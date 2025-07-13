@@ -1,0 +1,9 @@
+[dependencies]
+base = "0.14.14"
+new-base = "0.4.0"
+map = "9.0.1"
+http-parser = "0.3.4"
+base-x-encoder = "1.2.0"
+
+[toolchain]
+moc = "0.14.14"
