@@ -1,32 +1,32 @@
 # Prometheus Protocol
 
-<img width="1536" height="1024" alt="banner_candidate_7" src="images/ui.png" />
+<img width="1536" alt="Prometheus Protocol Banner" src="images/banner-professional.png" />
 
 ## Overview
 
-Prometheus Protocol is a full-featured, on-chain OAuth2 provider built for the Internet Computer. It enables developers to secure their applications using the industry-standard Authorization Code flow, allowing users to log in with their Internet Identity and grant specific permissions to third-party applications.
+Prometheus Protocol is a full-featured, on-chain OAuth2 provider built for the Internet Computer. It enables developers to secure their applications using the industry-standard **Authorization Code Flow with PKCE**, allowing users to log in with their Internet Identity and grant specific permissions to third-party applications.
 
-The system issues signed JSON Web Tokens (JWTs) that can be verified by any resource server in the ecosystem, providing a decentralized and robust foundation for authentication and authorization.
+The system is designed for modern, self-service developer workflows, featuring **Dynamic Client Registration** and a simple, fee-based activation model. It issues standards-compliant JSON Web Tokens (JWTs) that can be verified by any resource server in the ecosystem, providing a decentralized and robust foundation for authentication and authorization.
 
 ## Current Status: Phase 0 Complete
 
-**Phase 0: Project Chimera** is complete. The core authentication engine is online and fully functional.
+**Phase 0: Project Chimera** is complete. The core authentication engine is online, feature-complete, and compliant with modern security standards.
 
 **Key Features Implemented:**
-- **OAuth2 Authorization Code Flow:** The `/authorize` endpoint correctly validates client requests and initiates the login flow.
-- **Internet Identity Integration:** A dedicated frontend canister handles the login process via Internet Identity.
-- **Secure Token Issuance:** The `/token` endpoint securely exchanges single-use authorization codes for signed access tokens.
-- **Standards-Compliant JWTs:** Generates `ES256` signed JWTs using the web-standard `P-256` curve, ensuring maximum interoperability.
-- **Public Key Discovery:** Exposes the public signing key via a standard `/.well-known/jwks.json` endpoint for easy verification by resource servers.
+
+- **OAuth2 Authorization Code + PKCE:** Implements the full flow as per [RFC 6749](https://tools.ietf.org/html/rfc6749) and the secure Proof Key for Code Exchange enhancement as per [RFC 7636](https://tools.ietf.org/html/rfc7636).
+- **Dynamic Client Registration (DCR):** A public `/register` endpoint allows any client to programmatically register itself without manual setup, as per [RFC 7591](https://tools.ietf.org/html/rfc7591).
+- **Fee-Based Client Activation:** A unique on-chain model prevents spam by requiring a one-time fee to activate a dynamically registered client, making it useful.
+- **Standards-Compliant JWTs:** Generates `ES256` signed JWTs using the web-standard `P-256` curve for maximum interoperability.
+- **Public Key Discovery (JWKS):** Exposes the public signing key via a standard `/.well-known/jwks.json` endpoint.
+- **Server Metadata:** Provides a `/.well-known/oauth-authorization-server` discovery document for automated client configuration, as per [RFC 8414](https://tools.ietf.org/html/rfc8414).
 
 ## Architecture
 
 The project consists of two primary canisters:
 
-- **`oauth_backend`:** The main OAuth2 server. It handles all logic for client registration, authorization, token issuance, and key management.
-- **`oauth_frontend`:** A simple UI canister that serves the login page. It integrates with `@dfinity/auth-client` to handle the Internet Identity login flow and redirect the user back to the backend to complete the process.
-
-The backend is built using the `ic-server` framework and relies on `mo:ecdsa` for key management and `mo:jwt` for token creation.
+- **`oauth_backend`:** The main OAuth2 server. It handles all logic for client registration, activation, authorization, token issuance, and key management.
+- **`oauth_frontend`:** A simple UI canister that serves the login and payment page. It integrates with `@dfinity/auth-client` to handle the Internet Identity flow.
 
 ## Getting Started
 
@@ -37,6 +37,7 @@ Follow these steps to set up and run the project locally.
 - [DFINITY Canister SDK (dfx)](https://internetcomputer.org/docs/current/developer-docs/setup/install/)
 - [Node.js](https://nodejs.org/) (for frontend dependencies)
 - [Mops](https://mops.one/) (for Motoko package management)
+- [jq](https://stedolan.github.io/jq/) (for processing JSON in helper scripts)
 
 ### 1. Clone & Install Dependencies
 
@@ -49,115 +50,114 @@ npm install
 mops install
 ```
 
-### 2. Start the Local Replica
+### 2. Start the Local Replica & Deploy
 
-Start a clean local replica instance.
-
-```bash
-dfx start --clean
-```
-
-### 3. Deploy the Canisters
-
-Deploy both the backend and frontend canisters to your local replica.
+Start a clean local replica instance and deploy the canisters. The `dfx.json` is pre-configured to deploy a local ICRC-2 ledger and our canisters.
 
 ```bash
+dfx start --clean --background
 dfx deploy
 ```
 
-### 4. Configure the Canisters
+## Running the End-to-End Flow
 
-The backend needs to know the principal ID of the frontend canister to construct correct redirect URLs. You also need to register a test client application.
+This sequence validates the entire process, from registering a new app to getting a valid token.
 
-**A. Get Canister and Principal IDs:**
+### Phase 1: Register & Activate Your Client
 
-```bash
-# Get your user principal ID
-dfx identity get-principal
+First, we'll register a new client application and pay the one-time fee to activate it.
 
-# Get the backend canister ID
-dfx canister id oauth_backend
-
-# Get the frontend canister ID
-dfx canister id oauth_frontend
-```
-
-**B. Set the Frontend ID:**
-Open `./scripts/set_frontend_canister_id.sh` and replace the canister id with your ID from the previous step.
-
-```bash
-./scripts/set_frontend_canister_id.sh
-```
-
-**C. Add a Test Client:**
-Open ./scripts/add_test_client.sh and replace the principal id with your user principal. This script registers a test app with `client_id="test-app-01"` and `client_secret="supersecret"`.
-
-```bash
-./scripts/add_test_client.sh
-```
-
-## Running the Full Test Flow
-
-This sequence validates the entire end-to-end process.
-
-### Phase A: Get Authorization Code (Browser)
-
-1.  **Construct the URL:** Copy the URL below and replace `<YOUR_BACKEND_CANISTER_ID>` with your backend canister's ID.
-
-    ```
-    http://<YOUR_BACKEND_CANISTER_ID>.localhost:4943/authorize?response_type=code&client_id=test-app-01&redirect_uri=https://jwt.io&state=local-test-12345&scope=profile
-    ```
-
-2.  **Authorize:** Paste the URL into your browser. You will be redirected to the login page. Complete the Internet Identity login.
-
-3.  **Capture the Code:** You will be redirected to `https://jwt.io`. The URL will contain the authorization code.
-    `https://jwt.io/?code=<A_LONG_HEX_STRING>&state=local-test-12345`
-
-    **Copy the `code` value.**
-
-### Phase B: Exchange Code for Token (Terminal)
-
-1.  **Get Token:** Run the `get_token.sh` script.
-    -   Replace `<YOUR_BACKEND_CANISTER_ID>` with your backend canister's ID.
-    -   Replace `<THE_CODE_YOU_COPIED>` with the code from the previous step.
+1.  **Register the Client:**
+    Run the `register_client.sh` script. This will call the `/register` endpoint and save your new `client_id` and `client_secret` to a file named `.env.prom`.
 
     ```bash
-    curl -X POST \
-      --resolve <YOUR_BACKEND_CANISTER_ID>.localhost:4943:127.0.0.1 \
-      http://<YOUR_BACKEND_CANISTER_ID>.localhost:4943/token \
-      -H "Content-Type: application/x-www-form-urlencoded" \
-      -d "grant_type=authorization_code" \
-      -d "code=<THE_CODE_YOU_COPIED>" \
-      -d "client_id=test-app-01" \
-      -d "client_secret=supersecret"
+    ./scripts/register_client.sh
     ```
 
-2.  **Capture the Token:** The command will return a JSON object.
-    `{ "access_token": "ey...", "token_type": "Bearer", ... }`
+2.  **Load Credentials:**
+    Load the new credentials into your current shell session by "sourcing" the environment file.
 
-    **Copy the `access_token` value.**
+    ```bash
+    source .env.prom
+    ```
 
-### Phase C: Verify the Token and Public Key
+3.  **Activate the Client:**
+    Activation requires a one-time fee. First, approve the fee from your principal, then call the `activate_client` function.
 
-1.  **Verify the Token:**
-    -   Go to [https://jwt.io](https://jwt.io).
-    -   Paste the `access_token` into the "Encoded" box on the left.
+    ```bash
+    # A. Approve the fee (50 PMP tokens)
+    dfx canister call icrc1_ledger icrc2_approve '(record { spender = record { owner = principal "'$(dfx canister id oauth_backend)'" }; amount = 50_00000000 })'
+
+    # B. Call the activate function with your new credentials
+    dfx canister call oauth_backend activate_client "(\"$NEW_CLIENT_ID\", \"$NEW_CLIENT_SECRET\")"
+    ```
+
+    You should see `(ok = "Client successfully activated.")`. Your client is now ready to use.
+
+### Phase 2: Get an Authorization Code
+
+Now, we'll initiate the login flow for a user.
+
+1.  **Generate the Authorize URL:**
+    Run the `generate-auth-url.js` script. This creates a secure PKCE challenge and saves the necessary `code_verifier` to your `.env.prom` file.
+
+    ```bash
+    node ./scripts/generate-auth-url.js
+    ```
+
+2.  **Load the Verifier:**
+    Source the environment file again to load the new `PKCE_VERIFIER` variable.
+
+    ```bash
+    source .env.prom
+    ```
+
+3.  **Authorize in Browser:**
+    - Copy the full `/authorize` URL printed by the script.
+    - Paste it into your browser.
+    - You will be redirected to the login page. Complete the Internet Identity login and the subscription flow if necessary.
+    - You will be redirected to `https://jwt.io`. The URL will contain the authorization code: `https://jwt.io/?code=<A_LONG_HEX_STRING>&...`
+    - **Copy the `code` value.**
+
+### Phase 3: Exchange Code for Token
+
+1.  **Get the Token:**
+    Run the `get_token.sh` script, passing the code you just copied as an argument.
+
+    ```bash
+    ./scripts/get_token.sh <THE_CODE_YOU_COPIED>
+    ```
+
+2.  **Capture the Token:**
+    The command will return a JSON object containing your `access_token`. Copy it.
+
+### Phase 4: Verify the Token
+
+Finally, verify the token's signature against the canister's public key.
+
+1.  **Verify on jwt.io:**
+    - Go to [https://jwt.io](https://jwt.io).
+    - Paste the `access_token` into the "Encoded" box.
 
 2.  **Get the Public Key:**
-    -   Run the following command in your terminal, replacing `<YOUR_BACKEND_CANISTER_ID>`.
+    - Run `curl http://$(dfx canister id oauth_backend).localhost:4943/.well-known/jwks.json | jq .`
+    - Copy the first key object from the `keys` array.
 
-    ```bash
-    curl --resolve <YOUR_BACKEND_CANISTER_ID>.localhost:4943:127.0.0.1 http://<YOUR_BACKEND_CANISTER_ID>.localhost:4943/.well-known/jwks.json
-    ```
-    -   Copy the first key in the JSON output (`{"kty":"EC","crv":"P-256","x":"Hv...","y":"1Eb..."}`).
+3.  **Verify Signature:**
+    - On jwt.io, paste the key object into the "Public Key" box.
+    - **Crucially, change the "Public Key Format" dropdown from `PEM` to `JWK`.**
 
-3.  **Verify the Signature:**
-    -   On jwt.io, paste the public key JSON into the "Public Key" box under the "Verify Signature" section.
-    -   **Crucially, change the "Public Key Format" dropdown from `PEM` to `JWK`.**
-
-    You should see the green **"Signature Verified"** message. Congratulations!
+    You should see the green **"Signature Verified"** message.
 
 ![JWT Verification Example](images/jwt_decoded.png)
+
+## Running Tests
+
+The project includes a comprehensive test suite using the `mo:test` library. To run all unit and replica tests, use Mops:
+
+```bash
+mops test
+```
 
 ## License
 
