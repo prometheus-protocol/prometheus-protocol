@@ -1,47 +1,66 @@
-import { createActor, oauth_backend } from '../../declarations/oauth_backend';
+import { createActor, canisterId as backendCanisterId } from '../../declarations/oauth_backend';
 import { AuthClient } from '@dfinity/auth-client';
-import { HttpAgent } from '@dfinity/agent';
 
-let actor = oauth_backend;
 
-const greetButton = document.getElementById('greet');
-greetButton.onclick = async (e) => {
-  e.preventDefault();
+const loginButton = document.getElementById('loginButton');
+const status = document.getElementById('status');
 
-  greetButton.setAttribute('disabled', true);
+// Explicitly create the actor using the imported canister ID.
+// This is more robust than relying on the default export.
+const actor = createActor(backendCanisterId);
 
-  // Interact with backend actor, calling the greet method
-  const greeting = await actor.greet();
-
-  greetButton.removeAttribute('disabled');
-
-  document.getElementById('greeting').innerText = greeting;
-
-  return false;
-};
-
-const loginButton = document.getElementById('login');
 loginButton.onclick = async (e) => {
   e.preventDefault();
+  loginButton.setAttribute('disabled', true);
+  status.innerText = 'Preparing login...';
 
-  // create an auth client
-  let authClient = await AuthClient.create();
+  // Create an auth client
+  const authClient = await AuthClient.create();
 
-  // start the login process and wait for it to finish
-  await new Promise((resolve) => {
-    authClient.login({
-      identityProvider: process.env.II_URL,
-      onSuccess: resolve,
-    });
-  });
+  // Start the login process
+  await authClient.login({
+    // Use the II_URL environment variable
+    identityProvider: process.env.II_URL,
 
-  // At this point we're authenticated, and we can get the identity from the auth client:
-  const identity = authClient.getIdentity();
-  // Using the identity obtained from the auth client, we can create an agent to interact with the IC.
-  const agent = new HttpAgent({ identity });
-  // Using the interface description of our webapp, we create an actor that we use to call the service methods.
-  actor = createActor(process.env.OAUTH_BACKEND_CANISTER_ID, {
-    agent,
+    // The new, correct onSuccess callback
+    onSuccess: async () => {
+      status.innerText = 'Login successful! Completing authorization...';
+
+      // 1. Get the user's identity and principal
+      const identity = authClient.getIdentity();
+      const user_principal = identity.getPrincipal();
+
+      // 2. Get the session_id from the URL's query parameters
+      const urlParams = new URLSearchParams(window.location.search);
+      const session_id = urlParams.get('session_id');
+
+      if (!session_id) {
+        status.innerText = 'Error: No session_id found in URL.';
+        loginButton.removeAttribute('disabled');
+        return;
+      }
+
+      try {
+        // 3. Call the backend to get the final redirect URL
+        const final_url = await actor.complete_authorize(session_id, user_principal);
+        console.log('Final redirect URL:', final_url);
+        
+        // 4. Perform the final redirect
+        status.innerText = 'Redirecting...';
+        window.location.href = final_url;
+
+      } catch (err) {
+        console.log('Error during authorization:', err);
+        status.innerText = 'Error during authorization: ' + err.message;
+        loginButton.removeAttribute('disabled');
+      }
+    },
+
+    // Handle login errors
+    onError: (error) => {
+      status.innerText = 'Login failed: ' + error;
+      loginButton.removeAttribute('disabled');
+    },
   });
 
   return false;

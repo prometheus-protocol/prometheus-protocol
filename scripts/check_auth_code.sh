@@ -1,0 +1,1 @@
+dfx canister call auth_canister get_auth_code '("<THE_CODE_FROM_THE_URL>")'
