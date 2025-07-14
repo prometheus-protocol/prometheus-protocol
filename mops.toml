@@ -10,6 +10,7 @@ json = "1.3.0"
 ecdsa = "6.0.0"
 xtended-numbers = "0.4.0"
 sha2 = "0.1.4"
+icrc2-types = "1.1.0"
 
 [toolchain]
 moc = "0.14.14"

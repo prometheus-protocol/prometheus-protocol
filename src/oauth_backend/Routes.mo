@@ -10,24 +10,41 @@ import Debug "mo:base/Debug";
 import Random "mo:base/Random";
 import BaseX "mo:base-x-encoder";
 import Map "mo:map/Map";
-import { thash } "mo:map/Map";
+import { thash; phash } "mo:map/Map";
 import Sha256 "mo:sha2/Sha256";
 import JWT "mo:jwt";
 import Server "mo:server";
 import Types "Types";
 import Crypto "Crypto";
+import Json "mo:json";
 
 module {
-  // Moved from main actor
-  public func complete_authorize(context : Types.Context, session_id : Text, user_principal : Principal) : async Text {
+  public func complete_authorize(context : Types.Context, session_id : Text, user_principal : Principal) : async Result.Result<Text, Text> {
+    // 1. CRITICAL: Check for an active subscription for the user.
+    let subscription = Map.get(context.subscriptions, phash, user_principal);
+    switch (subscription) {
+      case (null) {
+        return #err("No active subscription found for user.");
+      };
+      case (?sub) {
+        if (sub.expires_at < Time.now()) {
+          return #err("User subscription has expired.");
+        };
+      };
+    };
+
+    // 2. Look up the session and handle errors.
     let session = switch (Map.get(context.authorize_sessions, thash, session_id)) {
-      case (null) { Debug.trap("Invalid or already used session ID") };
+      case (null) { return #err("Invalid or already used session ID.") };
       case (?s) s;
     };
+
+    // 3. Check for session expiration.
     if (session.expires_at < Time.now()) {
       Map.delete(context.authorize_sessions, thash, session_id);
-      Debug.trap("Session has expired");
+      return #err("Login session has expired.");
     };
+
     let code_blob = await Random.blob();
     let code = BaseX.toHex(code_blob.vals(), { isUpper = false; prefix = #none });
     let auth_code_data : Types.AuthorizationCode = {
@@ -37,6 +54,8 @@ module {
       redirect_uri = session.redirect_uri;
       scope = session.scope;
       expires_at = Time.now() + (10 * 60 * 1_000_000_000);
+      code_challenge = session.code_challenge;
+      code_challenge_method = session.code_challenge_method;
     };
     Map.set(context.auth_codes, thash, code, auth_code_data);
     Map.delete(context.authorize_sessions, thash, session_id);
@@ -44,7 +63,9 @@ module {
       case (?s) "&state=" # s;
       case (_) "";
     };
-    return session.redirect_uri # "?code=" # code # state_param;
+
+    let final_url = session.redirect_uri # "?code=" # code # state_param;
+    return #ok(final_url);
   };
 
   // Main registration function
@@ -110,6 +131,8 @@ module {
         let response_type_opt = req.url.queryObj.get("response_type");
         let state_opt = req.url.queryObj.get("state");
         let scope_opt = req.url.queryObj.get("scope");
+        let code_challenge_opt = req.url.queryObj.get("code_challenge");
+        let code_challenge_method_opt = req.url.queryObj.get("code_challenge_method");
 
         // 2. Validate the request
         let validation_result = await validate_authorize_request(
@@ -131,6 +154,58 @@ module {
             });
           };
           case (#ok(validated_req)) {
+            let client = switch (Map.get(context.clients, thash, validated_req.client.client_id)) {
+              case (null) { Debug.trap("Impossible: client not found") };
+              case (?c) c;
+            };
+
+            if (client.status != #active) {
+              return res.send({
+                status_code = 400;
+                body = Text.encodeUtf8("Invalid Client: Client is not active. Please pay the activation fee.");
+                headers = [];
+                streaming_strategy = null;
+                cache_strategy = #noCache;
+              });
+            };
+
+            // PKCE Validation
+            let code_challenge = switch (code_challenge_opt) {
+              case (null) {
+                return res.send({
+                  status_code = 400;
+                  headers = [];
+                  body = Text.encodeUtf8("Invalid Request: code_challenge is required for PKCE");
+                  streaming_strategy = null;
+                  cache_strategy = #noCache;
+                });
+              };
+              case (?c) c;
+            };
+            let code_challenge_method = switch (code_challenge_method_opt) {
+              case (null) {
+                return res.send({
+                  status_code = 400;
+                  headers = [];
+                  body = Text.encodeUtf8("Invalid Request: code_challenge_method is required for PKCE");
+                  streaming_strategy = null;
+                  cache_strategy = #noCache;
+                });
+              };
+              case (?m) m;
+            };
+
+            if (code_challenge_method != "S256") {
+              // We only support S256 for security.
+              return res.send({
+                status_code = 400;
+                body = Text.encodeUtf8("Invalid Request: code_challenge_method must be 'S256'");
+                headers = [];
+                streaming_strategy = null;
+                cache_strategy = #noCache;
+              });
+            };
+
             // 3. Create a temporary session
             let session_id_blob = await Random.blob();
             let session_id = BaseX.toHex(session_id_blob.vals(), { isUpper = false; prefix = #none });
@@ -141,6 +216,8 @@ module {
               scope = validated_req.scope;
               state = validated_req.state;
               expires_at = Time.now() + (5 * 60 * 1_000_000_000); // 5 minutes
+              code_challenge = code_challenge;
+              code_challenge_method = code_challenge_method;
             };
             Map.set(context.authorize_sessions, thash, session_id, session_data);
 
@@ -227,6 +304,7 @@ module {
         let code_opt = get_param("code");
         let client_id_opt = get_param("client_id");
         let client_secret_opt = get_param("client_secret");
+        let code_verifier_opt = get_param("code_verifier");
 
         // 2. Validate the request parameters.
         if (Option.get(grant_type_opt, "") != "authorization_code") {
@@ -261,6 +339,14 @@ module {
             cache_strategy = #noCache;
           });
         };
+        let code_verifier = switch (code_verifier_opt) {
+          case (?v) v;
+          case (_) return res.json({
+            status_code = 400;
+            body = "{ \"error\": \"invalid_request\", \"error_description\": \"code_verifier is missing\" }";
+            cache_strategy = #noCache;
+          });
+        };
 
         // 2a. Validate the authorization code itself.
         let auth_code_record = switch (Map.get(context.auth_codes, thash, code)) {
@@ -274,10 +360,32 @@ module {
           case (?rec) rec;
         };
 
-        // 2b. CRITICAL: Delete the code immediately after lookup to make it single-use.
+        // 2b. CRITICAL: PKCE Verification
+        // We must do this *before* deleting the code to prevent replay attacks.
+        if (auth_code_record.code_challenge_method == "S256") {
+          let code_verifier_blob = Text.encodeUtf8(code_verifier);
+          let hash_blob = Sha256.fromBlob(#sha256, code_verifier_blob);
+
+          // Base64URL encode the hash
+          let calculated_challenge = BaseX.toBase64(hash_blob.vals(), #url({ includePadding = false }));
+
+          if (calculated_challenge != auth_code_record.code_challenge) {
+            // The proof is invalid. Reject the request.
+            return res.json({
+              status_code = 400;
+              body = "{ \"error\": \"invalid_grant\", \"error_description\": \"Invalid code_verifier\" }";
+              cache_strategy = #noCache;
+            });
+          };
+        } else {
+          // This should not happen if /authorize is working correctly.
+          Debug.trap("Internal error: unsupported code_challenge_method found in auth code record");
+        };
+
+        // 2c. CRITICAL: Delete the code immediately after lookup to make it single-use.
         Map.delete(context.auth_codes, thash, code);
 
-        // 2c. Check if code has expired and matches the client.
+        // 2d. Check if code has expired and matches the client.
         if (auth_code_record.expires_at < Time.now()) {
           return res.json({
             status_code = 400;
@@ -293,7 +401,7 @@ module {
           });
         };
 
-        // 2d. Validate the client secret.
+        // 2e. Validate the client secret.
         let client_record = switch (Map.get(context.clients, thash, client_id)) {
           case (?c) c;
           case (_) Debug.trap("Internal error: client record not found for valid code");
@@ -307,6 +415,29 @@ module {
             body = "{ \"error\": \"invalid_client\" }";
             cache_strategy = #noCache;
           });
+        };
+
+        // 2f. CRITICAL: Check for an active subscription.
+        let user_principal = auth_code_record.user_principal;
+        let subscription = Map.get(context.subscriptions, phash, user_principal);
+
+        switch (subscription) {
+          case (null) {
+            return res.json({
+              status_code = 402;
+              body = "{ \"error\": \"payment_required\", \"error_description\": \"No active subscription found.\" }";
+              cache_strategy = #noCache;
+            });
+          };
+          case (?sub) {
+            if (sub.expires_at < Time.now()) {
+              return res.json({
+                status_code = 402;
+                body = "{ \"error\": \"payment_required\", \"error_description\": \"Subscription has expired.\" }";
+                cache_strategy = #noCache;
+              });
+            };
+          };
         };
 
         // 3. Get the canister's signing key.
@@ -371,6 +502,124 @@ module {
       },
     );
 
+    server.post(
+      "/register",
+      func(req : Types.Request, res : Types.ResponseClass) : async Types.Response {
+        // 1. Define the expected JSON schema for the request body.
+        // This is the declarative, robust way to define our input requirements.
+        let dcrSchema : Json.Schema = #object_({
+          properties = [
+            ("client_name", #string),
+            ("redirect_uris", #array({ items = #string })),
+            ("logo_uri", #string), // Optional, but must be a string if present
+          ];
+          required = ?["client_name", "redirect_uris"];
+        });
+
+        // 2. Parse the request body text into a JSON object.
+        let json_body = switch (req.body) {
+          case (?b) Json.parse(b.text());
+          case (_) return res.json({
+            status_code = 400;
+            body = "{ \"error\": \"invalid_request\", \"error_description\": \"Request body is missing or not JSON\" }";
+            cache_strategy = #noCache;
+          });
+        };
+
+        let parsed = switch (json_body) {
+          case (#err(e)) {
+            return res.json({
+              status_code = 400;
+              body = "{ \"error\": \"invalid_request\", \"error_description\": \"Invalid JSON: " # debug_show (e) # "\" }";
+              cache_strategy = #noCache;
+            });
+          };
+          case (#ok(j)) j;
+        };
+
+        // 3. Validate the parsed JSON against our schema.
+        switch (Json.validate(parsed, dcrSchema)) {
+          case (#ok()) { /* The JSON is valid, proceed. */ };
+          case (#err(e)) {
+            // The JSON is invalid. Return a specific error.
+            let error_description = "Invalid JSON structure: " # debug_show (e);
+
+            return res.json({
+              status_code = 400;
+              body = "{ \"error\": \"invalid_request\", \"error_description\": \"" # error_description # "\" }";
+              cache_strategy = #noCache;
+            });
+          };
+        };
+
+        // 4. Extract data using Json.get. This is now safe because validation passed.
+        // We can trap on failure here, as it indicates a logic error (mismatch between schema and extraction).
+        let client_name = switch (Json.getAsText(parsed, "client_name")) {
+          case (#ok(t)) t;
+          case (#err(_)) Debug.trap("Impossible: client_name validation failed silently");
+        };
+        let redirect_uris_json = switch (Json.get(parsed, "redirect_uris")) {
+          case (?(#array(a))) a;
+          case (_) Debug.trap("Impossible: redirect_uris validation failed silently");
+        };
+        let redirect_uris = Array.map(
+          redirect_uris_json,
+          func(j : Json.Json) : Text {
+            switch (j) {
+              case (#string(t)) t;
+              case (_) Debug.trap("Impossible: redirect_uris item not a string");
+            };
+          },
+        );
+        let logo_uri = switch (Json.getAsText(parsed, "logo_uri")) {
+          case (#ok(t)) ?t;
+          case (#err(_)) null;
+        };
+
+        // 4. Generate and store new client credentials
+        let client_id_blob = await Random.blob();
+        let client_secret_blob = await Random.blob();
+        let client_id = BaseX.toHex(client_id_blob.vals(), { isUpper = false; prefix = #none });
+        let client_secret = BaseX.toHex(client_secret_blob.vals(), { isUpper = false; prefix = #none });
+        let secret_hash_blob = Sha256.fromBlob(#sha256, Text.encodeUtf8(client_secret));
+        let client_secret_hash = BaseX.toHex(secret_hash_blob.vals(), { isUpper = false; prefix = #none });
+
+        let new_client : Types.Client = {
+          client_id = client_id;
+          owner = Principal.fromText("aaaaa-aa"); // This will be set to the caller later
+          client_secret_hash = client_secret_hash;
+          client_name = client_name;
+          logo_uri = Option.get(logo_uri, "");
+          redirect_uris = redirect_uris;
+          status = #pending_activation; // Initially pending activation
+        };
+        Map.set(context.clients, thash, new_client.client_id, new_client);
+
+        // 5. Construct and return the successful response
+        let response_record : Types.RegistrationResponse = {
+          client_id = client_id;
+          client_secret = client_secret;
+          client_name = client_name;
+          redirect_uris = redirect_uris;
+          grant_types = ["authorization_code"];
+        };
+
+        let json_response = #object_([
+          ("client_id", #string(response_record.client_id)),
+          ("client_secret", #string(response_record.client_secret)),
+          ("client_name", #string(response_record.client_name)),
+          ("redirect_uris", #array(Array.map(response_record.redirect_uris, func(uri : Text) : { #string : Text } { #string(uri) }))),
+          ("grant_types", #array(Array.map(response_record.grant_types, func(gt : Text) : { #string : Text } { #string(gt) }))),
+        ]);
+
+        return res.json({
+          status_code = 201; // 201 Created
+          body = Json.stringify(json_response, null);
+          cache_strategy = #noCache;
+        });
+      },
+    );
+
     server.get(
       "/.well-known/jwks.json",
       func(_ : Types.Request, res : Types.ResponseClass) : async Types.Response {
@@ -397,6 +646,49 @@ module {
           status_code = 200;
           body = jwks_body;
           cache_strategy = #noCache; // This can be cached
+        });
+      },
+    );
+
+    server.get(
+      "/.well-known/oauth-authorization-server",
+      func(req : Types.Request, res : Types.ResponseClass) : async Types.Response {
+        // 1. Get the host from the request header.
+        let host = switch (req.headers.get("host")) {
+          case (?values) {
+            if (values.size() == 0) {
+              Principal.toText(context.self) # ".localhost";
+            } // Fallback for safety
+            else { values[0] };
+          };
+          case (_) Principal.toText(context.self) # ".localhost"; // Fallback for safety
+        };
+
+        // 2. Detect if we are running locally or on the mainnet to set the correct protocol.
+        let scheme = if (Text.contains(host, #text(".localhost"))) "http" else "https";
+
+        // 3. Construct the issuer URL with the correct scheme.
+        let issuer = scheme # "://" # host;
+
+        // Construct the metadata object using the mo:json library
+        let metadata = #object_([
+          ("issuer", #string(issuer)),
+          ("authorization_endpoint", #string(issuer # "/authorize")),
+          ("token_endpoint", #string(issuer # "/token")),
+          ("jwks_uri", #string(issuer # "/.well-known/jwks.json")),
+          ("registration_endpoint", #string(issuer # "/register")),
+          ("scopes_supported", #array([#string("profile"), #string("openid")])),
+          ("response_types_supported", #array([#string("code")])),
+          ("grant_types_supported", #array([#string("authorization_code")])),
+          ("token_endpoint_auth_methods_supported", #array([#string("client_secret_post")])),
+          ("code_challenge_methods_supported", #array([#string("S256")])),
+        ]);
+
+        return res.json({
+          status_code = 200;
+          body = Json.stringify(metadata, null);
+          // It's a well-known, static document, so we can cache it.
+          cache_strategy = #noCache; // This can be cached, but we set it to noCache for simplicity
         });
       },
     );

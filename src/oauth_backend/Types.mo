@@ -12,6 +12,10 @@ module {
     client_name : Text;
     logo_uri : Text;
     redirect_uris : [Text];
+    status : {
+      #active; // The client is fully registered and can be used.
+      #pending_activation; // The client is registered but not yet activated.
+    };
   };
 
   // Represents a temporary code used to get a real token.
@@ -22,6 +26,8 @@ module {
     redirect_uri : Text;
     scope : Text;
     expires_at : Time.Time;
+    code_challenge : Text;
+    code_challenge_method : Text;
   };
 
   // Represents a user's active subscription.
@@ -38,6 +44,8 @@ module {
     scope : Text;
     state : ?Text;
     expires_at : Time.Time;
+    code_challenge : Text;
+    code_challenge_method : Text;
   };
 
   // A type to hold the validated and cleaned-up request parameters.
@@ -48,12 +56,23 @@ module {
     state : ?Text;
   };
 
+  // The data returned to a developer after successful client registration.
+  public type RegistrationResponse = {
+    client_id : Text;
+    client_secret : Text; // This is the only time the raw secret is ever revealed.
+    client_name : Text;
+    redirect_uris : [Text];
+    grant_types : [Text];
+  };
+
   // The Context object that bundles all application state.
   public type Context = {
     self : Principal; // The canister's own principal
     creator : Principal;
     var frontend_canister_id : Principal;
     var signing_key_bytes : Blob;
+    icrc2_ledger_id : Principal;
+    registration_fee : Nat; // The fee in PMP tokens for client registration
     clients : Map.Map<Text, Client>;
     auth_codes : Map.Map<Text, AuthorizationCode>;
     subscriptions : Map.Map<Principal, Subscription>;

@@ -1,12 +1,15 @@
 import Principal "mo:base/Principal";
 import Blob "mo:base/Blob";
+import Result "mo:base/Result";
+import Text "mo:base/Text";
 import Map "mo:map/Map";
 import Server "mo:server";
 import Types "Types";
 import Routes "Routes";
 import Admin "Admin";
+import Subscriptions "Subscriptions";
 
-shared ({ caller = creator }) actor class () = self {
+shared ({ caller = creator }) actor class AuthCanister(ledger_id : Principal) = self {
 
   // =================================================================================================
   // STATE - The main actor is the sole owner of all stable state.
@@ -18,6 +21,8 @@ shared ({ caller = creator }) actor class () = self {
   stable var authorize_sessions = Map.new<Text, Types.AuthorizeSession>();
   stable var frontend_canister_id : Principal = Principal.fromActor(self);
   stable var serializedEntries : Server.SerializedEntries = ([], [], [creator]);
+  stable var icrc2_ledger_id : Principal = ledger_id;
+  stable var registration_fee : Nat = 50 * 100_000_000; // 50 PMP tokens (with 8 decimals)
 
   // =================================================================================================
   // CONTEXT & INITIALIZATION
@@ -33,6 +38,8 @@ shared ({ caller = creator }) actor class () = self {
     auth_codes = auth_codes;
     subscriptions = subscriptions;
     authorize_sessions = authorize_sessions;
+    icrc2_ledger_id = icrc2_ledger_id;
+    registration_fee = registration_fee;
   };
 
   // The server instance.
@@ -42,9 +49,9 @@ shared ({ caller = creator }) actor class () = self {
   Routes.register(server, context);
 
   // =================================================================================================
-  // PUBLIC API - Delegated to logic modules.
+  // PUBLIC API - All logic is delegated to specialized modules.
   // =================================================================================================
-  public shared func complete_authorize(session_id : Text, user_principal : Principal) : async Text {
+  public shared func complete_authorize(session_id : Text, user_principal : Principal) : async Result.Result<Text, Text> {
     await Routes.complete_authorize(context, session_id, user_principal);
   };
 
@@ -54,6 +61,18 @@ shared ({ caller = creator }) actor class () = self {
 
   public shared ({ caller }) func add_test_client(client : Types.Client) {
     Admin.add_test_client(context, caller, client);
+  };
+
+  public shared ({ caller }) func activate_client(client_id : Text, client_secret : Text) : async Result.Result<Text, Text> {
+    await Admin.activate_client(context, caller, client_id, client_secret);
+  };
+
+  public shared ({ caller }) func register_subscription() : async Result.Result<Types.Subscription, Text> {
+    await Subscriptions.register_subscription(context, caller);
+  };
+
+  public shared query ({ caller }) func get_subscription() : async ?Types.Subscription {
+    Subscriptions.get_subscription(context, caller);
   };
 
   // =================================================================================================

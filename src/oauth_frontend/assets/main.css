@@ -1,12 +1,17 @@
 /* --- Base & Theme Setup --- */
 :root {
   --color-background: #111827; /* Tailwind gray-900 */
-  --color-card-bg: rgba(31, 41, 55, 0.5); /* Tailwind gray-800 with transparency */
+  --color-card-bg: rgba(
+    31,
+    41,
+    55,
+    0.5
+  ); /* Tailwind gray-800 with transparency */
   --color-grid: #374151; /* Tailwind gray-700 */
-  --color-text-primary: #F9FAFB; /* Tailwind gray-50 */
-  --color-text-secondary: #9CA3AF; /* Tailwind gray-400 */
-  --color-neon-pink: #EC4899;
-  --color-neon-purple: #8B5CF6;
+  --color-text-primary: #f9fafb; /* Tailwind gray-50 */
+  --color-text-secondary: #9ca3af; /* Tailwind gray-400 */
+  --color-neon-pink: #ec4899;
+  --color-neon-purple: #8b5cf6;
   --font-family-main: 'Poppins', sans-serif;
 }
 
@@ -15,11 +20,15 @@ body {
   font-family: var(--font-family-main);
   background-color: var(--color-background);
   color: var(--color-text-primary);
-  
+
   /* Retrowave grid background */
-  background-image: 
-    linear-gradient(var(--color-grid) 1px, transparent 1px), 
-    linear-gradient(to right, var(--color-grid) 1px, var(--color-background) 1px);
+  background-image:
+    linear-gradient(var(--color-grid) 1px, transparent 1px),
+    linear-gradient(
+      to right,
+      var(--color-grid) 1px,
+      var(--color-background) 1px
+    );
   background-size: 40px 40px;
 }
 
@@ -59,7 +68,9 @@ h1 {
   font-weight: 700;
   color: var(--color-text-primary);
   /* Neon glow effect */
-  text-shadow: 0 0 5px var(--color-neon-pink), 0 0 10px var(--color-neon-pink);
+  text-shadow:
+    0 0 5px var(--color-neon-pink),
+    0 0 10px var(--color-neon-pink);
   margin: 0 0 0.5rem 0;
 }
 
@@ -78,20 +89,28 @@ h1 {
   border: none;
   border-radius: 0.5rem;
   cursor: pointer;
-  
+
   /* Gradient background matching the banner */
-  background-image: linear-gradient(to right, var(--color-neon-pink), var(--color-neon-purple));
-  
+  background-image: linear-gradient(
+    to right,
+    var(--color-neon-pink),
+    var(--color-neon-purple)
+  );
+
   /* Smooth transitions for hover effects */
   transition: all 0.3s ease;
-  
+
   /* Glow effect */
-  box-shadow: 0 0 15px rgba(236, 72, 153, 0.5), 0 0 15px rgba(139, 92, 246, 0.5);
+  box-shadow:
+    0 0 15px rgba(236, 72, 153, 0.5),
+    0 0 15px rgba(139, 92, 246, 0.5);
 }
 
 .login-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 0 25px rgba(236, 72, 153, 0.8), 0 0 25px rgba(139, 92, 246, 0.8);
+  box-shadow:
+    0 0 25px rgba(236, 72, 153, 0.8),
+    0 0 25px rgba(139, 92, 246, 0.8);
 }
 
 .status-text {
@@ -99,4 +118,52 @@ h1 {
   color: var(--color-text-secondary);
   font-style: italic;
   min-height: 1.2em; /* Reserve space to prevent layout shift */
+}
+
+/* --- Payment Flow Styles --- */
+.payment-flow {
+  margin-top: 2.5rem;
+  border-top: 1px solid var(--color-grid);
+  padding-top: 2rem;
+}
+
+.payment-flow h2 {
+  font-size: 1.25rem;
+  color: var(--color-text-secondary);
+  margin: 0 0 0.5rem 0;
+  text-shadow: none; /* No glow for the subtitle */
+}
+
+.step {
+  margin-bottom: 1rem;
+}
+
+.action-button {
+  width: 100%;
+  padding: 0.7rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: white;
+  border: 1px solid var(--color-neon-purple);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  background-color: transparent;
+  transition: all 0.2s ease;
+}
+
+.action-button:hover:not(:disabled) {
+  background-color: var(--color-neon-purple);
+  box-shadow: 0 0 15px var(--color-neon-purple);
+}
+
+.action-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.status-text-small {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  min-height: 1em;
 }

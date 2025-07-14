@@ -10,11 +10,9 @@ const network =
 function initCanisterEnv() {
   let localCanisters, prodCanisters;
   try {
-    localCanisters = require(path.resolve(
-      '.dfx',
-      'local',
-      'canister_ids.json',
-    ));
+    localCanisters = require(
+      path.resolve('.dfx', 'local', 'canister_ids.json'),
+    );
   } catch (error) {
     console.log('No local canister_ids.json found. Continuing production');
   }
@@ -52,7 +50,7 @@ module.exports = {
   entry: {
     // The frontend.entrypoint points to the HTML file for this build, so we need
     // to replace the extension to `.js`.
-    index: path.join(__dirname, frontend_entry).replace(/\.html$/, '.js'),
+    index: path.join(__dirname, frontend_entry).replace(/\.html$/, '.ts'),
   },
   devtool: isDevelopment ? 'source-map' : false,
   optimization: {
@@ -80,10 +78,10 @@ module.exports = {
   // modules and CSS as described in the "Adding a stylesheet"
   // tutorial, uncomment the following lines:
   module: {
-   rules: [
-     { test: /\.(ts|tsx|jsx)$/, loader: "ts-loader" },
-     { test: /\.css$/, use: ['style-loader','css-loader'] }
-   ]
+    rules: [
+      { test: /\.(ts|tsx|jsx)$/, loader: 'ts-loader' },
+      { test: /\.css$/, use: ['style-loader', 'css-loader'] },
+    ],
   },
   plugins: [
     new HtmlWebpackPlugin({

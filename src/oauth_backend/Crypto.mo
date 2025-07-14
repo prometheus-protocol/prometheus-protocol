@@ -4,7 +4,6 @@ import ECDSA "mo:ecdsa";
 import Types "Types";
 
 module Crypto {
-  // Note: All functions now take the context as an argument.
   public func get_signing_key(context : Types.Context) : ?ECDSA.PrivateKey {
     if (context.signing_key_bytes.size() == 0) { return null };
     let key_res = ECDSA.privateKeyFromBytes(context.signing_key_bytes.vals(), #raw({ curve = ECDSA.prime256v1Curve() }));

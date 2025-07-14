@@ -1,1 +1,0 @@
-http://avqkn-guaaa-aaaaa-qaaea-cai.localhost:4943/authorize?response_type=code&client_id=test-app-01&redirect_uri=https://jwt.io&state=local-test-12345&scope=profile

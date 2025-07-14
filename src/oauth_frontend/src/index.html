@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -7,26 +7,64 @@
     <base href="/" />
     <link rel="icon" href="favicon.ico" />
     <!-- Google Fonts for a modern, clean look -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap"
+      rel="stylesheet" />
     <!-- Link to our new stylesheet -->
     <link type="text/css" rel="stylesheet" href="main.css" />
   </head>
   <body>
     <div class="container">
       <main class="card">
-        <img src="banner.png" alt="Prometheus Protocol Banner" class="banner-image" />
-        
+        <img
+          src="banner.png"
+          alt="Prometheus Protocol Banner"
+          class="banner-image" />
+
         <h1>Authentication Required</h1>
         <p class="subtitle">
-          Log in with your Internet Identity to securely connect to the application.
+          Log in with your Internet Identity to securely connect to the
+          application.
         </p>
-        
+
         <button id="loginButton" class="login-button">
           Connect with Internet Identity
         </button>
-        
+
+        <div id="paymentFlow" class="payment-flow" hidden>
+          <h2>Become a Pro Member</h2>
+          <p class="subtitle">
+            A one-time payment of 100 PMP grants a 30-day subscription.
+          </p>
+
+          <div class="step">
+            <button id="approveButton" class="action-button">
+              1. Approve Payment
+            </button>
+            <p id="approveStatus" class="status-text-small"></p>
+          </div>
+
+          <div class="step">
+            <button id="payButton" class="action-button" disabled>
+              2. Confirm Subscription
+            </button>
+            <p id="payStatus" class="status-text-small"></p>
+          </div>
+        </div>
+
+        <div id="completionFlow" class="completion-flow" hidden>
+          <h2>Ready to Go!</h2>
+          <p class="subtitle">
+            Your identity is verified and your subscription is active.
+          </p>
+          <button id="completeButton" class="login-button">
+            Proceed to Application
+          </button>
+          <p id="completionStatus" class="status-text-small"></p>
+        </div>
+
         <p id="status" class="status-text"></p>
       </main>
     </div>
