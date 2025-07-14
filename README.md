@@ -1,4 +1,4 @@
-# Prometheus Protocol
+# Prometheus Protocol - Chimera
 
 <img width="1536" alt="Prometheus Protocol Banner" src="images/banner-professional.png" />
 
