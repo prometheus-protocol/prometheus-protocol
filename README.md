@@ -1,5 +1,5 @@
 # Prometheus Protocol
-
+/home/jesse/portal-bx/.local/hifi_candidates/prometheus_protocol_sw.png/banner_candidate_7.png
 ## Overview
 
 Prometheus Protocol is a full-featured, on-chain OAuth2 provider built for the Internet Computer. It enables developers to secure their applications using the industry-standard Authorization Code flow, allowing users to log in with their Internet Identity and grant specific permissions to third-party applications.
