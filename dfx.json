@@ -3,7 +3,7 @@
     "oauth_backend": {
       "main": "src/oauth_backend/main.mo",
       "type": "motoko",
-      "args": "(principal \"avqkn-guaaa-aaaaa-qaaea-cai\")"
+      "init_arg": "(principal \"avqkn-guaaa-aaaaa-qaaea-cai\")"
     },
     "oauth_frontend": {
       "dependencies": ["oauth_backend", "icrc1_ledger"],
