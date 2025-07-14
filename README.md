@@ -1,6 +1,6 @@
 # Prometheus Protocol
 
-<img width="1536" height="1024" alt="banner_candidate_7" src="https://github.com/user-attachments/assets/6eac81d0-4d63-4cde-a626-0103bfa4c268" />
+<img width="1536" height="1024" alt="banner_candidate_7" src="images/ui.png" />
 
 ## Overview
 
@@ -156,6 +156,8 @@ This sequence validates the entire end-to-end process.
     -   **Crucially, change the "Public Key Format" dropdown from `PEM` to `JWK`.**
 
     You should see the green **"Signature Verified"** message. Congratulations!
+
+![JWT Verification Example](images/jwt_decoded.png)
 
 ## License
 

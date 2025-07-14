@@ -1,37 +1,102 @@
+/* --- Base & Theme Setup --- */
+:root {
+  --color-background: #111827; /* Tailwind gray-900 */
+  --color-card-bg: rgba(31, 41, 55, 0.5); /* Tailwind gray-800 with transparency */
+  --color-grid: #374151; /* Tailwind gray-700 */
+  --color-text-primary: #F9FAFB; /* Tailwind gray-50 */
+  --color-text-secondary: #9CA3AF; /* Tailwind gray-400 */
+  --color-neon-pink: #EC4899;
+  --color-neon-purple: #8B5CF6;
+  --font-family-main: 'Poppins', sans-serif;
+}
+
 body {
-    font-family: sans-serif;
-    font-size: 1.5rem;
+  margin: 0;
+  font-family: var(--font-family-main);
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+  
+  /* Retrowave grid background */
+  background-image: 
+    linear-gradient(var(--color-grid) 1px, transparent 1px), 
+    linear-gradient(to right, var(--color-grid) 1px, var(--color-background) 1px);
+  background-size: 40px 40px;
 }
 
-img {
-    max-width: 50vw;
-    max-height: 25vw;
-    display: block;
-    margin: auto;
+/* --- Layout --- */
+.container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 2rem;
+  box-sizing: border-box;
 }
 
-form {
-    display: flex;
-    justify-content: center;
-    gap: 0.5em;
-    flex-flow: row wrap;
-    max-width: 40vw;
-    margin: auto;
-    align-items: baseline;
+.card {
+  width: 100%;
+  max-width: 450px;
+  background-color: var(--color-card-bg);
+  border: 1px solid var(--color-grid);
+  border-radius: 1rem;
+  padding: 2.5rem;
+  text-align: center;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
 }
 
-button[type="submit"] {
-    padding: 5px 20px;
-    margin: 10px auto;
-    float: right;
+/* --- Elements --- */
+.banner-image {
+  width: 100%;
+  border-radius: 0.5rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 0 25px var(--color-neon-pink);
 }
 
-#greeting {
-    margin: 10px auto;
-    padding: 10px 60px;
-    border: 1px solid #222;
+h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  /* Neon glow effect */
+  text-shadow: 0 0 5px var(--color-neon-pink), 0 0 10px var(--color-neon-pink);
+  margin: 0 0 0.5rem 0;
 }
 
-#greeting:empty {
-    display: none;
+.subtitle {
+  color: var(--color-text-secondary);
+  margin: 0 0 2rem 0;
+  line-height: 1.6;
+}
+
+.login-button {
+  width: 100%;
+  padding: 0.8rem 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  
+  /* Gradient background matching the banner */
+  background-image: linear-gradient(to right, var(--color-neon-pink), var(--color-neon-purple));
+  
+  /* Smooth transitions for hover effects */
+  transition: all 0.3s ease;
+  
+  /* Glow effect */
+  box-shadow: 0 0 15px rgba(236, 72, 153, 0.5), 0 0 15px rgba(139, 92, 246, 0.5);
+}
+
+.login-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 25px rgba(236, 72, 153, 0.8), 0 0 25px rgba(139, 92, 246, 0.8);
+}
+
+.status-text {
+  margin-top: 1.5rem;
+  color: var(--color-text-secondary);
+  font-style: italic;
+  min-height: 1.2em; /* Reserve space to prevent layout shift */
 }

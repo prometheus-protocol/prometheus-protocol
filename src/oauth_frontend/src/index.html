@@ -2,22 +2,33 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width" />
-    <title>Prometheus Protocol Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Prometheus Protocol | Authentication</title>
     <base href="/" />
     <link rel="icon" href="favicon.ico" />
+    <!-- Google Fonts for a modern, clean look -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Link to our new stylesheet -->
     <link type="text/css" rel="stylesheet" href="main.css" />
   </head>
   <body>
-    <main>
-      <img src="logo2.svg" alt="DFINITY logo" />
-      <br />
-      <br />
-      <h1>Authentication Required</h1>
-      <p>Please log in to continue the authorization process.</p>
-      <br />
-      <button id="loginButton">Login with Internet Identity</button>
-      <p id="status"></p>
-    </main>
+    <div class="container">
+      <main class="card">
+        <img src="banner.png" alt="Prometheus Protocol Banner" class="banner-image" />
+        
+        <h1>Authentication Required</h1>
+        <p class="subtitle">
+          Log in with your Internet Identity to securely connect to the application.
+        </p>
+        
+        <button id="loginButton" class="login-button">
+          Connect with Internet Identity
+        </button>
+        
+        <p id="status" class="status-text"></p>
+      </main>
+    </div>
   </body>
 </html>
