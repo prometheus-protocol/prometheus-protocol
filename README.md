@@ -1,4 +1,4 @@
-# Prometheus Protocol - Chimera
+# Prometheus Protocol - Auth Canister
 
 <img width="1536" alt="Prometheus Protocol Banner" src="images/banner-professional.png" />
 
@@ -20,12 +20,13 @@ The system is designed for modern, self-service developer workflows, featuring *
 - **Standards-Compliant JWTs:** Generates `ES256` signed JWTs using the web-standard `P-256` curve for maximum interoperability.
 - **Public Key Discovery (JWKS):** Exposes the public signing key via a standard `/.well-known/jwks.json` endpoint.
 - **Server Metadata:** Provides a `/.well-known/oauth-authorization-server` discovery document for automated client configuration, as per [RFC 8414](https://tools.ietf.org/html/rfc8414).
+- **Resource Indicators:** Supports the specification of resource indicators during authorization to indicate the target resource server for the token as defined in [RFC 8707](https://tools.ietf.org/html/rfc8707)
 
 ## Architecture
 
 The project consists of two primary canisters:
 
-- **`oauth_backend`:** The main OAuth2 server. It handles all logic for client registration, activation, authorization, token issuance, and key management.
+- **`oauth_backend`:** The main OAuth2 server. It handles all logic for client registration and activation, resource server registration, authorization, token issuance, and key management.
 - **`oauth_frontend`:** A simple UI canister that serves the login and payment page. It integrates with `@dfinity/auth-client` to handle the Internet Identity flow.
 
 ## Getting Started
