@@ -31,52 +31,7 @@ The Prometheus Protocol is designed to bridge the Web2 and Web3 economies by ena
 
 This diagram illustrates the complete flow, from a user initiating a login in a client application to the final, successful micropayment on the resource server.
 
-```mermaid
-graph LR
-    subgraph User
-        U(User)
-        B(Browser)
-        C1(Client App <br> e.g. MCP Client, React SPA)
-    end
-
-    subgraph "Authentication & UI"
-        II(Internet Identity)
-        AuthFrontend(oauth_frontend <br> Login UI)
-    end
-
-    subgraph "Prometheus Core"
-        style AuthBackend fill:#d5f5e3,stroke:#333,stroke-width:2px
-        AuthBackend(oauth_backend <br> Auth Canister)
-        Ledger(ICRC-2 Ledger)
-    end
-
-    subgraph "Resource Servers (APIs)"
-        style ExpressRS fill:#d6eaf8,stroke:#333,stroke-width:2px
-        ExpressRS(Express.js Server <br> e.g. MCP Server)
-    end
-
-    %% Flow 1: Authorization
-    U -- "Initiates Login" --> C1
-    C1 -- "1. /authorize" --> AuthBackend
-    AuthBackend -- "2. Redirect" --> B
-    B -- "3. Renders Login UI" --> AuthFrontend
-    AuthFrontend -- "4. Login" --> II
-    II -- "5. Returns Principal" --> AuthFrontend
-    AuthFrontend -- "6. Optional: Approve" --> Ledger
-    AuthFrontend -- "7. Complete Auth" --> AuthBackend
-    AuthBackend -- "8. Returns auth_code" --> C1
-    C1 -- "9. /token (back-channel)" --> AuthBackend
-    AuthBackend -- "10. Returns JWT" --> C1
-
-    %% Flow 2: Web2 Micropayment
-    C1 -- "11. API Request with JWT" --> ExpressRS
-    ExpressRS -- "12. Validate JWT" --> AuthBackend
-    ExpressRS -- "13. charge_user" --> AuthBackend
-    AuthBackend -- "14. transfer_from" --> Ledger
-    Ledger -- "15. Success" --> AuthBackend
-    AuthBackend -- "16. Success" --> ExpressRS
-    ExpressRS -- "17. Return Data" --> C1
-```
+![Architecture Diagram](images/architecture.png)
 
 ### Key Components
 
