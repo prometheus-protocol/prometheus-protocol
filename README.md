@@ -22,14 +22,99 @@ The system is designed for modern, self-service developer workflows, featuring *
 - **Server Metadata:** Provides a `/.well-known/oauth-authorization-server` discovery document for automated client configuration, as per [RFC 8414](https://tools.ietf.org/html/rfc8414).
 - **Resource Indicators:** Supports the specification of resource indicators during authorization to indicate the target resource server for the token as defined in [RFC 8707](https://tools.ietf.org/html/rfc8707)
 
+
 ## Architecture
 
-The project consists of two primary canisters:
+The Prometheus Protocol is designed to bridge the Web2 and Web3 economies by enabling traditional, off-chain services to accept on-chain micropayments in a secure and decentralized manner. The architecture is built around a set of core canisters on the Internet Computer and a client-side SDK that simplifies integration for service providers.
 
-- **`oauth_backend`:** The main OAuth2 server. It handles all logic for client registration and activation, resource server registration, authorization, token issuance, and key management.
-- **`oauth_frontend`:** A simple UI canister that serves the login and payment page. It integrates with `@dfinity/auth-client` to handle the Internet Identity flow.
+### Architectural Diagram
 
-![Architecture Diagram](images/architecture.png)
+This diagram illustrates the complete flow, from a user initiating a login in a client application to the final, successful micropayment on the resource server.
+
+```mermaid
+graph LR
+    subgraph User
+        U(User)
+        B(Browser)
+        C1(Client App <br> e.g. MCP Client, React SPA)
+    end
+
+    subgraph "Authentication & UI"
+        II(Internet Identity)
+        AuthFrontend(oauth_frontend <br> Login UI)
+    end
+
+    subgraph "Prometheus Core"
+        style AuthBackend fill:#d5f5e3,stroke:#333,stroke-width:2px
+        AuthBackend(oauth_backend <br> Auth Canister)
+        Ledger(ICRC-2 Ledger)
+    end
+
+    subgraph "Resource Servers (APIs)"
+        style ExpressRS fill:#d6eaf8,stroke:#333,stroke-width:2px
+        ExpressRS(Express.js Server <br> e.g. MCP Server)
+    end
+
+    %% Flow 1: Authorization
+    U -- "Initiates Login" --> C1
+    C1 -- "1. /authorize" --> AuthBackend
+    AuthBackend -- "2. Redirect" --> B
+    B -- "3. Renders Login UI" --> AuthFrontend
+    AuthFrontend -- "4. Login" --> II
+    II -- "5. Returns Principal" --> AuthFrontend
+    AuthFrontend -- "6. Optional: Approve" --> Ledger
+    AuthFrontend -- "7. Complete Auth" --> AuthBackend
+    AuthBackend -- "8. Returns auth_code" --> C1
+    C1 -- "9. /token (back-channel)" --> AuthBackend
+    AuthBackend -- "10. Returns JWT" --> C1
+
+    %% Flow 2: Web2 Micropayment
+    C1 -- "11. API Request with JWT" --> ExpressRS
+    ExpressRS -- "12. Validate JWT" --> AuthBackend
+    ExpressRS -- "13. charge_user" --> AuthBackend
+    AuthBackend -- "14. transfer_from" --> Ledger
+    Ledger -- "15. Success" --> AuthBackend
+    AuthBackend -- "16. Success" --> ExpressRS
+    ExpressRS -- "17. Return Data" --> C1
+```
+
+### Key Components
+
+The protocol is composed of several key components that work in concert:
+
+*   **`oauth_backend` (The Core Engine):** This is the main canister and the heart of the protocol. It is a stateful canister responsible for:
+    *   Registering and managing Client Applications and Resource Servers.
+    *   Handling the OAuth2 `/authorize` and `/token` endpoints.
+    *   Issuing, signing, and managing JWTs (JSON Web Tokens).
+    *   Serving public keys via the `/.well-known/jwks.json` endpoint for JWT validation.
+    *   Processing payments by calling the ICRC-2 Ledger canister.
+
+*   **`oauth_frontend` (The Login UI):** A dedicated UI canister that provides a user-friendly interface for the authentication process. Its primary roles are:
+    *   Integrating with `@dfinity/auth-client` to handle the login flow with Internet Identity.
+    *   Providing a UI for the user to grant a spending allowance (`icrc2_approve`) to the `oauth_backend` canister.
+    *   Finalizing the authorization flow by calling back to the `oauth_backend`.
+
+*   **Resource Server (The Service Provider):** This is the Web2 service that wants to charge for its API. For example, an **MCP Server**. It is responsible for:
+    *   Protecting specific API endpoints.
+    *   Using standard middleware (e.g., `express-jwt`) to validate incoming JWTs.
+    *   Using the Prometheus JS SDK to trigger the micropayment.
+
+*   **Client Application (The Initiator):** This is the application the user interacts with, such as an **MCP Client** or a React Single-Page App. It is responsible for:
+    *   Initiating the OAuth2 flow by redirecting the user to the `oauth_backend`.
+    *   Receiving the `authorization_code` after a successful login.
+    *   Securely exchanging the code for a JWT.
+    *   Storing the JWT and including it in subsequent requests to the Resource Server.
+
+*   **Prometheus JS SDK (`@prometheus-protocol/typescript-sdk`):** A client library for Node.js that dramatically simplifies integration for Resource Server developers. It abstracts away the complexity of:
+    *   Creating an authenticated agent using a server's private key (`.pem` file).
+    *   Making a secure, authenticated inter-canister call to the `charge_user` method on the `oauth_backend`.
+
+*   **ICRC-2 Ledger Canister (The Bank):** A standard token canister that holds user funds. Its role is strictly financial:
+    *   To hold token balances for users.
+    *   To manage spending allowances granted via `icrc2_approve`.
+    *   To execute payments via `icrc2_transfer_from` when called by the `oauth_backend`.
+
+*   **Internet Identity (The Authenticator):** The decentralized authentication service on the Internet Computer. It is used to securely verify the user's identity and provide a stable `Principal` to the protocol.
 
 ## Getting Started
 
