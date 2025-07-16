@@ -117,8 +117,10 @@ loginButton.onclick = async () => {
 
   await authClient.login({
     identityProvider: process.env.II_URL,
-    // By removing onSuccess, we ensure a consistent full-page redirect flow
-    // which our new init() function is designed to handle perfectly.
+    onSuccess: async () => {
+      status.innerText = 'Successfully logged in!';
+      await handleAuthenticated();
+    },
     onError: (err) => {
       status.innerText = `Login failed: ${err}`;
     },
@@ -136,12 +138,7 @@ completeButton.onclick = async () => {
   completeButton.disabled = true;
 
   try {
-    const identity = authClient.getIdentity();
-    const userPrincipal = identity.getPrincipal();
-    const result = await backendActor.complete_authorize(
-      sessionId,
-      userPrincipal,
-    );
+    const result = await backendActor.complete_authorize(sessionId);
 
     if ('ok' in result) {
       window.location.href = result.ok;

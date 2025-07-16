@@ -94,7 +94,7 @@ module Admin {
   };
 
   // The core payment function. A trusted resource server calls this to charge a user.
-  public func charge_user(context : Types.Context, caller : Principal, user_to_charge : Principal, amount : Nat) : async Result.Result<Null, Text> {
+  public func charge_user(context : Types.Context, caller : Principal, user_to_charge : Principal, amount : Nat, icrc2_ledger_id : Principal) : async Result.Result<Null, Text> {
     // 1. Identify the resource server by the caller's Principal
     let service_principal = caller;
     let resource_server = switch (findResourceServerByServicePrincipal(context, service_principal)) {
@@ -108,7 +108,7 @@ module Admin {
     let payout_principal = resource_server.payout_principal;
 
     // 3. Execute the payment
-    let ledger = actor (Principal.toText(context.icrc2_ledger_id)) : ICRC2.Service;
+    let ledger = actor (Principal.toText(icrc2_ledger_id)) : ICRC2.Service;
     let transfer_args : ICRC2.TransferFromArgs = {
       from = { owner = user_to_charge; subaccount = null };
       to = { owner = payout_principal; subaccount = null };

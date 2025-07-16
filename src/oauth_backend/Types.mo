@@ -80,8 +80,6 @@ module {
     creator : Principal;
     var frontend_canister_id : Principal;
     var signing_key_bytes : Blob;
-    icrc2_ledger_id : Principal;
-    registration_fee : Nat; // The fee in PMP tokens for client registration
     clients : Map.Map<Text, Client>;
     resource_servers : Map.Map<Text, ResourceServer>;
     auth_codes : Map.Map<Text, AuthorizationCode>;

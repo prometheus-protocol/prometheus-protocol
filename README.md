@@ -6,7 +6,7 @@
 
 Prometheus Protocol is a full-featured, on-chain OAuth2 provider built for the Internet Computer. It enables developers to secure their applications using the industry-standard **Authorization Code Flow with PKCE**, allowing users to log in with their Internet Identity and grant specific permissions to third-party applications.
 
-The system is designed for modern, self-service developer workflows, featuring **Dynamic Client Registration** and a simple, fee-based activation model. It issues standards-compliant JSON Web Tokens (JWTs) that can be verified by any resource server in the ecosystem, providing a decentralized and robust foundation for authentication and authorization.
+The system is designed for modern, self-service developer workflows, featuring **Dynamic Client Registration**. It issues standards-compliant JSON Web Tokens (JWTs) that can be verified by any resource server in the ecosystem, providing a decentralized and robust foundation for authentication and authorization.
 
 ## Current Status: Phase 0 Complete
 
@@ -16,7 +16,6 @@ The system is designed for modern, self-service developer workflows, featuring *
 
 - **OAuth2 Authorization Code + PKCE:** Implements the full flow as per [RFC 6749](https://tools.ietf.org/html/rfc6749) and the secure Proof Key for Code Exchange enhancement as per [RFC 7636](https://tools.ietf.org/html/rfc7636).
 - **Dynamic Client Registration (DCR):** A public `/register` endpoint allows any client to programmatically register itself without manual setup, as per [RFC 7591](https://tools.ietf.org/html/rfc7591).
-- **Fee-Based Client Activation:** A unique on-chain model prevents spam by requiring a one-time fee to activate a dynamically registered client, making it useful.
 - **Standards-Compliant JWTs:** Generates `ES256` signed JWTs using the web-standard `P-256` curve for maximum interoperability.
 - **Public Key Discovery (JWKS):** Exposes the public signing key via a standard `/.well-known/jwks.json` endpoint.
 - **Server Metadata:** Provides a `/.well-known/oauth-authorization-server` discovery document for automated client configuration, as per [RFC 8414](https://tools.ietf.org/html/rfc8414).
@@ -41,7 +40,7 @@ The protocol is composed of several key components that work in concert:
   - Handling the OAuth2 `/authorize` and `/token` endpoints.
   - Issuing, signing, and managing JWTs (JSON Web Tokens).
   - Serving public keys via the `/.well-known/jwks.json` endpoint for JWT validation.
-  - Processing payments by calling the ICRC-2 Ledger canister.
+  - Processing payments by calling ICRC-2 Ledger canisters.
 
 - **`oauth_frontend` (The Login UI):** A dedicated UI canister that provides a user-friendly interface for the authentication process. Its primary roles are:
   - Integrating with `@dfinity/auth-client` to handle the login flow with Internet Identity.
@@ -63,7 +62,7 @@ The protocol is composed of several key components that work in concert:
   - Creating an authenticated agent using a server's private key (`.pem` file).
   - Making a secure, authenticated inter-canister call to the `charge_user` method on the `oauth_backend`.
 
-- **ICRC-2 Ledger Canister (The Bank):** A standard token canister that holds user funds. Its role is strictly financial:
+- **ICRC-2 Ledger Canisters (The Bank):** Standard token canisters that hold user funds. Their role is strictly financial:
   - To hold token balances for users.
   - To manage spending allowances granted via `icrc2_approve`.
   - To execute payments via `icrc2_transfer_from` when called by the `oauth_backend`.
@@ -116,26 +115,6 @@ First, we'll register a new client application and pay the one-time fee to activ
     ./scripts/register_client.sh
     ```
 
-2.  **Load Credentials:**
-    Load the new credentials into your current shell session by "sourcing" the environment file.
-
-    ```bash
-    source .env.prom
-    ```
-
-3.  **Activate the Client:**
-    Activation requires a one-time fee. First, approve the fee from your principal, then call the `activate_client` function.
-
-    ```bash
-    # A. Approve the fee (50 PMP tokens)
-    dfx canister call icrc1_ledger icrc2_approve '(record { spender = record { owner = principal "'$(dfx canister id oauth_backend)'" }; amount = 50_00000000 })'
-
-    # B. Call the activate function with your new credentials
-    dfx canister call oauth_backend activate_client "(\"$NEW_CLIENT_ID\", \"$NEW_CLIENT_SECRET\")"
-    ```
-
-    You should see `(ok = "Client successfully activated.")`. Your client is now ready to use.
-
 ### Phase 2: Get an Authorization Code
 
 Now, we'll initiate the login flow for a user.
@@ -157,7 +136,7 @@ Now, we'll initiate the login flow for a user.
 3.  **Authorize in Browser:**
     - Copy the full `/authorize` URL printed by the script.
     - Paste it into your browser.
-    - You will be redirected to the login page. Complete the Internet Identity login and the subscription flow if necessary.
+    - You will be redirected to the login page. Complete the Internet Identity login.
     - You will be redirected to `https://jwt.io`. The URL will contain the authorization code: `https://jwt.io/?code=<A_LONG_HEX_STRING>&...`
     - **Copy the `code` value.**
 

@@ -48,8 +48,6 @@ func createMockContext() : Types.Context {
     authorize_sessions = Map.new();
     var frontend_canister_id = Principal.fromText("aaaaa-aa");
     var signing_key_bytes = Blob.fromArray([]);
-    icrc2_ledger_id = Principal.fromText("avqkn-guaaa-aaaaa-qaaea-cai");
-    registration_fee = 50 * 100_000_000;
     uri_to_rs_id = Map.new<Text, Text>(); // Initialized
   };
 };
@@ -116,7 +114,7 @@ await suite(
             let unregistered_caller = Principal.fromText("dbkgd-72ter-ea");
             let user_to_charge = Principal.fromText("kufey-x4r");
 
-            let result = await Admin.charge_user(context, unregistered_caller, user_to_charge, 100_000);
+            let result = await Admin.charge_user(context, unregistered_caller, user_to_charge, 100_000, Principal.fromText("avqkn-guaaa-aaaaa-qaaea-cai"));
 
             expect.result<Null, Text>(result, showChargeResult, func(a, b) { a == b }).isErr();
             expect.result<Null, Text>(result, showChargeResult, func(a, b) { a == b }).equal(#err("Unauthorized: This service principal is not registered with any resource server."));

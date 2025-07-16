@@ -10,7 +10,7 @@ import Debug "mo:base/Debug";
 import Random "mo:base/Random";
 import BaseX "mo:base-x-encoder";
 import Map "mo:map/Map";
-import { thash; phash } "mo:map/Map";
+import { thash } "mo:map/Map";
 import Sha256 "mo:sha2/Sha256";
 import JWT "mo:jwt";
 import Server "mo:server";
