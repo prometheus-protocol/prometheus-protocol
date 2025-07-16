@@ -10,7 +10,7 @@ The system is designed for modern, self-service developer workflows, featuring *
 
 ## Current Status: Phase 0 Complete
 
-**Phase 0: Project Chimera** is complete. The core authentication engine is online, feature-complete, and compliant with modern security standards.
+[**Phase 0: Project Chimera**](https://github.com/prometheus-protocol) is complete. The core authentication engine is online, feature-complete, and compliant with modern security standards.
 
 **Key Features Implemented:**
 
