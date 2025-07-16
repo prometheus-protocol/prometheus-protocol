@@ -74,11 +74,3 @@ echo "export NEW_CLIENT_SECRET=\"$CLIENT_SECRET\"" >> "$ENV_FILE"
 
 # 7. Print a success message and clear instructions to the user
 echo -e "\n✅ Success! Client credentials have been saved to '$ENV_FILE'."
-echo -e "\n➡️  What's Next?"
-echo "   1. Run the following command to load the credentials into your shell:"
-echo "      source $ENV_FILE"
-echo ""
-echo "   2. Approve the activation fee for your principal."
-echo "   3. Run the activate_client command:"
-# --- THIS IS THE CORRECTED LINE ---
-echo "      dfx canister call oauth_backend activate_client '(\"$CLIENT_ID\", \"$CLIENT_SECRET\")'"

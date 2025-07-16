@@ -13,14 +13,10 @@ import { _SERVICE } from '../../declarations/oauth_backend/oauth_backend.did';
 // --- UI Element References ---
 // Views
 const loginView = document.getElementById('loginView');
-const paymentView = document.getElementById('paymentView');
 const completionView = document.getElementById('completionView');
 // Buttons
 const loginButton = document.getElementById('loginButton') as HTMLButtonElement;
-const approveButton = document.getElementById(
-  'approveButton',
-) as HTMLButtonElement;
-const payButton = document.getElementById('payButton') as HTMLButtonElement;
+// DELETE: No longer need approveButton or payButton
 const completeButton = document.getElementById(
   'completeButton',
 ) as HTMLButtonElement;
@@ -29,8 +25,7 @@ const logoutButton = document.getElementById(
 ) as HTMLButtonElement;
 // Displays & Statuses
 const principalDisplay = document.getElementById('principalDisplay');
-const approveStatus = document.getElementById('approveStatus');
-const payStatus = document.getElementById('payStatus');
+// DELETE: No longer need approveStatus
 const completionStatus = document.getElementById('completionStatus');
 const status = document.getElementById('status');
 const allowanceAmount = document.getElementById(
@@ -55,7 +50,6 @@ type UiState = 'login' | 'payment' | 'completion' | 'invalid';
 
 const updateUi = (state: UiState) => {
   loginView.hidden = state !== 'login';
-  paymentView.hidden = state !== 'payment';
   completionView.hidden = state !== 'completion';
 
   if (state === 'invalid') {
@@ -69,17 +63,26 @@ const updateUi = (state: UiState) => {
 
 // --- Core Logic ---
 const init = async () => {
+  // --- THIS IS THE FIX ---
+  // 1. Read the sessionId from the URL immediately and unconditionally.
+  // This makes it available to all subsequent logic on this page load.
   const urlParams = new URLSearchParams(window.location.search);
   sessionId = urlParams.get('session_id');
 
+  // 2. Create the auth client.
   authClient = await AuthClient.create();
 
+  // 3. Now, branch based on authentication state.
   if (await authClient.isAuthenticated()) {
+    // The global sessionId is already set, so handleAuthenticated() will work.
     await handleAuthenticated();
-  } else if (sessionId) {
-    updateUi('login');
   } else {
-    updateUi('invalid');
+    // If not authenticated, decide the UI based on whether a session is active.
+    if (sessionId) {
+      updateUi('login');
+    } else {
+      updateUi('invalid');
+    }
   }
 };
 
@@ -98,18 +101,8 @@ const handleAuthenticated = async () => {
     principalDisplay.innerText = userPrincipal.toText();
   }
 
+  updateUi('completion');
   status.hidden = true;
-
-  const subscription = await backendActor.get_subscription();
-
-  if (
-    subscription.length > 0 &&
-    subscription[0].expires_at > BigInt(Date.now()) * 1000000n
-  ) {
-    updateUi('completion');
-  } else {
-    updateUi('payment');
-  }
 };
 
 const handleLogout = async () => {
@@ -121,9 +114,11 @@ const handleLogout = async () => {
 loginButton.onclick = async () => {
   status.hidden = false;
   status.innerText = 'Connecting to Internet Identity...';
+
   await authClient.login({
     identityProvider: process.env.II_URL,
-    onSuccess: handleAuthenticated,
+    // By removing onSuccess, we ensure a consistent full-page redirect flow
+    // which our new init() function is designed to handle perfectly.
     onError: (err) => {
       status.innerText = `Login failed: ${err}`;
     },
@@ -131,45 +126,6 @@ loginButton.onclick = async () => {
 };
 
 logoutButton.onclick = handleLogout;
-
-approveButton.onclick = async () => {
-  approveStatus.innerText = 'Approving...';
-  approveButton.disabled = true;
-  const SUB_PRICE = 100_00000000n;
-  const FEE = 10_000n;
-  const approveArgs: ApproveParams = {
-    spender: {
-      owner: Principal.fromText(auth_canister_id),
-      subaccount: toNullable(),
-    },
-    amount: SUB_PRICE + FEE,
-  };
-  try {
-    await ledgerActor.approve(approveArgs);
-    approveStatus.innerText = 'Approval successful!';
-    payButton.disabled = false;
-  } catch (error) {
-    approveStatus.innerText = `Approval failed: ${error.message}`;
-    approveButton.disabled = false;
-  }
-};
-
-payButton.onclick = async () => {
-  payStatus.innerText = 'Processing payment...';
-  payButton.disabled = true;
-  try {
-    const result = await backendActor.register_subscription();
-    if ('ok' in result) {
-      payStatus.innerText = 'Payment successful! Subscription is now active.';
-      updateUi('completion'); // Transition to the final view
-    } else {
-      throw new Error(JSON.stringify(result.err));
-    }
-  } catch (error) {
-    payStatus.innerText = `Payment failed: ${error.message}`;
-    payButton.disabled = false;
-  }
-};
 
 completeButton.onclick = async () => {
   if (!sessionId) {

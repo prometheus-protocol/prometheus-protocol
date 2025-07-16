@@ -11,6 +11,7 @@ module {
     name : Text;
     payout_principal : Principal; // CRITICAL: Where the money goes.
     service_principals : [Principal]; // List of trusted backend server identities.
+    uris : [Text]; // List of URIs for the resource server.
     status : {
       #active;
       #pending;
@@ -42,13 +43,6 @@ module {
     code_challenge : Text;
     code_challenge_method : Text;
     audience : Text; // The resource server this code is for.
-  };
-
-  // Represents a user's active subscription.
-  public type Subscription = {
-    user_principal : Principal;
-    tier : Text;
-    expires_at : Time.Time;
   };
 
   // Represents the temporary state during the II login flow.
@@ -91,8 +85,8 @@ module {
     clients : Map.Map<Text, Client>;
     resource_servers : Map.Map<Text, ResourceServer>;
     auth_codes : Map.Map<Text, AuthorizationCode>;
-    subscriptions : Map.Map<Principal, Subscription>;
     authorize_sessions : Map.Map<Text, AuthorizeSession>;
+    uri_to_rs_id : Map.Map<Text, Text>; // Maps resource server URIs to their IDs
   };
 
   // Re-export server types for convenience.

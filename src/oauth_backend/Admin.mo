@@ -26,60 +26,6 @@ module Admin {
     Map.set(context.clients, thash, client.client_id, client);
   };
 
-  public func activate_client(
-    context : Types.Context,
-    caller : Principal,
-    client_id : Text,
-    client_secret : Text,
-  ) : async Result.Result<Text, Text> {
-    // 1. Find the client record
-    let client = switch (Map.get(context.clients, thash, client_id)) {
-      case (null) { return #err("Client not found.") };
-      case (?c) c;
-    };
-
-    // 2. Verify ownership by checking the client_secret
-    let provided_secret_hash_blob = Sha256.fromBlob(#sha256, Text.encodeUtf8(client_secret));
-    let provided_secret_hash = BaseX.toHex(provided_secret_hash_blob.vals(), { isUpper = false; prefix = #none });
-
-    if (provided_secret_hash != client.client_secret_hash) {
-      return #err("Unauthorized: Invalid client_secret.");
-    };
-
-    // 3. Check if already active
-    if (client.status == #active) {
-      return #ok("Client is already active.");
-    };
-
-    // 4. Execute the activation fee payment
-    let ledger = actor (Principal.toText(context.icrc2_ledger_id)) : ICRC2.Service;
-    let transfer_args : ICRC2.TransferFromArgs = {
-      from = { owner = caller; subaccount = null };
-      to = { owner = context.self; subaccount = null };
-      amount = context.registration_fee;
-      fee = null;
-      memo = null;
-      created_at_time = null;
-      spender_subaccount = null;
-    };
-    let transfer_result = await ledger.icrc2_transfer_from(transfer_args);
-
-    switch (transfer_result) {
-      case (#Err(e)) { return #err("Payment failed: " # debug_show (e)) };
-      case (#Ok(_)) { /* Payment successful, proceed. */ };
-    };
-
-    // 5. Activate the client and officially assign ownership
-    let updated_client : Types.Client = {
-      client with
-      owner = caller;
-      status = #active;
-    };
-    Map.set(context.clients, thash, client_id, updated_client);
-
-    return #ok("Client successfully activated.");
-  };
-
   // ===================================================================
   // RESOURCE SERVER MANAGEMENT & PAYMENT LOGIC
   // ===================================================================
@@ -89,6 +35,7 @@ module Admin {
     context : Types.Context,
     caller : Principal,
     name : Text,
+    uris : [Text],
     payout_principal : Principal,
     initial_service_principal : Principal,
   ) : async Types.ResourceServer {
@@ -115,9 +62,16 @@ module Admin {
       payout_principal = payout_principal;
       service_principals = [initial_service_principal];
       status = #active; // Active immediately for now
+      uris = uris;
     };
 
     Map.set(context.resource_servers, thash, resource_server_id, new_server);
+
+    // 4. Update the URI to resource server ID mapping
+    for (uri in Iter.fromArray(uris)) {
+      Map.set(context.uri_to_rs_id, thash, normalize_uri(uri), resource_server_id);
+    };
+
     return new_server;
   };
 
@@ -129,6 +83,14 @@ module Admin {
       };
     };
     return null;
+  };
+
+  // A helper function to ensure URIs are stored and looked up consistently.
+  // It removes all trailing slashes from a URI.
+  public func normalize_uri(uri : Text) : Text {
+    // trimEnd is idempotent: it does nothing if the pattern is not at the end.
+    // This is more robust than checking with endsWith first.
+    return Text.trimEnd(uri, #char '/');
   };
 
   // The core payment function. A trusted resource server calls this to charge a user.
@@ -163,5 +125,44 @@ module Admin {
       case (#Ok(_)) { return #ok(null) };
       case (#Err(e)) { return #err("Payment failed: " # debug_show (e)) };
     };
+  };
+
+  // Allows the owner of a resource server to update its associated URIs.
+  public func update_resource_server_uris(
+    context : Types.Context,
+    caller : Principal,
+    resource_server_id : Text,
+    new_uris : [Text],
+  ) : async Result.Result<Text, Text> {
+    // 1. Find the resource server by its unique ID.
+    let server_opt = Map.get(context.resource_servers, thash, resource_server_id);
+    let server = switch (server_opt) {
+      case (null) {
+        return #err("Resource server not found.");
+      };
+      case (?s) { s };
+    };
+
+    // 2. Authenticate the caller. Only the original owner can update the URIs.
+    if (caller != server.owner) {
+      return #err("Unauthorized: Caller is not the owner of this resource server.");
+    };
+
+    // 3. Clean up the old URIs from the reverse lookup map to prevent stale entries.
+    for (old_uri in Iter.fromArray(server.uris)) {
+      Map.delete(context.uri_to_rs_id, thash, old_uri);
+    };
+
+    // 4. Add the new URIs to the reverse lookup map.
+    for (new_uri in Iter.fromArray(new_uris)) {
+      Map.set(context.uri_to_rs_id, thash, normalize_uri(new_uri), resource_server_id);
+    };
+
+    // 5. Update the URIs in the main resource server record.
+    let updated = { server with uris = new_uris };
+    Map.set(context.resource_servers, thash, resource_server_id, updated);
+
+    // 6. Return a success message.
+    return #ok("Resource server URIs updated successfully.");
   };
 };

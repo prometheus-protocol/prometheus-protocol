@@ -1,1 +1,0 @@
-dfx canister call avqkn-guaaa-aaaaa-qaaea-cai set_frontend_canister_id '(principal "asrmz-lmaaa-aaaaa-qaaeq-cai")'

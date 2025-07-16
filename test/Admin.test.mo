@@ -32,11 +32,6 @@ func showResourceServer(rs : Types.ResourceServer) : Text {
   debug_show (rs);
 };
 
-// Generic helper to display a Result.
-func showResult(c : Result.Result<Text, Text>) : Text {
-  debug_show (c);
-};
-
 func showChargeResult(c : Result.Result<Null, Text>) : Text {
   debug_show (c);
 };
@@ -50,12 +45,12 @@ func createMockContext() : Types.Context {
     clients = Map.new<Text, Types.Client>();
     resource_servers = Map.new<Text, Types.ResourceServer>(); // Initialized
     auth_codes = Map.new();
-    subscriptions = Map.new();
     authorize_sessions = Map.new();
     var frontend_canister_id = Principal.fromText("aaaaa-aa");
     var signing_key_bytes = Blob.fromArray([]);
     icrc2_ledger_id = Principal.fromText("avqkn-guaaa-aaaaa-qaaea-cai");
     registration_fee = 50 * 100_000_000;
+    uri_to_rs_id = Map.new<Text, Text>(); // Initialized
   };
 };
 
@@ -87,34 +82,6 @@ await suite(
       },
     );
 
-    await test(
-      "activate_client: should fail if client_id does not exist",
-      func() : async () {
-        let context = createMockContext();
-        let result = await Admin.activate_client(context, context.creator, "non-existent-id", "secret");
-        expect.result<Text, Text>(result, showResult, func(a, b) { a == b }).equal(#err("Client not found."));
-      },
-    );
-
-    await test(
-      "activate_client: should fail if client_secret is invalid",
-      func() : async () {
-        let context = createMockContext();
-        let client : Types.Client = {
-          client_id = "test-2";
-          owner = context.creator;
-          client_secret_hash = "correct_hash";
-          client_name = "c";
-          logo_uri = "";
-          redirect_uris = [];
-          status = #pending_activation;
-        };
-        Map.set(context.clients, thash, client.client_id, client);
-        let result = await Admin.activate_client(context, context.creator, "test-2", "wrong_secret");
-        expect.result<Text, Text>(result, showResult, func(a, b) { a == b }).equal(#err("Unauthorized: Invalid client_secret."));
-      },
-    );
-
     // --- NEW TEST SUITE FOR RESOURCE SERVERS ---
     await suite(
       "Resource Server & Payments",
@@ -127,7 +94,7 @@ await suite(
             let payout = Principal.fromText("aaaaa-aa");
             let service_principal = Principal.fromText("aaaaa-aa");
 
-            let new_server = await Admin.register_resource_server(context, owner, "Test Server", payout, service_principal);
+            let new_server = await Admin.register_resource_server(context, owner, "Test Server", ["https://canister_id.ic0.app"], payout, service_principal);
 
             // Check that the returned object has the correct data
             expect.principal(new_server.owner).equal(owner);
@@ -168,7 +135,7 @@ await suite(
             let user_to_charge = Principal.fromText("aaaaa-aa");
 
             // 1. Register the server so it exists in our system
-            let server = Admin.register_resource_server(context, owner, "Test Server", payout, service_principal);
+            let server = Admin.register_resource_server(context, owner, "Test Server", ["https://canister_id.ic0.app"], payout, service_principal);
 
             // 2. Attempt to charge. In a unit test, this will trap on the `await` if the
             // preceding logic (finding the server) fails. If it doesn't trap, our lookup logic is correct.

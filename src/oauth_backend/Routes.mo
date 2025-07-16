@@ -17,22 +17,10 @@ import Server "mo:server";
 import Types "Types";
 import Crypto "Crypto";
 import Json "mo:json";
+import Admin "Admin";
 
 module {
   public func complete_authorize(context : Types.Context, session_id : Text, user_principal : Principal) : async Result.Result<Text, Text> {
-    // 1. CRITICAL: Check for an active subscription for the user.
-    let subscription = Map.get(context.subscriptions, phash, user_principal);
-    switch (subscription) {
-      case (null) {
-        return #err("No active subscription found for user.");
-      };
-      case (?sub) {
-        if (sub.expires_at < Time.now()) {
-          return #err("User subscription has expired.");
-        };
-      };
-    };
-
     // 2. Look up the session and handle errors.
     let session = switch (Map.get(context.authorize_sessions, thash, session_id)) {
       case (null) { return #err("Invalid or already used session ID.") };
@@ -161,12 +149,24 @@ module {
                 // Fallback behavior: If no resource is specified, the audience is the client itself.
                 #ok(validated_req.client.client_id);
               };
-              case (?resource_id) {
+              case (?resource_uri) {
                 // Resource-oriented behavior: Validate the provided resource ID.
-                if (Option.isSome(Map.get(context.resource_servers, thash, resource_id))) {
-                  #ok(resource_id);
-                } else {
-                  #err("The specified 'resource' server is not registered with this provider.");
+                // 1. Use the reverse lookup map to find the UID from the provided URI.
+                Debug.print("Validating resource URI: " # resource_uri);
+                let normalized_uri = Admin.normalize_uri(resource_uri);
+                let rs_id_opt = Map.get(context.uri_to_rs_id, thash, normalized_uri);
+                Debug.print("Resource ID lookup result: " # debug_show (rs_id_opt));
+
+                switch (rs_id_opt) {
+                  case (null) {
+                    // 2. If the URI is not in our reverse map, it's not registered.
+                    #err("The specified 'resource' URI is not registered with this provider.");
+                  };
+                  case (?_rs_id) {
+                    // 3. The URI is valid. The audience for the JWT MUST be the URI itself.
+                    // The lookup was purely for validation.
+                    #ok(normalized_uri);
+                  };
                 };
               };
             };
@@ -448,29 +448,6 @@ module {
           });
         };
 
-        // 2f. CRITICAL: Check for an active subscription.
-        let user_principal = auth_code_record.user_principal;
-        let subscription = Map.get(context.subscriptions, phash, user_principal);
-
-        switch (subscription) {
-          case (null) {
-            return res.json({
-              status_code = 402;
-              body = "{ \"error\": \"payment_required\", \"error_description\": \"No active subscription found.\" }";
-              cache_strategy = #noCache;
-            });
-          };
-          case (?sub) {
-            if (sub.expires_at < Time.now()) {
-              return res.json({
-                status_code = 402;
-                body = "{ \"error\": \"payment_required\", \"error_description\": \"Subscription has expired.\" }";
-                cache_strategy = #noCache;
-              });
-            };
-          };
-        };
-
         // 3. Get the canister's signing key.
         let private_key = Crypto.get_or_create_signing_key(context, entropy_source);
 
@@ -532,7 +509,6 @@ module {
         });
       },
     );
-
     server.post(
       "/register",
       func(req : Types.Request, res : Types.ResponseClass) : async Types.Response {
@@ -622,7 +598,7 @@ module {
           client_name = client_name;
           logo_uri = Option.get(logo_uri, "");
           redirect_uris = redirect_uris;
-          status = #pending_activation; // Initially pending activation
+          status = #active; // Active by default
         };
         Map.set(context.clients, thash, new_client.client_id, new_client);
 

@@ -2,12 +2,12 @@ import Principal "mo:base/Principal";
 import Blob "mo:base/Blob";
 import Result "mo:base/Result";
 import Text "mo:base/Text";
+import Debug "mo:base/Debug";
 import Map "mo:map/Map";
 import Server "mo:server";
 import Types "Types";
 import Routes "Routes";
 import Admin "Admin";
-import Subscriptions "Subscriptions";
 
 shared ({ caller = creator }) actor class AuthCanister(ledger_id : Principal) = self {
 
@@ -18,12 +18,12 @@ shared ({ caller = creator }) actor class AuthCanister(ledger_id : Principal) = 
   stable var clients = Map.new<Text, Types.Client>();
   stable var resource_servers = Map.new<Text, Types.ResourceServer>();
   stable var auth_codes = Map.new<Text, Types.AuthorizationCode>();
-  stable var subscriptions = Map.new<Principal, Types.Subscription>();
   stable var authorize_sessions = Map.new<Text, Types.AuthorizeSession>();
   stable var frontend_canister_id : Principal = Principal.fromActor(self);
   stable var serializedEntries : Server.SerializedEntries = ([], [], [creator]);
   stable var icrc2_ledger_id : Principal = ledger_id;
   stable var registration_fee : Nat = 50 * 100_000_000; // 50 PMP tokens (with 8 decimals)
+  stable var uri_to_rs_id = Map.new<Text, Text>();
 
   // =================================================================================================
   // CONTEXT & INITIALIZATION
@@ -38,14 +38,23 @@ shared ({ caller = creator }) actor class AuthCanister(ledger_id : Principal) = 
     clients = clients;
     resource_servers = resource_servers;
     auth_codes = auth_codes;
-    subscriptions = subscriptions;
     authorize_sessions = authorize_sessions;
     icrc2_ledger_id = icrc2_ledger_id;
     registration_fee = registration_fee;
+    uri_to_rs_id = uri_to_rs_id;
   };
 
   // The server instance.
   var server = Server.Server({ serializedEntries = serializedEntries });
+
+  // 3. Enable CORS for all endpoints
+  // This should be done before registering routes if you want it to apply to all of them.
+  // It's safe to call this on every canister upgrade.
+  server.enableCors(
+    "*", // Allow any origin. For production, you might restrict this to your frontend's domain.
+    "GET, POST, OPTIONS", // Allowed methods
+    "Content-Type, Authorization" // Allowed headers
+  );
 
   // Register all routes, passing the server and context.
   Routes.register(server, context);
@@ -65,27 +74,31 @@ shared ({ caller = creator }) actor class AuthCanister(ledger_id : Principal) = 
     Admin.add_test_client(context, caller, client);
   };
 
-  public shared ({ caller }) func activate_client(client_id : Text, client_secret : Text) : async Result.Result<Text, Text> {
-    await Admin.activate_client(context, caller, client_id, client_secret);
+  type RegisterResourceServerArgs = {
+    name : Text;
+    uris : [Text]; // The URIs for the resource server
+    payout_principal : Principal;
+    initial_service_principal : Principal;
+  };
+  public shared ({ caller }) func register_resource_server(args : RegisterResourceServerArgs) : async Types.ResourceServer {
+    await Admin.register_resource_server(context, caller, args.name, args.uris, args.payout_principal, args.initial_service_principal);
   };
 
-  public shared ({ caller }) func register_subscription() : async Result.Result<Types.Subscription, Text> {
-    await Subscriptions.register_subscription(context, caller);
+  type UpdateResourceServerUrisArgs = {
+    resource_server_id : Text;
+    new_uris : [Text];
+  };
+  public shared ({ caller }) func update_resource_server_uris(args : UpdateResourceServerUrisArgs) : async Result.Result<Text, Text> {
+    await Admin.update_resource_server_uris(context, caller, args.resource_server_id, args.new_uris);
   };
 
-  public shared query ({ caller }) func get_subscription() : async ?Types.Subscription {
-    Subscriptions.get_subscription(context, caller);
+  type ChargeUserArgs = {
+    user_to_charge : Principal;
+    amount : Nat; // Amount in PMP tokens
   };
-
-  public shared ({ caller }) func register_resource_server(name : Text, payout_principal : Principal, initial_service_principal : Principal) : async Types.ResourceServer {
-    await Admin.register_resource_server(context, caller, name, payout_principal, initial_service_principal);
-  };
-
-  public shared ({ caller }) func charge_user(
-    user_to_charge : Principal,
-    amount : Nat,
-  ) : async Result.Result<Null, Text> {
-    await Admin.charge_user(context, caller, user_to_charge, amount);
+  public shared ({ caller }) func charge_user(args : ChargeUserArgs) : async Result.Result<Null, Text> {
+    Debug.print("Charge user called by: " # Principal.toText(caller));
+    await Admin.charge_user(context, caller, args.user_to_charge, args.amount);
   };
 
   // =================================================================================================
@@ -106,6 +119,5 @@ shared ({ caller = creator }) actor class AuthCanister(ledger_id : Principal) = 
 
   system func postupgrade() {
     ignore server.cache.pruneAll();
-    Routes.register(server, context); // Re-register routes on the new server instance.
   };
 };

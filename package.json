@@ -15,7 +15,7 @@
     "prestart": "npm run generate",
     "generate": "dfx generate oauth_backend",
     "generate-auth-url": "node scripts/generate-auth-url.js",
-    "bootstrap": "./scripts/bootstrap.sh"
+    "bootstrap": "./scripts/set_frontend_canister_id.sh"
   },
   "devDependencies": {
     "@dfinity/agent": "2.4.1",
