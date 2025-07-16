@@ -33,6 +33,13 @@ const approveStatus = document.getElementById('approveStatus');
 const payStatus = document.getElementById('payStatus');
 const completionStatus = document.getElementById('completionStatus');
 const status = document.getElementById('status');
+const allowanceAmount = document.getElementById(
+  'allowanceAmount',
+) as HTMLInputElement;
+const setAllowanceButton = document.getElementById(
+  'setAllowanceButton',
+) as HTMLButtonElement;
+const allowanceStatus = document.getElementById('allowanceStatus');
 
 // --- Main Application State ---
 let authClient: AuthClient;
@@ -188,6 +195,39 @@ completeButton.onclick = async () => {
   } catch (error) {
     completionStatus.innerText = `Error: ${error.message}`;
     completeButton.disabled = false;
+  }
+};
+
+setAllowanceButton.onclick = async () => {
+  const amountStr = allowanceAmount.value;
+  if (!amountStr || parseFloat(amountStr) <= 0) {
+    allowanceStatus.innerText = 'Please enter a valid amount.';
+    return;
+  }
+
+  // Convert the user-friendly amount (e.g., 10) to the e8s format (10 * 10^8)
+  const amount = BigInt(parseFloat(amountStr) * 100_000_000);
+
+  allowanceStatus.innerText = 'Approving...';
+  setAllowanceButton.disabled = true;
+
+  const approveArgs: ApproveParams = {
+    spender: {
+      owner: Principal.fromText(auth_canister_id),
+      subaccount: toNullable(),
+    },
+    amount: amount,
+  };
+
+  try {
+    const result = await ledgerActor.approve(approveArgs);
+    console.log('Approval result:', result);
+    allowanceStatus.innerText = `Successfully approved ${amountStr} tokens!`;
+  } catch (error) {
+    console.error('Approval failed:', error);
+    allowanceStatus.innerText = `Approval failed: ${(error as Error).message}`;
+  } finally {
+    setAllowanceButton.disabled = false;
   }
 };
 

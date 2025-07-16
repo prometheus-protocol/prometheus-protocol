@@ -16,6 +16,7 @@ shared ({ caller = creator }) actor class AuthCanister(ledger_id : Principal) = 
   // =================================================================================================
   stable var signing_key_bytes : Blob = Blob.fromArray([]);
   stable var clients = Map.new<Text, Types.Client>();
+  stable var resource_servers = Map.new<Text, Types.ResourceServer>();
   stable var auth_codes = Map.new<Text, Types.AuthorizationCode>();
   stable var subscriptions = Map.new<Principal, Types.Subscription>();
   stable var authorize_sessions = Map.new<Text, Types.AuthorizeSession>();
@@ -35,6 +36,7 @@ shared ({ caller = creator }) actor class AuthCanister(ledger_id : Principal) = 
     var frontend_canister_id = frontend_canister_id;
     var signing_key_bytes = signing_key_bytes;
     clients = clients;
+    resource_servers = resource_servers;
     auth_codes = auth_codes;
     subscriptions = subscriptions;
     authorize_sessions = authorize_sessions;
@@ -73,6 +75,17 @@ shared ({ caller = creator }) actor class AuthCanister(ledger_id : Principal) = 
 
   public shared query ({ caller }) func get_subscription() : async ?Types.Subscription {
     Subscriptions.get_subscription(context, caller);
+  };
+
+  public shared ({ caller }) func register_resource_server(name : Text, payout_principal : Principal, initial_service_principal : Principal) : async Types.ResourceServer {
+    await Admin.register_resource_server(context, caller, name, payout_principal, initial_service_principal);
+  };
+
+  public shared ({ caller }) func charge_user(
+    user_to_charge : Principal,
+    amount : Nat,
+  ) : async Result.Result<Null, Text> {
+    await Admin.charge_user(context, caller, user_to_charge, amount);
   };
 
   // =================================================================================================

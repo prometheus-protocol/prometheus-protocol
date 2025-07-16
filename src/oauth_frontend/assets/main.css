@@ -172,3 +172,36 @@ h1 {
   background-color: var(--color-border);
   color: var(--color-text-primary);
 }
+
+/* Container for the new section */
+.allowance-box {
+  border-top: 1px solid #4a5a6a; /* A subtle separator line */
+  padding-top: 20px;
+  margin-top: 20px;
+}
+
+.allowance-box h4 {
+  margin-bottom: 5px;
+  font-weight: 600;
+}
+
+/* Styling for the new input field */
+#allowanceAmount {
+  display: block; /* Makes margin: auto work for centering */
+  width: 120px; /* A fixed, smaller width */
+  margin: 15px auto; /* Centers the input horizontally */
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #566573;
+  background-color: #fff;
+  color: #333;
+  text-align: center;
+  font-size: 16px;
+  font-family: 'Poppins', sans-serif;
+}
+
+/* Ensure the Set Allowance button has the same margin as others */
+#setAllowanceButton {
+  margin-top: 5px;
+  margin-bottom: 10px;
+}

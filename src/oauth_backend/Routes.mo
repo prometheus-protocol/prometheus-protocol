@@ -56,6 +56,7 @@ module {
       expires_at = Time.now() + (10 * 60 * 1_000_000_000);
       code_challenge = session.code_challenge;
       code_challenge_method = session.code_challenge_method;
+      audience = session.audience;
     };
     Map.set(context.auth_codes, thash, code, auth_code_data);
     Map.delete(context.authorize_sessions, thash, session_id);
@@ -133,6 +134,7 @@ module {
         let scope_opt = req.url.queryObj.get("scope");
         let code_challenge_opt = req.url.queryObj.get("code_challenge");
         let code_challenge_method_opt = req.url.queryObj.get("code_challenge_method");
+        let resource_opt = req.url.queryObj.get("resource");
 
         // 2. Validate the request
         let validation_result = await validate_authorize_request(
@@ -154,6 +156,34 @@ module {
             });
           };
           case (#ok(validated_req)) {
+            let audience_result : Result.Result<Text, Text> = switch (resource_opt) {
+              case (null) {
+                // Fallback behavior: If no resource is specified, the audience is the client itself.
+                #ok(validated_req.client.client_id);
+              };
+              case (?resource_id) {
+                // Resource-oriented behavior: Validate the provided resource ID.
+                if (Option.isSome(Map.get(context.resource_servers, thash, resource_id))) {
+                  #ok(resource_id);
+                } else {
+                  #err("The specified 'resource' server is not registered with this provider.");
+                };
+              };
+            };
+
+            let audience = switch (audience_result) {
+              case (#err(msg)) {
+                return res.send({
+                  status_code = 400;
+                  body = Text.encodeUtf8("Invalid Request: " # msg);
+                  headers = [];
+                  streaming_strategy = null;
+                  cache_strategy = #noCache;
+                });
+              };
+              case (#ok(aud)) { aud };
+            };
+
             let client = switch (Map.get(context.clients, thash, validated_req.client.client_id)) {
               case (null) { Debug.trap("Impossible: client not found") };
               case (?c) c;
@@ -218,6 +248,7 @@ module {
               expires_at = Time.now() + (5 * 60 * 1_000_000_000); // 5 minutes
               code_challenge = code_challenge;
               code_challenge_method = code_challenge_method;
+              audience = audience;
             };
             Map.set(context.authorize_sessions, thash, session_id, session_data);
 
@@ -456,7 +487,7 @@ module {
           payload = [
             ("iss", #string(Principal.toText(context.self))),
             ("sub", #string(Principal.toText(auth_code_record.user_principal))),
-            ("aud", #string(client_id)),
+            ("aud", #string(auth_code_record.audience)),
             ("exp", #number(#int(exp_seconds))),
             ("iat", #number(#int(now_seconds))),
             ("scope", #string(auth_code_record.scope)),
@@ -633,10 +664,31 @@ module {
           case (?private_key) {
             // We have a key, so we can generate the JWK.
             let public_key = private_key.getPublicKey();
-            let jwk = public_key.toText(#jwk);
+            let jwk_string = public_key.toText(#jwk);
 
-            // Wrap it in the standard "keys" array.
-            "{ \"keys\": [" # jwk # "] }";
+            // 1. Try to strip the opening brace "{" from the original JWK string.
+            let jwk_inner_content_opt = Text.stripStart(jwk_string, #char '{');
+
+            let jwk_inner_content = switch (jwk_inner_content_opt) {
+              case (?content) {
+                // Success! We have the string without the leading brace.
+                content;
+              };
+              case (null) {
+                // This should be impossible if the crypto library is correct.
+                // We trap here to prevent silent failures in the future.
+                Debug.trap("FATAL: JWK string from crypto library did not start with '{'.");
+              };
+            };
+
+            // 2. Create the "kid" field as a string.
+            let kid_field = "\"kid\":\"" # Principal.toText(context.self) # "\",";
+
+            // 3. Prepend the kid field to the inner content and re-add the opening brace.
+            let modified_jwk = "{" # kid_field # jwk_inner_content;
+
+            // 4. Wrap the modified JWK in the standard "keys" array.
+            "{ \"keys\": [" # modified_jwk # "] }";
           };
         };
 

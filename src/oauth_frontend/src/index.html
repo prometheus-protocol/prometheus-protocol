@@ -59,6 +59,21 @@
             Your identity is verified and your subscription is active.
           </p>
           <p id="principalDisplay" class="principal-display"></p>
+
+          <div class="allowance-box">
+            <h4>Manage Spending Allowance</h4>
+            <p class="status-text-small">
+              Grant permission for the app to make payments on your behalf.
+            </p>
+            <!-- The input is now on its own for easy centering -->
+            <input type="number" id="allowanceAmount" placeholder="e.g., 10" />
+            <!-- This button now uses the same style as "Sign Out" -->
+            <button id="setAllowanceButton" class="logout-button">
+              Set Allowance
+            </button>
+            <p id="allowanceStatus" class="status-text-small"></p>
+          </div>
+
           <button id="completeButton" class="login-button">
             Proceed to Application
           </button>

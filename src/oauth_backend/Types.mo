@@ -4,6 +4,19 @@ import Server "mo:server";
 import Map "mo:map/Map";
 
 module {
+  // Represents a registered backend service that provides paid tools.
+  public type ResourceServer = {
+    resource_server_id : Text;
+    owner : Principal;
+    name : Text;
+    payout_principal : Principal; // CRITICAL: Where the money goes.
+    service_principals : [Principal]; // List of trusted backend server identities.
+    status : {
+      #active;
+      #pending;
+    };
+  };
+
   // Represents a registered application (a resource server).
   public type Client = {
     client_id : Text;
@@ -28,6 +41,7 @@ module {
     expires_at : Time.Time;
     code_challenge : Text;
     code_challenge_method : Text;
+    audience : Text; // The resource server this code is for.
   };
 
   // Represents a user's active subscription.
@@ -46,6 +60,7 @@ module {
     expires_at : Time.Time;
     code_challenge : Text;
     code_challenge_method : Text;
+    audience : Text; // The resource server this session is for.
   };
 
   // A type to hold the validated and cleaned-up request parameters.
@@ -74,6 +89,7 @@ module {
     icrc2_ledger_id : Principal;
     registration_fee : Nat; // The fee in PMP tokens for client registration
     clients : Map.Map<Text, Client>;
+    resource_servers : Map.Map<Text, ResourceServer>;
     auth_codes : Map.Map<Text, AuthorizationCode>;
     subscriptions : Map.Map<Principal, Subscription>;
     authorize_sessions : Map.Map<Text, AuthorizeSession>;

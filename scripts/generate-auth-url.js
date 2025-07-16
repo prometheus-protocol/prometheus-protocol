@@ -12,6 +12,8 @@ const CLIENT_ID = process.env.NEW_CLIENT_ID || 'test-app-01';
 const REDIRECT_URI = 'https://jwt.io';
 const STATE = `cli-run-${Date.now()}`;
 const SCOPE = 'profile';
+const RESOURCE_SERVER_ID =
+  'rs_41f480c88b2515b87c3cc9543008aabd0625061ab54b047a747f3492b8ffd22e';
 
 function generateCodeVerifier() {
   return crypto.randomBytes(32).toString('base64url');
@@ -60,6 +62,9 @@ function main() {
   authUrl.searchParams.set('scope', SCOPE);
   authUrl.searchParams.set('code_challenge', codeChallenge);
   authUrl.searchParams.set('code_challenge_method', 'S256');
+
+  // Tell the Auth Canister which resource we want to get a token for.
+  authUrl.searchParams.set('resource', RESOURCE_SERVER_ID);
 
   console.log('\n✅ PKCE Verifier Saved & URL Generated!');
   console.log(

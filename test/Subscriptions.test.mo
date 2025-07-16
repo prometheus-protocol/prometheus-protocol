@@ -27,6 +27,7 @@ func createMockContext() : Types.Context {
     self = Principal.fromText("b77ix-eeaaa-aaaaa-qaada-cai");
     creator = creator;
     clients = Map.new();
+    resource_servers = Map.new<Text, Types.ResourceServer>();
     auth_codes = Map.new();
     subscriptions = Map.new<Principal, Types.Subscription>();
     authorize_sessions = Map.new();

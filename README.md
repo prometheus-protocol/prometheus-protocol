@@ -29,6 +29,8 @@ The project consists of two primary canisters:
 - **`oauth_backend`:** The main OAuth2 server. It handles all logic for client registration and activation, resource server registration, authorization, token issuance, and key management.
 - **`oauth_frontend`:** A simple UI canister that serves the login and payment page. It integrates with `@dfinity/auth-client` to handle the Internet Identity flow.
 
+![Architecture Diagram](images/architecture.png)
+
 ## Getting Started
 
 Follow these steps to set up and run the project locally.
