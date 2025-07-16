@@ -22,7 +22,6 @@ The system is designed for modern, self-service developer workflows, featuring *
 - **Server Metadata:** Provides a `/.well-known/oauth-authorization-server` discovery document for automated client configuration, as per [RFC 8414](https://tools.ietf.org/html/rfc8414).
 - **Resource Indicators:** Supports the specification of resource indicators during authorization to indicate the target resource server for the token as defined in [RFC 8707](https://tools.ietf.org/html/rfc8707)
 
-
 ## Architecture
 
 The Prometheus Protocol is designed to bridge the Web2 and Web3 economies by enabling traditional, off-chain services to accept on-chain micropayments in a secure and decentralized manner. The architecture is built around a set of core canisters on the Internet Computer and a client-side SDK that simplifies integration for service providers.
@@ -37,39 +36,39 @@ This diagram illustrates the complete flow, from a user initiating a login in a 
 
 The protocol is composed of several key components that work in concert:
 
-*   **`oauth_backend` (The Core Engine):** This is the main canister and the heart of the protocol. It is a stateful canister responsible for:
-    *   Registering and managing Client Applications and Resource Servers.
-    *   Handling the OAuth2 `/authorize` and `/token` endpoints.
-    *   Issuing, signing, and managing JWTs (JSON Web Tokens).
-    *   Serving public keys via the `/.well-known/jwks.json` endpoint for JWT validation.
-    *   Processing payments by calling the ICRC-2 Ledger canister.
+- **`oauth_backend` (The Core Engine):** This is the main canister and the heart of the protocol. It is a stateful canister responsible for:
+  - Registering and managing Client Applications and Resource Servers.
+  - Handling the OAuth2 `/authorize` and `/token` endpoints.
+  - Issuing, signing, and managing JWTs (JSON Web Tokens).
+  - Serving public keys via the `/.well-known/jwks.json` endpoint for JWT validation.
+  - Processing payments by calling the ICRC-2 Ledger canister.
 
-*   **`oauth_frontend` (The Login UI):** A dedicated UI canister that provides a user-friendly interface for the authentication process. Its primary roles are:
-    *   Integrating with `@dfinity/auth-client` to handle the login flow with Internet Identity.
-    *   Providing a UI for the user to grant a spending allowance (`icrc2_approve`) to the `oauth_backend` canister.
-    *   Finalizing the authorization flow by calling back to the `oauth_backend`.
+- **`oauth_frontend` (The Login UI):** A dedicated UI canister that provides a user-friendly interface for the authentication process. Its primary roles are:
+  - Integrating with `@dfinity/auth-client` to handle the login flow with Internet Identity.
+  - Providing a UI for the user to grant a spending allowance (`icrc2_approve`) to the `oauth_backend` canister.
+  - Finalizing the authorization flow by calling back to the `oauth_backend`.
 
-*   **Resource Server (The Service Provider):** This is the Web2 service that wants to charge for its API. For example, an **MCP Server**. It is responsible for:
-    *   Protecting specific API endpoints.
-    *   Using standard middleware (e.g., `express-jwt`) to validate incoming JWTs.
-    *   Using the Prometheus JS SDK to trigger the micropayment.
+- **Resource Server (The Service Provider):** This is the Web2 service that wants to charge for its API. For example, an **MCP Server**. It is responsible for:
+  - Protecting specific API endpoints (or specific MCP tools and resources).
+  - Using standard middleware (e.g., `express-jwt` or `requireBearerAuth` from `@modelcontextprotocol/typescript-sdk`) to validate incoming JWTs.
+  - Using the [Prometheus TypeScript SDK](https://github.com/prometheus-protocol/typescript-sdk) to trigger the micropayment.
 
-*   **Client Application (The Initiator):** This is the application the user interacts with, such as an **MCP Client** or a React Single-Page App. It is responsible for:
-    *   Initiating the OAuth2 flow by redirecting the user to the `oauth_backend`.
-    *   Receiving the `authorization_code` after a successful login.
-    *   Securely exchanging the code for a JWT.
-    *   Storing the JWT and including it in subsequent requests to the Resource Server.
+- **Client Application (The Initiator):** This is the application the user interacts with, such as an **MCP Client** or a React Single-Page App. It is responsible for:
+  - Initiating the OAuth2 flow by redirecting the user to the `oauth_backend`.
+  - Receiving the `authorization_code` after a successful login.
+  - Securely exchanging the code for a JWT.
+  - Storing the JWT and including it in subsequent requests to the Resource Server.
 
-*   **Prometheus JS SDK (`@prometheus-protocol/typescript-sdk`):** A client library for Node.js that dramatically simplifies integration for Resource Server developers. It abstracts away the complexity of:
-    *   Creating an authenticated agent using a server's private key (`.pem` file).
-    *   Making a secure, authenticated inter-canister call to the `charge_user` method on the `oauth_backend`.
+- **[Prometheus TypeScript SDK (`@prometheus-protocol/typescript-sdk`)](https://github.com/prometheus-protocol/typescript-sdk):** A client library for Node.js that dramatically simplifies integration for Resource Server developers. It abstracts away the complexity of:
+  - Creating an authenticated agent using a server's private key (`.pem` file).
+  - Making a secure, authenticated inter-canister call to the `charge_user` method on the `oauth_backend`.
 
-*   **ICRC-2 Ledger Canister (The Bank):** A standard token canister that holds user funds. Its role is strictly financial:
-    *   To hold token balances for users.
-    *   To manage spending allowances granted via `icrc2_approve`.
-    *   To execute payments via `icrc2_transfer_from` when called by the `oauth_backend`.
+- **ICRC-2 Ledger Canister (The Bank):** A standard token canister that holds user funds. Its role is strictly financial:
+  - To hold token balances for users.
+  - To manage spending allowances granted via `icrc2_approve`.
+  - To execute payments via `icrc2_transfer_from` when called by the `oauth_backend`.
 
-*   **Internet Identity (The Authenticator):** The decentralized authentication service on the Internet Computer. It is used to securely verify the user's identity and provide a stable `Principal` to the protocol.
+- **Internet Identity (The Authenticator):** The decentralized authentication service on the Internet Computer. It is used to securely verify the user's identity and provide a stable `Principal` to the protocol.
 
 ## Getting Started
 
