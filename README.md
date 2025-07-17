@@ -45,6 +45,7 @@ sequenceDiagram
     participant C as MCP Client
     participant M as MCP Server (Resource Server)
     participant P as Prometheus (Authorization Server)
+    participant B as User-Agent (Browser)
 
     C->>M: MCP request (no token)
     M-->>C: HTTP 401 Unauthorized<br/>WWW-Authenticate: resource_metadata="..."
@@ -60,8 +61,17 @@ sequenceDiagram
     C->>P: POST /register
     P-->>C: Client Credentials
 
-    C->>Browser: Redirect to P's /authorize endpoint
-    ...
+    C->>B: Redirect to P's /authorize endpoint<br/>(with PKCE, state, resource)
+    B->>P: User authenticates & consents
+    P-->>B: Redirect to C's callback_uri<br/>(with code, state)
+
+    Note over C, B: Browser delivers auth code to Client logic
+
+    C->>P: POST /token (with code, PKCE verifier, client credentials)
+    P-->>C: { "access_token": "...", "refresh_token": "..." }
+
+    C->>M: MCP request with Bearer access_token
+    M-->>C: MCP response (Success)
 ```
 
 </details>
