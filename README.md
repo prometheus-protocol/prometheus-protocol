@@ -4,85 +4,80 @@
 
 ## Overview
 
-Prometheus Protocol is a full-featured, on-chain OAuth2 provider built for the Internet Computer. It enables developers to secure their applications using the industry-standard **Authorization Code Flow with PKCE**, allowing users to log in with their Internet Identity and grant specific permissions to third-party applications.
+Prometheus Protocol is a full-featured, on-chain **OAuth 2.1 provider** built for the Internet Computer. It provides a robust, general-purpose solution for any application requiring standards-based authentication and authorization.
 
-The system is designed for modern, self-service developer workflows, featuring **Dynamic Client Registration**. It issues standards-compliant JSON Web Tokens (JWTs) that can be verified by any resource server in the ecosystem, providing a decentralized and robust foundation for authentication and authorization.
+While designed for broad use, it is also a fully compliant **Authorization Server** for the **Model Context Protocol (MCP)** ecosystem. This dual focus ensures that Prometheus is both a flexible tool for the wider IC community and a hardened, specification-compliant engine for enterprise-grade protocols.
 
-## Current Status: Phase 0 Complete
+It enables developers to secure applications using the industry-standard **Authorization Code Flow with PKCE**, and supports modern features like Dynamic Client Registration, Refresh Token Rotation, and Resource Indicators.
 
-[**Phase 0: Project Chimera**](https://github.com/prometheus-protocol) is complete. The core authentication engine is online, feature-complete, and compliant with modern security standards.
+## Features & Compliance
 
-**Key Features Implemented:**
+Prometheus Protocol implements the latest security best practices from the IETF and the specific requirements of the MCP specification.
 
-- **OAuth2 Authorization Code + PKCE:** Implements the full flow as per [RFC 6749](https://tools.ietf.org/html/rfc6749) and the secure Proof Key for Code Exchange enhancement as per [RFC 7636](https://tools.ietf.org/html/rfc7636).
-- **Dynamic Client Registration (DCR):** A public `/register` endpoint allows any client to programmatically register itself without manual setup, as per [RFC 7591](https://tools.ietf.org/html/rfc7591).
-- **Standards-Compliant JWTs:** Generates `ES256` signed JWTs using the web-standard `P-256` curve for maximum interoperability.
-- **Public Key Discovery (JWKS):** Exposes the public signing key via a standard `/.well-known/jwks.json` endpoint.
-- **Server Metadata:** Provides a `/.well-known/oauth-authorization-server` discovery document for automated client configuration, as per [RFC 8414](https://tools.ietf.org/html/rfc8414).
-- **Resource Indicators:** Supports the specification of resource indicators during authorization to indicate the target resource server for the token as defined in [RFC 8707](https://tools.ietf.org/html/rfc8707)
+- ✓ **OAuth 2.1 Core:** Implements the modern, secure baseline for OAuth, including mandatory PKCE (`RFC 7636`) and the Authorization Code Flow (`RFC 6749`).
+- ✓ **Refresh Token Rotation:** Enhances security by issuing a new, single-use refresh token each time one is used, mitigating the risk of token theft.
+- ✓ **Dynamic Client Registration (DCR):** A public `/register` endpoint (`RFC 7591`) allows applications to register programmatically without manual intervention.
+- ✓ **Resource Indicators:** Supports token audience binding via the `resource` parameter (`RFC 8707`), ensuring tokens are used only at their intended destination.
+- ✓ **Server Metadata:** Provides `/.well-known/oauth-authorization-server` (`RFC 8414`) and `/.well-known/jwks.json` endpoints for automated client configuration and key discovery.
+- ✓ **MCP Authorization Spec Compliant:** Fully adheres to the requirements for an Authorization Server within the MCP ecosystem (rev. 2025-06-18).
 
 ## Architecture
 
-The Prometheus Protocol is designed to bridge the Web2 and Web3 economies by enabling traditional, off-chain services to accept on-chain micropayments in a secure and decentralized manner. The architecture is built around a set of core canisters on the Internet Computer and a client-side SDK that simplifies integration for service providers.
+The protocol is designed to be a foundational piece of infrastructure for the Internet Computer, enabling secure interactions between users, client applications, and protected resource servers.
 
 ### Architectural Diagram
-
-This diagram illustrates the complete flow, from a user initiating a login in a client application to the final, successful micropayment on the resource server.
 
 ![Architecture Diagram](images/architecture.png)
 
 ### Key Components
 
-The protocol is composed of several key components that work in concert:
+- **Client Application (e.g., an MCP Client, a React SPA):** The user-facing application that initiates the login flow.
+- **Prometheus Protocol (This Project):** The central Authorization Server that handles user authentication, consent, and the issuance of secure tokens.
+- **Resource Server (e.g., an MCP Server, a protected backend API):** The service that requires authorization and validates the tokens issued by Prometheus before granting access to its resources.
 
-- **`oauth_backend` (The Core Engine):** This is the main canister and the heart of the protocol. It is a stateful canister responsible for:
-  - Registering and managing Client Applications and Resource Servers.
-  - Handling the OAuth2 `/authorize` and `/token` endpoints.
-  - Issuing, signing, and managing JWTs (JSON Web Tokens).
-  - Serving public keys via the `/.well-known/jwks.json` endpoint for JWT validation.
-  - Processing payments by calling ICRC-2 Ledger canisters.
+<details>
+  <summary><strong>Understanding the MCP Discovery Flow</strong></summary>
 
-- **`oauth_frontend` (The Login UI):** A dedicated UI canister that provides a user-friendly interface for the authentication process. Its primary roles are:
-  - Integrating with `@dfinity/auth-client` to handle the login flow with Internet Identity.
-  - Providing a UI for the user to grant a spending allowance (`icrc2_approve`) to the `oauth_backend` canister.
-  - Finalizing the authorization flow by calling back to the `oauth_backend`.
+For developers integrating specifically with an MCP Server, it's important to understand the standard discovery flow. The client does not know about Prometheus initially; it discovers it through the MCP Server's metadata.
 
-- **Resource Server (The Service Provider):** This is the Web2 service that wants to charge for its API. For example, an **MCP Server**. It is responsible for:
-  - Protecting specific API endpoints (or specific MCP tools and resources).
-  - Using standard middleware (e.g., `express-jwt` or `requireBearerAuth` from `@modelcontextprotocol/typescript-sdk`) to validate incoming JWTs.
-  - Using the [Prometheus TypeScript SDK](https://github.com/prometheus-protocol/typescript-sdk) to trigger the micropayment.
+```mermaid
+sequenceDiagram
+    participant C as MCP Client
+    participant M as MCP Server (Resource Server)
+    participant P as Prometheus (Authorization Server)
 
-- **Client Application (The Initiator):** This is the application the user interacts with, such as an **MCP Client** or a React Single-Page App. It is responsible for:
-  - Initiating the OAuth2 flow by redirecting the user to the `oauth_backend`.
-  - Receiving the `authorization_code` after a successful login.
-  - Securely exchanging the code for a JWT.
-  - Storing the JWT and including it in subsequent requests to the Resource Server.
+    C->>M: MCP request (no token)
+    M-->>C: HTTP 401 Unauthorized<br/>WWW-Authenticate: resource_metadata="..."
 
-- **[Prometheus TypeScript SDK (`@prometheus-protocol/typescript-sdk`)](https://github.com/prometheus-protocol/typescript-sdk):** A client library for Node.js that dramatically simplifies integration for Resource Server developers. It abstracts away the complexity of:
-  - Creating an authenticated agent using a server's private key (`.pem` file).
-  - Making a secure, authenticated inter-canister call to the `charge_user` method on the `oauth_backend`.
+    C->>M: GET /.well-known/oauth-protected-resource
+    M-->>C: { "authorization_servers": ["https://prometheus.canister/..."] }
 
-- **ICRC-2 Ledger Canisters (The Bank):** Standard token canisters that hold user funds. Their role is strictly financial:
-  - To hold token balances for users.
-  - To manage spending allowances granted via `icrc2_approve`.
-  - To execute payments via `icrc2_transfer_from` when called by the `oauth_backend`.
+    Note over C, P: Client has now discovered Prometheus and begins the standard OAuth flow...
 
-- **Internet Identity (The Authenticator):** The decentralized authentication service on the Internet Computer. It is used to securely verify the user's identity and provide a stable `Principal` to the protocol.
+    C->>P: GET /.well-known/oauth-authorization-server
+    P-->>C: Authorization server metadata
 
-## Getting Started
+    C->>P: POST /register
+    P-->>C: Client Credentials
 
-Follow these steps to set up and run the project locally.
+    C->>Browser: Redirect to P's /authorize endpoint
+    ...
+```
+
+</details>
+
+## Getting Started (Local Development)
+
+This guide walks through running the full end-to-end flow locally, simulating the roles of both a Client and a Resource Server.
 
 ### Prerequisites
 
 - [DFINITY Canister SDK (dfx)](https://internetcomputer.org/docs/current/developer-docs/setup/install/)
-- [Node.js](https://nodejs.org/) (for frontend dependencies)
-- [Mops](https://mops.one/) (for Motoko package management)
-- [jq](https://stedolan.github.io/jq/) (for processing JSON in helper scripts)
+- [Node.js](https://nodejs.org/) & [npm](https://nodejs.org/)
+- [Mops](https://mops.one/) (Motoko Package Manager)
+- [jq](https://stedolan.github.io/jq/) (Command-line JSON processor)
 
-### 1. Clone & Install Dependencies
-
-Clone the repository and install all necessary packages.
+### 1. Clone & Install
 
 ```bash
 git clone <your-repo-url>
@@ -91,93 +86,99 @@ npm install
 mops install
 ```
 
-### 2. Start the Local Replica & Deploy
+### 2. Deploy Local Environment
 
-Start a clean local replica instance and deploy the canisters. The `dfx.json` is pre-configured to deploy a local ICRC-2 ledger and our canisters.
+This command starts a local replica and deploys the Prometheus canisters and a mock ICRC-2 ledger.
 
 ```bash
 dfx start --clean --background
 dfx deploy
 ```
 
-## Running the End-to-End Flow
+## Running the Full Test Flow
 
-This sequence validates the entire process, from registering a new app to getting a valid token.
+This sequence validates the entire process from the perspective of a developer building a client application.
 
-### Phase 1: Register & Activate Your Client
+### Phase 1: Register Your Client
 
-First, we'll register a new client application and pay the one-time fee to activate it.
+Your application first needs to register itself with Prometheus to get credentials.
 
-1.  **Register the Client:**
-    Run the `register_client.sh` script. This will call the `/register` endpoint and save your new `client_id` and `client_secret` to a file named `.env.prom`.
+```bash
+# This script calls the /register endpoint and saves credentials to .env.prom
+./scripts/register_client.sh
+```
 
-    ```bash
-    ./scripts/register_client.sh
-    ```
+### Phase 2: Initiate User Authorization
 
-### Phase 2: Get an Authorization Code
+Next, your application directs the user to Prometheus to log in and grant consent.
 
-Now, we'll initiate the login flow for a user.
-
-1.  **Generate the Authorize URL:**
-    Run the `generate-auth-url.js` script. This creates a secure PKCE challenge and saves the necessary `code_verifier` to your `.env.prom` file.
+1.  **Generate the Authorize URL:** This script creates a secure PKCE challenge and constructs the full authorization URL, including the mandatory `state` and `resource` parameters.
 
     ```bash
+    # This generates the URL and saves the PKCE verifier to .env.prom
     node ./scripts/generate-auth-url.js
     ```
 
-2.  **Load the Verifier:**
-    Source the environment file again to load the new `PKCE_VERIFIER` variable.
+2.  **Authorize in Browser:**
+    - Copy the full `/authorize` URL printed by the script.
+    - Paste it into your browser and complete the Internet Identity login.
+    - You will be redirected to `https://jwt.io` (our example `redirect_uri`).
+    - **Copy the `code` value from the resulting URL.**
+
+### Phase 3: Exchange the Code for Tokens
+
+Your application's backend now exchanges the single-use code for an access token and a refresh token.
+
+1.  **Load Credentials:** Make sure your shell has the `client_id`, `client_secret`, and `PKCE_VERIFIER` loaded.
 
     ```bash
     source .env.prom
     ```
 
-3.  **Authorize in Browser:**
-    - Copy the full `/authorize` URL printed by the script.
-    - Paste it into your browser.
-    - You will be redirected to the login page. Complete the Internet Identity login.
-    - You will be redirected to `https://jwt.io`. The URL will contain the authorization code: `https://jwt.io/?code=<A_LONG_HEX_STRING>&...`
-    - **Copy the `code` value.**
-
-### Phase 3: Exchange Code for Token
-
-1.  **Get the Token:**
-    Run the `get_token.sh` script, passing the code you just copied as an argument.
-
+2.  **Get Tokens:** Run the `get_token.sh` script, passing the code you copied.
     ```bash
     ./scripts/get_token.sh <THE_CODE_YOU_COPIED>
     ```
+    The command will return a JSON object containing your `access_token` and `refresh_token`.
 
-2.  **Capture the Token:**
-    The command will return a JSON object containing your `access_token`. Copy it.
+### Phase 4: Use the Refresh Token
 
-### Phase 4: Verify the Token
+When the access token expires, your application can use the refresh token to get a new one without requiring the user to log in again.
 
-Finally, verify the token's signature against the canister's public key.
+1.  **Refresh Tokens:** Run the `refresh_token.sh` script, passing the `refresh_token` from the previous step.
+    ```bash
+    # Make sure to use the actual refresh_token value
+    ./scripts/refresh_token.sh <THE_REFRESH_TOKEN>
+    ```
+    This will return a **new** `access_token` and a **new** `refresh_token`.
 
-1.  **Verify on jwt.io:**
-    - Go to [https://jwt.io](https://jwt.io).
-    - Paste the `access_token` into the "Encoded" box.
+### Phase 5: Verify the JWT
 
-2.  **Get the Public Key:**
-    - Run `curl http://$(dfx canister id oauth_backend).localhost:4943/.well-known/jwks.json | jq .`
-    - Copy the first key object from the `keys` array.
+A Resource Server would perform this step to validate the token it receives.
 
+1.  **Go to [jwt.io](https://jwt.io)** and paste the `access_token` into the "Encoded" box.
+2.  **Get the Public Key:** Run the following command to fetch the server's public key set.
+    ```bash
+    curl http://$(dfx canister id oauth_backend).localhost:4943/.well-known/jwks.json | jq
+    ```
 3.  **Verify Signature:**
-    - On jwt.io, paste the key object into the "Public Key" box.
+    - Copy the key object from the `keys` array in the terminal output.
+    - On jwt.io, paste it into the "Public Key" box.
     - **Crucially, change the "Public Key Format" dropdown from `PEM` to `JWK`.**
-
-    You should see the green **"Signature Verified"** message.
+    - The signature should now be verified.
 
 ![JWT Verification Example](images/jwt_decoded.png)
 
 ## Running Tests
 
-The project includes a comprehensive test suite using the `mo:test` library. To run all unit and replica tests, use Mops:
+The project includes a comprehensive test suite using Vitest for E2E tests and `mo:test` for unit tests.
 
 ```bash
+# Run all unit and integration tests
 mops test
+
+# Run all end-to-end tests
+npm run test
 ```
 
 ## License

@@ -16,6 +16,7 @@ module {
       auth_codes = Map.new<Text, Types.AuthorizationCode>();
       authorize_sessions = Map.new<Text, Types.AuthorizeSession>();
       uri_to_rs_id = Map.new<Text, Text>();
+      refresh_tokens = Map.new<Text, Types.RefreshToken>();
     };
   };
 };

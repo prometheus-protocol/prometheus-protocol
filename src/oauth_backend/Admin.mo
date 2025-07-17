@@ -14,6 +14,7 @@ import Array "mo:base/Array";
 import Option "mo:base/Option";
 import Iter "mo:base/Iter";
 import Nat8 "mo:base/Nat8";
+import Utils "Utils";
 
 module Admin {
   public func set_frontend_canister_id(context : Types.Context, caller : Principal, id : Principal) {
@@ -69,7 +70,7 @@ module Admin {
 
     // 4. Update the URI to resource server ID mapping
     for (uri in Iter.fromArray(uris)) {
-      Map.set(context.uri_to_rs_id, thash, normalize_uri(uri), resource_server_id);
+      Map.set(context.uri_to_rs_id, thash, Utils.normalize_uri(uri), resource_server_id);
     };
 
     return new_server;
@@ -83,14 +84,6 @@ module Admin {
       };
     };
     return null;
-  };
-
-  // A helper function to ensure URIs are stored and looked up consistently.
-  // It removes all trailing slashes from a URI.
-  public func normalize_uri(uri : Text) : Text {
-    // trimEnd is idempotent: it does nothing if the pattern is not at the end.
-    // This is more robust than checking with endsWith first.
-    return Text.trimEnd(uri, #char '/');
   };
 
   // The core payment function. A trusted resource server calls this to charge a user.
@@ -155,7 +148,7 @@ module Admin {
 
     // 4. Add the new URIs to the reverse lookup map.
     for (new_uri in Iter.fromArray(new_uris)) {
-      Map.set(context.uri_to_rs_id, thash, normalize_uri(new_uri), resource_server_id);
+      Map.set(context.uri_to_rs_id, thash, Utils.normalize_uri(new_uri), resource_server_id);
     };
 
     // 5. Update the URIs in the main resource server record.

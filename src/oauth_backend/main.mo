@@ -6,6 +6,7 @@ import Types "Types";
 import Routes "Routes";
 import Admin "Admin";
 import State "State";
+import Authorize "oauth/Authorize";
 
 shared ({ caller = creator }) actor class AuthCanister() = self {
 
@@ -36,7 +37,7 @@ shared ({ caller = creator }) actor class AuthCanister() = self {
   // PUBLIC API - All logic is delegated to specialized modules.
   // =================================================================================================
   public shared ({ caller }) func complete_authorize(session_id : Text) : async Result.Result<Text, Text> {
-    await Routes.complete_authorize(context, session_id, caller);
+    await Authorize.complete_authorize(context, session_id, caller);
   };
 
   public shared ({ caller }) func set_frontend_canister_id(id : Principal) {

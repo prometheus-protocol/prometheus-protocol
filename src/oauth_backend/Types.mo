@@ -1,5 +1,7 @@
 import Principal "mo:base/Principal";
 import Time "mo:base/Time";
+import TrieMap "mo:base/TrieMap";
+import Buffer "mo:base/Buffer";
 import Server "mo:server";
 import Map "mo:map/Map";
 
@@ -32,6 +34,17 @@ module {
     };
   };
 
+  public type ValidatedAuthorizeRequest = {
+    client_id : Text;
+    redirect_uri : Text;
+    scope : Text;
+    state : Text;
+    code_challenge : Text;
+    code_challenge_method : Text;
+    audience : Text;
+    resource : ?Text; // Optional resource URI, if specified.
+  };
+
   // Represents a temporary code used to get a real token.
   public type AuthorizationCode = {
     code : Text;
@@ -43,6 +56,7 @@ module {
     code_challenge : Text;
     code_challenge_method : Text;
     audience : Text; // The resource server this code is for.
+    resource : ?Text; // Optional resource URI, if specified.
   };
 
   // Represents the temporary state during the II login flow.
@@ -50,19 +64,27 @@ module {
     client_id : Text;
     redirect_uri : Text;
     scope : Text;
-    state : ?Text;
+    state : Text;
     expires_at : Time.Time;
     code_challenge : Text;
     code_challenge_method : Text;
     audience : Text; // The resource server this session is for.
+    resource : ?Text; // Optional resource URI, if specified.
   };
 
-  // A type to hold the validated and cleaned-up request parameters.
-  public type ValidatedAuthRequest = {
+  // A record to hold all the validated data from a /token request.
+  public type ValidatedTokenRequest = {
+    auth_code_record : AuthorizationCode;
     client : Client;
-    redirect_uri : Text;
+  };
+
+  public type RefreshToken = {
+    token : Text; // The refresh token string itself
+    user_principal : Principal;
+    client_id : Text;
     scope : Text;
-    state : ?Text;
+    audience : Text;
+    expires_at : Time.Time;
   };
 
   // The data returned to a developer after successful client registration.
@@ -85,6 +107,29 @@ module {
     auth_codes : Map.Map<Text, AuthorizationCode>;
     authorize_sessions : Map.Map<Text, AuthorizeSession>;
     uri_to_rs_id : Map.Map<Text, Text>; // Maps resource server URIs to their IDs
+    refresh_tokens : Map.Map<Text, RefreshToken>;
+  };
+
+  // Re-export HttpParser types that are not exported from the lib.
+  public type File = {
+    name : Text;
+    filename : Text;
+
+    mimeType : Text;
+    mimeSubType : Text;
+
+    start : Nat;
+    end : Nat;
+    bytes : Buffer.Buffer<Nat8>;
+  };
+
+  public type Form = {
+    get : (Text) -> ?[Text];
+    trieMap : TrieMap.TrieMap<Text, [Text]>;
+    keys : [Text];
+
+    fileKeys : [Text];
+    files : (Text) -> ?[File];
   };
 
   // Re-export server types for convenience.
