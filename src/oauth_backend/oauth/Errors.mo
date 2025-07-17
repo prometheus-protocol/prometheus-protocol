@@ -1,7 +1,7 @@
 import Text "mo:base/Text";
 import Types "../Types";
 import Array "mo:base/Array";
-import Server "mo:server";
+import Server "../server";
 import Json "mo:json";
 
 module {

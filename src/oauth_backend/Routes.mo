@@ -1,4 +1,4 @@
-import Server "mo:server";
+import Server "server";
 import Types "Types";
 import DCR "oauth/DCR";
 import WellKnown "oauth/WellKnown";

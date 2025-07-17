@@ -45,14 +45,11 @@ module {
   };
 
   public func handle_token(context : Types.Context, req : Types.Request, res : Types.ResponseClass) : async Types.Response {
-    Debug.print("Handling token request");
     // 1. Get form data from the request body.
     let form = switch (req.body) {
       case (?b) b.form;
       case (_) return await Errors.send_token_error(res, 400, "invalid_request", ?"Request body is missing");
     };
-
-    Debug.print("Form data.");
 
     // 2. Determine the grant type and route logic accordingly.
     let grant_type = switch (form.get("grant_type")) {
@@ -60,13 +57,8 @@ module {
       case (_) null;
     };
 
-    Debug.print(
-      "Grant type: " # debug_show (grant_type)
-    );
-
     switch (grant_type) {
       case (?"authorization_code") {
-        Debug.print("Handling authorization code grant");
         // --- Handle Authorization Code Grant ---
         let validation_result = await Validation.validate_token_request(context, form);
         let validated_req = switch (validation_result) {
@@ -74,14 +66,10 @@ module {
           case (#ok(data)) data;
         };
 
-        Debug.print("Authorization code validated");
-
         Map.delete(context.auth_codes, thash, validated_req.auth_code_record.code);
 
         let issuer = Utils.get_issuer(context, req);
         let token_result = await JWT.create_and_sign(context, validated_req.auth_code_record, issuer);
-
-        Debug.print("JWT created and signed");
 
         let access_token = switch (token_result) {
           case (#err(msg)) {
@@ -90,8 +78,6 @@ module {
           };
           case (#ok(token)) token;
         };
-
-        Debug.print("Access token created");
 
         // Create and store a new refresh token
         let refresh_token_blob = await Random.blob();
@@ -106,12 +92,10 @@ module {
         };
         Map.set(context.refresh_tokens, thash, refresh_token_string, refresh_token_data);
 
-        Debug.print("Refresh token created");
         return await issue_token_response(res, access_token, validated_req.auth_code_record.scope, ?refresh_token_string);
       };
 
       case (?"refresh_token") {
-        Debug.print("Handling refresh token grant");
         // --- Handle Refresh Token Grant ---
         let validation_result = await Validation.validate_refresh_token_request(context, form);
         let old_refresh_token = switch (validation_result) {

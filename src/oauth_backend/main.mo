@@ -1,7 +1,7 @@
 import Principal "mo:base/Principal";
 import Result "mo:base/Result";
 import Text "mo:base/Text";
-import Server "mo:server";
+import Server "server";
 import Types "Types";
 import Routes "Routes";
 import Admin "Admin";

@@ -2,7 +2,7 @@ import Principal "mo:base/Principal";
 import Time "mo:base/Time";
 import TrieMap "mo:base/TrieMap";
 import Buffer "mo:base/Buffer";
-import Server "mo:server";
+import Server "server";
 import Map "mo:map/Map";
 
 module {

@@ -14,7 +14,6 @@ module {
     auth_code_record : Types.AuthorizationCode,
     issuer : Text,
   ) : async Result.Result<Text, Text> {
-    Debug.print("Creating and signing JWT for auth code: " # auth_code_record.code);
     let entropy = await Random.blob();
     let private_key = Crypto.get_or_create_signing_key(context, entropy);
 
@@ -36,14 +35,10 @@ module {
     let random_k = await Random.blob();
     let sign_res = private_key.sign(JWT_Lib.toBlobUnsigned(unsigned_token).vals(), random_k.vals());
 
-    Debug.print("Signing JWT with private key");
-
     let signature = switch (sign_res) {
       case (#err(e)) return #err("Failed to sign token: " # e);
       case (#ok(sig)) sig;
     };
-
-    Debug.print("JWT signed successfully");
 
     let signed_token : JWT_Lib.Token = {
       unsigned_token with
@@ -54,7 +49,6 @@ module {
       };
     };
 
-    Debug.print("JWT created successfully");
     return #ok(JWT_Lib.toText(signed_token));
   };
 };
