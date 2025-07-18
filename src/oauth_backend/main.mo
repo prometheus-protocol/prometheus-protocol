@@ -2,10 +2,10 @@ import Principal "mo:base/Principal";
 import Result "mo:base/Result";
 import Text "mo:base/Text";
 import Server "server";
-import Types "Types";
 import Routes "Routes";
-import Admin "Admin";
-import State "State";
+import Types "oauth/Types";
+import Admin "oauth/Admin";
+import State "oauth/State";
 import Authorize "oauth/Authorize";
 
 shared ({ caller = creator }) actor class AuthCanister() = self {
@@ -30,7 +30,7 @@ shared ({ caller = creator }) actor class AuthCanister() = self {
     "Content-Type, Authorization" // Allowed headers
   );
 
-  // Register all routes, passing the server and context.
+  // Register OAuth routes, passing the server and context.
   Routes.register(server, context);
 
   // =================================================================================================
@@ -40,12 +40,17 @@ shared ({ caller = creator }) actor class AuthCanister() = self {
     await Authorize.complete_authorize(context, session_id, caller);
   };
 
-  public shared ({ caller }) func set_frontend_canister_id(id : Principal) {
-    Admin.set_frontend_canister_id(context, caller, id);
+  public shared ({ caller }) func confirm_login(session_id : Text) : async Result.Result<Types.LoginConfirmation, Text> {
+    await Authorize.confirm_login(context, session_id, caller);
   };
 
-  public shared ({ caller }) func add_test_client(client : Types.Client) {
-    Admin.add_test_client(context, caller, client);
+  public shared ({ caller }) func complete_payment_setup(session_id : Text) : async Result.Result<Null, Text> {
+    await Authorize.complete_payment_setup(context, session_id, caller);
+  };
+
+  // Must be called before any other functions
+  public shared ({ caller }) func set_frontend_canister_id(id : Principal) {
+    Admin.set_frontend_canister_id(context, caller, id);
   };
 
   type RegisterResourceServerArgs = {
@@ -64,15 +69,6 @@ shared ({ caller = creator }) actor class AuthCanister() = self {
   };
   public shared ({ caller }) func update_resource_server_uris(args : UpdateResourceServerUrisArgs) : async Result.Result<Text, Text> {
     await Admin.update_resource_server_uris(context, caller, args.resource_server_id, args.new_uris);
-  };
-
-  type ChargeUserArgs = {
-    user_to_charge : Principal;
-    amount : Nat; // Amount in PMP tokens
-    icrc2_ledger_id : Principal; // The ledger ID to use for the payment
-  };
-  public shared ({ caller }) func charge_user(args : ChargeUserArgs) : async Result.Result<Null, Text> {
-    await Admin.charge_user(context, caller, args.user_to_charge, args.amount, args.icrc2_ledger_id);
   };
 
   // =================================================================================================

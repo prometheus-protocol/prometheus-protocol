@@ -4,14 +4,12 @@ import Text "mo:base/Text";
 import Map "mo:map/Map";
 import { thash } "mo:map/Map";
 import Types "Types";
-import ICRC2 "mo:icrc2-types";
 import Sha256 "mo:sha2/Sha256";
 import BaseX "mo:base-x-encoder";
 import Time "mo:base/Time"; // We need Time for a unique ID
 import Random "mo:base/Random"; // And Random for a unique ID
 import Blob "mo:base/Blob";
 import Array "mo:base/Array";
-import Option "mo:base/Option";
 import Iter "mo:base/Iter";
 import Nat8 "mo:base/Nat8";
 import Utils "Utils";
@@ -74,50 +72,6 @@ module Admin {
     };
 
     return new_server;
-  };
-
-  // A helper function to find which resource server a given service principal belongs to.
-  func findResourceServerByServicePrincipal(context : Types.Context, service_principal : Principal) : ?Types.ResourceServer {
-    for ((_, server) in Map.entries(context.resource_servers)) {
-      if (Option.isSome(Array.indexOf(service_principal, server.service_principals, Principal.equal))) {
-        return ?server;
-      };
-    };
-    return null;
-  };
-
-  // The core payment function. A trusted resource server calls this to charge a user.
-  public func charge_user(context : Types.Context, caller : Principal, user_to_charge : Principal, amount : Nat, icrc2_ledger_id : Principal) : async Result.Result<Null, Text> {
-    // 1. Identify the resource server by the caller's Principal
-    let service_principal = caller;
-    let resource_server = switch (findResourceServerByServicePrincipal(context, service_principal)) {
-      case (null) {
-        return #err("Unauthorized: This service principal is not registered with any resource server.");
-      };
-      case (?server) server;
-    };
-
-    // 2. Get the payout address from the server's registration data
-    let payout_principal = resource_server.payout_principal;
-
-    // 3. Execute the payment
-    let ledger = actor (Principal.toText(icrc2_ledger_id)) : ICRC2.Service;
-    let transfer_args : ICRC2.TransferFromArgs = {
-      from = { owner = user_to_charge; subaccount = null };
-      to = { owner = payout_principal; subaccount = null };
-      amount = amount;
-      fee = null;
-      memo = null;
-      created_at_time = null;
-      spender_subaccount = null;
-    };
-    let transfer_result = await ledger.icrc2_transfer_from(transfer_args);
-
-    // 4. Return the result
-    switch (transfer_result) {
-      case (#Ok(_)) { return #ok(null) };
-      case (#Err(e)) { return #err("Payment failed: " # debug_show (e)) };
-    };
   };
 
   // Allows the owner of a resource server to update its associated URIs.

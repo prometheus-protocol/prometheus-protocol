@@ -1,11 +1,11 @@
-import Types "../Types";
+import Types "Types";
 import Validation "Validation";
 import Errors "Errors";
 import JWT "JWT";
 import Json "mo:json";
 import Map "mo:map/Map";
 import { thash } "mo:map/Map";
-import Utils "../Utils";
+import Utils "Utils";
 import Random "mo:base/Random";
 import BaseX "mo:base-x-encoder";
 import Time "mo:base/Time";

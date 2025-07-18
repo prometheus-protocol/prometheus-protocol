@@ -42,15 +42,13 @@ const internetIdentityUrl =
 
 const frontendDirectory = 'oauth_frontend';
 
-const frontend_entry = path.join('src', frontendDirectory, 'src', 'index.html');
-
 module.exports = {
   target: 'web',
   mode: isDevelopment ? 'development' : 'production',
   entry: {
     // The frontend.entrypoint points to the HTML file for this build, so we need
     // to replace the extension to `.js`.
-    index: path.join(__dirname, frontend_entry).replace(/\.html$/, '.ts'),
+    index: path.join(__dirname, 'src', frontendDirectory, 'src', 'main.tsx'),
   },
   devtool: isDevelopment ? 'source-map' : false,
   optimization: {
@@ -66,6 +64,9 @@ module.exports = {
       stream: require.resolve('stream-browserify/'),
       util: require.resolve('util/'),
     },
+    alias: {
+      '@': path.resolve(__dirname, 'src', frontendDirectory, 'src'),
+    },
   },
   output: {
     filename: 'index.js',
@@ -79,13 +80,30 @@ module.exports = {
   // tutorial, uncomment the following lines:
   module: {
     rules: [
-      { test: /\.(ts|tsx|jsx)$/, loader: 'ts-loader' },
-      { test: /\.css$/, use: ['style-loader', 'css-loader'] },
+      {
+        test: /\.(ts|tsx|jsx)$/,
+        loader: 'ts-loader',
+        exclude: /node_modules/, // Good practice to add this
+      },
+      {
+        test: /\.css$/,
+        use: [
+          'style-loader',
+          'css-loader',
+          'postcss-loader', // This MUST be the last in the array (first to run)
+        ],
+      },
     ],
   },
   plugins: [
     new HtmlWebpackPlugin({
-      template: path.join(__dirname, frontend_entry),
+      template: path.join(
+        __dirname,
+        'src',
+        frontendDirectory,
+        'src',
+        'index.html',
+      ),
       cache: false,
     }),
     new webpack.EnvironmentPlugin({

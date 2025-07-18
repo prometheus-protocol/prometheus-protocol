@@ -423,7 +423,7 @@ module {
       // 2. Register a global OPTIONS handler for preflight requests
       options(
         "*",
-        func(request : Request, response : ResponseClass) : async Response {
+        func(_ : Request, response : ResponseClass) : async Response {
           return response.send({
             status_code = 204; // No Content
             headers = [

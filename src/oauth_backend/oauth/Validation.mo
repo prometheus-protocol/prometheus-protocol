@@ -1,13 +1,13 @@
 import Text "mo:base/Text";
 import Result "mo:base/Result";
-import Types "../Types";
+import Types "Types";
 import Time "mo:base/Time";
 import Option "mo:base/Option";
 import Array "mo:base/Array";
 import BaseX "mo:base-x-encoder";
 import Map "mo:map/Map";
 import { thash } "mo:map/Map";
-import Utils "../Utils";
+import Utils "Utils";
 import Sha256 "mo:sha2/Sha256";
 
 module {

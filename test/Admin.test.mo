@@ -3,9 +3,8 @@ import Blob "mo:base/Blob";
 import Map "mo:map/Map";
 import { thash } "mo:map/Map";
 import Text "mo:base/Text";
-import Result "mo:base/Result";
-import Types "../src/oauth_backend/Types";
-import Admin "../src/oauth_backend/Admin";
+import Types "../src/oauth_backend/oauth/Types";
+import Admin "../src/oauth_backend/oauth/Admin";
 import { test; suite; expect } "mo:test/async";
 
 // =================================================================================================
@@ -30,10 +29,6 @@ func equalResourceServer(a : Types.ResourceServer, b : Types.ResourceServer) : B
 // NEW: Helper to display a ResourceServer record.
 func showResourceServer(rs : Types.ResourceServer) : Text {
   debug_show (rs);
-};
-
-func showChargeResult(c : Result.Result<Null, Text>) : Text {
-  debug_show (c);
 };
 
 // Helper to create a default mock context for our tests
@@ -108,41 +103,6 @@ await suite(
           },
         );
 
-        await test(
-          "charge_user: should fail if caller is not a registered service principal",
-          func() : async () {
-            let context = createMockContext();
-            let unregistered_caller = Principal.fromText("dbkgd-72ter-ea");
-            let user_to_charge = Principal.fromText("kufey-x4r");
-
-            let result = await Admin.charge_user(context, unregistered_caller, user_to_charge, 100_000, Principal.fromText("avqkn-guaaa-aaaaa-qaaea-cai"));
-
-            expect.result<Null, Text>(result, showChargeResult, func(a, b) { a == b }).isErr();
-            expect.result<Null, Text>(result, showChargeResult, func(a, b) { a == b }).equal(#err("Unauthorized: This service principal is not registered with any resource server."));
-          },
-        );
-
-        await test(
-          "charge_user: should succeed on the happy path (logic check)",
-          func() : async () {
-            // This test verifies the logic *before* the external ICRC2 call.
-            // A full replica test is required to test the actual payment.
-            let context = createMockContext();
-            let owner = Principal.fromText("aaaaa-aa");
-            let payout = Principal.fromText("aaaaa-aa");
-            let service_principal = Principal.fromText("aaaaa-aa"); // This will be the caller
-            let user_to_charge = Principal.fromText("aaaaa-aa");
-
-            // 1. Register the server so it exists in our system
-            let server = Admin.register_resource_server(context, owner, "Test Server", ["https://canister_id.ic0.app"], payout, service_principal);
-
-            // 2. Attempt to charge. In a unit test, this will trap on the `await` if the
-            // preceding logic (finding the server) fails. If it doesn't trap, our lookup logic is correct.
-            // We can't check the #ok result because the await will never return.
-            // This is the limit of unit testing for cross-canister calls.
-            assert true; // Placeholder for replica test
-          },
-        );
       },
     );
   },

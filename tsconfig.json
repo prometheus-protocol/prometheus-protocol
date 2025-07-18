@@ -8,6 +8,14 @@
     "allowJs": true,
     "moduleResolution": "node",
     "resolveJsonModule": true,
-    "allowSyntheticDefaultImports": true
-  }
+    "allowSyntheticDefaultImports": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/oauth_frontend/src/*"]
+    }
+  },
+  "include": [
+    "src/oauth_frontend/src/**/*.ts",
+    "src/oauth_frontend/src/**/*.tsx"
+  ]
 }

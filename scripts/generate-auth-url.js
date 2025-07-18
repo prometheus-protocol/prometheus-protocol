@@ -12,8 +12,7 @@ const CLIENT_ID = process.env.NEW_CLIENT_ID || 'test-app-01';
 const REDIRECT_URI = 'https://jwt.io';
 const STATE = `cli-run-${Date.now()}`;
 const SCOPE = 'profile';
-const RESOURCE_SERVER_ID =
-  'rs_41f480c88b2515b87c3cc9543008aabd0625061ab54b047a747f3492b8ffd22e';
+const RESOURCE_SERVER_ID = 'http://localhost:8079';
 
 function generateCodeVerifier() {
   return crypto.randomBytes(32).toString('base64url');

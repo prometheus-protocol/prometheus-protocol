@@ -1,9 +1,9 @@
 import Principal "mo:base/Principal";
 import Text "mo:base/Text";
-import Types "../Types";
-import Crypto "../Crypto";
+import Types "Types";
+import Crypto "Crypto";
 import Json "mo:json";
-import Utils "../Utils";
+import Utils "Utils";
 
 module {
   public func handle_jwks(context : Types.Context, _ : Types.Request, res : Types.ResponseClass) : async Types.Response {
@@ -16,8 +16,13 @@ module {
           case (?content) content;
           case (null) "}"; // Should be impossible, but provide a safe fallback
         };
+
+        // Define the fields to be injected into the JWK
         let kid_field = "\"kid\":\"" # Principal.toText(context.self) # "\",";
-        let modified_jwk = "{" # kid_field # jwk_inner_content;
+        let alg_field = "\"alg\":\"ES256\",";
+
+        // Prepend the new fields to the existing JWK content
+        let modified_jwk = "{" # kid_field # alg_field # jwk_inner_content;
         "{ \"keys\": [" # modified_jwk # "] }";
       };
     };

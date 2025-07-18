@@ -1,4 +1,4 @@
-import Types "../Types";
+import Types "Types";
 import Validation "Validation";
 import Errors "Errors";
 import Random "mo:base/Random";
@@ -38,6 +38,8 @@ module {
           code_challenge_method = validated_req.code_challenge_method;
           audience = validated_req.audience;
           resource = validated_req.resource; // Include the resource if specified
+          var status = #awaiting_login;
+          var user_principal = null; // Initially no user principal
         };
         Map.set(context.authorize_sessions, thash, session_id, session_data);
 
@@ -75,11 +77,105 @@ module {
     };
   };
 
-  public func complete_authorize(context : Types.Context, session_id : Text, user_principal : Principal) : async Result.Result<Text, Text> {
-    // 2. Look up the session and handle errors.
+  public func confirm_login(context : Types.Context, session_id : Text, caller : Principal) : async Result.Result<Types.LoginConfirmation, Text> {
+    // 1. Get the session
+    let session = switch (Map.get(context.authorize_sessions, thash, session_id)) {
+      case (null) return #err("Invalid or expired session ID.");
+      case (?s) s;
+    };
+
+    // 2. Validate the session is in the correct state
+    if (session.status != #awaiting_login) {
+      return #err("Invalid session state.");
+    };
+    if (session.user_principal != null) {
+      return #err("Session already confirmed by a user.");
+    };
+
+    // BIND the session to the caller's principal.
+    session.user_principal := ?caller;
+
+    // 3. Check if the `prometheus:charge` scope was requested
+    let requires_payment_setup = Text.contains(session.scope, #text("prometheus:charge"));
+    var next_step : Types.AuthFlowStep = #consent;
+
+    // 4. Determine the next step based *only* on the presence of the scope.
+    if (requires_payment_setup) {
+      // If the charge scope is present, ALWAYS go to the setup page.
+      session.status := #awaiting_payment_setup;
+      next_step := #setup;
+    } else {
+      // If the scope is not present, go directly to consent.
+      session.status := #awaiting_consent;
+      next_step := #consent;
+    };
+
+    // 5. Update the session in the map
+    Map.set(context.authorize_sessions, thash, session_id, session);
+
+    // 6. Prepare and return the data for the frontend
+    let client = switch (Map.get(context.clients, thash, session.client_id)) {
+      case (null) return #err("Internal error: Client not found for session.");
+      case (?c) c;
+    };
+    let consent_data : Types.ConsentData = {
+      client_name = client.client_name;
+      scope = session.scope;
+      logo_uri = client.logo_uri;
+    };
+
+    return #ok({ next_step = next_step; consent_data = consent_data });
+  };
+
+  // This function is called by the frontend after the user successfully sets up their allowance.
+  public func complete_payment_setup(context : Types.Context, session_id : Text, caller : Principal) : async Result.Result<Null, Text> {
+    let session = switch (Map.get(context.authorize_sessions, thash, session_id)) {
+      case (null) return #err("Invalid or expired session ID.");
+      case (?s) s;
+    };
+
+    // VALIDATE that the caller is the bound user.
+    switch (session.user_principal) {
+      case (null) return #err("Session not yet associated with a user.");
+      case (?owner_principal) {
+        if (owner_principal != caller) {
+          return #err("Caller does not match session owner.");
+        };
+      };
+    };
+
+    // Validate state transition
+    if (session.status != #awaiting_payment_setup) {
+      return #err("Invalid session state. Expected #awaiting_payment_setup.");
+    };
+
+    // Transition state to the final consent step
+    session.status := #awaiting_consent;
+    Map.set(context.authorize_sessions, thash, session_id, session);
+
+    return #ok(null);
+  };
+
+  public func complete_authorize(context : Types.Context, session_id : Text, caller : Principal) : async Result.Result<Text, Text> {
+    // 1. Look up the session and handle errors.
     let session = switch (Map.get(context.authorize_sessions, thash, session_id)) {
       case (null) { return #err("Invalid or already used session ID.") };
       case (?s) s;
+    };
+
+    // 2. VALIDATE that the caller is the bound user.
+    let user_principal = switch (session.user_principal) {
+      case (null) return #err("Session not yet associated with a user.");
+      case (?owner_principal) {
+        if (owner_principal != caller) {
+          return #err("Caller does not match session owner.");
+        };
+        owner_principal; // Return the principal for use below
+      };
+    };
+
+    if (session.status != #awaiting_consent) {
+      return #err("Invalid session state.");
     };
 
     // 3. Check for session expiration.

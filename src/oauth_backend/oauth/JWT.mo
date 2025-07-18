@@ -3,10 +3,9 @@ import Time "mo:base/Time";
 import Blob "mo:base/Blob";
 import Result "mo:base/Result";
 import Random "mo:base/Random";
-import Debug "mo:base/Debug";
 import JWT_Lib "mo:jwt";
-import Types "../Types";
-import Crypto "../Crypto";
+import Types "Types";
+import Crypto "Crypto";
 
 module {
   public func create_and_sign(

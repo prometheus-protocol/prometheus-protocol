@@ -2,7 +2,7 @@ import Principal "mo:base/Principal";
 import Time "mo:base/Time";
 import TrieMap "mo:base/TrieMap";
 import Buffer "mo:base/Buffer";
-import Server "server";
+import Server "../server";
 import Map "mo:map/Map";
 
 module {
@@ -59,6 +59,12 @@ module {
     resource : ?Text; // Optional resource URI, if specified.
   };
 
+  public type AuthorizeSessionStatus = {
+    #awaiting_login;
+    #awaiting_payment_setup;
+    #awaiting_consent;
+  };
+
   // Represents the temporary state during the II login flow.
   public type AuthorizeSession = {
     client_id : Text;
@@ -70,6 +76,24 @@ module {
     code_challenge_method : Text;
     audience : Text; // The resource server this session is for.
     resource : ?Text; // Optional resource URI, if specified.
+    var status : AuthorizeSessionStatus;
+    var user_principal : ?Principal; // The user principal after login, if available.
+  };
+
+  public type ConsentData = {
+    client_name : Text;
+    scope : Text;
+    logo_uri : Text;
+  };
+
+  public type AuthFlowStep = {
+    #consent; // User needs to consent to the requested scopes.
+    #setup; // User needs to set up payment or other required actions.
+  };
+
+  public type LoginConfirmation = {
+    next_step : AuthFlowStep;
+    consent_data : ConsentData;
   };
 
   // A record to hold all the validated data from a /token request.

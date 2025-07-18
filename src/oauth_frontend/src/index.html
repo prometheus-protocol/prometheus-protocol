@@ -3,66 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Prometheus Protocol | Authentication</title>
-    <base href="/" />
-    <link rel="icon" href="favicon.ico" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap"
-      rel="stylesheet" />
-    <link type="text/css" rel="stylesheet" href="main.css" />
+    <title>Prometheus Protocol</title>
   </head>
-  <body>
-    <div class="container">
-      <main class="card">
-        <!-- View 1: Initial Login State -->
-        <div id="loginView">
-          <img
-            src="banner-professional.png"
-            alt="Prometheus Protocol Banner"
-            class="banner-image" />
-          <h1>Authentication Required</h1>
-          <p class="subtitle">
-            Log in with your Internet Identity to securely connect to the
-            application.
-          </p>
-          <button id="loginButton" class="login-button">
-            Connect with Internet Identity
-          </button>
-        </div>
-
-        <div id="completionView" hidden>
-          <h2>Ready to Go!</h2>
-          <p class="subtitle">
-            You are successfully authenticated. You can now proceed back to the
-            application.
-          </p>
-          <p id="principalDisplay" class="principal-display"></p>
-
-          <div class="allowance-box">
-            <h4>Manage Spending Allowance</h4>
-            <p class="status-text-small">
-              Grant permission for the app to make payments on your behalf for
-              microtransactions.
-            </p>
-            <input type="number" id="allowanceAmount" placeholder="e.g., 10" />
-            <button id="setAllowanceButton" class="logout-button">
-              Set Allowance
-            </button>
-            <p id="allowanceStatus" class="status-text-small"></p>
-          </div>
-
-          <button id="completeButton" class="login-button">
-            Proceed to Application
-          </button>
-          <button id="logoutButton" class="logout-button">Sign Out</button>
-          <p id="completionStatus" class="status-text-small"></p>
-        </div>
-
-        <!-- A single, shared status message area -->
-        <p id="status" class="status-text"></p>
-      </main>
-    </div>
+  <!-- Add a dark theme background for a better look -->
+  <body class="bg-background text-foreground">
+    <div id="root"></div>
   </body>
 </html>
