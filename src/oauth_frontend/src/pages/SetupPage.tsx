@@ -12,109 +12,216 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useInternetIdentity } from 'ic-use-internet-identity';
-import { useSetupPaymentMutation } from '@/hooks/usePayment';
+import {
+  useSetupPaymentMutation,
+  useBalanceQuery,
+  useAllowanceQuery,
+  useTokenInfosQuery,
+} from '@/hooks/usePayment';
 import { useSessionInfoQuery } from '@/hooks/useSessionInfo';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Principal } from '@dfinity/principal';
+import { Label } from '@/components/ui/label';
 
-// Define the form validation schema with Zod
 const formSchema = z.object({
   budget: z.coerce
     .number()
-    .positive({ message: 'Budget must be a positive number.' }),
+    .min(0, { message: 'Allowance cannot be negative.' }),
 });
 
 export default function SetupPage() {
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const sessionId = searchParams.get('session_id');
+  // --- Hooks & State ---
+  const { state } = useLocation();
   const { identity } = useInternetIdentity();
+  const sessionId = useSearchParams()[0].get('session_id');
+  const navigate = useNavigate();
 
-  const { mutate: setupPayment, isPending } = useSetupPaymentMutation();
-  const { data: sessionInfo, isError } = useSessionInfoQuery(sessionId);
+  const consentData = state?.consent_data;
+  const clientName = consentData?.client_name || 'the application';
 
+  const rawCanisters = state?.accepted_payment_canisters || [];
+  const acceptedPaymentCanisters: Principal[] = useMemo(
+    () => rawCanisters.map((p: any) => Principal.from(p)),
+    [rawCanisters],
+  );
+
+  const [selectedTokenId, setSelectedTokenId] = useState<string | undefined>(
+    acceptedPaymentCanisters[0]?.toText(),
+  );
+  const selectedTokenPrincipal = useMemo(
+    () => (selectedTokenId ? Principal.fromText(selectedTokenId) : undefined),
+    [selectedTokenId],
+  );
+
+  // --- Data Fetching ---
+  const { data: sessionInfo, isLoading: isSessionLoading } =
+    useSessionInfoQuery(sessionId);
+  const spenderPrincipal = sessionInfo?.resource_server_principal;
+
+  const tokenInfoResults = useTokenInfosQuery(
+    identity,
+    acceptedPaymentCanisters,
+  );
+  const isTokenInfoLoading = tokenInfoResults.some((r) => r.isLoading);
+  const tokenInfos = useMemo(
+    () => tokenInfoResults.map((r) => r.data).filter(Boolean),
+    [tokenInfoResults],
+  );
+  const selectedTokenInfo = tokenInfos.find(
+    (t) => t?.canisterId.toText() === selectedTokenId,
+  );
+
+  const { data: balance, isLoading: isBalanceLoading } = useBalanceQuery(
+    identity,
+    selectedTokenPrincipal,
+  );
+  const { data: currentAllowance, isLoading: isAllowanceLoading } =
+    useAllowanceQuery(identity, spenderPrincipal, selectedTokenPrincipal);
+
+  const { mutate: setupPayment, isPending: isSettingAllowance } =
+    useSetupPaymentMutation();
+
+  // --- Form & Effects ---
   const form = useForm<z.input<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: { budget: 10.0 },
+    defaultValues: { budget: 0 },
   });
 
+  useEffect(() => {
+    if (currentAllowance !== undefined) {
+      form.reset({ budget: currentAllowance });
+    }
+  }, [currentAllowance, form]);
+
+  // --- Handlers ---
   function onSubmit(values: z.infer<typeof formSchema>) {
-    if (!identity || !sessionId || !sessionInfo) {
+    if (
+      !identity ||
+      !sessionId ||
+      !spenderPrincipal ||
+      !selectedTokenPrincipal
+    ) {
       alert('Required information not available. Please try again.');
       return;
     }
-
     setupPayment(
       {
         identity,
         sessionId,
         amount: values.budget,
-        spenderPrincipal: sessionInfo.resource_server_principal,
+        spenderPrincipal,
+        icrc2CanisterId: selectedTokenPrincipal,
       },
       {
-        onSuccess: () => navigate(`/consent?session_id=${sessionId}`),
+        onSuccess: () =>
+          navigate(`/consent?session_id=${sessionId}`, {
+            state,
+          }),
       },
     );
   }
 
-  if (isError) {
-    return (
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-destructive">Error</CardTitle>
-          <CardDescription>Could not load session information.</CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
+  const isLoading =
+    isSessionLoading ||
+    isBalanceLoading ||
+    isAllowanceLoading ||
+    isTokenInfoLoading;
 
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
-        <CardTitle>Step 2: Set Your Budget</CardTitle>
+        <CardTitle>
+          Set Allowance for {selectedTokenInfo?.name ?? '...'}
+        </CardTitle>
         <CardDescription>
-          Activate your Prometheus account by setting a global spending budget
-          for all apps.
+          To connect to <strong>{clientName}</strong>, you need to approve an
+          allowance for it to initiate payments on your behalf.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <FormField
-              control={form.control}
-              name="budget"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Global Budget (ckUSDC)</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      {...field}
-                      value={
-                        field.value === undefined || field.value === null
-                          ? ''
-                          : Number(field.value)
-                      }
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <Button type="submit" className="w-full" disabled={isPending}>
-              {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isPending ? 'Approving...' : 'Approve Budget & Continue'}
-            </Button>
-          </form>
-        </Form>
+      <CardContent className="space-y-6">
+        <div className="space-y-2">
+          <Label>Payment Token</Label>
+          <Select onValueChange={setSelectedTokenId} value={selectedTokenId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select a payment token..." />
+            </SelectTrigger>
+            <SelectContent>
+              {tokenInfos.map((token) => (
+                <SelectItem
+                  key={token.canisterId.toText()}
+                  value={token.canisterId.toText()}>
+                  {token.name} ({token.symbol})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {isLoading ? (
+          <div className="flex justify-center items-center h-24">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <FormField
+                control={form.control}
+                name="budget"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      New Allowance for {clientName} (
+                      {selectedTokenInfo?.symbol})
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        {...field}
+                        value={
+                          field.value === undefined || field.value === null
+                            ? ''
+                            : Number(field.value)
+                        }
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Your balance: {balance?.toFixed(2) ?? '...'}{' '}
+                      {selectedTokenInfo?.symbol}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={isSettingAllowance}>
+                {isSettingAllowance && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                {isSettingAllowance ? 'Approving...' : 'Approve & Continue'}
+              </Button>
+            </form>
+          </Form>
+        )}
       </CardContent>
     </Card>
   );

@@ -1,6 +1,7 @@
 import {
   confirmLogin as apiConfirmLogin,
   completeAuthorize as apiCompleteAuthorize,
+  denyConsent as apiDenyConsent,
 } from '@/api/auth.api';
 import { Identity } from '@dfinity/agent';
 import useMutation from './useMutation';
@@ -50,4 +51,28 @@ export const useCompleteAuthorizeMutation = () => {
     errorMessage: 'Failed to grant permissions. Please try again.',
     queryKeysToRefetch: [],
   });
+};
+
+/**
+ * A mutation to cancel the authorization flow when the user denies consent.
+ * On success, it redirects the user back to the client app with an access_denied error.
+ */
+export const useDenyConsentMutation = () => {
+  const { mutate, isPending, error } = useMutation<
+    { identity: Identity; sessionId: string }, // Input type
+    string // Return type (the redirect URL)
+  >({
+    mutationFn: (variables) =>
+      apiDenyConsent(variables.identity, variables.sessionId),
+    // No success message needed, the redirect is the feedback.
+    enableSnackbar: false,
+    errorMessage: 'Failed to deny permissions. Please try again.',
+    queryKeysToRefetch: [],
+  });
+
+  return {
+    denyConsent: mutate,
+    isDenying: isPending,
+    error,
+  };
 };

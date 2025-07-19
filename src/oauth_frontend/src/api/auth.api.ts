@@ -6,15 +6,21 @@ import { Principal } from '@dfinity/principal';
 // It's good practice to define the expected return types.
 // These should match the types in your oauth_backend.did.js file.
 
+interface ScopeDetails {
+  id: string;
+  description: string;
+}
+
 interface ConsentData {
   client_name: string;
   logo_uri: string;
-  scope: string;
+  scopes: ScopeDetails[];
 }
 
 interface ConfirmLoginOk {
   next_step: { setup: null } | { consent: null };
   consent_data: ConsentData;
+  accepted_payment_canisters: Principal[];
 }
 
 interface SessionInfo {
@@ -83,6 +89,24 @@ export const completeAuthorize = async (
 ): Promise<string> => {
   const authActor = getAuthActor(identity);
   const result = await authActor.complete_authorize(sessionId);
+
+  if ('err' in result) {
+    throw new Error(result.err);
+  }
+  return result.ok;
+};
+
+/**
+ * Called when the user clicks "Deny" on the consent screen.
+ * This cancels the authorization flow and cleans up the session on the backend.
+ * @returns The final redirect URL (with error params) to send the user back to the client.
+ */
+export const denyConsent = async (
+  identity: Identity,
+  sessionId: string,
+): Promise<string> => {
+  const authActor = getAuthActor(identity);
+  const result = await authActor.deny_consent(sessionId);
 
   if ('err' in result) {
     throw new Error(result.err);

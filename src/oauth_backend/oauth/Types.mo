@@ -17,6 +17,11 @@ module {
       #active;
       #pending;
     };
+    // A map of supported scopes to their human-readable descriptions.
+    // Example: { "read:files" -> "Allows the app to read your files.",
+    //            "write:files" -> "Allows the app to create and modify your files." }
+    scopes : [(Text, Text)];
+    accepted_payment_canisters : [Principal]; // List of icrc2 canisters that this server accepts.
   };
 
   // Represents a registered application (a resource server).
@@ -84,9 +89,14 @@ module {
     client_name : Text;
   };
 
+  public type ScopeData = {
+    id : Text;
+    description : Text;
+  };
+
   public type ConsentData = {
     client_name : Text;
-    scope : Text;
+    scopes : [ScopeData]; // List of scopes with descriptions
     logo_uri : Text;
   };
 
@@ -98,6 +108,7 @@ module {
   public type LoginConfirmation = {
     next_step : AuthFlowStep;
     consent_data : ConsentData;
+    accepted_payment_canisters : [Principal];
   };
 
   // A record to hold all the validated data from a /token request.

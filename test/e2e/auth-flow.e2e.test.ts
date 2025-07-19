@@ -71,6 +71,70 @@ describe('Authorization State Machine Flow', () => {
     expect(body).toContain('state is required');
   });
 
+  describe('Scope Validation', () => {
+    test('should succeed when requesting valid, registered scopes', async () => {
+      // Arrange: Construct an /authorize URL with scopes that are registered
+      // in the global setup file (e.g., 'image:read').
+      const authUrl = new URL(`${replicaUrl}/authorize`);
+      authUrl.searchParams.set('canisterId', backendCanisterId.toText());
+      authUrl.searchParams.set('response_type', 'code');
+      authUrl.searchParams.set('client_id', clientId);
+      authUrl.searchParams.set('redirect_uri', 'https://jwt.io');
+      authUrl.searchParams.set(
+        'code_challenge',
+        (await generatePkce()).challenge,
+      );
+      authUrl.searchParams.set('code_challenge_method', 'S256');
+      authUrl.searchParams.set(
+        'resource',
+        'https://some-oauth-resource-server.com',
+      );
+      authUrl.searchParams.set('state', 'valid-scope-test');
+      authUrl.searchParams.set('scope', 'openid image:read'); // A valid, registered scope
+
+      // Act: Make the request
+      const response = await fetch(authUrl.toString(), {
+        redirect: 'manual',
+      });
+
+      // Assert: The request must be a successful redirect, allowing the flow to continue.
+      expect(response.status).toBe(302);
+      expect(response.headers.get('location')).toContain('/login?session_id=');
+    });
+
+    test('should reject /authorize request with an unregistered scope', async () => {
+      // Arrange: Construct an /authorize URL with a scope that is NOT registered.
+      const authUrl = new URL(`${replicaUrl}/authorize`);
+      authUrl.searchParams.set('canisterId', backendCanisterId.toText());
+      authUrl.searchParams.set('response_type', 'code');
+      authUrl.searchParams.set('client_id', clientId);
+      authUrl.searchParams.set('redirect_uri', 'https://jwt.io');
+      authUrl.searchParams.set(
+        'code_challenge',
+        (await generatePkce()).challenge,
+      );
+      authUrl.searchParams.set('code_challenge_method', 'S256');
+      authUrl.searchParams.set(
+        'resource',
+        'https://some-oauth-resource-server.com',
+      );
+      authUrl.searchParams.set('state', 'invalid-scope-test');
+      authUrl.searchParams.set('scope', 'image:read admin:god_mode'); // Mix of valid and invalid
+
+      // Act: Make the request
+      const response = await fetch(authUrl.toString());
+      // MODIFIED: Read the body as plain text, not JSON
+      const errorBody = await response.text();
+
+      // Assert: The request must be rejected with a 400 status
+      expect(response.status).toBe(400);
+
+      // MODIFIED: Assert that the plain text body contains the expected error strings
+      expect(errorBody).toContain('invalid_scope');
+      expect(errorBody).toContain("scope 'admin:god_mode' is not supported");
+    });
+  });
+
   test('should go directly to consent if `prometheus:charge` scope is NOT requested', async () => {
     // Arrange: Start a flow without the charge scope
     const sessionId = await startAuthFlowAndGetSessionId('openid profile');
@@ -88,7 +152,12 @@ describe('Authorization State Machine Flow', () => {
     expect(confirmResult).toHaveProperty('ok');
     if (!('ok' in confirmResult)) throw new Error('confirm_login failed');
     expect(confirmResult.ok.next_step).toEqual({ consent: null });
-    expect(confirmResult.ok.consent_data.scope).toBe('openid profile');
+    expect(confirmResult.ok.consent_data.scopes).toEqual([
+      {
+        id: 'openid',
+        description: 'Confirm your identity with this application.',
+      },
+    ]);
 
     // Act & Assert: Since the next step is consent, a subsequent call to complete_authorize should succeed
     const finalResult = await endUserActor.complete_authorize(sessionId);
@@ -114,8 +183,16 @@ describe('Authorization State Machine Flow', () => {
     expect(confirmResult).toHaveProperty('ok');
     if (!('ok' in confirmResult)) throw new Error('confirm_login failed');
     expect(confirmResult.ok.next_step).toEqual({ setup: null });
-    expect(confirmResult.ok.consent_data.scope).toContain('prometheus:charge');
-
+    expect(confirmResult.ok.consent_data.scopes).toEqual([
+      {
+        id: 'openid',
+        description: 'Confirm your identity with this application.',
+      },
+      {
+        id: 'prometheus:charge',
+        description: 'Allow this application to charge your account.',
+      },
+    ]);
     // Assert 2: A direct call to complete_authorize MUST FAIL because the state is #awaiting_payment_setup
     const prematureFinalizeResult =
       await endUserActor.complete_authorize(sessionId);

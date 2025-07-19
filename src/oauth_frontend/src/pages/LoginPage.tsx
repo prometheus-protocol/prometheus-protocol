@@ -42,10 +42,12 @@ export default function LoginPage() {
             );
 
             if ('setup' in data.next_step) {
-              navigate(`/setup?session_id=${sessionId}`);
+              navigate(`/setup?session_id=${sessionId}`, {
+                state: data,
+              });
             } else if ('consent' in data.next_step) {
               navigate(`/consent?session_id=${sessionId}`, {
-                state: { consentData: data.consent_data },
+                state: data,
               });
             }
           },

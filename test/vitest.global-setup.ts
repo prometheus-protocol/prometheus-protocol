@@ -8,6 +8,8 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 
 const backendCanisterId = Principal.fromText(canisterIds.oauth_backend.local);
+// The ICRC-2 canister ID for ckUSDC
+const icrc2CanisterId = Principal.fromText(canisterIds.icrc1_ledger.local);
 const replicaUrl = `http://127.0.0.1:4943`;
 
 const createActorFor = (identity: Identity) => {
@@ -43,6 +45,11 @@ export async function setup() {
     initial_service_principal: developerIdentity.getPrincipal(),
     name: 'Global E2E Resource Server',
     uris: ['https://some-oauth-resource-server.com'],
+    accepted_payment_canisters: [icrc2CanisterId],
+    scopes: [
+      ['image:read', 'Allows the app to read your files.'],
+      ['image:write', 'Allows the app to create and modify your files.'],
+    ],
   });
 
   if (!('active' in activateResponse.status)) {

@@ -7,9 +7,9 @@ import { createActor as createOAuthActor } from '../../../declarations/oauth_bac
 // Import an ICRC token's service definition and idlFactory
 import { _SERVICE as ICRCService } from '../../../declarations/icrc1_ledger/icrc1_ledger.did.js';
 import { createActor as createIcrcActor } from '../../../declarations/icrc1_ledger/index.js';
+import { Principal } from '@dfinity/principal';
 
 const OAUTH_CANISTER_ID = process.env.CANISTER_ID_OAUTH_BACKEND;
-const CKUSDC_CANISTER_ID = process.env.CANISTER_ID_ICRC1_LEDGER;
 
 /**
  * Creates a typed actor for the Oauth Backend canister.
@@ -29,14 +29,18 @@ export const getAuthActor = (identity: Identity): AuthService => {
 /**
  * Creates a typed actor for an ICRC-1 compliant token canister.
  * @param agent The agent to use for creating the actor.
+ * @param canisterId The Principal ID of the ICRC-1 token canister.
  * @returns A typed actor instance for the ckUSDC ledger.
  */
-export const getIcrcActor = (identity: Identity): ICRCService => {
+export const getIcrcActor = (
+  identity: Identity,
+  canisterId: Principal,
+): ICRCService => {
   const agent = HttpAgent.createSync({
     host: process.env.IC_HOST,
     identity,
   });
-  return createIcrcActor(CKUSDC_CANISTER_ID, {
+  return createIcrcActor(canisterId, {
     agent,
   });
 };

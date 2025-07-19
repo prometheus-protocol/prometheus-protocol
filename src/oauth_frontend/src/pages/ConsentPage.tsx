@@ -7,63 +7,117 @@ import {
   CardDescription,
 } from '@/components/ui/card';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { useCompleteAuthorizeMutation } from '@/hooks/useAuth';
-import { Check, Wallet, Loader2 } from 'lucide-react';
-import { JSX } from 'react';
+import {
+  useCompleteAuthorizeMutation,
+  useDenyConsentMutation,
+} from '@/hooks/useAuth';
+import {
+  Check,
+  FileLock2,
+  Loader2,
+  Eye,
+  Pencil,
+  Trash2,
+  User,
+  CreditCard,
+} from 'lucide-react';
+import { JSX, useMemo } from 'react';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 
-// A small helper component to render each permission row
-const PermissionRow = ({ scope }: { scope: string }) => {
-  const scopeDetails: {
-    [key: string]: { icon: JSX.Element; text: string; required?: boolean };
-  } = {
-    openid: {
-      icon: <Check className="h-5 w-5 text-primary" />,
-      text: 'View your user ID',
-    },
-    'prometheus:wallet': {
-      icon: <Wallet className="h-5 w-5" />,
-      text: 'Initiate payments via your Prometheus Wallet',
-      required: true,
-    },
-    default: {
-      icon: <Check className="h-5 w-5" />,
-      text: `Unknown permission: ${scope}`,
-    },
+// --- Types and Data Structures ---
+
+type ScopeData = {
+  id: string;
+  description: string;
+};
+
+type GroupedScopes = {
+  [groupName: string]: ScopeData[];
+};
+
+// --- Helper Components ---
+
+const PermissionRow = ({ scopeData }: { scopeData: ScopeData }) => {
+  const { id, description } = scopeData;
+
+  const getIcon = (scopeId: string): JSX.Element => {
+    // Protocol-level scopes
+    if (scopeId === 'openid') return <User className="h-5 w-5 text-primary" />;
+    if (scopeId === 'prometheus:charge')
+      return <FileLock2 className="h-5 w-5 text-primary" />;
+
+    // Action-based icons for resource scopes
+    if (scopeId.includes('read')) return <Eye className="h-5 w-5" />;
+    if (scopeId.includes('write')) return <Pencil className="h-5 w-5" />;
+    if (scopeId.includes('delete')) return <Trash2 className="h-5 w-5" />;
+    if (scopeId.includes('billing')) return <CreditCard className="h-5 w-5" />;
+
+    // Default fallback
+    return <Check className="h-5 w-5" />;
   };
 
-  const details = scopeDetails[scope] || scopeDetails['default'];
-
   return (
-    <div className="flex items-center p-3 bg-secondary rounded-md">
-      <div className="mr-3">{details.icon}</div>
-      <span className="flex-grow">{details.text}</span>
-      {details.required && (
-        <span className="text-xs font-semibold text-muted-foreground">
-          (Required)
-        </span>
-      )}
+    <div className="flex items-start">
+      <div className="mr-4 mt-1 flex-shrink-0 text-muted-foreground">
+        {getIcon(id)}
+      </div>
+      <span className="flex-grow text-sm">{description}</span>
     </div>
   );
 };
 
+const PermissionGroup = ({
+  title,
+  scopes,
+}: {
+  title: string;
+  scopes: ScopeData[];
+}) => (
+  <div className="space-y-3 rounded-lg border border-border/40 bg-background p-4">
+    <h4 className="font-semibold text-sm capitalize">{title}</h4>
+    <div className="space-y-3 pl-2">
+      {scopes.map((scope) => (
+        <PermissionRow key={scope.id} scopeData={scope} />
+      ))}
+    </div>
+  </div>
+);
+
+// --- Main Component ---
+
 export default function ConsentPage() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const location = useLocation();
 
   const sessionId = searchParams.get('session_id');
   const { identity } = useInternetIdentity();
-  const { mutate: completeAuthorize, isPending } =
+  const { mutate: completeAuthorize, isPending: isAllowing } =
     useCompleteAuthorizeMutation();
+  const { denyConsent, isDenying } = useDenyConsentMutation();
 
-  // Get the client name and scopes from the navigation state
-  const consentData = location.state?.consentData;
+  const consentData = location.state?.consent_data;
   const clientName = consentData?.client_name || '[Application Name]';
-  const scopes = consentData?.scopes?.split(' ') || [
-    'openid',
-    'prometheus:wallet',
-  ];
+  const clientLogo = consentData?.logo_uri;
+  const allScopes: ScopeData[] = consentData?.scopes || [];
+
+  const { foundationalScopes, applicationScopes } = useMemo(() => {
+    const foundational: ScopeData[] = [];
+    const application: GroupedScopes = {};
+
+    allScopes.forEach((scope) => {
+      if (scope.id === 'openid' || scope.id === 'prometheus:charge') {
+        foundational.push(scope);
+      } else {
+        const [groupName] = scope.id.split(':');
+        if (!application[groupName]) {
+          application[groupName] = [];
+        }
+        application[groupName].push(scope);
+      }
+    });
+
+    return { foundationalScopes: foundational, applicationScopes: application };
+  }, [allScopes]);
 
   const handleAllow = () => {
     if (!identity || !sessionId) {
@@ -75,7 +129,6 @@ export default function ConsentPage() {
       { identity, sessionId },
       {
         onSuccess: (redirectUrl) => {
-          // This is a full page redirect, not a client-side navigation
           window.location.href = redirectUrl;
         },
       },
@@ -83,23 +136,53 @@ export default function ConsentPage() {
   };
 
   const handleDeny = () => {
-    // TODO: Redirect back to the client app with an error
-    alert('Permissions denied.');
-    navigate('/login'); // For now, just go back to login
+    if (!identity || !sessionId) return;
+    denyConsent(
+      { identity, sessionId },
+      {
+        onSuccess: (redirectUrl) => {
+          window.location.href = redirectUrl;
+        },
+      },
+    );
   };
+
+  const isPending = isAllowing || isDenying;
 
   return (
     <Card className="w-full max-w-md border-border/60">
-      <CardHeader>
-        <CardTitle>Step 3: Grant Permissions</CardTitle>
+      <CardHeader className="text-center">
+        {clientLogo && (
+          <img
+            src={clientLogo}
+            alt={`${clientName} Logo`}
+            className="mx-auto mb-4 h-16 w-16 rounded-full object-cover"
+          />
+        )}
+        <CardTitle>Grant Permissions</CardTitle>
         <CardDescription>
-          <span className="font-bold">{clientName}</span> would like to:
+          <span className="font-bold">{clientName}</span> would like permission
+          to access your account.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="space-y-3">
-          {scopes.map((scope: string) => (
-            <PermissionRow key={scope} scope={scope} />
+        <div className="space-y-4">
+          {/* Render Foundational Scopes First */}
+          {foundationalScopes.length > 0 && (
+            <div className="space-y-3 rounded-lg bg-secondary p-4">
+              {foundationalScopes.map((scope) => (
+                <PermissionRow key={scope.id} scopeData={scope} />
+              ))}
+            </div>
+          )}
+
+          {/* Render Grouped Application Scopes */}
+          {Object.entries(applicationScopes).map(([groupName, scopes]) => (
+            <PermissionGroup
+              key={groupName}
+              title={`${groupName} Access`}
+              scopes={scopes}
+            />
           ))}
         </div>
         <div className="flex flex-col gap-3">

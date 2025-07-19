@@ -38,12 +38,14 @@ shared ({ caller = creator }) actor class AuthCanister() = self {
   // =================================================================================================
   // PUBLIC API - All logic is delegated to specialized modules.
   // =================================================================================================
-  public shared query ({ caller }) func get_session_info(session_id : Text) : async Result.Result<Types.SessionInfo, Text> {
-    Admin.get_session_info(context, session_id, caller);
+
+  // Must be called before any other functions
+  public shared ({ caller }) func set_frontend_canister_id(id : Principal) {
+    Admin.set_frontend_canister_id(context, caller, id);
   };
 
-  public shared ({ caller }) func complete_authorize(session_id : Text) : async Result.Result<Text, Text> {
-    await Authorize.complete_authorize(context, session_id, caller);
+  public shared query ({ caller }) func get_session_info(session_id : Text) : async Result.Result<Types.SessionInfo, Text> {
+    Admin.get_session_info(context, session_id, caller);
   };
 
   public shared ({ caller }) func confirm_login(session_id : Text) : async Result.Result<Types.LoginConfirmation, Text> {
@@ -54,20 +56,25 @@ shared ({ caller = creator }) actor class AuthCanister() = self {
     await Authorize.complete_payment_setup(context, session_id, caller);
   };
 
-  // Must be called before any other functions
-  public shared ({ caller }) func set_frontend_canister_id(id : Principal) {
-    Admin.set_frontend_canister_id(context, caller, id);
+  public shared ({ caller }) func complete_authorize(session_id : Text) : async Result.Result<Text, Text> {
+    await Authorize.complete_authorize(context, session_id, caller);
+  };
+
+  public shared ({ caller }) func deny_consent(session_id : Text) : async Result.Result<Text, Text> {
+    await Authorize.deny_consent(context, session_id, caller);
   };
 
   type RegisterResourceServerArgs = {
     name : Text;
     uris : [Text]; // The URIs for the resource server
     initial_service_principal : Principal;
+    scopes : [(Text, Text)]; // A map of supported scopes to their descriptions
+    accepted_payment_canisters : [Principal]; // List of icrc2 canisters that this server accepts.
   };
   public shared ({ caller }) func register_resource_server(args : RegisterResourceServerArgs) : async Types.ResourceServer {
     let entropy = await Random.blob();
     ignore Crypto.get_or_create_signing_key(context, entropy);
-    await Admin.register_resource_server(context, caller, args.name, args.uris, args.initial_service_principal);
+    await Admin.register_resource_server(context, caller, args.name, args.uris, args.initial_service_principal, args.scopes, args.accepted_payment_canisters);
   };
 
   type UpdateResourceServerUrisArgs = {

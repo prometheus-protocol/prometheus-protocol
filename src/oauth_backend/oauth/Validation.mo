@@ -79,24 +79,58 @@ module {
     };
 
     // --- 5. Validate the Resource and determine the Audience ---
+    var resource_server : ?Types.ResourceServer = null;
     let audience = switch (resource_opt) {
       case (null) {
-        // Fallback behavior: If no resource is specified, the audience is the client itself.
         client_id;
       };
       case (?resource_uri) {
-        // Resource-oriented behavior: Validate the provided resource URI.
         let normalized_uri = Utils.normalize_uri(resource_uri);
-        if (Map.get(context.uri_to_rs_id, thash, normalized_uri) == null) {
-          // If the URI is not in our reverse map, it's not a registered resource.
-          return #err("The specified 'resource' URI is not registered with this provider.");
+        let rs_id = switch (Map.get(context.uri_to_rs_id, thash, normalized_uri)) {
+          case (null) return #err("The specified 'resource' URI is not registered with this provider.");
+          case (?id) id;
         };
-        // The URI is valid. The audience for the JWT MUST be the URI itself.
+        resource_server := Map.get(context.resource_servers, thash, rs_id);
+        if (Option.isNull(resource_server)) {
+          // This should be impossible if data is consistent, but it's a good sanity check.
+          return #err("Internal error: Resource server ID found but data is missing.");
+        };
         normalized_uri;
       };
     };
 
-    // --- 6. If all checks pass, return the validated data in a structured way ---
+    // --- 6. NEW: Validate Scopes ---
+    switch (scope_opt) {
+      case (?scope_string) {
+        // Only perform scope validation if a resource server is targeted.
+        switch (resource_server) {
+          case (?rs) {
+            let requested_scopes = Text.split(scope_string, #char ' ');
+            let supported_scopes_map = Map.fromIter<Text, Text>(rs.scopes.vals(), thash);
+
+            label checkScopes for (scope in requested_scopes) {
+              // These are our globally recognized, protocol-level scopes.
+              // We also silently ignore `profile` for compatibility with generic OIDC clients.
+              if (scope == "openid" or scope == "prometheus:charge" or scope == "profile") {
+                continue checkScopes;
+              };
+
+              // For all other scopes, they MUST be registered by the resource server.
+              if (Option.isNull(Map.get(supported_scopes_map, thash, scope))) {
+                return #err("invalid_scope: The scope '" # scope # "' is not supported by this resource server.");
+              };
+            };
+          };
+          case (null) {
+            // No resource server specified, so we don't validate custom scopes.
+            // We could add a check here to reject any non-standard scopes if desired.
+          };
+        };
+      };
+      case (null) { /* No scopes requested, nothing to validate */ };
+    };
+
+    // --- 7. If all checks pass, return the validated data in a structured way ---
     return #ok({
       client_id = client_id;
       redirect_uri = redirect_uri;

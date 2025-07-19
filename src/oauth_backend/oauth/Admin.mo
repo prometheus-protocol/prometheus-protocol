@@ -36,6 +36,8 @@ module Admin {
     name : Text,
     uris : [Text],
     initial_service_principal : Principal,
+    scopes : [(Text, Text)],
+    accepted_payment_canisters : [Principal],
   ) : async Types.ResourceServer {
     // For now, registration is open. We can add a fee later.
     // 1. Get entropy
@@ -60,6 +62,8 @@ module Admin {
       service_principals = [initial_service_principal];
       status = #active; // Active immediately for now
       uris = uris;
+      scopes = scopes;
+      accepted_payment_canisters = accepted_payment_canisters;
     };
 
     Map.set(context.resource_servers, thash, resource_server_id, new_server);

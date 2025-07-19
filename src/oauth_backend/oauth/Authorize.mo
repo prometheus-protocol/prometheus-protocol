@@ -11,6 +11,8 @@ import Time "mo:base/Time";
 import Principal "mo:base/Principal";
 import Blob "mo:base/Blob";
 import Result "mo:base/Result";
+import Utils "Utils";
+import Scope "Scope";
 
 module {
   public func handle_authorize(context : Types.Context, req : Types.Request, res : Types.ResponseClass) : async Types.Response {
@@ -113,18 +115,48 @@ module {
     // 5. Update the session in the map
     Map.set(context.authorize_sessions, thash, session_id, session);
 
-    // 6. Prepare and return the data for the frontend
+    // 6. Prepare ENRICHED consent data for the frontend
     let client = switch (Map.get(context.clients, thash, session.client_id)) {
       case (null) return #err("Internal error: Client not found for session.");
       case (?c) c;
     };
+
+    // 7. Prepare scope details for the consent data
+    let scope_details = Scope.build_scope_details(context, session);
+
     let consent_data : Types.ConsentData = {
       client_name = client.client_name;
-      scope = session.scope;
+      scopes = scope_details;
       logo_uri = client.logo_uri;
     };
 
-    return #ok({ next_step = next_step; consent_data = consent_data });
+    // 8. Fetch the accepted payment canisters for this resource server.
+    var accepted_payment_canisters : [Principal] = [];
+    switch (session.resource) {
+      case (?resource_uri) {
+        let normalized_uri = Utils.normalize_uri(resource_uri);
+        let rs_id = Map.get(context.uri_to_rs_id, thash, normalized_uri);
+        switch (rs_id) {
+          case (?id) {
+            switch (Map.get(context.resource_servers, thash, id)) {
+              case (null) {};
+              case (?r) {
+                // Collect all service principals that are registered for this resource server.
+                accepted_payment_canisters := r.accepted_payment_canisters;
+              };
+            };
+          };
+          case (null) { /* No resource server found for this URI */ };
+        };
+      };
+      case (null) { /* No resource specified in the request */ };
+    };
+
+    return #ok({
+      next_step = next_step;
+      consent_data = consent_data;
+      accepted_payment_canisters = accepted_payment_canisters;
+    });
   };
 
   // This function is called by the frontend after the user successfully sets up their allowance.
@@ -202,6 +234,36 @@ module {
     Map.delete(context.authorize_sessions, thash, session_id);
     let state_param = "&state=" # session.state;
     let final_url = session.redirect_uri # "?code=" # code # state_param;
+    return #ok(final_url);
+  };
+
+  public func deny_consent(context : Types.Context, session_id : Text, caller : Principal) : async Result.Result<Text, Text> {
+    // 1. Look up the session and handle errors.
+    let session = switch (Map.get(context.authorize_sessions, thash, session_id)) {
+      case (null) { return #err("Invalid or already used session ID.") };
+      case (?s) s;
+    };
+
+    // 2. VALIDATE that the caller is the bound user.
+    switch (session.user_principal) {
+      case (null) return #err("Session not yet associated with a user.");
+      case (?owner_principal) {
+        if (owner_principal != caller) {
+          return #err("Caller does not match session owner.");
+        };
+      };
+    };
+
+    // 3. Get the necessary data before deleting the session.
+    let redirect_uri = session.redirect_uri;
+    let state = session.state;
+
+    // 4. CRITICAL: Clean up the session immediately.
+    Map.delete(context.authorize_sessions, thash, session_id);
+
+    // 5. Construct the redirect URL according to OAuth 2.1 spec for access denial.
+    let final_url = redirect_uri # "?error=access_denied&state=" # state;
+
     return #ok(final_url);
   };
 };
