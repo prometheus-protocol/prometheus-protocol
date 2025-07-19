@@ -35,7 +35,6 @@ module Admin {
     caller : Principal,
     name : Text,
     uris : [Text],
-    payout_principal : Principal,
     initial_service_principal : Principal,
   ) : async Types.ResourceServer {
     // For now, registration is open. We can add a fee later.
@@ -58,7 +57,6 @@ module Admin {
       resource_server_id = resource_server_id;
       owner = caller;
       name = name;
-      payout_principal = payout_principal;
       service_principals = [initial_service_principal];
       status = #active; // Active immediately for now
       uris = uris;
@@ -111,5 +109,62 @@ module Admin {
 
     // 6. Return a success message.
     return #ok("Resource server URIs updated successfully.");
+  };
+
+  public func get_session_info(context : Types.Context, session_id : Text, caller : Principal) : Result.Result<Types.SessionInfo, Text> {
+    // 1. Find the session
+    let session = switch (Map.get(context.authorize_sessions, thash, session_id)) {
+      case (null) { return #err("Invalid session ID.") };
+      case (?s) s;
+    };
+
+    // VALIDATE that the caller is the bound user.
+    switch (session.user_principal) {
+      case (null) return #err("Session not yet associated with a user.");
+      case (?owner_principal) {
+        if (owner_principal != caller) {
+          return #err("Caller does not match session owner.");
+        };
+      };
+    };
+
+    // 2. Get the audience URI from the session. This is the public identifier.
+    let audience_uri = session.audience;
+
+    // 3. CRITICAL: Use the reverse-lookup map to find the internal resource_server_id.
+    let resource_server_id = switch (Map.get(context.uri_to_rs_id, thash, audience_uri)) {
+      case (null) {
+        // This is a key validation step. The client requested an audience URI that isn't registered.
+        return #err("Invalid audience: The requested resource URI is not registered with any resource server.");
+      };
+      case (?id) id;
+    };
+
+    // 4. Now, look up the full ResourceServer record using the internal ID.
+    let resource_server = switch (Map.get(context.resource_servers, thash, resource_server_id)) {
+      case (null) {
+        // This indicates an internal data consistency error.
+        return #err("Internal error: Resource server record not found for the given audience.");
+      };
+      case (?rs) rs;
+    };
+
+    // 5. Select the principal to be approved as the spender (the "select the first" strategy).
+    if (resource_server.service_principals.size() == 0) {
+      return #err("Configuration error: The target resource server has no service principals registered.");
+    };
+    let spender_principal = resource_server.service_principals[0];
+
+    // 6. Get the client's name for a user-friendly UI.
+    let client = switch (Map.get(context.clients, thash, session.client_id)) {
+      case (null) return #err("Internal error: Client not found for session.");
+      case (?c) c;
+    };
+
+    // 7. Return the correct spender principal and the client name.
+    return #ok({
+      resource_server_principal = spender_principal;
+      client_name = client.client_name;
+    });
   };
 };

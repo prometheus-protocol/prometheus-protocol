@@ -88,7 +88,7 @@ describe('Authorization State Machine Flow', () => {
     expect(confirmResult).toHaveProperty('ok');
     if (!('ok' in confirmResult)) throw new Error('confirm_login failed');
     expect(confirmResult.ok.next_step).toEqual({ consent: null });
-    expect(confirmResult.ok.consent_data.scope).toBe('openid+profile');
+    expect(confirmResult.ok.consent_data.scope).toBe('openid profile');
 
     // Act & Assert: Since the next step is consent, a subsequent call to complete_authorize should succeed
     const finalResult = await endUserActor.complete_authorize(sessionId);

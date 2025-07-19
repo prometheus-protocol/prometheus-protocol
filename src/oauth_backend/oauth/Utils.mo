@@ -1,6 +1,7 @@
 import Text "mo:base/Text";
 import Types "Types";
 import Principal "mo:base/Principal";
+import Iter "mo:base/Iter";
 
 module {
 
@@ -95,6 +96,43 @@ module {
         };
         return "http://" # final_host;
       };
+    };
+  };
+
+  /**
+   * A private helper to extract a canister ID from a given URI.
+   * Handles both production (e.g., https://canister-id.icp0.io) and
+   * local (e.g., http://127.0.0.1/?canisterId=canister-id) formats.
+   * @param uri The URI to parse.
+   * @returns An optional Principal if found, otherwise null.
+   */
+  public func extract_canister_id_from_uri(uri : Text) : ?Principal {
+    // Case 1: Local development format with a query parameter
+    if (Text.contains(uri, #text("?canisterId="))) {
+      // Split by "?canisterId=" and take the second part
+      let parts = Iter.toArray(Text.split(uri, #char '='));
+      if (parts.size() > 1) {
+        // The canister ID might have other query params after it, so split by '&'
+        let canister_id_text = Iter.toArray(Text.split(parts[parts.size() - 1], #char '&'))[0];
+        ?Principal.fromText(canister_id_text);
+      } else {
+        return null;
+      };
+      // Case 2: Production format with a subdomain
+    } else if (Text.contains(uri, #text(".icp0.io")) or Text.contains(uri, #text(".icp-api.io")) or Text.contains(uri, #text(".localhost"))) {
+      // Remove the protocol part
+      let host_part = Text.replace(Text.replace(uri, #text("https://"), ""), #text("http://"), "");
+      // Split by '.' and take the first part
+      let parts = Iter.toArray(Text.split(host_part, #char '.'));
+      if (parts.size() > 0) {
+        let canister_id_text = parts[0];
+        return ?Principal.fromText(canister_id_text);
+      } else {
+        return null;
+      };
+    } else {
+      // Could not determine format
+      return null;
     };
   };
 };

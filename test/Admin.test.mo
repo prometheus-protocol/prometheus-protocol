@@ -23,7 +23,7 @@ func showClient(c : Types.Client) : Text {
 
 // NEW: Helper to compare two ResourceServer records.
 func equalResourceServer(a : Types.ResourceServer, b : Types.ResourceServer) : Bool {
-  return a.resource_server_id == b.resource_server_id and a.owner == b.owner and a.name == b.name and a.payout_principal == b.payout_principal;
+  return a.resource_server_id == b.resource_server_id and a.owner == b.owner and a.name == b.name;
 };
 
 // NEW: Helper to display a ResourceServer record.
@@ -85,15 +85,13 @@ await suite(
           func() : async () {
             let context = createMockContext();
             let owner = Principal.fromText("aaaaa-aa");
-            let payout = Principal.fromText("aaaaa-aa");
             let service_principal = Principal.fromText("aaaaa-aa");
 
-            let new_server = await Admin.register_resource_server(context, owner, "Test Server", ["https://canister_id.ic0.app"], payout, service_principal);
+            let new_server = await Admin.register_resource_server(context, owner, "Test Server", ["https://canister_id.ic0.app"], service_principal);
 
             // Check that the returned object has the correct data
             expect.principal(new_server.owner).equal(owner);
             expect.text(new_server.name).equal("Test Server");
-            expect.principal(new_server.payout_principal).equal(payout);
             expect.principal(new_server.service_principals[0]).equal(service_principal);
 
             // Check that the object was actually stored in the context's map

@@ -11,7 +11,6 @@ module {
     resource_server_id : Text;
     owner : Principal;
     name : Text;
-    payout_principal : Principal; // CRITICAL: Where the money goes.
     service_principals : [Principal]; // List of trusted backend server identities.
     uris : [Text]; // List of URIs for the resource server.
     status : {
@@ -78,6 +77,11 @@ module {
     resource : ?Text; // Optional resource URI, if specified.
     var status : AuthorizeSessionStatus;
     var user_principal : ?Principal; // The user principal after login, if available.
+  };
+
+  public type SessionInfo = {
+    resource_server_principal : Principal;
+    client_name : Text;
   };
 
   public type ConsentData = {

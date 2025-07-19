@@ -81,7 +81,6 @@ describe('Admin and Registration', () => {
         initial_service_principal: developerIdentity.getPrincipal(),
         name: 'E2E Test Resource Server',
         uris: ['https://some-oauth-resource-server.com'],
-        payout_principal: developerIdentity.getPrincipal(),
       });
 
       // Assert
@@ -96,9 +95,6 @@ describe('Admin and Registration', () => {
         'https://some-oauth-resource-server.com',
       );
       expect(activateResponse.service_principals[0].toText()).toBe(
-        developerIdentity.getPrincipal().toText(),
-      );
-      expect(activateResponse.payout_principal.toText()).toBe(
         developerIdentity.getPrincipal().toText(),
       );
     });

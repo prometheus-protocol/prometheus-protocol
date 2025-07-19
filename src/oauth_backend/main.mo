@@ -36,6 +36,10 @@ shared ({ caller = creator }) actor class AuthCanister() = self {
   // =================================================================================================
   // PUBLIC API - All logic is delegated to specialized modules.
   // =================================================================================================
+  public shared query ({ caller }) func get_session_info(session_id : Text) : async Result.Result<Types.SessionInfo, Text> {
+    Admin.get_session_info(context, session_id, caller);
+  };
+
   public shared ({ caller }) func complete_authorize(session_id : Text) : async Result.Result<Text, Text> {
     await Authorize.complete_authorize(context, session_id, caller);
   };
@@ -56,11 +60,10 @@ shared ({ caller = creator }) actor class AuthCanister() = self {
   type RegisterResourceServerArgs = {
     name : Text;
     uris : [Text]; // The URIs for the resource server
-    payout_principal : Principal;
     initial_service_principal : Principal;
   };
   public shared ({ caller }) func register_resource_server(args : RegisterResourceServerArgs) : async Types.ResourceServer {
-    await Admin.register_resource_server(context, caller, args.name, args.uris, args.payout_principal, args.initial_service_principal);
+    await Admin.register_resource_server(context, caller, args.name, args.uris, args.initial_service_principal);
   };
 
   type UpdateResourceServerUrisArgs = {

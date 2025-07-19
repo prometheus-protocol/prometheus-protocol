@@ -3,7 +3,7 @@ import Text "mo:base/Text";
 import Array "mo:base/Array";
 import Iter "mo:base/Iter";
 import Result "mo:base/Result";
-import HttpParser "mo:http-parser";
+import HttpParser "../../http-parser";
 
 module {
 

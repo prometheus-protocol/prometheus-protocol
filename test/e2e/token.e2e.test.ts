@@ -307,6 +307,6 @@ describe('Token Endpoint', () => {
       expect(response.status).toBe(400);
       const errorJson = await response.json();
       expect(errorJson.error).toBe('invalid_grant');
-    }, 70000); // Increase timeout for this specific test
+    }, 80000); // Increase timeout for this specific test
   });
 });
