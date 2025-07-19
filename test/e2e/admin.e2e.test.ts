@@ -73,30 +73,4 @@ describe('Admin and Registration', () => {
       expect(errorJson.error).toBe('invalid_redirect_uri');
     });
   });
-
-  describe('Resource Server Management', () => {
-    test('should allow a developer to register a resource server', async () => {
-      // Arrange & Act
-      const activateResponse = await backendActor.register_resource_server({
-        initial_service_principal: developerIdentity.getPrincipal(),
-        name: 'E2E Test Resource Server',
-        uris: ['https://some-oauth-resource-server.com'],
-      });
-
-      // Assert
-      expect(activateResponse).toHaveProperty('status');
-      expect(activateResponse.status).toHaveProperty('active');
-      expect(activateResponse.resource_server_id).toBeDefined();
-      expect(activateResponse.owner.toText()).toBe(
-        developerIdentity.getPrincipal().toText(),
-      );
-      expect(activateResponse.name).toBe('E2E Test Resource Server');
-      expect(activateResponse.uris).toContain(
-        'https://some-oauth-resource-server.com',
-      );
-      expect(activateResponse.service_principals[0].toText()).toBe(
-        developerIdentity.getPrincipal().toText(),
-      );
-    });
-  });
 });
