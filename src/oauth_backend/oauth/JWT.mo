@@ -13,8 +13,10 @@ module {
     auth_code_record : Types.AuthorizationCode,
     issuer : Text,
   ) : async Result.Result<Text, Text> {
-    let entropy = await Random.blob();
-    let private_key = Crypto.get_or_create_signing_key(context, entropy);
+    let private_key = switch (Crypto.get_signing_key(context)) {
+      case (?key) key;
+      case (null) return #err("No signing key found");
+    };
 
     let now_seconds = Time.now() / 1_000_000_000;
     let exp_seconds = now_seconds + 3600; // Token expires in 1 hour.

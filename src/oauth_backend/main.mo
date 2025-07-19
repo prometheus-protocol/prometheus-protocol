@@ -1,12 +1,14 @@
 import Principal "mo:base/Principal";
 import Result "mo:base/Result";
 import Text "mo:base/Text";
+import Random "mo:base/Random";
 import Server "server";
 import Routes "Routes";
 import Types "oauth/Types";
 import Admin "oauth/Admin";
 import State "oauth/State";
 import Authorize "oauth/Authorize";
+import Crypto "oauth/Crypto";
 
 shared ({ caller = creator }) actor class AuthCanister() = self {
 
@@ -63,6 +65,8 @@ shared ({ caller = creator }) actor class AuthCanister() = self {
     initial_service_principal : Principal;
   };
   public shared ({ caller }) func register_resource_server(args : RegisterResourceServerArgs) : async Types.ResourceServer {
+    let entropy = await Random.blob();
+    ignore Crypto.get_or_create_signing_key(context, entropy);
     await Admin.register_resource_server(context, caller, args.name, args.uris, args.initial_service_principal);
   };
 
