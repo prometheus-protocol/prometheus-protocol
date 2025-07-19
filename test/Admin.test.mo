@@ -87,7 +87,15 @@ await suite(
             let owner = Principal.fromText("aaaaa-aa");
             let service_principal = Principal.fromText("aaaaa-aa");
 
-            let new_server = await Admin.register_resource_server(context, owner, "Test Server", ["https://canister_id.ic0.app"], service_principal);
+            let new_server = await Admin.register_resource_server(
+              context,
+              owner,
+              "Test Server",
+              ["https://canister_id.ic0.app"],
+              service_principal,
+              [("scope1", "description1")],
+              [Principal.fromText("aaaaa-aa")],
+            );
 
             // Check that the returned object has the correct data
             expect.principal(new_server.owner).equal(owner);
