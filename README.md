@@ -8,7 +8,9 @@ Prometheus Protocol is a full-featured, on-chain **OAuth 2.1 provider** built fo
 
 While designed for broad use, it is also a fully compliant **Authorization Server** for the **Model Context Protocol (MCP)** ecosystem. This dual focus ensures that Prometheus is both a flexible tool for the wider IC community and a hardened, specification-compliant engine for enterprise-grade protocols.
 
-It enables developers to secure applications using the industry-standard **Authorization Code Flow with PKCE**, and supports modern features like Dynamic Client Registration, Refresh Token Rotation, and Resource Indicators.
+It enables developers to secure applications using the industry-standard **Authorization Code Flow with PKCE**.
+
+It supports flexible, **multi-token payment authorization**, allowing resource servers to define which ICRC-2 tokens they accept for payment-gated scopes.
 
 ## Features & Compliance
 
@@ -18,6 +20,7 @@ Prometheus Protocol implements the latest security best practices from the IETF 
 - ✓ **Refresh Token Rotation:** Enhances security by issuing a new, single-use refresh token each time one is used, mitigating the risk of token theft.
 - ✓ **Dynamic Client Registration (DCR):** A public `/register` endpoint (`RFC 7591`) allows applications to register programmatically without manual intervention.
 - ✓ **Resource Indicators:** Supports token audience binding via the `resource` parameter (`RFC 8707`), ensuring tokens are used only at their intended destination.
+- ✓ **ICRC-2 Payment Authorization:** Enables resource servers to specify a list of accepted ICRC-2 compliant tokens for payment-gated scopes (e.g., `prometheus:charge`).
 - ✓ **Server Metadata:** Provides `/.well-known/oauth-authorization-server` (`RFC 8414`) and `/.well-known/jwks.json` endpoints for automated client configuration and key discovery.
 - ✓ **MCP Authorization Spec Compliant:** Fully adheres to the requirements for an Authorization Server within the MCP ecosystem (rev. 2025-06-18).
 
@@ -35,10 +38,10 @@ The protocol is designed to be a foundational piece of infrastructure for the In
 - **Prometheus Protocol (This Project):** The central Authorization Server that handles user authentication, consent, and the issuance of secure tokens.
 - **Resource Server (e.g., an MCP Server, a protected backend API):** The service that requires authorization and validates the tokens issued by Prometheus before granting access to its resources.
 
+  It also defines the list of accepted ICRC-2 payment tokens for any payment-gated scopes it offers.
+
 <details>
   <summary><strong>Understanding the MCP Discovery Flow</strong></summary>
-
-For developers integrating specifically with an MCP Server, it's important to understand the standard discovery flow. The client does not know about Prometheus initially; it discovers it through the MCP Server's metadata.
 
 ```mermaid
 sequenceDiagram
@@ -98,7 +101,7 @@ mops install
 
 ### 2. Deploy Local Environment
 
-This command starts a local replica and deploys the Prometheus canisters and a mock ICRC-2 ledger.
+This command starts a local replica and deploys the Prometheus canisters and mock ICRC-2 ledgers (e.g., PMP and ckUSDC).
 
 ```bash
 dfx start --clean --background
@@ -108,6 +111,15 @@ dfx deploy
 ## Running the Full Test Flow
 
 This sequence validates the entire process from the perspective of a developer building a client application.
+
+### Phase 0: Register a Resource Server (Environment Setup)
+
+Before a client can request tokens, a resource server must exist. This script registers a mock resource server configured to accept payments in multiple ICRC-2 tokens, setting up the multi-token test environment.
+
+```bash
+# This script registers a resource server that accepts PMP and ckUSDC
+./scripts/register_resource_server.sh
+```
 
 ### Phase 1: Register Your Client
 
@@ -132,6 +144,7 @@ Next, your application directs the user to Prometheus to log in and grant consen
 2.  **Authorize in Browser:**
     - Copy the full `/authorize` URL printed by the script.
     - Paste it into your browser and complete the Internet Identity login.
+    - If the `prometheus:charge` scope was requested, you will be prompted to **select a payment token** (e.g., PMP or ckUSDC) and set an allowance before reaching the consent screen.
     - You will be redirected to `https://jwt.io` (our example `redirect_uri`).
     - **Copy the `code` value from the resulting URL.**
 
