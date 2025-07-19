@@ -4,7 +4,7 @@ import Principal "mo:base/Principal";
 import Text "mo:base/Text";
 import Map "mo:map/Map";
 import { test; suite; expect } "mo:test/async";
-import HttpParser "http-parser";
+import HttpParser "../src/oauth_backend/http-parser";
 import Blob "mo:base/Blob";
 
 // =================================================================================================
