@@ -3,7 +3,6 @@ import Map "mo:map/Map";
 import { thash } "mo:map/Map";
 import Text "mo:base/Text";
 import Array "mo:base/Array";
-import Utils "Utils";
 
 module {
   /**
@@ -21,21 +20,10 @@ module {
   ) : [Types.ScopeData] {
     // 6a. Find the target resource server to get its scope definitions.
     var rs_scope_map : ?Map.Map<Text, Text> = null;
-    switch (session.resource) {
-      case (?resource_uri) {
-        let normalized_uri = Utils.normalize_uri(resource_uri);
-        let rs_id = Map.get(context.uri_to_rs_id, thash, normalized_uri);
-        switch (rs_id) {
-          case (?id) {
-            switch (Map.get(context.resource_servers, thash, id)) {
-              case (null) {};
-              case (?r) rs_scope_map := ?Map.fromIter<Text, Text>(r.scopes.vals(), thash);
-            };
-          };
-          case (null) { /* No resource server found for this URI */ };
-        };
-      };
-      case (null) { /* No resource specified in the request */ };
+
+    switch (Map.get(context.resource_servers, thash, session.resource_server_id)) {
+      case (null) {};
+      case (?r) rs_scope_map := ?Map.fromIter<Text, Text>(r.scopes.vals(), thash);
     };
 
     // 6b. Build the structured list of scopes and their descriptions.

@@ -91,6 +91,7 @@ await suite(
               context,
               owner,
               "Test Server",
+              "", // Optional logo URI
               ["https://canister_id.ic0.app"],
               service_principal,
               [("scope1", "description1")],

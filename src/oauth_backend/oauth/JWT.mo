@@ -26,7 +26,7 @@ module {
       payload = [
         ("iss", #string(issuer)),
         ("sub", #string(Principal.toText(auth_code_record.user_principal))),
-        ("aud", #string(auth_code_record.audience)),
+        ("aud", #string(auth_code_record.resource)),
         ("exp", #number(#int(exp_seconds))),
         ("iat", #number(#int(now_seconds))),
         ("scope", #string(auth_code_record.scope)),

@@ -64,25 +64,21 @@ shared ({ caller = creator }) actor class AuthCanister() = self {
     await Authorize.deny_consent(context, session_id, caller);
   };
 
-  type RegisterResourceServerArgs = {
-    name : Text;
-    uris : [Text]; // The URIs for the resource server
-    initial_service_principal : Principal;
-    scopes : [(Text, Text)]; // A map of supported scopes to their descriptions
-    accepted_payment_canisters : [Principal]; // List of icrc2 canisters that this server accepts.
-  };
-  public shared ({ caller }) func register_resource_server(args : RegisterResourceServerArgs) : async Types.ResourceServer {
+  // =================================================================================================
+  // Resource Server Management
+  // =================================================================================================
+  public shared ({ caller }) func register_resource_server(args : Types.RegisterResourceServerArgs) : async Types.ResourceServer {
     let entropy = await Random.blob();
     ignore Crypto.get_or_create_signing_key(context, entropy);
-    await Admin.register_resource_server(context, caller, args.name, args.uris, args.initial_service_principal, args.scopes, args.accepted_payment_canisters);
+    await Admin.register_resource_server(context, caller, args);
   };
 
-  type UpdateResourceServerUrisArgs = {
-    resource_server_id : Text;
-    new_uris : [Text];
+  public shared ({ caller }) func update_resource_server(args : Types.UpdateResourceServerArgs) : async Result.Result<Text, Text> {
+    await Admin.update_resource_server(context, caller, args);
   };
-  public shared ({ caller }) func update_resource_server_uris(args : UpdateResourceServerUrisArgs) : async Result.Result<Text, Text> {
-    await Admin.update_resource_server_uris(context, caller, args.resource_server_id, args.new_uris);
+
+  public shared ({ caller }) func get_my_resource_server_details(id : Text) : async Result.Result<Types.ResourceServer, Text> {
+    await Admin.get_my_resource_server_details(context, id, caller);
   };
 
   // =================================================================================================

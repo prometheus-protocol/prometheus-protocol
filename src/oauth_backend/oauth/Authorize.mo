@@ -11,7 +11,6 @@ import Time "mo:base/Time";
 import Principal "mo:base/Principal";
 import Blob "mo:base/Blob";
 import Result "mo:base/Result";
-import Utils "Utils";
 import Scope "Scope";
 
 module {
@@ -25,23 +24,32 @@ module {
         // If validation fails, send a standardized error and stop.
         return await Errors.send_authorize_error(res, error_message);
       };
-      case (#ok(validated_req)) {
-        // 2. On success, create a temporary session for the login flow.
+      case (#ok(validated)) {
         let session_id_blob = await Random.blob();
         let session_id = BaseX.toHex(session_id_blob.vals(), { isUpper = false; prefix = #none });
 
+        // 2. CRITICAL: Create the session with ALL required data from the start.
         let session_data : Types.AuthorizeSession = {
-          client_id = validated_req.client_id;
-          redirect_uri = validated_req.redirect_uri;
-          scope = validated_req.scope;
-          state = validated_req.state;
+          // Standard OAuth params
+          client_id = validated.params.client_id;
+          redirect_uri = validated.params.redirect_uri;
+          scope = validated.params.scope;
+          state = validated.params.state;
           expires_at = Time.now() + (5 * 60 * 1_000_000_000); // 5 minutes
-          code_challenge = validated_req.code_challenge;
-          code_challenge_method = validated_req.code_challenge_method;
-          audience = validated_req.audience;
-          resource = validated_req.resource; // Include the resource if specified
+          code_challenge = validated.params.code_challenge;
+          code_challenge_method = validated.params.code_challenge_method;
+          resource = validated.params.resource;
           var status = #awaiting_login;
-          var user_principal = null; // Initially no user principal
+          var user_principal = null;
+
+          // Pre-fetched Resource Server data
+          resource_server_id = validated.resource_server.resource_server_id;
+          resource_server_name = validated.resource_server.name;
+          resource_server_logo = validated.resource_server.logo_uri;
+          // Assuming the first service principal is the spender for now.
+          // This logic might need to be more sophisticated later.
+          spender_principal = validated.resource_server.service_principals[0];
+          accepted_payment_canisters = validated.resource_server.accepted_payment_canisters;
         };
         Map.set(context.authorize_sessions, thash, session_id, session_data);
 
@@ -115,47 +123,19 @@ module {
     // 5. Update the session in the map
     Map.set(context.authorize_sessions, thash, session_id, session);
 
-    // 6. Prepare ENRICHED consent data for the frontend
-    let client = switch (Map.get(context.clients, thash, session.client_id)) {
-      case (null) return #err("Internal error: Client not found for session.");
-      case (?c) c;
-    };
-
     // 7. Prepare scope details for the consent data
     let scope_details = Scope.build_scope_details(context, session);
 
     let consent_data : Types.ConsentData = {
-      client_name = client.client_name;
+      client_name = session.resource_server_name;
+      logo_uri = session.resource_server_logo;
       scopes = scope_details;
-      logo_uri = client.logo_uri;
-    };
-
-    // 8. Fetch the accepted payment canisters for this resource server.
-    var accepted_payment_canisters : [Principal] = [];
-    switch (session.resource) {
-      case (?resource_uri) {
-        let normalized_uri = Utils.normalize_uri(resource_uri);
-        let rs_id = Map.get(context.uri_to_rs_id, thash, normalized_uri);
-        switch (rs_id) {
-          case (?id) {
-            switch (Map.get(context.resource_servers, thash, id)) {
-              case (null) {};
-              case (?r) {
-                // Collect all service principals that are registered for this resource server.
-                accepted_payment_canisters := r.accepted_payment_canisters;
-              };
-            };
-          };
-          case (null) { /* No resource server found for this URI */ };
-        };
-      };
-      case (null) { /* No resource specified in the request */ };
     };
 
     return #ok({
       next_step = next_step;
       consent_data = consent_data;
-      accepted_payment_canisters = accepted_payment_canisters;
+      accepted_payment_canisters = session.accepted_payment_canisters;
     });
   };
 
@@ -227,7 +207,6 @@ module {
       expires_at = Time.now() + (60 * 1_000_000_000);
       code_challenge = session.code_challenge;
       code_challenge_method = session.code_challenge_method;
-      audience = session.audience;
       resource = session.resource; // Include the resource if specified
     };
     Map.set(context.auth_codes, thash, code, auth_code_data);

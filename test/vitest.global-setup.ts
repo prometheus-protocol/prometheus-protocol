@@ -44,6 +44,7 @@ export async function setup() {
   const activateResponse = await backendActor.register_resource_server({
     initial_service_principal: developerIdentity.getPrincipal(),
     name: 'Global E2E Resource Server',
+    logo_uri: '', // Optional, can be empty
     uris: ['https://some-oauth-resource-server.com'],
     accepted_payment_canisters: [icrc2CanisterId],
     scopes: [

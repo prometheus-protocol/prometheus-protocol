@@ -33,11 +33,7 @@ module Admin {
   public func register_resource_server(
     context : Types.Context,
     caller : Principal,
-    name : Text,
-    uris : [Text],
-    initial_service_principal : Principal,
-    scopes : [(Text, Text)],
-    accepted_payment_canisters : [Principal],
+    args : Types.RegisterResourceServerArgs,
   ) : async Types.ResourceServer {
     // For now, registration is open. We can add a fee later.
     // 1. Get entropy
@@ -46,7 +42,7 @@ module Admin {
     // 2. Concatenate all sources of uniqueness into a single byte array
     var combined_bytes : [Nat8] = [];
     combined_bytes := Array.append(combined_bytes, Iter.toArray(Principal.toBlob(caller).vals()));
-    combined_bytes := Array.append(combined_bytes, Iter.toArray(Text.encodeUtf8(name).vals()));
+    combined_bytes := Array.append(combined_bytes, Iter.toArray(Text.encodeUtf8(args.name).vals()));
     combined_bytes := Array.append(combined_bytes, [Nat8.fromIntWrap(Time.now())]);
     combined_bytes := Array.append(combined_bytes, Iter.toArray(entropy.vals()));
 
@@ -58,61 +54,116 @@ module Admin {
     let new_server : Types.ResourceServer = {
       resource_server_id = resource_server_id;
       owner = caller;
-      name = name;
-      service_principals = [initial_service_principal];
+      name = args.name;
+      logo_uri = args.logo_uri;
+      service_principals = [args.initial_service_principal];
       status = #active; // Active immediately for now
-      uris = uris;
-      scopes = scopes;
-      accepted_payment_canisters = accepted_payment_canisters;
+      uris = args.uris;
+      scopes = args.scopes;
+      accepted_payment_canisters = args.accepted_payment_canisters;
     };
 
     Map.set(context.resource_servers, thash, resource_server_id, new_server);
 
     // 4. Update the URI to resource server ID mapping
-    for (uri in Iter.fromArray(uris)) {
+    for (uri in Iter.fromArray(args.uris)) {
       Map.set(context.uri_to_rs_id, thash, Utils.normalize_uri(uri), resource_server_id);
     };
 
     return new_server;
   };
 
-  // Allows the owner of a resource server to update its associated URIs.
-  public func update_resource_server_uris(
+  public func update_resource_server(
     context : Types.Context,
     caller : Principal,
-    resource_server_id : Text,
-    new_uris : [Text],
+    args : Types.UpdateResourceServerArgs,
   ) : async Result.Result<Text, Text> {
-    // 1. Find the resource server by its unique ID.
-    let server_opt = Map.get(context.resource_servers, thash, resource_server_id);
-    let server = switch (server_opt) {
-      case (null) {
-        return #err("Resource server not found.");
+    // 1. Fetch the existing resource server
+    let server = switch (Map.get(context.resource_servers, thash, args.resource_server_id)) {
+      case (null) return #err("Resource server not found.");
+      case (?s) s;
+    };
+
+    // 2. Check permissions
+    if (server.owner != caller) {
+      return #err("Unauthorized: Caller is not the owner of the resource server.");
+    };
+
+    // 3. Handle the URI index update first, as it's a side effect.
+    // This must be done before we determine the final `uris` value.
+    switch (args.uris) {
+      case (?new_uris) {
+        // Remove all old URIs from the index
+        for (old_uri in server.uris.vals()) {
+          Map.delete(context.uri_to_rs_id, thash, Utils.normalize_uri(old_uri));
+        };
+        // Add all new URIs to the index
+        for (new_uri in new_uris.vals()) {
+          Map.set(context.uri_to_rs_id, thash, Utils.normalize_uri(new_uri), server.resource_server_id);
+        };
       };
-      case (?s) { s };
+      case (null) {}; // No URI update, so no index change needed.
     };
 
-    // 2. Authenticate the caller. Only the original owner can update the URIs.
-    if (caller != server.owner) {
-      return #err("Unauthorized: Caller is not the owner of this resource server.");
+    // 4. Determine the final value for each field by composing a new object.
+    // For each field, we use the new value if provided, otherwise we keep the old one.
+    let final_name = switch (args.name) {
+      case (?n) n;
+      case (null) server.name;
+    };
+    let final_logo_uri = switch (args.logo_uri) {
+      case (?l) l;
+      case (null) server.logo_uri;
+    };
+    let final_uris = switch (args.uris) {
+      case (?u) u;
+      case (null) server.uris;
+    };
+    let final_service_principals = switch (args.service_principals) {
+      case (?sp) sp;
+      case (null) server.service_principals;
+    };
+    let final_scopes = switch (args.scopes) {
+      case (?s) s;
+      case (null) server.scopes;
+    };
+    let final_accepted_payment_canisters = switch (args.accepted_payment_canisters) {
+      case (?apc) apc;
+      case (null) server.accepted_payment_canisters;
     };
 
-    // 3. Clean up the old URIs from the reverse lookup map to prevent stale entries.
-    for (old_uri in Iter.fromArray(server.uris)) {
-      Map.delete(context.uri_to_rs_id, thash, old_uri);
+    // 5. Construct the new, immutable ResourceServer object
+    let updated_server : Types.ResourceServer = {
+      // Unchanged fields are copied directly from the old `server` object
+      server with
+
+      // Updated fields use the final values determined above
+      name = final_name;
+      logo_uri = final_logo_uri;
+      uris = final_uris;
+      service_principals = final_service_principals;
+      scopes = final_scopes;
+      accepted_payment_canisters = final_accepted_payment_canisters;
     };
 
-    // 4. Add the new URIs to the reverse lookup map.
-    for (new_uri in Iter.fromArray(new_uris)) {
-      Map.set(context.uri_to_rs_id, thash, Utils.normalize_uri(new_uri), resource_server_id);
+    // 6. Save the new object, replacing the old one in the map
+    Map.set(context.resource_servers, thash, updated_server.resource_server_id, updated_server);
+
+    return #ok("Resource server updated successfully.");
+  };
+
+  public func get_my_resource_server_details(context : Types.Context, id : Text, caller : Principal) : async Result.Result<Types.ResourceServer, Text> {
+    let server = switch (Map.get(context.resource_servers, thash, id)) {
+      case (null) return #err("Resource server not found.");
+      case (?s) s;
     };
 
-    // 5. Update the URIs in the main resource server record.
-    let updated = { server with uris = new_uris };
-    Map.set(context.resource_servers, thash, resource_server_id, updated);
+    // CRITICAL: Enforce ownership
+    if (server.owner != caller) {
+      return #err("Unauthorized: You are not the owner of this resource server.");
+    };
 
-    // 6. Return a success message.
-    return #ok("Resource server URIs updated successfully.");
+    return #ok(server);
   };
 
   public func get_session_info(context : Types.Context, session_id : Text, caller : Principal) : Result.Result<Types.SessionInfo, Text> {
@@ -132,17 +183,8 @@ module Admin {
       };
     };
 
-    // 2. Get the audience URI from the session. This is the public identifier.
-    let audience_uri = session.audience;
-
-    // 3. CRITICAL: Use the reverse-lookup map to find the internal resource_server_id.
-    let resource_server_id = switch (Map.get(context.uri_to_rs_id, thash, audience_uri)) {
-      case (null) {
-        // This is a key validation step. The client requested an audience URI that isn't registered.
-        return #err("Invalid audience: The requested resource URI is not registered with any resource server.");
-      };
-      case (?id) id;
-    };
+    // 3. Find the internal resource_server_id.
+    let resource_server_id = session.resource_server_id;
 
     // 4. Now, look up the full ResourceServer record using the internal ID.
     let resource_server = switch (Map.get(context.resource_servers, thash, resource_server_id)) {

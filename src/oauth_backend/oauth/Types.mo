@@ -11,6 +11,7 @@ module {
     resource_server_id : Text;
     owner : Principal;
     name : Text;
+    logo_uri : Text; // Optional logo URI for the resource server
     service_principals : [Principal]; // List of trusted backend server identities.
     uris : [Text]; // List of URIs for the resource server.
     status : {
@@ -22,6 +23,25 @@ module {
     //            "write:files" -> "Allows the app to create and modify your files." }
     scopes : [(Text, Text)];
     accepted_payment_canisters : [Principal]; // List of icrc2 canisters that this server accepts.
+  };
+
+  public type RegisterResourceServerArgs = {
+    name : Text;
+    logo_uri : Text; // Optional logo URI
+    uris : [Text]; // The URIs for the resource server
+    initial_service_principal : Principal;
+    scopes : [(Text, Text)]; // A map of supported scopes to their descriptions
+    accepted_payment_canisters : [Principal]; // List of icrc2 canisters that this server accepts.
+  };
+
+  public type UpdateResourceServerArgs = {
+    resource_server_id : Text; // Required to identify which server to update
+    name : ?Text;
+    logo_uri : ?Text;
+    uris : ?[Text];
+    service_principals : ?[Principal];
+    scopes : ?[(Text, Text)];
+    accepted_payment_canisters : ?[Principal];
   };
 
   // Represents a registered application (a resource server).
@@ -38,15 +58,21 @@ module {
     };
   };
 
-  public type ValidatedAuthorizeRequest = {
+  // A type to hold all the validated parameters from the original request.
+  public type ValidatedAuthorizeRequestParams = {
     client_id : Text;
     redirect_uri : Text;
     scope : Text;
     state : Text;
     code_challenge : Text;
     code_challenge_method : Text;
-    audience : Text;
-    resource : ?Text; // Optional resource URI, if specified.
+    resource : Text;
+  };
+
+  // The rich object returned by a successful validation.
+  public type ValidatedAuthorizeRequest = {
+    params : ValidatedAuthorizeRequestParams;
+    resource_server : ResourceServer; // The full, looked-up resource server record.
   };
 
   // Represents a temporary code used to get a real token.
@@ -59,8 +85,7 @@ module {
     expires_at : Time.Time;
     code_challenge : Text;
     code_challenge_method : Text;
-    audience : Text; // The resource server this code is for.
-    resource : ?Text; // Optional resource URI, if specified.
+    resource : Text;
   };
 
   public type AuthorizeSessionStatus = {
@@ -69,7 +94,7 @@ module {
     #awaiting_consent;
   };
 
-  // Represents the temporary state during the II login flow.
+  // Represents the temporary state during the login flow.
   public type AuthorizeSession = {
     client_id : Text;
     redirect_uri : Text;
@@ -78,10 +103,16 @@ module {
     expires_at : Time.Time;
     code_challenge : Text;
     code_challenge_method : Text;
-    audience : Text; // The resource server this session is for.
-    resource : ?Text; // Optional resource URI, if specified.
+    resource : Text;
     var status : AuthorizeSessionStatus;
-    var user_principal : ?Principal; // The user principal after login, if available.
+    var user_principal : ?Principal;
+
+    // Pre-fetched resource server details.
+    resource_server_id : Text;
+    resource_server_name : Text;
+    resource_server_logo : Text;
+    spender_principal : Principal;
+    accepted_payment_canisters : [Principal];
   };
 
   public type SessionInfo = {

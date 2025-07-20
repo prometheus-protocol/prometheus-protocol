@@ -6,7 +6,7 @@
       "init_arg": "(principal \"a4tbr-q4aaa-aaaaa-qaafq-cai\")"
     },
     "oauth_frontend": {
-      "dependencies": ["oauth_backend", "icrc1_ledger"],
+      "dependencies": ["oauth_backend"],
       "frontend": {
         "entrypoint": "src/oauth_frontend/src/index.html"
       },

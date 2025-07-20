@@ -87,7 +87,7 @@ module {
           user_principal = validated_req.auth_code_record.user_principal;
           client_id = validated_req.client.client_id;
           scope = validated_req.auth_code_record.scope;
-          audience = validated_req.auth_code_record.audience;
+          audience = validated_req.auth_code_record.resource;
           expires_at = Time.now() + (90 * 24 * 60 * 60 * 1_000_000_000); // 90-day expiry
         };
         Map.set(context.refresh_tokens, thash, refresh_token_string, refresh_token_data);
@@ -111,14 +111,13 @@ module {
         let auth_data_for_jwt : Types.AuthorizationCode = {
           user_principal = old_refresh_token.user_principal;
           scope = old_refresh_token.scope;
-          audience = old_refresh_token.audience;
           code = "";
           redirect_uri = "";
           client_id = "";
           expires_at = 0;
           code_challenge = "";
           code_challenge_method = "";
-          resource = null;
+          resource = old_refresh_token.audience;
         };
         let token_result = await JWT.create_and_sign(context, auth_data_for_jwt, issuer);
         let access_token = switch (token_result) {

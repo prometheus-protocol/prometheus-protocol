@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/select';
 import { Principal } from '@dfinity/principal';
 import { Label } from '@/components/ui/label';
+import { CopyablePrincipal } from '@/components/ui/copyable-principal';
 
 const formSchema = z.object({
   budget: z.coerce
@@ -47,14 +48,15 @@ const formSchema = z.object({
 });
 
 export default function SetupPage() {
-  // --- Hooks & State ---
+  // --- Hooks & State (No changes here) ---
   const { state } = useLocation();
   const { identity } = useInternetIdentity();
   const sessionId = useSearchParams()[0].get('session_id');
   const navigate = useNavigate();
 
   const consentData = state?.consent_data;
-  const clientName = consentData?.client_name || 'the application';
+  const resourceServerName = consentData?.client_name || 'the application';
+  const resourceServerLogo = consentData?.logo_uri;
 
   const rawCanisters = state?.accepted_payment_canisters || [];
   const acceptedPaymentCanisters: Principal[] = useMemo(
@@ -70,11 +72,10 @@ export default function SetupPage() {
     [selectedTokenId],
   );
 
-  // --- Data Fetching ---
+  // --- Data Fetching & Form Logic (No changes here) ---
   const { data: sessionInfo, isLoading: isSessionLoading } =
     useSessionInfoQuery(sessionId);
   const spenderPrincipal = sessionInfo?.resource_server_principal;
-
   const tokenInfoResults = useTokenInfosQuery(
     identity,
     acceptedPaymentCanisters,
@@ -87,30 +88,23 @@ export default function SetupPage() {
   const selectedTokenInfo = tokenInfos.find(
     (t) => t?.canisterId.toText() === selectedTokenId,
   );
-
   const { data: balance, isLoading: isBalanceLoading } = useBalanceQuery(
     identity,
     selectedTokenPrincipal,
   );
   const { data: currentAllowance, isLoading: isAllowanceLoading } =
     useAllowanceQuery(identity, spenderPrincipal, selectedTokenPrincipal);
-
   const { mutate: setupPayment, isPending: isSettingAllowance } =
     useSetupPaymentMutation();
-
-  // --- Form & Effects ---
   const form = useForm<z.input<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: { budget: 0 },
   });
-
   useEffect(() => {
     if (currentAllowance !== undefined) {
       form.reset({ budget: currentAllowance });
     }
   }, [currentAllowance, form]);
-
-  // --- Handlers ---
   function onSubmit(values: z.infer<typeof formSchema>) {
     if (
       !identity ||
@@ -131,13 +125,10 @@ export default function SetupPage() {
       },
       {
         onSuccess: () =>
-          navigate(`/consent?session_id=${sessionId}`, {
-            state,
-          }),
+          navigate(`/consent?session_id=${sessionId}`, { state }),
       },
     );
   }
-
   const isLoading =
     isSessionLoading ||
     isBalanceLoading ||
@@ -145,21 +136,39 @@ export default function SetupPage() {
     isTokenInfoLoading;
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle>
-          Set Allowance for {selectedTokenInfo?.name ?? '...'}
+    <Card className="w-full max-w-md py-2 sm:py-6">
+      <CardHeader className="items-center text-center">
+        {resourceServerLogo && (
+          <img
+            src={resourceServerLogo}
+            alt={`${resourceServerName} Logo`}
+            className="w-20 h-20 mb-4 rounded-lg object-contain mx-auto my-2"
+          />
+        )}
+        <CardTitle className="text-2xl">
+          Set Allowance for {resourceServerName}
         </CardTitle>
         <CardDescription>
-          To connect to <strong>{clientName}</strong>, you need to approve an
-          allowance for it to initiate payments on your behalf.
+          Approve an allowance for this service to initiate payments on your
+          behalf.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-8 pt-8">
+        {identity && (
+          <div className="space-y-2">
+            <Label>Your Principal ID (Wallet Address)</Label>
+            <CopyablePrincipal principal={identity.getPrincipal()} />
+            <p className="text-xs text-muted-foreground">
+              Use this ID to transfer funds to your wallet if your balance is
+              low.
+            </p>
+          </div>
+        )}
+
         <div className="space-y-2">
           <Label>Payment Token</Label>
           <Select onValueChange={setSelectedTokenId} value={selectedTokenId}>
-            <SelectTrigger>
+            <SelectTrigger className="w-full">
               <SelectValue placeholder="Select a payment token..." />
             </SelectTrigger>
             <SelectContent>
@@ -180,15 +189,14 @@ export default function SetupPage() {
           </div>
         ) : (
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
                 control={form.control}
                 name="budget"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      New Allowance for {clientName} (
-                      {selectedTokenInfo?.symbol})
+                      New Allowance ({selectedTokenInfo?.symbol})
                     </FormLabel>
                     <FormControl>
                       <Input
@@ -212,7 +220,8 @@ export default function SetupPage() {
               />
               <Button
                 type="submit"
-                className="w-full"
+                size="lg"
+                className="w-full !mt-8"
                 disabled={isSettingAllowance}>
                 {isSettingAllowance && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -13,16 +13,15 @@ import { Loader2 } from 'lucide-react';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 
 export default function LoginPage() {
+  // --- Hooks & Logic (No changes here) ---
   const [searchParams] = useSearchParams();
   const sessionId = searchParams.get('session_id');
   const navigate = useNavigate();
-
   const { login, isLoggingIn, identity } = useInternetIdentity();
   const { confirmLogin, isConfirming, error } = useConfirmLoginMutation();
   const hasFiredRef = useRef(false);
 
   useEffect(() => {
-    // Your excellent, robust condition is kept as is.
     if (
       identity &&
       sessionId &&
@@ -36,19 +35,10 @@ export default function LoginPage() {
         { identity, sessionId },
         {
           onSuccess: (data) => {
-            console.log(
-              'Login confirmed, navigating to next step:',
-              data.next_step,
-            );
-
             if ('setup' in data.next_step) {
-              navigate(`/setup?session_id=${sessionId}`, {
-                state: data,
-              });
+              navigate(`/setup?session_id=${sessionId}`, { state: data });
             } else if ('consent' in data.next_step) {
-              navigate(`/consent?session_id=${sessionId}`, {
-                state: data,
-              });
+              navigate(`/consent?session_id=${sessionId}`, { state: data });
             }
           },
           onError: () => {
@@ -75,22 +65,24 @@ export default function LoginPage() {
     login();
   };
 
-  // Your JSX is perfect.
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle>Step 1: Log In</CardTitle>
+    <Card className="w-full max-w-md py-2 sm:py-6">
+      <CardHeader className="items-center text-center">
+        <img
+          src={'/ii.png'}
+          alt="Internet Identity Logo"
+          className="w-20 h-20 mb-4 rounded-lg object-contain mx-auto my-2"
+        />
+        <CardTitle className="text-2xl">Log In to Continue</CardTitle>
         <CardDescription>
-          Please log in with Internet Identity to continue.
+          This service requires you to log in with your Internet Identity.
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col items-center space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Session ID: {sessionId || 'Not Found'}
-        </p>
+      <CardContent className="pt-8">
         <Button
           onClick={handleLoginClick}
           className="w-full"
+          size="lg"
           disabled={isLoggingIn || isConfirming}>
           {(isLoggingIn || isConfirming) && (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />

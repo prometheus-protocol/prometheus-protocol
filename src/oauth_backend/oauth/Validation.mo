@@ -12,46 +12,44 @@ import Sha256 "mo:sha2/Sha256";
 
 module {
 
-  // This function now handles ALL validation for an incoming /authorize request.
   public func validate_authorize_request(
     context : Types.Context,
     req : Types.Request,
   ) : async Result.Result<Types.ValidatedAuthorizeRequest, Text> {
 
-    // --- 1. Parse all required parameters from the query string ---
-    let q = req.url.queryObj;
-    let response_type = switch (q.get("response_type")) {
+    // --- 1. Unwrap all required parameters using the switch/return pattern ---
+    let response_type = switch (req.url.queryObj.get("response_type")) {
       case (?v) v;
-      case (_) return #err("response_type is required");
+      case (null) return #err("response_type is required");
     };
-    let client_id = switch (q.get("client_id")) {
+    let client_id = switch (req.url.queryObj.get("client_id")) {
       case (?v) v;
-      case (_) return #err("client_id is required");
+      case (null) return #err("client_id is required");
     };
-    let redirect_uri = switch (q.get("redirect_uri")) {
+    let redirect_uri = switch (req.url.queryObj.get("redirect_uri")) {
       case (?v) v;
-      case (_) return #err("redirect_uri is required");
+      case (null) return #err("redirect_uri is required");
     };
-    let code_challenge = switch (q.get("code_challenge")) {
+    let code_challenge = switch (req.url.queryObj.get("code_challenge")) {
       case (?v) v;
-      case (_) return #err("code_challenge is required for PKCE");
+      case (null) return #err("code_challenge is required for PKCE");
     };
-    let code_challenge_method = switch (q.get("code_challenge_method")) {
+    let code_challenge_method = switch (req.url.queryObj.get("code_challenge_method")) {
       case (?v) v;
-      case (_) return #err("code_challenge_method is required for PKCE");
+      case (null) return #err("code_challenge_method is required for PKCE");
     };
+    let state = switch (req.url.queryObj.get("state")) {
+      case (?v) v;
+      case (null) return #err("state is required");
+    };
+    let resource_uri = switch (req.url.queryObj.get("resource")) {
+      case (?v) v;
+      case (null) return #err("resource parameter is required");
+    };
+    // The scope parameter is optional, so Option.get with a default is correct here.
+    let scope_string = Option.get(req.url.queryObj.get("scope"), "");
 
-    // For security, we require the state parameter to prevent CSRF attacks.
-    let state = switch (q.get("state")) {
-      case (?v) v;
-      case (_) return #err("state is required");
-    };
-
-    // Optional parameters
-    let scope_opt = q.get("scope");
-    let resource_opt = q.get("resource");
-
-    // --- 2. Validate parameter values ---
+    // --- 2. Validate Parameter Values ---
     if (response_type != "code") {
       return #err("unsupported response_type: must be 'code'");
     };
@@ -59,14 +57,13 @@ module {
       return #err("code_challenge_method must be 'S256'");
     };
 
-    // --- 3. Validate the Client ---
+    // --- 3. Validate the Client and Redirect URI ---
     let client = switch (Map.get(context.clients, thash, client_id)) {
-      case (null) { return #err("invalid client_id: client not found") };
+      case (null) return #err("invalid client_id: client not found");
       case (?c) c;
     };
-
     if (client.status != #active) {
-      return #err("Invalid Client: Client is not active. Please pay the activation fee.");
+      return #err("Invalid Client: Client is not active.");
     };
 
     // --- 4. CRITICAL: Validate redirect_uri ---
@@ -78,68 +75,52 @@ module {
       return #err("invalid redirect_uri: URI not registered for this client");
     };
 
-    // --- 5. Validate the Resource and determine the Audience ---
-    var resource_server : ?Types.ResourceServer = null;
-    let audience = switch (resource_opt) {
-      case (null) {
-        client_id;
+    // --- 4. Validate the Resource Server ---
+    let normalized_uri = Utils.normalize_uri(resource_uri);
+    let rs_id = switch (Map.get(context.uri_to_rs_id, thash, normalized_uri)) {
+      case (null) return #err("The specified 'resource' URI is not registered.");
+      case (?id) id;
+    };
+    let resource_server = switch (Map.get(context.resource_servers, thash, rs_id)) {
+      case (null) return #err("Internal error: Resource server ID found but data is missing.");
+      case (?rs) rs;
+    };
+
+    // --- 5. Validate Scopes against the Resource Server ---
+    // Only perform scope validation if a resource server is targeted.
+    let requested_scopes = Text.split(scope_string, #char ' ');
+    let supported_scopes_map = Map.fromIter<Text, Text>(resource_server.scopes.vals(), thash);
+
+    label checkScopes for (scope in requested_scopes) {
+      // These are our globally recognized, protocol-level scopes.
+      // We also silently ignore `profile` for compatibility with generic OIDC clients.
+      if (scope == "openid" or scope == "prometheus:charge" or scope == "profile") {
+        continue checkScopes;
       };
-      case (?resource_uri) {
-        let normalized_uri = Utils.normalize_uri(resource_uri);
-        let rs_id = switch (Map.get(context.uri_to_rs_id, thash, normalized_uri)) {
-          case (null) return #err("The specified 'resource' URI is not registered with this provider.");
-          case (?id) id;
-        };
-        resource_server := Map.get(context.resource_servers, thash, rs_id);
-        if (Option.isNull(resource_server)) {
-          // This should be impossible if data is consistent, but it's a good sanity check.
-          return #err("Internal error: Resource server ID found but data is missing.");
-        };
-        normalized_uri;
+
+      // For all other scopes, they MUST be registered by the resource server.
+      if (Option.isNull(Map.get(supported_scopes_map, thash, scope))) {
+        return #err("invalid_scope: The scope '" # scope # "' is not supported by this resource server.");
       };
     };
 
-    // --- 6. NEW: Validate Scopes ---
-    switch (scope_opt) {
-      case (?scope_string) {
-        // Only perform scope validation if a resource server is targeted.
-        switch (resource_server) {
-          case (?rs) {
-            let requested_scopes = Text.split(scope_string, #char ' ');
-            let supported_scopes_map = Map.fromIter<Text, Text>(rs.scopes.vals(), thash);
-
-            label checkScopes for (scope in requested_scopes) {
-              // These are our globally recognized, protocol-level scopes.
-              // We also silently ignore `profile` for compatibility with generic OIDC clients.
-              if (scope == "openid" or scope == "prometheus:charge" or scope == "profile") {
-                continue checkScopes;
-              };
-
-              // For all other scopes, they MUST be registered by the resource server.
-              if (Option.isNull(Map.get(supported_scopes_map, thash, scope))) {
-                return #err("invalid_scope: The scope '" # scope # "' is not supported by this resource server.");
-              };
-            };
-          };
-          case (null) {
-            // No resource server specified, so we don't validate custom scopes.
-            // We could add a check here to reject any non-standard scopes if desired.
-          };
-        };
-      };
-      case (null) { /* No scopes requested, nothing to validate */ };
+    // --- 6. Additional Security/Logic Checks ---
+    if (Text.contains(scope_string, #text("prometheus:charge")) and resource_server.accepted_payment_canisters.size() == 0) {
+      return #err("invalid_request: The target resource server does not support payments.");
     };
 
-    // --- 7. If all checks pass, return the validated data in a structured way ---
+    // --- 7. If all checks pass, return the structured, validated data ---
     return #ok({
-      client_id = client_id;
-      redirect_uri = redirect_uri;
-      scope = Option.get(scope_opt, "");
-      state = state;
-      code_challenge = code_challenge;
-      code_challenge_method = code_challenge_method;
-      audience = audience;
-      resource = resource_opt;
+      params = {
+        client_id = client_id;
+        redirect_uri = redirect_uri;
+        scope = scope_string;
+        state = state;
+        code_challenge = code_challenge;
+        code_challenge_method = code_challenge_method;
+        resource = normalized_uri;
+      };
+      resource_server = resource_server;
     });
   };
 
@@ -196,17 +177,18 @@ module {
       case (?rec) rec;
     };
 
-    // 3. Validate the resource parameter if provided.
-    // This is optional, but if provided, it must match the one stored with the code
+    // 3. The `resource` parameter is now REQUIRED in the token request form.
     let resource_from_form = switch (form.get("resource")) {
       case (?values) {
-        if (values.size() > 0) { ?values[0] } else { null };
+        if (values.size() == 0) return #err((400, "invalid_request", "resource parameter is missing"));
+        values[0];
       };
-      case (_) null;
+      case (_) return #err((400, "invalid_request", "resource parameter is missing"));
     };
 
+    // The `resource` from the form MUST match the one stored with the authorization code.
     // Compare the resource from the form with the one stored with the code
-    if (auth_code_record.resource != resource_from_form) {
+    if (Utils.normalize_uri(auth_code_record.resource) != Utils.normalize_uri(resource_from_form)) {
       return #err((400, "invalid_grant", "resource parameter mismatch"));
     };
 
