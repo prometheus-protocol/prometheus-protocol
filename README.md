@@ -79,6 +79,38 @@ sequenceDiagram
 
 </details>
 
+## On-Chain Security Model
+
+Building a secure OAuth 2.1 provider on a public blockchain like the Internet Computer requires a specific design that leverages the platform's unique features while mitigating its inherent transparency. The Prometheus Protocol is built on a "trustless" model, meaning you do not need to trust the boundary nodes delivering the data; security is enforced by cryptography at the protocol level.
+
+Here are the core security principles and assumptions of this implementation:
+
+### 1. Protection of Secrets during Token Exchange
+
+The most critical part of the OAuth flow is the `/token` endpoint, where a short-lived `authorization_code` is exchanged for a long-lived `access_token`.
+
+- **State Change is Required:** To prevent replay attacks, the canister **must** change its state to invalidate the `authorization_code` after a single use. On the IC, any state-changing call must be an **`update` call**.
+
+- **Asynchronous Handling for HTTP Clients:** For standard HTTP clients (like `curl` or a Node.js backend) that are not using an IC-specific identity, these `update` calls are handled asynchronously. The canister's response, containing the secret `access_token`, **is temporarily written to the IC's state tree** so the client can poll for it using a `request_id`.
+
+- **Security of the On-Chain Response:** This process is secure due to two fundamental IC features:
+  1.  **Secret Path via `request_id`:** The response is not stored in a public, enumerable location. It is stored at a path derived from a secret `request_id`. This ID is a hash of the request's content, which includes secrets known only to the client (the `authorization_code`, `PKCE verifier`, and a random `nonce`). An attacker cannot predict this ID and therefore cannot find the token in the state tree.
+  2.  **Certified Responses & Secure Transport:** The boundary node that retrieves this result for the client receives it along with a **Certificate** signed by the IC. This certificate cryptographically proves the response is authentic and untampered. The boundary node then delivers this certified response to the client over a standard, secure HTTPS (TLS) connection. This ensures that even a malicious boundary node cannot forge a fake token response, and a network attacker cannot eavesdrop on the final delivery.
+
+### 2. Unauthenticated Calls and the `request_id`
+
+For clients that do not have an IC identity (e.g., a standard web app), `update` calls are handled asynchronously. The client first receives a `request_id` and then polls for the result.
+
+- **The `request_id` is Unpredictable:** The `request_id` is a 32-byte SHA-256 hash derived from the content of the original request, which includes multiple secrets known only to the client (the `authorization_code`, the `PKCE verifier`, and a random `nonce`). An attacker cannot predict or calculate this ID.
+- **The Result Path is Secret:** The access token is stored temporarily in the canister's state tree at a path derived from this secret `request_id` (e.g., `/request_status/<request_id>/reply`).
+- **Access is Restricted by the IC Protocol:** The Internet Computer's protocol itself enforces that only the principal that made the original request is allowed to poll for its status.
+
+This means that while the token temporarily exists in the public state tree, its location is protected by an unguessable secret path, making it impossible for an attacker to find and steal it.
+
+### 3. PKCE as a Hard Requirement
+
+Prometheus enforces **Proof Key for Code Exchange (PKCE)** on all authorization code grants, as mandated by OAuth 2.1. This is the primary defense against authorization code interception attacks. Even if an attacker steals a `code` from a redirect URL, it is useless without the corresponding secret `code_verifier`, which never leaves the legitimate client.
+
 ## Getting Started (Local Development)
 
 This guide walks through running the full end-to-end flow locally, simulating the roles of both a Client and a Resource Server.
