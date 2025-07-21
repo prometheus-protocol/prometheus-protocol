@@ -291,11 +291,11 @@ module {
     label parseBytes while (i < sourceBytes.size()) {
       let byte = sourceBytes[i];
 
-      // MODIFIED: Compare the byte directly with the Nat8 value for '%', which is 37.
+      // Compare the byte directly with the Nat8 value for '%', which is 37.
       if (byte == (37 : Nat8)) {
         // Check if there are at least two characters to look ahead.
         if (i + 2 < sourceBytes.size()) {
-          // MODIFIED: Use Char.fromNat32 to convert bytes back to Chars for checking.
+          // Use Char.fromNat32 to convert bytes back to Chars for checking.
           let char1 = Char.fromNat32(Nat16.toNat32(Nat8.toNat16(sourceBytes[i + 1])));
           let char2 = Char.fromNat32(Nat16.toNat32(Nat8.toNat16(sourceBytes[i + 2])));
 

@@ -35,7 +35,7 @@ fi
 AUTH_CODE=$1
 
 # 3. Check for required environment variables
-if [ -z "$NEW_CLIENT_ID" ] || [ -z "$NEW_CLIENT_SECRET" ] || [ -z "$PKCE_VERIFIER" ]; then
+if [ -z "$NEW_CLIENT_ID" ] || [ -z "$PKCE_VERIFIER" ]; then
     echo "❌ ERROR: Required environment variables are not set." >&2
     echo "   Please run 'source .env.prom' after registering a client and generating an auth URL." >&2
     exit 1
@@ -51,7 +51,6 @@ curl -s -X POST \
   -d "grant_type=authorization_code" \
   -d "code=$AUTH_CODE" \
   -d "client_id=$NEW_CLIENT_ID" \
-  -d "client_secret=$NEW_CLIENT_SECRET" \
   -d "code_verifier=$PKCE_VERIFIER" | jq .
 
 echo -e "\n✅ Token exchange complete." >&2

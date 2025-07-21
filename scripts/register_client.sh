@@ -55,10 +55,9 @@ RESPONSE=$(curl -s -X POST \
 
 # 4. Parse the response with jq
 CLIENT_ID=$(echo "$RESPONSE" | jq -r .client_id)
-CLIENT_SECRET=$(echo "$RESPONSE" | jq -r .client_secret)
 
 # 5. Check if parsing was successful
-if [[ "$CLIENT_ID" == "null" || -z "$CLIENT_ID" || "$CLIENT_SECRET" == "null" || -z "$CLIENT_SECRET" ]]; then
+if [[ "$CLIENT_ID" == "null" || -z "$CLIENT_ID" ]]; then
     echo "❌ ERROR: Failed to parse client credentials from the server response."
     echo "--- RAW SERVER RESPONSE ---"
     echo "$RESPONSE"
@@ -70,7 +69,6 @@ fi
 echo "# Prometheus Protocol client credentials" > "$ENV_FILE"
 echo "# Generated on $(date)" >> "$ENV_FILE"
 echo "export NEW_CLIENT_ID=\"$CLIENT_ID\"" >> "$ENV_FILE"
-echo "export NEW_CLIENT_SECRET=\"$CLIENT_SECRET\"" >> "$ENV_FILE"
 
 # 7. Print a success message and clear instructions to the user
 echo -e "\n✅ Success! Client credentials have been saved to '$ENV_FILE'."

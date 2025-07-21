@@ -84,16 +84,11 @@ module {
 
     // 4. Generate and store new client credentials.
     let client_id_blob = await Random.blob();
-    let client_secret_blob = await Random.blob();
     let client_id = BaseX.toHex(client_id_blob.vals(), { isUpper = false; prefix = #none });
-    let client_secret = BaseX.toHex(client_secret_blob.vals(), { isUpper = false; prefix = #none });
-    let secret_hash_blob = Sha256.fromBlob(#sha256, Text.encodeUtf8(client_secret));
-    let client_secret_hash = BaseX.toHex(secret_hash_blob.vals(), { isUpper = false; prefix = #none });
 
     let new_client : Types.Client = {
       client_id = client_id;
       owner = Principal.fromText("aaaaa-aa"); // Placeholder owner
-      client_secret_hash = client_secret_hash;
       client_name = client_name;
       logo_uri = Option.get(logo_uri, "");
       redirect_uris = normalized_redirect_uris;
@@ -104,10 +99,15 @@ module {
     // 5. Construct and return the successful response.
     let json_response = #object_([
       ("client_id", #string(client_id)),
-      ("client_secret", #string(client_secret)),
       ("client_name", #string(client_name)),
       ("redirect_uris", #array(Array.map(normalized_redirect_uris, func(uri : Text) : Json.Json { #string(uri) }))),
       ("grant_types", #array([#string("authorization_code")])),
+
+      // Confirms the client is registered for the Authorization Code flow.
+      ("response_types", #array([#string("code")])),
+
+      // Confirms the client is public and must not use a client_secret.
+      ("token_endpoint_auth_method", #string("none")),
     ]);
 
     return res.json({

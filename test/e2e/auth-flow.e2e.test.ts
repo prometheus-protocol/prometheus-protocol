@@ -25,7 +25,10 @@ describe('Authorization State Machine Flow', () => {
   });
 
   // Helper to start the auth flow and get a session ID for a given scope
-  const startAuthFlowAndGetSessionId = async (scope: string) => {
+  const startAuthFlowAndGetSessionId = async (
+    scope: string,
+    state?: string,
+  ) => {
     const authUrl = new URL(`${replicaUrl}/authorize`);
     authUrl.searchParams.set('canisterId', backendCanisterId.toText());
     authUrl.searchParams.set('response_type', 'code');
@@ -40,7 +43,7 @@ describe('Authorization State Machine Flow', () => {
       'resource',
       'https://some-oauth-resource-server.com',
     );
-    authUrl.searchParams.set('state', 'state-machine-test-state');
+    authUrl.searchParams.set('state', state || 'state-machine-test-state==');
     authUrl.searchParams.set('scope', scope);
 
     const authResponse = await fetch(authUrl.toString(), {
@@ -117,6 +120,43 @@ describe('Authorization State Machine Flow', () => {
   });
 
   describe('Parameter Handling', () => {
+    test('should correctly handle a state parameter with special Base64 characters (+, /, =)', async () => {
+      // Arrange: Define a state value that contains characters that must not be
+      // misinterpreted by the parser, specifically the '+' which should NOT become a space.
+      const rawState = 'k/V+n8v==';
+      const encodedState = encodeURIComponent(rawState); // -> "k%2FV%2Bn8v%3D%3D"
+
+      // Arrange: Start the full authorization flow with this specific state.
+      const sessionId = await startAuthFlowAndGetSessionId(
+        'openid',
+        encodedState,
+      );
+      const endUserIdentity = Secp256k1KeyIdentity.generate();
+      const endUserActor = createActorFor(endUserIdentity);
+
+      if (!sessionId) {
+        throw new Error('Failed to get session ID from auth flow');
+      }
+
+      // Act: Complete the entire flow to get the final redirect URL.
+      await endUserActor.confirm_login(sessionId);
+      const finalResult = await endUserActor.complete_authorize(sessionId);
+
+      // Assert: The final redirect URL must contain the original, raw state value,
+      // proving that no incorrect transformations were applied.
+      expect(finalResult).toHaveProperty('ok');
+      if (!('ok' in finalResult)) throw new Error('Final authorization failed');
+
+      const urlString = finalResult.ok;
+      const match = urlString.match(/state=([^&]+)/);
+
+      // Ensure the regex found a match. The captured group will be at index 1.
+      expect(match).not.toBeNull();
+      const returnedState = match ? match[1] : '';
+
+      expect(returnedState).toBe(rawState);
+    });
+
     test('should correctly parse a complex, double-encoded state parameter', async () => {
       // Arrange: Create a state parameter that is double-encoded.
       // This simulates complex clients like the VS Code extension and is a
@@ -238,7 +278,11 @@ describe('Authorization State Machine Flow', () => {
     // Assert 3: The final redirect URL should contain a valid code
     const finalRedirectUrl = new URL(finalResult.ok);
     const authCode = finalRedirectUrl.searchParams.get('code');
+    const returnedState = finalRedirectUrl.searchParams.get('state');
     expect(authCode).toBeDefined();
+    expect(authCode?.length).toBeGreaterThan(10);
+
+    expect(returnedState).toBe('state-machine-test-state==');
   });
 
   test('should reject if a different user tries to continue the session (session fixation)', async () => {

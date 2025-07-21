@@ -39,9 +39,7 @@ describe('Server Metadata Endpoints', () => {
     );
     expect(metadata.response_types_supported).toContain('code');
     expect(metadata.code_challenge_methods_supported).toContain('S256');
-    expect(metadata.token_endpoint_auth_methods_supported).toContain(
-      'client_secret_post',
-    );
+    expect(metadata.token_endpoint_auth_methods_supported).toContain('none');
   });
 
   test('should return a valid JWKS from /.well-known/jwks.json', async () => {

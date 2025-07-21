@@ -13,6 +13,7 @@ import Blob "mo:base/Blob";
 import Result "mo:base/Result";
 import Option "mo:base/Option";
 import Scope "Scope";
+import Utils "../http-parser/Utils";
 
 module {
   public func handle_authorize(context : Types.Context, req : Types.Request, res : Types.ResponseClass) : async Types.Response {
@@ -213,10 +214,11 @@ module {
     Map.set(context.auth_codes, thash, code, auth_code_data);
     Map.delete(context.authorize_sessions, thash, session_id);
     let state_param = switch (session.state) {
-      case (?exists) "&state=" # exists;
+      case (?exists) "&state=" # Utils.encodeURIComponent(exists);
       case (null) "";
     };
     let final_url = session.redirect_uri # "?code=" # code # state_param;
+    Debug.print("Final redirect URL: " # final_url);
     return #ok(final_url);
   };
 

@@ -48,6 +48,7 @@ module {
 
     // The state parameter is optional.
     let state = req.url.queryObj.get("state");
+    Debug.print("State parameter: " # debug_show (state));
 
     // --- 2. Validate Parameter Values ---
     if (response_type != "code") {
@@ -154,10 +155,6 @@ module {
       case (#ok(v)) v;
       case (#err(e)) return #err(e);
     };
-    let client_secret = switch (get_required("client_secret")) {
-      case (#ok(v)) v;
-      case (#err(e)) return #err(e);
-    };
     let code_verifier = switch (get_required("code_verifier")) {
       case (#ok(v)) v;
       case (#err(e)) return #err(e);
@@ -177,31 +174,27 @@ module {
       case (?rec) rec;
     };
 
-    // 3. The `resource` parameter is now REQUIRED in the token request form.
-    let resource_from_form = switch (form.get("resource")) {
-      case (?values) {
-        if (values.size() == 0) return #err((400, "invalid_request", "resource parameter is missing"));
-        values[0];
-      };
-      case (_) return #err((400, "invalid_request", "resource parameter is missing"));
-    };
+    // TODO: VSCode does not submit resource in the token request, so we don't validate it here.
+    // // 3. The `resource` parameter is now REQUIRED in the token request form.
+    // let resource_from_form = switch (form.get("resource")) {
+    //   case (?values) {
+    //     if (values.size() == 0) return #err((400, "invalid_request", "resource parameter is missing"));
+    //     values[0];
+    //   };
+    //   case (_) return #err((400, "invalid_request", "resource parameter is missing"));
+    // };
 
-    // The `resource` from the form MUST match the one stored with the authorization code.
-    // Compare the resource from the form with the one stored with the code
-    if (Utils.normalize_uri(auth_code_record.resource) != Utils.normalize_uri(resource_from_form)) {
-      Debug.print("Validating resource: " # Utils.normalize_uri(auth_code_record.resource) # " against " # Utils.normalize_uri(resource_from_form));
-      return #err((400, "invalid_grant", "resource parameter mismatch"));
-    };
+    // // The `resource` from the form MUST match the one stored with the authorization code.
+    // // Compare the resource from the form with the one stored with the code
+    // if (Utils.normalize_uri(auth_code_record.resource) != Utils.normalize_uri(resource_from_form)) {
+    //   Debug.print("Validating resource: " # Utils.normalize_uri(auth_code_record.resource) # " against " # Utils.normalize_uri(resource_from_form));
+    //   return #err((400, "invalid_grant", "resource parameter mismatch"));
+    // };
 
     // 3. Validate client and secret.
     let client = switch (Map.get(context.clients, thash, client_id)) {
       case (null) return #err((400, "invalid_client", "Client not found"));
       case (?c) c;
-    };
-    let secret_hash_blob = Sha256.fromBlob(#sha256, Text.encodeUtf8(client_secret));
-    let secret_hash_hex = BaseX.toHex(secret_hash_blob.vals(), { isUpper = false; prefix = #none });
-    if (secret_hash_hex != client.client_secret_hash) {
-      return #err((401, "invalid_client", "Invalid client secret"));
     };
 
     // 4. Validate code integrity and expiration.
@@ -257,20 +250,10 @@ module {
       case (#ok(v)) v;
       case (#err(e)) return #err(e);
     };
-    let client_secret = switch (get_required("client_secret")) {
-      case (#ok(v)) v;
-      case (#err(e)) return #err(e);
-    };
 
-    // 2. Validate the client secret
-    let client = switch (Map.get(context.clients, thash, client_id)) {
-      case (null) return #err((400, "invalid_client", "Client not found"));
-      case (?c) c;
-    };
-    let secret_hash_blob = Sha256.fromBlob(#sha256, Text.encodeUtf8(client_secret));
-    let secret_hash_hex = BaseX.toHex(secret_hash_blob.vals(), { isUpper = false; prefix = #none });
-    if (secret_hash_hex != client.client_secret_hash) {
-      return #err((401, "invalid_client", "Invalid client secret"));
+    // 2. Validate the client
+    if (Option.isNull(Map.get(context.clients, thash, client_id))) {
+      return #err((400, "invalid_client", "Client not found"));
     };
 
     // 3. Validate the refresh token itself

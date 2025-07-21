@@ -37,24 +37,50 @@ module HttpRequestParser {
 
     let mvMap = MultiValueMap.MultiValueMap<Text, Text>(Text.equal, Text.hash);
 
-    for (encodedPair in encodedPairs.vals()) {
-      let pair : [Text] = Iter.toArray(Text.split(encodedPair, #char '='));
-      if (pair.size() == 2) {
-        let key_encoded = pair[0];
-        let val_encoded = pair[1];
+    label parsePairs for (encodedPair in encodedPairs.vals()) {
+      // Since Motoko Text cannot be sliced by index, we must manually iterate
+      // through the characters and build the key and value parts based on the
+      // position of the first '=' delimiter.
 
-        // --- THE FIX ---
-        // 1. First, handle the '+' to space conversion. This is part of the
-        //    application/x-www-form-urlencoded standard.
-        let key_with_spaces = Text.replace(key_encoded, #char '+', " ");
-        let val_with_spaces = Text.replace(val_encoded, #char '+', " ");
+      let keyBuffer = Buffer.Buffer<Char>(encodedPair.size());
+      let valueBuffer = Buffer.Buffer<Char>(encodedPair.size());
+      var foundDelimiter = false;
 
-        // 2. THEN, decode any percent-encoded characters.
-        let decodedKey = Option.get(Utils.decodeURIComponent(key_with_spaces), key_with_spaces);
-        let decodedVal = Option.get(Utils.decodeURIComponent(val_with_spaces), val_with_spaces);
-
-        mvMap.add(decodedKey, decodedVal);
+      for (char in encodedPair.chars()) {
+        if (not foundDelimiter and char == '=') {
+          // We've found the first '=', so switch from building the key
+          // to building the value. Do not add the '=' itself to either buffer.
+          foundDelimiter := true;
+        } else {
+          if (not foundDelimiter) {
+            // We are still building the key.
+            keyBuffer.add(char);
+          } else {
+            // We are now building the value.
+            valueBuffer.add(char);
+          };
+        };
       };
+
+      // Convert the character buffers back into Text.
+      let key_encoded = Text.fromArray(Buffer.toArray(keyBuffer));
+      let val_encoded = Text.fromArray(Buffer.toArray(valueBuffer));
+
+      // 1. Decode the key first.
+      let decodedKey = Option.get(Utils.decodeURIComponent(key_encoded), key_encoded);
+
+      // 2. Start with the raw encoded value.
+      var value_to_process = val_encoded;
+
+      // 3. Conditionally modify the value ONLY if the key is "scope".
+      if (decodedKey == "scope") {
+        value_to_process := Text.replace(value_to_process, #char '+', " ");
+      };
+
+      // 4. Decode the final, processed value.
+      let decodedVal = Option.get(Utils.decodeURIComponent(value_to_process), value_to_process);
+
+      mvMap.add(decodedKey, decodedVal);
     };
 
     return mvMap;

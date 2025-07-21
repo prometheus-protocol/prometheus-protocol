@@ -184,7 +184,7 @@ Next, your application directs the user to Prometheus to log in and grant consen
 
 Your application's backend now exchanges the single-use code for an access token and a refresh token.
 
-1.  **Load Credentials:** Make sure your shell has the `client_id`, `client_secret`, and `PKCE_VERIFIER` loaded.
+1.  **Load Credentials:** Make sure your shell has the `client_id` and `PKCE_VERIFIER` loaded.
 
     ```bash
     source .env.prom

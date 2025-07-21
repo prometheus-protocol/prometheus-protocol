@@ -45,7 +45,7 @@ module {
       ("scopes_supported", #array([#string("openid"), #string("prometheus:charge")])),
       ("response_types_supported", #array([#string("code")])),
       ("grant_types_supported", #array([#string("authorization_code"), #string("refresh_token")])),
-      ("token_endpoint_auth_methods_supported", #array([#string("client_secret_post")])),
+      ("token_endpoint_auth_methods_supported", #array([#string("none")])),
       ("code_challenge_methods_supported", #array([#string("S256")])),
     ]);
 

@@ -13,14 +13,13 @@ dotenv.config({ path: path.resolve(__dirname, '../.test.env') });
 const backendCanisterId = Principal.fromText(canisterIds.oauth_backend.local);
 const replicaUrl = `http://127.0.0.1:4943`;
 const clientId = process.env.E2E_CLIENT_ID!;
-const clientSecret = process.env.E2E_CLIENT_SECRET!;
 
 // --- Test Suite ---
 describe('Token Endpoint', () => {
   beforeAll(() => {
-    if (!clientId || !clientSecret) {
+    if (!clientId) {
       throw new Error(
-        'Client ID/Secret not found. Ensure global setup ran correctly.',
+        'Client ID not found. Ensure global setup ran correctly.',
       );
     }
   });
@@ -44,7 +43,6 @@ describe('Token Endpoint', () => {
           code: authCode,
           redirect_uri: 'https://jwt.io',
           client_id: clientId,
-          client_secret: clientSecret,
           code_verifier: pkce.verifier,
           resource: 'https://some-oauth-resource-server.com',
         }),
@@ -90,7 +88,6 @@ describe('Token Endpoint', () => {
           code: authCode,
           redirect_uri: 'https://jwt.io',
           client_id: clientId,
-          client_secret: clientSecret,
           code_verifier: pkce.verifier,
           resource: 'https://some-oauth-resource-server.com',
         }),
@@ -106,7 +103,6 @@ describe('Token Endpoint', () => {
           code: authCode,
           redirect_uri: 'https://jwt.io',
           client_id: clientId,
-          client_secret: clientSecret,
           code_verifier: pkce.verifier,
           resource: 'https://some-oauth-resource-server.com',
         }),
@@ -139,7 +135,6 @@ describe('Token Endpoint', () => {
           code: authCode,
           redirect_uri: 'https://jwt.io',
           client_id: clientId,
-          client_secret: clientSecret,
           code_verifier: pkce.verifier,
           resource: 'https://some-oauth-resource-server.com',
         }),
@@ -164,7 +159,6 @@ describe('Token Endpoint', () => {
           grant_type: 'refresh_token',
           refresh_token: initialRefreshToken,
           client_id: clientId,
-          client_secret: clientSecret,
         }),
       });
 
@@ -191,7 +185,6 @@ describe('Token Endpoint', () => {
           grant_type: 'refresh_token',
           refresh_token: firstRefreshToken,
           client_id: clientId,
-          client_secret: clientSecret,
         }),
       });
       expect(firstRefreshResponse.status).toBe(200);
@@ -204,7 +197,6 @@ describe('Token Endpoint', () => {
           grant_type: 'refresh_token',
           refresh_token: firstRefreshToken, // Using the old, rotated token
           client_id: clientId,
-          client_secret: clientSecret,
         }),
       });
 
@@ -235,7 +227,6 @@ describe('Token Endpoint', () => {
           code: authCode,
           redirect_uri: 'https://jwt.io',
           client_id: clientId,
-          client_secret: clientSecret,
           code_verifier: 'this-is-the-wrong-verifier-12345',
           resource: 'https://some-oauth-resource-server.com',
         }),
@@ -265,7 +256,6 @@ describe('Token Endpoint', () => {
           code: authCode,
           redirect_uri: 'https://evil-site.com', // Mismatched URI
           client_id: clientId,
-          client_secret: clientSecret,
           code_verifier: pkce.verifier,
           resource: 'https://some-oauth-resource-server.com',
         }),
@@ -297,7 +287,6 @@ describe('Token Endpoint', () => {
           code: authCode,
           redirect_uri: 'https://jwt.io',
           client_id: clientId,
-          client_secret: clientSecret,
           code_verifier: pkce.verifier,
           resource: 'https://some-oauth-resource-server.com',
         }),

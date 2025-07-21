@@ -14,7 +14,7 @@ import { test; suite; expect } "mo:test/async";
 
 // Helper to compare two Client records.
 func equalClient(a : Types.Client, b : Types.Client) : Bool {
-  return a.client_id == b.client_id and a.owner == b.owner and a.client_secret_hash == b.client_secret_hash and a.client_name == b.client_name;
+  return a.client_id == b.client_id and a.owner == b.owner and a.client_name == b.client_name;
 };
 
 // Helper to display a Client record.
@@ -65,7 +65,6 @@ await suite(
         let test_client : Types.Client = {
           client_id = "test-1";
           owner = context.creator;
-          client_secret_hash = "h";
           client_name = "c";
           logo_uri = "";
           redirect_uris = [];

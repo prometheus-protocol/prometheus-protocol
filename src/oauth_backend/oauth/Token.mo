@@ -45,6 +45,8 @@ module {
   };
 
   public func handle_token(context : Types.Context, req : Types.Request, res : Types.ResponseClass) : async Types.Response {
+    Debug.print("--- Handling token request ---");
+
     // 1. Get form data from the request body.
     let form = switch (req.body) {
       case (?b) b.form;
@@ -59,24 +61,38 @@ module {
 
     switch (grant_type) {
       case (?"authorization_code") {
+        Debug.print("Grant type is 'authorization_code'. Proceeding with validation...");
         // --- Handle Authorization Code Grant ---
         let validation_result = await Validation.validate_token_request(context, form);
         let validated_req = switch (validation_result) {
-          case (#err((status, error, desc))) return await Errors.send_token_error(res, Nat16.fromNat(status), error, ?desc);
-          case (#ok(data)) data;
+          case (#err((status, error, desc))) {
+            // --- NEW LOGGING: See why validation failed ---
+            Debug.print("!!! Token validation failed. Status: " # debug_show (status) # ", Error: " # error # ", Desc: " # debug_show (desc));
+            return await Errors.send_token_error(res, Nat16.fromNat(status), error, ?desc);
+          };
+          case (#ok(data)) {
+            // --- NEW LOGGING: See the successful validation data ---
+            Debug.print("Token validation successful. Validated data: " # debug_show (data));
+            data;
+          };
         };
 
         Map.delete(context.auth_codes, thash, validated_req.auth_code_record.code);
 
         let issuer = Utils.get_issuer(context, req);
+        // --- NEW LOGGING: See the data going into the JWT ---
+        Debug.print("Creating JWT with auth record: " # debug_show (validated_req.auth_code_record));
         let token_result = await JWT.create_and_sign(context, validated_req.auth_code_record, issuer);
 
         let access_token = switch (token_result) {
           case (#err(msg)) {
-            Debug.print("Error creating access token: " # msg);
+            Debug.print("!!! Error creating access token: " # msg);
             return await Errors.send_token_error(res, 500, "server_error", ?msg);
           };
-          case (#ok(token)) token;
+          case (#ok(token)) {
+            Debug.print("JWT and access token created successfully.");
+            token;
+          };
         };
 
         // Create and store a new refresh token
@@ -92,9 +108,9 @@ module {
         };
         Map.set(context.refresh_tokens, thash, refresh_token_string, refresh_token_data);
 
+        Debug.print("Issuing final token response...");
         return await issue_token_response(res, access_token, validated_req.auth_code_record.scope, ?refresh_token_string);
       };
-
       case (?"refresh_token") {
         // --- Handle Refresh Token Grant ---
         let validation_result = await Validation.validate_refresh_token_request(context, form);

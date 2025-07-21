@@ -48,7 +48,6 @@ module {
   public type Client = {
     client_id : Text;
     owner : Principal;
-    client_secret_hash : Text;
     client_name : Text;
     logo_uri : Text;
     redirect_uris : [Text];
@@ -160,7 +159,6 @@ module {
   // The data returned to a developer after successful client registration.
   public type RegistrationResponse = {
     client_id : Text;
-    client_secret : Text; // This is the only time the raw secret is ever revealed.
     client_name : Text;
     redirect_uris : [Text];
     grant_types : [Text];

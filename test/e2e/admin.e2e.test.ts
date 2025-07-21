@@ -61,7 +61,6 @@ describe('Admin and Registration', () => {
       expect(registerResponse.status).toBe(201);
       const dcrResponse = await registerResponse.json();
       expect(dcrResponse.client_id).toBeDefined();
-      expect(dcrResponse.client_secret).toBeDefined();
     });
 
     test('should reject client registration with an empty redirect_uris array', async () => {
