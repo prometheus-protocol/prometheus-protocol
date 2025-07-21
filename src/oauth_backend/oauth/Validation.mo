@@ -9,6 +9,7 @@ import Map "mo:map/Map";
 import { thash } "mo:map/Map";
 import Utils "Utils";
 import Sha256 "mo:sha2/Sha256";
+import Debug "mo:base/Debug";
 
 module {
 
@@ -38,16 +39,15 @@ module {
       case (?v) v;
       case (null) return #err("code_challenge_method is required for PKCE");
     };
-    let state = switch (req.url.queryObj.get("state")) {
-      case (?v) v;
-      case (null) return #err("state is required");
-    };
     let resource_uri = switch (req.url.queryObj.get("resource")) {
       case (?v) v;
       case (null) return #err("resource parameter is required");
     };
     // The scope parameter is optional, so Option.get with a default is correct here.
     let scope_string = Option.get(req.url.queryObj.get("scope"), "");
+
+    // The state parameter is optional.
+    let state = req.url.queryObj.get("state");
 
     // --- 2. Validate Parameter Values ---
     if (response_type != "code") {
@@ -68,7 +68,7 @@ module {
 
     // --- 4. CRITICAL: Validate redirect_uri ---
     func isRedirectUri(uri : Text) : Bool {
-      return uri == redirect_uri;
+      return Utils.normalize_uri(uri) == Utils.normalize_uri(redirect_uri);
     };
 
     if (Option.isNull(Array.find<Text>(client.redirect_uris, isRedirectUri))) {
@@ -189,6 +189,7 @@ module {
     // The `resource` from the form MUST match the one stored with the authorization code.
     // Compare the resource from the form with the one stored with the code
     if (Utils.normalize_uri(auth_code_record.resource) != Utils.normalize_uri(resource_from_form)) {
+      Debug.print("Validating resource: " # Utils.normalize_uri(auth_code_record.resource) # " against " # Utils.normalize_uri(resource_from_form));
       return #err((400, "invalid_grant", "resource parameter mismatch"));
     };
 

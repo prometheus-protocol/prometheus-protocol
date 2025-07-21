@@ -63,7 +63,7 @@ module {
     client_id : Text;
     redirect_uri : Text;
     scope : Text;
-    state : Text;
+    state : ?Text;
     code_challenge : Text;
     code_challenge_method : Text;
     resource : Text;
@@ -99,7 +99,7 @@ module {
     client_id : Text;
     redirect_uri : Text;
     scope : Text;
-    state : Text;
+    state : ?Text;
     expires_at : Time.Time;
     code_challenge : Text;
     code_challenge_method : Text;

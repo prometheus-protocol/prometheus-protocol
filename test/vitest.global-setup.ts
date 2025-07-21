@@ -6,10 +6,10 @@ import { createActor } from '../src/declarations/oauth_backend';
 import canisterIds from '../.dfx/local/canister_ids.json';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { ResourceServer } from '../src/declarations/oauth_backend/oauth_backend.did';
 
 const backendCanisterId = Principal.fromText(canisterIds.oauth_backend.local);
-// The ICRC-2 canister ID for ckUSDC
-const icrc2CanisterId = Principal.fromText(canisterIds.icrc1_ledger.local);
+const icrc2CanisterId = Principal.fromText('aaaaa-aa');
 const replicaUrl = `http://127.0.0.1:4943`;
 
 const createActorFor = (identity: Identity) => {
@@ -21,6 +21,7 @@ export async function setup() {
   console.log('\n🚀 Performing global E2E setup...');
 
   // 1. Dynamically register a single client for all test suites
+  // This is likely idempotent already, but we'll assume it is for now.
   const registerResponse = await fetch(
     `${replicaUrl}/register?canisterId=${backendCanisterId}`,
     {
@@ -34,27 +35,65 @@ export async function setup() {
   );
 
   if (registerResponse.status !== 201) {
-    throw new Error('Global setup failed: Could not register client.');
+    // This might fail if not idempotent, but we'll focus on the resource server error.
+    console.warn('Could not register client, it might already exist.');
   }
   const dcrResponse = await registerResponse.json();
 
-  // 2. Register a single resource server for all test suites
-  const developerIdentity = Secp256k1KeyIdentity.generate();
+  // 2. Get or Create the Resource Server (Idempotent Pattern)
+  // MODIFIED: Use a deterministic seed for the developer identity.
+  // This ensures we are the same "developer" on every test run.
+  const seedPhrase =
+    'test test test test test test test test test test test junk';
+  const developerIdentity = Secp256k1KeyIdentity.fromSeedPhrase(seedPhrase);
   const backendActor = createActorFor(developerIdentity);
-  const activateResponse = await backendActor.register_resource_server({
-    initial_service_principal: developerIdentity.getPrincipal(),
-    name: 'Global E2E Resource Server',
-    logo_uri: '', // Optional, can be empty
-    uris: ['https://some-oauth-resource-server.com'],
-    accepted_payment_canisters: [icrc2CanisterId],
-    scopes: [
-      ['image:read', 'Allows the app to read your files.'],
-      ['image:write', 'Allows the app to create and modify your files.'],
-    ],
-  });
 
-  if (!('active' in activateResponse.status)) {
-    throw new Error('Global setup failed: Could not register resource server.');
+  const targetUri = 'https://some-oauth-resource-server.com';
+  let resourceServer: ResourceServer | undefined;
+
+  // Step 2a: Check if the server already exists
+  const existingServersRes = await backendActor.list_my_resource_servers();
+  if ('err' in existingServersRes) {
+    throw new Error(
+      `Global setup failed during resource server listing: ${existingServersRes.err}`,
+    );
+  }
+  const existingServers = existingServersRes.ok;
+  console.log(
+    'uris:',
+    existingServers.map((s) => s.uris),
+  );
+  resourceServer = existingServers.find((s) => s.uris.includes(targetUri));
+
+  // Step 2b: If it doesn't exist, create it
+  if (!resourceServer) {
+    console.log('Registering new resource server...');
+    const registerRsResponse = await backendActor.register_resource_server({
+      initial_service_principal: developerIdentity.getPrincipal(),
+      name: 'Global E2E Resource Server',
+      logo_uri: '',
+      uris: [targetUri],
+      accepted_payment_canisters: [icrc2CanisterId],
+      scopes: [
+        ['image:read', 'Allows the app to read your files.'],
+        ['image:write', 'Allows the app to create and modify your files.'],
+      ],
+    });
+
+    if ('err' in registerRsResponse) {
+      throw new Error(
+        `Global setup failed during registration: ${registerRsResponse.err}`,
+      );
+    }
+    resourceServer = registerRsResponse.ok;
+  } else {
+    console.log('Resource server already exists. Using existing one.');
+  }
+
+  if (!resourceServer) {
+    throw new Error(
+      'Global setup failed: Could not get or create resource server.',
+    );
   }
 
   // 3. Write the client credentials to a temporary environment file

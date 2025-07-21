@@ -9,6 +9,7 @@ import Map "mo:map/Map";
 import { thash } "mo:map/Map";
 import Sha256 "mo:sha2/Sha256";
 import Types "Types";
+import Utils "Utils";
 import Json "mo:json";
 
 module {
@@ -70,6 +71,12 @@ module {
         cache_strategy = #noCache;
       });
     };
+    // Normalize all redirect URIs before storing them.
+    let normalized_redirect_uris = Array.map<Text, Text>(
+      redirect_uris,
+      func(uri) { Utils.normalize_uri(uri) },
+    );
+
     let logo_uri = switch (Json.getAsText(parsed, "logo_uri")) {
       case (#ok(t)) ?t;
       case (_) null;
@@ -89,7 +96,7 @@ module {
       client_secret_hash = client_secret_hash;
       client_name = client_name;
       logo_uri = Option.get(logo_uri, "");
-      redirect_uris = redirect_uris;
+      redirect_uris = normalized_redirect_uris;
       status = #active; // Or #pending_activation if you have a fee model
     };
     Map.set(context.clients, thash, new_client.client_id, new_client);
@@ -99,7 +106,7 @@ module {
       ("client_id", #string(client_id)),
       ("client_secret", #string(client_secret)),
       ("client_name", #string(client_name)),
-      ("redirect_uris", #array(Array.map(redirect_uris, func(uri : Text) : Json.Json { #string(uri) }))),
+      ("redirect_uris", #array(Array.map(normalized_redirect_uris, func(uri : Text) : Json.Json { #string(uri) }))),
       ("grant_types", #array([#string("authorization_code")])),
     ]);
 

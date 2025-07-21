@@ -52,25 +52,6 @@ describe('Authorization State Machine Flow', () => {
     return sessionId;
   };
 
-  test('should reject /authorize request without a state parameter', async () => {
-    const authUrl = new URL(`${replicaUrl}/authorize`);
-    authUrl.searchParams.set('canisterId', backendCanisterId.toText());
-    authUrl.searchParams.set('response_type', 'code');
-    authUrl.searchParams.set('client_id', clientId);
-    authUrl.searchParams.set('redirect_uri', 'https://jwt.io');
-    authUrl.searchParams.set(
-      'code_challenge',
-      (await generatePkce()).challenge,
-    );
-    authUrl.searchParams.set('code_challenge_method', 'S256');
-    // 'state' parameter is intentionally omitted
-
-    const response = await fetch(authUrl.toString());
-    expect(response.status).toBe(400);
-    const body = await response.text();
-    expect(body).toContain('state is required');
-  });
-
   describe('Scope Validation', () => {
     test('should succeed when requesting valid, registered scopes', async () => {
       // Arrange: Construct an /authorize URL with scopes that are registered
@@ -132,6 +113,50 @@ describe('Authorization State Machine Flow', () => {
       // MODIFIED: Assert that the plain text body contains the expected error strings
       expect(errorBody).toContain('invalid_scope');
       expect(errorBody).toContain("scope 'admin:god_mode' is not supported");
+    });
+  });
+
+  describe('Parameter Handling', () => {
+    test('should correctly parse a complex, double-encoded state parameter', async () => {
+      // Arrange: Create a state parameter that is double-encoded.
+      // This simulates complex clients like the VS Code extension and is a
+      // regression test for the parser bug we fixed.
+      // const rawInnerState = 'key1=value1&key2=value2';
+      // const singleEncoded = encodeURIComponent(rawInnerState); // -> 'key1%3Dvalue1%26key2%3Dvalue2'
+      // const doubleEncodedState = encodeURIComponent(singleEncoded); // -> 'key1%253Dvalue1%2526key2%253Dvalue2'
+
+      const doubleEncodedState =
+        'vscode%3A%2F%2Fdynamicauthprovider%2Flocalhost%253A3000%2Fauthorize%3Fnonce%253Deebe0f9b6444d83a8f9ed34dfe79557a%2526windowId%253D';
+
+      const authUrl = new URL(`${replicaUrl}/authorize`);
+      authUrl.searchParams.set('canisterId', backendCanisterId.toText());
+      authUrl.searchParams.set('response_type', 'code');
+      authUrl.searchParams.set('client_id', clientId);
+      authUrl.searchParams.set('redirect_uri', 'https://jwt.io');
+      authUrl.searchParams.set(
+        'code_challenge',
+        (await generatePkce()).challenge,
+      );
+      authUrl.searchParams.set('code_challenge_method', 'S256');
+      authUrl.searchParams.set(
+        'resource',
+        'https://some-oauth-resource-server.com',
+      );
+      // Use the complex, double-encoded state value
+      authUrl.searchParams.set('state', doubleEncodedState);
+      authUrl.searchParams.set('scope', 'openid'); // A simple scope is fine for this test
+
+      // Act: Make the request
+      const response = await fetch(authUrl.toString(), {
+        redirect: 'manual',
+      });
+
+      // Assert: The request must succeed (status 302), indicating the parser
+      // handled the complex state correctly and did not crash.
+      expect(response.status).toBe(302);
+      const location = response.headers.get('location');
+      expect(location).toBeDefined();
+      expect(location).toContain('/login?session_id=');
     });
   });
 

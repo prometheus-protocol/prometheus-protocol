@@ -4,14 +4,10 @@ import Text "mo:base/Text";
 import Map "mo:map/Map";
 import { thash } "mo:map/Map";
 import Types "Types";
-import Sha256 "mo:sha2/Sha256";
 import BaseX "mo:base-x-encoder";
-import Time "mo:base/Time"; // We need Time for a unique ID
 import Random "mo:base/Random"; // And Random for a unique ID
-import Blob "mo:base/Blob";
-import Array "mo:base/Array";
+import Option "mo:base/Option";
 import Iter "mo:base/Iter";
-import Nat8 "mo:base/Nat8";
 import Utils "Utils";
 
 module Admin {
@@ -26,30 +22,35 @@ module Admin {
   };
 
   // ===================================================================
-  // RESOURCE SERVER MANAGEMENT & PAYMENT LOGIC
+  // RESOURCE SERVER MANAGEMENT (CRUD)
   // ===================================================================
 
-  // A developer calls this to register their backend service.
+  /**
+   * [CREATE] Registers a new resource server.
+   * Enforces a "first-come, first-served" policy on URIs to prevent hijacking.
+   */
   public func register_resource_server(
     context : Types.Context,
     caller : Principal,
     args : Types.RegisterResourceServerArgs,
-  ) : async Types.ResourceServer {
-    // For now, registration is open. We can add a fee later.
-    // 1. Get entropy
-    let entropy = await Random.blob();
+  ) : async Result.Result<Types.ResourceServer, Text> {
+    // SECURITY: Ensure at least one URI is provided for registration.
+    if (args.uris.size() == 0) {
+      return #err("At least one URI must be provided for the resource server.");
+    };
 
-    // 2. Concatenate all sources of uniqueness into a single byte array
-    var combined_bytes : [Nat8] = [];
-    combined_bytes := Array.append(combined_bytes, Iter.toArray(Principal.toBlob(caller).vals()));
-    combined_bytes := Array.append(combined_bytes, Iter.toArray(Text.encodeUtf8(args.name).vals()));
-    combined_bytes := Array.append(combined_bytes, [Nat8.fromIntWrap(Time.now())]);
-    combined_bytes := Array.append(combined_bytes, Iter.toArray(entropy.vals()));
+    // SECURITY: "First-come, first-served" check.
+    // We check all provided URIs to prevent partial registration or hijacking.
+    for (uri in args.uris.vals()) {
+      let normalized_uri = Utils.normalize_uri(uri);
+      if (Option.isSome(Map.get(context.uri_to_rs_id, thash, normalized_uri))) {
+        return #err("The resource URI '" # uri # "' has already been registered.");
+      };
+    };
 
-    // 3. Create a single blob from the combined bytes and hash it
-    let source_blob = Blob.fromArray(combined_bytes);
-    let unique_id_blob = Sha256.fromBlob(#sha256, source_blob);
-    let resource_server_id = "rs_" # BaseX.toHex(unique_id_blob.vals(), { isUpper = false; prefix = #none });
+    // Generate a unique, random ID for the resource server.
+    let rs_id_blob = await Random.blob();
+    let resource_server_id = "rs_" # BaseX.toHex(rs_id_blob.vals(), { isUpper = false; prefix = #none });
 
     let new_server : Types.ResourceServer = {
       resource_server_id = resource_server_id;
@@ -57,22 +58,60 @@ module Admin {
       name = args.name;
       logo_uri = args.logo_uri;
       service_principals = [args.initial_service_principal];
-      status = #active; // Active immediately for now
+      status = #active;
       uris = args.uris;
       scopes = args.scopes;
       accepted_payment_canisters = args.accepted_payment_canisters;
     };
 
+    // Update the main map.
     Map.set(context.resource_servers, thash, resource_server_id, new_server);
 
-    // 4. Update the URI to resource server ID mapping
-    for (uri in Iter.fromArray(args.uris)) {
+    // Update the URI-to-ID index for all provided URIs.
+    for (uri in args.uris.vals()) {
       Map.set(context.uri_to_rs_id, thash, Utils.normalize_uri(uri), resource_server_id);
     };
 
-    return new_server;
+    return #ok(new_server);
   };
 
+  /**
+   * [READ] Lists all resource servers owned by the caller.
+   */
+  public func list_my_resource_servers(
+    context : Types.Context,
+    caller : Principal,
+  ) : async Result.Result<[Types.ResourceServer], Text> {
+    let all_servers_iter = Map.vals(context.resource_servers);
+    let my_servers_iter = Iter.filter<Types.ResourceServer>(all_servers_iter, func(s : Types.ResourceServer) : Bool { s.owner == caller });
+    let my_servers_array = Iter.toArray(my_servers_iter);
+    return #ok(my_servers_array);
+  };
+
+  /**
+   * [READ] Gets the details of a specific resource server, enforcing ownership.
+   */
+  public func get_my_resource_server_details(
+    context : Types.Context,
+    id : Text,
+    caller : Principal,
+  ) : async Result.Result<Types.ResourceServer, Text> {
+    let server = switch (Map.get(context.resource_servers, thash, id)) {
+      case (null) return #err("Resource server not found.");
+      case (?s) s;
+    };
+
+    // SECURITY: Enforce ownership.
+    if (server.owner != caller) {
+      return #err("Unauthorized: You are not the owner of this resource server.");
+    };
+
+    return #ok(server);
+  };
+
+  /**
+   * [UPDATE] Updates the properties of an existing resource server.
+   */
   public func update_resource_server(
     context : Types.Context,
     caller : Principal,
@@ -84,86 +123,76 @@ module Admin {
       case (?s) s;
     };
 
-    // 2. Check permissions
+    // 2. SECURITY: Check permissions
     if (server.owner != caller) {
       return #err("Unauthorized: Caller is not the owner of the resource server.");
     };
 
-    // 3. Handle the URI index update first, as it's a side effect.
-    // This must be done before we determine the final `uris` value.
+    // 3. Handle the URI index update first
     switch (args.uris) {
       case (?new_uris) {
         // Remove all old URIs from the index
         for (old_uri in server.uris.vals()) {
           Map.delete(context.uri_to_rs_id, thash, Utils.normalize_uri(old_uri));
         };
-        // Add all new URIs to the index
+        // Add all new URIs to the index, checking for conflicts
         for (new_uri in new_uris.vals()) {
-          Map.set(context.uri_to_rs_id, thash, Utils.normalize_uri(new_uri), server.resource_server_id);
+          let normalized = Utils.normalize_uri(new_uri);
+          if (Option.isSome(Map.get(context.uri_to_rs_id, thash, normalized))) {
+            // This prevents updating to a URI that is already taken by another server.
+            return #err("The resource URI '" # new_uri # "' is already in use.");
+          };
+          Map.set(context.uri_to_rs_id, thash, normalized, server.resource_server_id);
         };
       };
       case (null) {}; // No URI update, so no index change needed.
     };
 
-    // 4. Determine the final value for each field by composing a new object.
-    // For each field, we use the new value if provided, otherwise we keep the old one.
-    let final_name = switch (args.name) {
-      case (?n) n;
-      case (null) server.name;
-    };
-    let final_logo_uri = switch (args.logo_uri) {
-      case (?l) l;
-      case (null) server.logo_uri;
-    };
-    let final_uris = switch (args.uris) {
-      case (?u) u;
-      case (null) server.uris;
-    };
-    let final_service_principals = switch (args.service_principals) {
-      case (?sp) sp;
-      case (null) server.service_principals;
-    };
-    let final_scopes = switch (args.scopes) {
-      case (?s) s;
-      case (null) server.scopes;
-    };
-    let final_accepted_payment_canisters = switch (args.accepted_payment_canisters) {
-      case (?apc) apc;
-      case (null) server.accepted_payment_canisters;
-    };
-
-    // 5. Construct the new, immutable ResourceServer object
+    // 4. Construct the new, immutable ResourceServer object
     let updated_server : Types.ResourceServer = {
-      // Unchanged fields are copied directly from the old `server` object
-      server with
-
-      // Updated fields use the final values determined above
-      name = final_name;
-      logo_uri = final_logo_uri;
-      uris = final_uris;
-      service_principals = final_service_principals;
-      scopes = final_scopes;
-      accepted_payment_canisters = final_accepted_payment_canisters;
+      server with // Start with old values
+      name = Option.get(args.name, server.name);
+      logo_uri = Option.get(args.logo_uri, server.logo_uri);
+      uris = Option.get(args.uris, server.uris);
+      service_principals = Option.get(args.service_principals, server.service_principals);
+      scopes = Option.get(args.scopes, server.scopes);
+      accepted_payment_canisters = Option.get(args.accepted_payment_canisters, server.accepted_payment_canisters);
     };
 
-    // 6. Save the new object, replacing the old one in the map
+    // 5. Save the new object, replacing the old one
     Map.set(context.resource_servers, thash, updated_server.resource_server_id, updated_server);
 
     return #ok("Resource server updated successfully.");
   };
 
-  public func get_my_resource_server_details(context : Types.Context, id : Text, caller : Principal) : async Result.Result<Types.ResourceServer, Text> {
+  /**
+   * [DELETE] Deletes a resource server and cleans up its associated data.
+   */
+  public func delete_resource_server(
+    context : Types.Context,
+    caller : Principal,
+    id : Text,
+  ) : async Result.Result<Text, Text> {
+    // 1. Fetch the resource server
     let server = switch (Map.get(context.resource_servers, thash, id)) {
       case (null) return #err("Resource server not found.");
       case (?s) s;
     };
 
-    // CRITICAL: Enforce ownership
+    // 2. SECURITY: Check permissions
     if (server.owner != caller) {
-      return #err("Unauthorized: You are not the owner of this resource server.");
+      return #err("Unauthorized: Caller is not the owner of the resource server.");
     };
 
-    return #ok(server);
+    // 3. CRITICAL: Clean up the URI index to free up the URIs.
+    for (uri in server.uris.vals()) {
+      Map.delete(context.uri_to_rs_id, thash, Utils.normalize_uri(uri));
+    };
+
+    // 4. Delete the main resource server record.
+    Map.delete(context.resource_servers, thash, id);
+
+    return #ok("Resource server deleted successfully.");
   };
 
   public func get_session_info(context : Types.Context, session_id : Text, caller : Principal) : Result.Result<Types.SessionInfo, Text> {

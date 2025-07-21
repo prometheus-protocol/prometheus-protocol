@@ -1,4 +1,11 @@
-import { describe, test, expect, beforeAll, beforeEach } from 'vitest';
+import {
+  describe,
+  test,
+  expect,
+  beforeAll,
+  beforeEach,
+  afterEach,
+} from 'vitest';
 import { HttpAgent, Identity } from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
 import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
@@ -80,7 +87,7 @@ describe('Admin and Registration', () => {
 
   // --- NEW TEST SUITE FOR RESOURCE SERVER MANAGEMENT ---
   describe('Resource Server Management', () => {
-    let resourceServerId: string;
+    let resourceServerId: string | undefined;
 
     // Before each test in this suite, register a new resource server to ensure a clean state.
     beforeEach(async () => {
@@ -96,13 +103,21 @@ describe('Admin and Registration', () => {
       if ('err' in result) {
         throw new Error(`Failed to register resource server: ${result.err}`);
       }
-      resourceServerId = result.resource_server_id;
+      resourceServerId = result.ok.resource_server_id;
+    });
+
+    afterEach(async () => {
+      // This guard prevents errors if the beforeEach hook failed to create the server.
+      if (resourceServerId) {
+        await backendActor.delete_resource_server(resourceServerId);
+        resourceServerId = undefined; // Reset for the next test
+      }
     });
 
     test('should allow the owner to update their resource server', async () => {
       // Arrange: Define the updates. Optional fields are arrays: [value] for Some, [] for None.
       const updates = {
-        resource_server_id: resourceServerId,
+        resource_server_id: resourceServerId!,
         name: toNullable('Updated Test Server'),
         logo_uri: toNullable('updated_logo.png'),
         uris: toNullable(['https://new.uri/api', 'https://another.uri/api']),
@@ -128,8 +143,9 @@ describe('Admin and Registration', () => {
       expect(updateResult.ok).toBe('Resource server updated successfully.');
 
       // Assert: Fetch the server using the owner-only query and verify all fields were updated
-      const getResult =
-        await backendActor.get_my_resource_server_details(resourceServerId);
+      const getResult = await backendActor.get_my_resource_server_details(
+        resourceServerId!,
+      );
       const serverDetails = (getResult as { ok: ResourceServer }).ok;
 
       expect(serverDetails.name).toBe('Updated Test Server');
@@ -154,7 +170,7 @@ describe('Admin and Registration', () => {
       const hackerActor = createActorFor(hackerIdentity);
 
       const updates = {
-        resource_server_id: resourceServerId,
+        resource_server_id: resourceServerId!,
         name: toNullable('Hacked Name'),
         logo_uri: toNullable(''),
         uris: toNullable<string[]>(),

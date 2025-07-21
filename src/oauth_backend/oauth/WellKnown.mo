@@ -42,7 +42,7 @@ module {
       ("token_endpoint", #string(issuer # "/token")),
       ("jwks_uri", #string(issuer # "/.well-known/jwks.json")),
       ("registration_endpoint", #string(issuer # "/register")),
-      ("scopes_supported", #array([#string("profile"), #string("openid")])),
+      ("scopes_supported", #array([#string("openid"), #string("prometheus:charge")])),
       ("response_types_supported", #array([#string("code")])),
       ("grant_types_supported", #array([#string("authorization_code"), #string("refresh_token")])),
       ("token_endpoint_auth_methods_supported", #array([#string("client_secret_post")])),

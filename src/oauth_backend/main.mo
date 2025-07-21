@@ -9,6 +9,7 @@ import Admin "oauth/Admin";
 import State "oauth/State";
 import Authorize "oauth/Authorize";
 import Crypto "oauth/Crypto";
+import Array "mo:base/Array";
 
 shared ({ caller = creator }) actor class AuthCanister() = self {
 
@@ -67,7 +68,7 @@ shared ({ caller = creator }) actor class AuthCanister() = self {
   // =================================================================================================
   // Resource Server Management
   // =================================================================================================
-  public shared ({ caller }) func register_resource_server(args : Types.RegisterResourceServerArgs) : async Types.ResourceServer {
+  public shared ({ caller }) func register_resource_server(args : Types.RegisterResourceServerArgs) : async Result.Result<Types.ResourceServer, Text> {
     let entropy = await Random.blob();
     ignore Crypto.get_or_create_signing_key(context, entropy);
     await Admin.register_resource_server(context, caller, args);
@@ -77,8 +78,16 @@ shared ({ caller = creator }) actor class AuthCanister() = self {
     await Admin.update_resource_server(context, caller, args);
   };
 
+  public shared ({ caller }) func list_my_resource_servers() : async Result.Result<[Types.ResourceServer], Text> {
+    await Admin.list_my_resource_servers(context, caller);
+  };
+
   public shared ({ caller }) func get_my_resource_server_details(id : Text) : async Result.Result<Types.ResourceServer, Text> {
     await Admin.get_my_resource_server_details(context, id, caller);
+  };
+
+  public shared ({ caller }) func delete_resource_server(id : Text) : async Result.Result<Text, Text> {
+    await Admin.delete_resource_server(context, caller, id);
   };
 
   // =================================================================================================

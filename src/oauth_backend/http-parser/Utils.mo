@@ -270,57 +270,62 @@ module {
     result;
   };
 
-  public func decodeURIComponent(t : Text) : ?Text {
-    let with_spaces = Text.replace(t, #char '+', " ");
-    let buffer : Buffer.Buffer<Nat8> = Buffer.Buffer<Nat8>(t.size() * 4);
-    let iter = Text.split(with_spaces, #char '%');
-    let bytes = Blob.toArray(Text.encodeUtf8(Option.get(iter.next(), "")));
-    for (byte in bytes.vals()) { buffer.add(byte) };
+  // Helper function to check if a character is a valid hexadecimal digit.
+  private func isHexDigit(c : Char) : Bool {
+    return (c >= '0' and c <= '9') or (c >= 'a' and c <= 'f') or (c >= 'A' and c <= 'F');
+  };
 
-    var accumulated_hex = "";
+  /**
+   * A robust implementation of decodeURIComponent that correctly handles all edge cases,
+   * including double-encoding (e.g., %25).
+   *
+   * It iterates through the source bytes, building a new buffer. When it encounters a '%',
+   * it looks ahead two characters, validates them as hex, decodes them, and appends the
+   * resulting byte. Otherwise, it appends characters literally.
+   */
+  public func decodeURIComponent(encoded : Text) : ?Text {
+    let sourceBytes = Blob.toArray(Text.encodeUtf8(encoded));
+    let decodedBuffer = Buffer.Buffer<Nat8>(sourceBytes.size());
+    var i = 0;
 
-    func extract_hex_bytes(accumulated_hex : Text, last_token : Text) : Bool {
-      switch (Hex.decode(accumulated_hex)) {
-        case (#ok(utf8_encoding)) {
-          for (byte in utf8_encoding.vals()) { buffer.add(byte) };
-          let non_decoded = if (last_token.size() < 2) "" else subText(last_token, 2, last_token.size());
+    label parseBytes while (i < sourceBytes.size()) {
+      let byte = sourceBytes[i];
 
-          let bytes = Blob.toArray(Text.encodeUtf8(non_decoded));
-          for (byte in bytes.vals()) { buffer.add(byte) };
+      // MODIFIED: Compare the byte directly with the Nat8 value for '%', which is 37.
+      if (byte == (37 : Nat8)) {
+        // Check if there are at least two characters to look ahead.
+        if (i + 2 < sourceBytes.size()) {
+          // MODIFIED: Use Char.fromNat32 to convert bytes back to Chars for checking.
+          let char1 = Char.fromNat32(Nat16.toNat32(Nat8.toNat16(sourceBytes[i + 1])));
+          let char2 = Char.fromNat32(Nat16.toNat32(Nat8.toNat16(sourceBytes[i + 2])));
 
-          true; // passed
-
+          // Check if both lookahead characters are valid hex digits.
+          if (isHexDigit(char1) and isHexDigit(char2)) {
+            // If they are, decode the two-character hex string.
+            let hexString = Text.fromChar(char1) # Text.fromChar(char2);
+            switch (Hex.decode(hexString)) {
+              case (#ok(decodedByteBlob)) {
+                if (decodedByteBlob.size() == 1) {
+                  decodedBuffer.add(decodedByteBlob[0]);
+                  i += 3; // Advance index past the '%' and the two hex digits.
+                  continue parseBytes;
+                };
+              };
+              case (#err(_)) { /* Unreachable */ };
+            };
+          };
         };
-        case (_) {
-          false; // failed
-        };
+        // If the '%' is not followed by two valid hex digits, treat it as a literal character.
+        decodedBuffer.add(byte);
+        i += 1;
+      } else {
+        // Not a '%', so just add the byte literally.
+        decodedBuffer.add(byte);
+        i += 1;
       };
     };
 
-    label decoding_hex for (sp in iter) {
-      if (sp.size() == 2) {
-        accumulated_hex #= sp;
-        continue decoding_hex;
-      };
-
-      let hex = subText(sp, 0, 2);
-      accumulated_hex #= hex;
-
-      if (not extract_hex_bytes(accumulated_hex, sp)) {
-        return null;
-      };
-
-      accumulated_hex := "";
-
-    };
-
-    if (accumulated_hex.size() > 0) {
-      if (not extract_hex_bytes(accumulated_hex, "")) {
-        return null;
-      };
-    };
-
-    Text.decodeUtf8(Blob.fromArray(Buffer.toArray(buffer)));
+    return Text.decodeUtf8(Blob.fromArray(Buffer.toArray(decodedBuffer)));
   };
 
   public func decodeURI(t : Text) : ?Text = decodeURIComponent(t);

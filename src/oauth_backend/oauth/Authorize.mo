@@ -11,6 +11,7 @@ import Time "mo:base/Time";
 import Principal "mo:base/Principal";
 import Blob "mo:base/Blob";
 import Result "mo:base/Result";
+import Option "mo:base/Option";
 import Scope "Scope";
 
 module {
@@ -211,7 +212,10 @@ module {
     };
     Map.set(context.auth_codes, thash, code, auth_code_data);
     Map.delete(context.authorize_sessions, thash, session_id);
-    let state_param = "&state=" # session.state;
+    let state_param = switch (session.state) {
+      case (?exists) "&state=" # exists;
+      case (null) "";
+    };
     let final_url = session.redirect_uri # "?code=" # code # state_param;
     return #ok(final_url);
   };
@@ -235,13 +239,16 @@ module {
 
     // 3. Get the necessary data before deleting the session.
     let redirect_uri = session.redirect_uri;
-    let state = session.state;
+    let state = switch (session.state) {
+      case (?exists) "&state=" # exists;
+      case (null) "";
+    };
 
     // 4. CRITICAL: Clean up the session immediately.
     Map.delete(context.authorize_sessions, thash, session_id);
 
     // 5. Construct the redirect URL according to OAuth 2.1 spec for access denial.
-    let final_url = redirect_uri # "?error=access_denied&state=" # state;
+    let final_url = redirect_uri # "?error=access_denied" # state;
 
     return #ok(final_url);
   };

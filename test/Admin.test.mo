@@ -1,5 +1,6 @@
 import Principal "mo:base/Principal";
 import Blob "mo:base/Blob";
+import Result "mo:base/Result";
 import Map "mo:map/Map";
 import { thash } "mo:map/Map";
 import Text "mo:base/Text";
@@ -87,16 +88,35 @@ await suite(
             let owner = Principal.fromText("aaaaa-aa");
             let service_principal = Principal.fromText("aaaaa-aa");
 
-            let new_server = await Admin.register_resource_server(
+            let res = await Admin.register_resource_server(
               context,
               owner,
-              "Test Server",
-              "", // Optional logo URI
-              ["https://canister_id.ic0.app"],
-              service_principal,
-              [("scope1", "description1")],
-              [Principal.fromText("aaaaa-aa")],
+              {
+                name = "Test Server";
+                logo_uri = "";
+                uris = ["https://canister_id.ic0.app"];
+                initial_service_principal = service_principal;
+                scopes = [("scope1", "description1")];
+                accepted_payment_canisters = [Principal.fromText("aaaaa-aa")];
+              },
             );
+
+            func show(a : Result.Result<Types.ResourceServer, Text>) : Text {
+              debug_show (a);
+            };
+            func equal(a : Result.Result<Types.ResourceServer, Text>, b : Result.Result<Types.ResourceServer, Text>) : Bool {
+              a == b;
+            };
+
+            // Check that the result is OK and contains a ResourceServer
+            expect.result<Types.ResourceServer, Text>(res, show, equal).isOk();
+            let new_server = switch (res) {
+              case (#ok(server)) server;
+              case (#err(_)) {
+                assert true;
+                return;
+              };
+            };
 
             // Check that the returned object has the correct data
             expect.principal(new_server.owner).equal(owner);
