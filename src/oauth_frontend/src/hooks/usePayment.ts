@@ -77,7 +77,12 @@ export const useAllowanceQuery = (
     ],
     queryFn: () => getAllowance(identity!, spender!, icrc2CanisterId!),
     // This query will only run if all required parameters are available
-    enabled: !!identity && !!spender && !!icrc2CanisterId,
+    enabled:
+      !!identity &&
+      !identity.getPrincipal().isAnonymous() &&
+      !!spender &&
+      !spender.isAnonymous() &&
+      !!icrc2CanisterId,
   });
 };
 

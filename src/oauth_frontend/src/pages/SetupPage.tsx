@@ -145,9 +145,7 @@ export default function SetupPage() {
             className="w-20 h-20 mb-4 rounded-lg object-contain mx-auto my-2"
           />
         )}
-        <CardTitle className="text-2xl">
-          Set Allowance for {resourceServerName}
-        </CardTitle>
+        <CardTitle className="text-2xl">{resourceServerName}</CardTitle>
         <CardDescription>
           Approve an allowance for this service to initiate payments on your
           behalf.
