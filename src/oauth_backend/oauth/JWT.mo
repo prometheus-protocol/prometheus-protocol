@@ -27,6 +27,7 @@ module {
         ("iss", #string(issuer)),
         ("sub", #string(Principal.toText(auth_code_record.user_principal))),
         ("aud", #string(auth_code_record.resource)),
+        ("azp", #string(auth_code_record.client_id)),
         ("exp", #number(#int(exp_seconds))),
         ("iat", #number(#int(now_seconds))),
         ("scope", #string(auth_code_record.scope)),
