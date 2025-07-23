@@ -164,6 +164,17 @@ module {
     grant_types : [Text];
   };
 
+  public type Grant = {
+    user_principal : Principal;
+    resource_server_id : Text;
+    scopes : [Text]; // The specific scopes that were granted.
+    granted_at : Time.Time;
+  };
+
+  // The set of resource server IDs a user has granted access to.
+  // We use a Map<Text, Null> to simulate a Set of resource_server_ids
+  public type UserGrants = Map.Map<Text, Null>;
+
   // The Context object that bundles all application state.
   public type Context = {
     self : Principal; // The canister's own principal
@@ -176,6 +187,7 @@ module {
     authorize_sessions : Map.Map<Text, AuthorizeSession>;
     uri_to_rs_id : Map.Map<Text, Text>; // Maps resource server URIs to their IDs
     refresh_tokens : Map.Map<Text, RefreshToken>;
+    user_grants : Map.Map<Principal, UserGrants>;
   };
 
   // Re-export HttpParser types that are not exported from the lib.

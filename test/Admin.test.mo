@@ -46,6 +46,7 @@ func createMockContext() : Types.Context {
     var signing_key_bytes = Blob.fromArray([]);
     uri_to_rs_id = Map.new<Text, Text>(); // Initialized
     refresh_tokens = Map.new<Text, Types.RefreshToken>(); // Initialized
+    user_grants = Map.new<Principal, Types.UserGrants>(); // Initialized
   };
 };
 

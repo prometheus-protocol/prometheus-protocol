@@ -99,6 +99,7 @@ export async function setup() {
   // 3. Write the client credentials to a temporary environment file
   const envContent = `
 E2E_CLIENT_ID=${dcrResponse.client_id}
+E2E_RESOURCE_SERVER_ID=${resourceServer.resource_server_id}
   `;
   const envPath = path.join(__dirname, '.test.env');
   await fs.writeFile(envPath, envContent.trim());

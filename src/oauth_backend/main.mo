@@ -9,7 +9,7 @@ import Admin "oauth/Admin";
 import State "oauth/State";
 import Authorize "oauth/Authorize";
 import Crypto "oauth/Crypto";
-import Array "mo:base/Array";
+import Grants "oauth/Grants";
 
 shared ({ caller = creator }) actor class AuthCanister() = self {
 
@@ -88,6 +88,17 @@ shared ({ caller = creator }) actor class AuthCanister() = self {
 
   public shared ({ caller }) func delete_resource_server(id : Text) : async Result.Result<Text, Text> {
     await Admin.delete_resource_server(context, caller, id);
+  };
+
+  // ===================================================================
+  // USER GRANT MANAGEMENT
+  // ===================================================================
+  public shared query ({ caller }) func get_my_grants() : async [Text] {
+    Grants.get_my_grants(context, caller);
+  };
+
+  public shared ({ caller }) func revoke_grant(resource_server_id : Text) : async Result.Result<Text, Text> {
+    await Grants.revoke_grant(context, caller, resource_server_id);
   };
 
   // =================================================================================================

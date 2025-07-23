@@ -6,12 +6,11 @@ import BaseX "mo:base-x-encoder";
 import Debug "mo:base/Debug";
 import Text "mo:base/Text";
 import Map "mo:map/Map";
-import { thash } "mo:map/Map";
+import { phash; thash } "mo:map/Map";
 import Time "mo:base/Time";
 import Principal "mo:base/Principal";
 import Blob "mo:base/Blob";
 import Result "mo:base/Result";
-import Option "mo:base/Option";
 import Scope "Scope";
 import Utils "../http-parser/Utils";
 
@@ -198,6 +197,19 @@ module {
       return #err("Login session has expired.");
     };
 
+    // Get the user's existing set of grants, or create a new empty one if this is their first time.
+    let grants_for_user = switch (Map.get(context.user_grants, phash, user_principal)) {
+      case (null) Map.new<Text, Null>();
+      case (?existing_set) existing_set;
+    };
+
+    // Add the new resource server ID to the user's set of grants.
+    Map.set(grants_for_user, thash, session.resource_server_id, null);
+
+    // Save the updated set back to the main map.
+    Map.set(context.user_grants, phash, user_principal, grants_for_user);
+
+    // 4. Create the one-time authorization code
     let code_blob = await Random.blob();
     let code = BaseX.toHex(code_blob.vals(), { isUpper = false; prefix = #none });
     let auth_code_data : Types.AuthorizationCode = {
