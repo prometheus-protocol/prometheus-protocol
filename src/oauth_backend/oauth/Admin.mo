@@ -110,6 +110,32 @@ module Admin {
   };
 
   /**
+   * [READ] Gets the public details of a resource server, without ownership check.
+   * This is used for public discovery and listing.
+   */
+  public func get_public_resource_server_details(
+    context : Types.Context,
+    id : Text,
+  ) : Result.Result<Types.PublicResourceServer, Text> {
+    let server = switch (Map.get(context.resource_servers, thash, id)) {
+      case (null) return #err("Resource server not found.");
+      case (?s) s;
+    };
+
+    // Construct and return the public details.
+    let public_info : Types.PublicResourceServer = {
+      resource_server_id = server.resource_server_id;
+      name = server.name;
+      logo_uri = server.logo_uri;
+      uris = server.uris;
+      scopes = server.scopes;
+      accepted_payment_canisters = server.accepted_payment_canisters;
+      service_principals = server.service_principals; // Include service principals for public visibility
+    };
+    return #ok(public_info);
+  };
+
+  /**
    * [UPDATE] Updates the properties of an existing resource server.
    */
   public func update_resource_server(

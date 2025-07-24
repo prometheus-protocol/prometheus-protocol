@@ -69,6 +69,7 @@
   "dependencies": {
     "@dfinity/ledger-icp": "^4.0.0",
     "@hookform/resolvers": "^5.1.1",
+    "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-dropdown-menu": "^2.1.15",
     "@radix-ui/react-label": "^2.1.7",
     "@radix-ui/react-select": "^2.2.5",

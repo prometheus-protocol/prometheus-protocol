@@ -101,6 +101,10 @@ shared ({ caller = creator }) actor class AuthCanister() = self {
     await Grants.revoke_grant(context, caller, resource_server_id);
   };
 
+  public shared query func get_public_resource_server(id : Text) : async Result.Result<Types.PublicResourceServer, Text> {
+    Admin.get_public_resource_server_details(context, id);
+  };
+
   // =================================================================================================
   // HTTP & SYSTEM HOOKS
   // =================================================================================================

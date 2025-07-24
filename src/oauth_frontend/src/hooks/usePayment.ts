@@ -11,7 +11,7 @@ import { Identity } from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
 import { useQueries, useQuery } from '@tanstack/react-query';
 
-type SetupPaymentInput = {
+type InitialSetupInput = {
   identity: Identity;
   sessionId: string;
   amount: number;
@@ -19,8 +19,8 @@ type SetupPaymentInput = {
   icrc2CanisterId: Principal;
 };
 
-export const useSetupPaymentMutation = () => {
-  return useMutation<SetupPaymentInput, void>({
+export const useInitialPaymentSetupMutation = () => {
+  return useMutation<InitialSetupInput, void>({
     mutationFn: async ({
       identity,
       sessionId,
@@ -39,6 +39,35 @@ export const useSetupPaymentMutation = () => {
     },
     successMessage: 'Budget approved successfully!',
     errorMessage: 'Failed to approve budget. Please try again.',
+    queryKeysToRefetch: [],
+  });
+};
+
+type UpdateAllowanceArgs = {
+  identity: Identity;
+  amount: number;
+  spenderPrincipal: Principal;
+  icrc2CanisterId: Principal;
+};
+
+export const useUpdateAllowanceMutation = () => {
+  return useMutation<UpdateAllowanceArgs, void>({
+    mutationFn: async ({
+      identity,
+      amount,
+      spenderPrincipal,
+      icrc2CanisterId,
+    }) => {
+      // Pass the spender principal to the approve function
+      await approveAllowance(
+        identity,
+        amount,
+        spenderPrincipal,
+        icrc2CanisterId,
+      );
+    },
+    successMessage: 'Allowance updated successfully!',
+    errorMessage: 'Failed to update allowance. Please try again.',
     queryKeysToRefetch: [],
   });
 };

@@ -2,9 +2,11 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import SetupPage from './pages/SetupPage';
 import ConsentPage from './pages/ConsentPage';
-import DashboardPage from './pages/DashboardPage';
 import NotFoundPage from './pages/NotFoundPage';
 import { Toaster } from './components/ui/sonner';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import ConnectionsPage from './pages/ConnectionsPage';
+import ConnectionDetailsPage from './pages/ConnectionDetailsPage';
 
 function App() {
   return (
@@ -16,8 +18,25 @@ function App() {
           <Route path="/setup" element={<SetupPage />} />
           <Route path="/consent" element={<ConsentPage />} />
 
-          {/* The user's account management dashboard */}
-          <Route path="/dashboard" element={<DashboardPage />} />
+          {/* --- Protected Routes for Logged-in Users --- */}
+          {/* The root path will now be the user's connection dashboard. */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <ConnectionsPage />
+              </ProtectedRoute>
+            }
+          />
+          {/* The details page for a specific connection, also protected. */}
+          <Route
+            path="/connections/:id"
+            element={
+              <ProtectedRoute>
+                <ConnectionDetailsPage />
+              </ProtectedRoute>
+            }
+          />
 
           {/* A catch-all for any undefined routes */}
           <Route path="*" element={<NotFoundPage />} />

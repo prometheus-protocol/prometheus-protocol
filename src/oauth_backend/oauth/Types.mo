@@ -25,6 +25,16 @@ module {
     accepted_payment_canisters : [Principal]; // List of icrc2 canisters that this server accepts.
   };
 
+  public type PublicResourceServer = {
+    resource_server_id : Text;
+    name : Text;
+    logo_uri : Text;
+    uris : [Text];
+    scopes : [(Text, Text)];
+    accepted_payment_canisters : [Principal];
+    service_principals : [Principal]; // List of trusted backend server identities.
+  };
+
   public type RegisterResourceServerArgs = {
     name : Text;
     logo_uri : Text; // Optional logo URI
