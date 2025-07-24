@@ -12,6 +12,14 @@ It enables developers to secure applications using the industry-standard **Autho
 
 It supports flexible, **multi-token payment authorization**, allowing resource servers to define which ICRC-2 tokens they accept for payment-gated scopes.
 
+## Live Ecosystem & Demos
+
+Prometheus is live on ICP mainnet. You can interact with the protocol and see it in action through these resources:
+
+- **[Prometheus Protocol Dashboard](https://bmfnl-jqaaa-aaaai-q32ha-cai.icp0.io/):** Manage your client applications, grants, and allowances.
+- **[PMP Token Faucet](https://remote-mcp-servers.com/servers/e4dc7647-14d3-43da-8513-3087e013cd3b):** A live MCP server that provides free PMP test tokens to help you get started with development.
+- **[Sentiment Analysis Demo](https://remote-mcp-servers.com/servers/491314bc-27b3-4070-b2c2-39ad971c36c4):** A simple, monetized AI tool built with our TypeScript SDK that demonstrates the end-to-end payment flow.
+
 ## Features & Compliance
 
 Prometheus Protocol implements the latest security best practices from the IETF and the specific requirements of the MCP specification.

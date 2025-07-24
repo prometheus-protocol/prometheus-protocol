@@ -18,12 +18,12 @@ module {
   public func handle_authorize(context : Types.Context, req : Types.Request, res : Types.ResponseClass) : async Types.Response {
 
     // 1. Perform all validation in one step.
-    let validation_result = await Validation.validate_authorize_request(context, req);
+    let validation_result = Validation.validate_authorize_request(context, req);
 
     switch (validation_result) {
       case (#err(error_message)) {
         // If validation fails, send a standardized error and stop.
-        return await Errors.send_authorize_error(res, error_message);
+        return Errors.send_authorize_error(res, error_message);
       };
       case (#ok(validated)) {
         let session_id_blob = await Random.blob();

@@ -3,10 +3,11 @@ import { Loader2, LogOut, ServerCrash } from 'lucide-react';
 import { ConnectionCard } from '@/components/connections/ConnectionCard'; // We will create this next
 import { Button } from '@/components/ui/button';
 import { useInternetIdentity } from 'ic-use-internet-identity';
+import { CopyablePrincipal } from '@/components/ui/copyable-principal';
 
 export default function ConnectionsPage() {
   const { data: grantIds, isLoading, isError, error } = useMyGrantsQuery();
-  const { clear } = useInternetIdentity();
+  const { clear, identity } = useInternetIdentity();
 
   if (isLoading) {
     return (
@@ -30,7 +31,7 @@ export default function ConnectionsPage() {
   return (
     <div className="w-full max-w-4xl mx-auto p-4 md:p-6">
       {/* --- 3. UPDATED HEADER SECTION --- */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
             Your Connections
@@ -45,8 +46,14 @@ export default function ConnectionsPage() {
         </Button>
       </div>
 
+      {identity?.getPrincipal() && (
+        <div className="mb-8">
+          <CopyablePrincipal principal={identity.getPrincipal()} />
+        </div>
+      )}
+
       {grantIds && grantIds.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {grantIds.map((id) => (
             <ConnectionCard key={id} resourceServerId={id} />
           ))}

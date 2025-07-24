@@ -29,12 +29,18 @@ export const useInitialPaymentSetupMutation = () => {
       icrc2CanisterId,
     }) => {
       // Pass the spender principal to the approve function
-      await approveAllowance(
-        identity,
-        amount,
-        spenderPrincipal,
-        icrc2CanisterId,
-      );
+      // Only attempt to set an allowance on the token canister if the
+      // user is actually requesting a non-zero allowance.
+      // This allows users with a zero balance to enter "0" to proceed
+      // with the authorization flow, intending to set a real allowance later.
+      if (amount > 0) {
+        await approveAllowance(
+          identity,
+          amount,
+          spenderPrincipal,
+          icrc2CanisterId,
+        );
+      }
       await completePaymentSetup(identity, sessionId);
     },
     successMessage: 'Budget approved successfully!',

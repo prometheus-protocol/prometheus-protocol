@@ -38,14 +38,22 @@ module {
     server.get(
       "/.well-known/jwks.json",
       func(req : Server.Request, res : Server.ResponseClass) : async Server.Response {
-        await WellKnown.handle_jwks(context, req, res);
+        WellKnown.handle_jwks(context, req, res);
       },
     );
 
     server.get(
       "/.well-known/oauth-authorization-server",
       func(req : Server.Request, res : Server.ResponseClass) : async Server.Response {
-        await WellKnown.handle_metadata(context, req, res);
+        WellKnown.handle_metadata(context, req, res);
+      },
+    );
+
+    // --- Health Check ---
+    server.get(
+      "/health",
+      func(_ : Server.Request, res : Server.ResponseClass) : async Server.Response {
+        return WellKnown.handle_health_check(res);
       },
     );
   };

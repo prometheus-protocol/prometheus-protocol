@@ -433,7 +433,7 @@ module {
             ];
             body = Blob.fromArray([]);
             streaming_strategy = null;
-            cache_strategy = #noCache;
+            cache_strategy = #default;
           });
         },
       );

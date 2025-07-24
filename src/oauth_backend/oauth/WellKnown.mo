@@ -6,7 +6,7 @@ import Json "mo:json";
 import Utils "Utils";
 
 module {
-  public func handle_jwks(context : Types.Context, _ : Types.Request, res : Types.ResponseClass) : async Types.Response {
+  public func handle_jwks(context : Types.Context, _ : Types.Request, res : Types.ResponseClass) : Types.Response {
     let jwks_body = switch (Crypto.get_signing_key(context)) {
       case (null) { "{ \"keys\": [] }" };
       case (?private_key) {
@@ -33,7 +33,7 @@ module {
     });
   };
 
-  public func handle_metadata(context : Types.Context, req : Types.Request, res : Types.ResponseClass) : async Types.Response {
+  public func handle_metadata(context : Types.Context, req : Types.Request, res : Types.ResponseClass) : Types.Response {
     let issuer = Utils.get_issuer(context, req);
 
     let metadata = #object_([
@@ -53,6 +53,16 @@ module {
       status_code = 200;
       body = Json.stringify(metadata, null);
       cache_strategy = #noCache; // TODO: Cache for 1 hour
+    });
+  };
+
+  public func handle_health_check(res : Types.ResponseClass) : Types.Response {
+    return res.send({
+      status_code = 200;
+      body = Text.encodeUtf8("OK");
+      cache_strategy = #noCache; // TODO: Cache for 1 hour
+      streaming_strategy = null;
+      headers = [("Content-Type", "text/plain")];
     });
   };
 };

@@ -5,7 +5,7 @@ import Json "mo:json";
 
 module {
   // A reusable helper to send a standard error response for the /authorize endpoint.
-  public func send_authorize_error(res : Types.ResponseClass, message : Text) : async Types.Response {
+  public func send_authorize_error(res : Types.ResponseClass, message : Text) : Types.Response {
     return res.send({
       status_code = 400;
       headers = [];
@@ -16,7 +16,7 @@ module {
   };
 
   // Helper for /token errors (standard OAuth2 JSON format)
-  public func send_token_error(res : Types.ResponseClass, status_code : Nat16, error : Text, description : ?Text) : async Types.Response {
+  public func send_token_error(res : Types.ResponseClass, status_code : Nat16, error : Text, description : ?Text) : Types.Response {
     let desc_field = switch (description) {
       case (?d) [("error_description", #string(d))];
       case (_) [];

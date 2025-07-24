@@ -100,6 +100,32 @@ module {
   };
 
   /**
+   * Converts a canister ID into a "raw" URL for non-certified access.
+   * This is useful for bypassing certificate validation when needed.
+   * It correctly handles both production and local environments.
+   * @param req The incoming HTTP request, used to determine the environment.
+   * @param canister_id The Principal of the target canister.
+   * @returns A fully-formed raw URL (e.g., "https://<canister_id>.raw.icp0.io").
+   */
+  public func to_raw_hostname(req : Types.Request) : Text {
+    let host = get_host_from_req(req);
+    let canister_id = switch (extract_canister_id_from_uri(host)) {
+      case (?id) Principal.toText(id);
+      case (_) "b77ix-eeaaa-aaaaa-qaada-cai"; // Default for local dev
+    };
+
+    switch (get_environment(host)) {
+      case (#production) {
+        // Production: Use the .raw subdomain.
+        return "https://" # canister_id # ".raw.icp0.io";
+      };
+      case (#local) {
+        return "https://" # canister_id # ".raw.localhost:4943";
+      };
+    };
+  };
+
+  /**
    * A private helper to extract a canister ID from a given URI.
    * Handles both production (e.g., https://canister-id.icp0.io) and
    * local (e.g., http://127.0.0.1/?canisterId=canister-id) formats.

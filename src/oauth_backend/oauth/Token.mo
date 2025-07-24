@@ -20,7 +20,7 @@ module {
     access_token : Text,
     scope : Text,
     refresh_token : ?Text,
-  ) : async Types.Response {
+  ) : Types.Response {
     let refresh_field = switch (refresh_token) {
       case (?rt) [("refresh_token", #string(rt))];
       case (_) [];
@@ -50,7 +50,7 @@ module {
     // 1. Get form data from the request body.
     let form = switch (req.body) {
       case (?b) b.form;
-      case (_) return await Errors.send_token_error(res, 400, "invalid_request", ?"Request body is missing");
+      case (_) return Errors.send_token_error(res, 400, "invalid_request", ?"Request body is missing");
     };
 
     // 2. Determine the grant type and route logic accordingly.
@@ -63,12 +63,12 @@ module {
       case (?"authorization_code") {
         Debug.print("Grant type is 'authorization_code'. Proceeding with validation...");
         // --- Handle Authorization Code Grant ---
-        let validation_result = await Validation.validate_token_request(context, form);
+        let validation_result = Validation.validate_token_request(context, form);
         let validated_req = switch (validation_result) {
           case (#err((status, error, desc))) {
             // --- NEW LOGGING: See why validation failed ---
             Debug.print("!!! Token validation failed. Status: " # debug_show (status) # ", Error: " # error # ", Desc: " # debug_show (desc));
-            return await Errors.send_token_error(res, Nat16.fromNat(status), error, ?desc);
+            return Errors.send_token_error(res, Nat16.fromNat(status), error, ?desc);
           };
           case (#ok(data)) {
             // --- NEW LOGGING: See the successful validation data ---
@@ -87,7 +87,7 @@ module {
         let access_token = switch (token_result) {
           case (#err(msg)) {
             Debug.print("!!! Error creating access token: " # msg);
-            return await Errors.send_token_error(res, 500, "server_error", ?msg);
+            return Errors.send_token_error(res, 500, "server_error", ?msg);
           };
           case (#ok(token)) {
             Debug.print("JWT and access token created successfully.");
@@ -109,13 +109,13 @@ module {
         Map.set(context.refresh_tokens, thash, refresh_token_string, refresh_token_data);
 
         Debug.print("Issuing final token response...");
-        return await issue_token_response(res, access_token, validated_req.auth_code_record.scope, ?refresh_token_string);
+        return issue_token_response(res, access_token, validated_req.auth_code_record.scope, ?refresh_token_string);
       };
       case (?"refresh_token") {
         // --- Handle Refresh Token Grant ---
-        let validation_result = await Validation.validate_refresh_token_request(context, form);
+        let validation_result = Validation.validate_refresh_token_request(context, form);
         let old_refresh_token = switch (validation_result) {
-          case (#err((status, error, desc))) return await Errors.send_token_error(res, Nat16.fromNat(status), error, ?desc);
+          case (#err((status, error, desc))) return Errors.send_token_error(res, Nat16.fromNat(status), error, ?desc);
           case (#ok(data)) data;
         };
 
@@ -137,7 +137,7 @@ module {
         };
         let token_result = await JWT.create_and_sign(context, auth_data_for_jwt, issuer);
         let access_token = switch (token_result) {
-          case (#err(msg)) return await Errors.send_token_error(res, 500, "server_error", ?msg);
+          case (#err(msg)) return Errors.send_token_error(res, 500, "server_error", ?msg);
           case (#ok(token)) token;
         };
 
@@ -154,11 +154,11 @@ module {
         };
         Map.set(context.refresh_tokens, thash, new_refresh_token_string, new_refresh_token_data);
 
-        return await issue_token_response(res, access_token, old_refresh_token.scope, ?new_refresh_token_string);
+        return issue_token_response(res, access_token, old_refresh_token.scope, ?new_refresh_token_string);
       };
 
       case (_) {
-        return await Errors.send_token_error(res, 400, "unsupported_grant_type", ?"grant_type is missing or invalid");
+        return Errors.send_token_error(res, 400, "unsupported_grant_type", ?"grant_type is missing or invalid");
       };
     };
   };

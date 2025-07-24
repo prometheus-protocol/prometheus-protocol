@@ -16,7 +16,7 @@ module {
   public func validate_authorize_request(
     context : Types.Context,
     req : Types.Request,
-  ) : async Result.Result<Types.ValidatedAuthorizeRequest, Text> {
+  ) : Result.Result<Types.ValidatedAuthorizeRequest, Text> {
 
     // --- 1. Unwrap all required parameters using the switch/return pattern ---
     let response_type = switch (req.url.queryObj.get("response_type")) {
@@ -128,7 +128,7 @@ module {
   public func validate_token_request(
     context : Types.Context,
     form : Types.Form,
-  ) : async Result.Result<Types.ValidatedTokenRequest, (Nat, Text, Text)> {
+  ) : Result.Result<Types.ValidatedTokenRequest, (Nat, Text, Text)> {
 
     // Helper to get a required parameter from the form.
     func get_required(key : Text) : Result.Result<Text, (Nat, Text, Text)> {
@@ -228,7 +228,7 @@ module {
   public func validate_refresh_token_request(
     context : Types.Context,
     form : Types.Form,
-  ) : async Result.Result<Types.RefreshToken, (Nat, Text, Text)> {
+  ) : Result.Result<Types.RefreshToken, (Nat, Text, Text)> {
     // Helper to get a required parameter from the form.
     func get_required(key : Text) : Result.Result<Text, (Nat, Text, Text)> {
       switch (form.get(key)) {

@@ -30,7 +30,7 @@ shared ({ caller = creator }) actor class AuthCanister() = self {
   server.enableCors(
     "*", // Allow any origin. For production, you might restrict this to your frontend's domain.
     "GET, POST, OPTIONS", // Allowed methods
-    "Content-Type, Authorization" // Allowed headers
+    "Content-Type, Authorization, Mcp-Protocol-Version" // Allowed headers
   );
 
   // Register OAuth routes, passing the server and context.
@@ -75,19 +75,19 @@ shared ({ caller = creator }) actor class AuthCanister() = self {
   };
 
   public shared ({ caller }) func update_resource_server(args : Types.UpdateResourceServerArgs) : async Result.Result<Text, Text> {
-    await Admin.update_resource_server(context, caller, args);
+    Admin.update_resource_server(context, caller, args);
   };
 
   public shared ({ caller }) func list_my_resource_servers() : async Result.Result<[Types.ResourceServer], Text> {
-    await Admin.list_my_resource_servers(context, caller);
+    Admin.list_my_resource_servers(context, caller);
   };
 
   public shared ({ caller }) func get_my_resource_server_details(id : Text) : async Result.Result<Types.ResourceServer, Text> {
-    await Admin.get_my_resource_server_details(context, id, caller);
+    Admin.get_my_resource_server_details(context, id, caller);
   };
 
   public shared ({ caller }) func delete_resource_server(id : Text) : async Result.Result<Text, Text> {
-    await Admin.delete_resource_server(context, caller, id);
+    Admin.delete_resource_server(context, caller, id);
   };
 
   // ===================================================================

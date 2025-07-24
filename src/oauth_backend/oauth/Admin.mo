@@ -81,7 +81,7 @@ module Admin {
   public func list_my_resource_servers(
     context : Types.Context,
     caller : Principal,
-  ) : async Result.Result<[Types.ResourceServer], Text> {
+  ) : Result.Result<[Types.ResourceServer], Text> {
     let all_servers_iter = Map.vals(context.resource_servers);
     let my_servers_iter = Iter.filter<Types.ResourceServer>(all_servers_iter, func(s : Types.ResourceServer) : Bool { s.owner == caller });
     let my_servers_array = Iter.toArray(my_servers_iter);
@@ -95,7 +95,7 @@ module Admin {
     context : Types.Context,
     id : Text,
     caller : Principal,
-  ) : async Result.Result<Types.ResourceServer, Text> {
+  ) : Result.Result<Types.ResourceServer, Text> {
     let server = switch (Map.get(context.resource_servers, thash, id)) {
       case (null) return #err("Resource server not found.");
       case (?s) s;
@@ -142,7 +142,7 @@ module Admin {
     context : Types.Context,
     caller : Principal,
     args : Types.UpdateResourceServerArgs,
-  ) : async Result.Result<Text, Text> {
+  ) : Result.Result<Text, Text> {
     // 1. Fetch the existing resource server
     let server = switch (Map.get(context.resource_servers, thash, args.resource_server_id)) {
       case (null) return #err("Resource server not found.");
@@ -198,7 +198,7 @@ module Admin {
     context : Types.Context,
     caller : Principal,
     id : Text,
-  ) : async Result.Result<Text, Text> {
+  ) : Result.Result<Text, Text> {
     // 1. Fetch the resource server
     let server = switch (Map.get(context.resource_servers, thash, id)) {
       case (null) return #err("Resource server not found.");
