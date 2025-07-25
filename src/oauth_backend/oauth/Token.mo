@@ -129,7 +129,7 @@ module {
           scope = old_refresh_token.scope;
           code = "";
           redirect_uri = "";
-          client_id = "";
+          client_id = old_refresh_token.client_id;
           expires_at = 0;
           code_challenge = "";
           code_challenge_method = "";

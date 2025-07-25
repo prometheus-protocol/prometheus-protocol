@@ -29,7 +29,7 @@ module {
     return res.json({
       status_code = 200;
       body = jwks_body;
-      cache_strategy = #noCache; // TODO: Cache for 1 hour
+      cache_strategy = #default; // TODO: Cache for 1 hour
     });
   };
 
@@ -52,7 +52,7 @@ module {
     return res.json({
       status_code = 200;
       body = Json.stringify(metadata, null);
-      cache_strategy = #noCache; // TODO: Cache for 1 hour
+      cache_strategy = #default; // TODO: Cache for 1 hour
     });
   };
 
@@ -60,7 +60,7 @@ module {
     return res.send({
       status_code = 200;
       body = Text.encodeUtf8("OK");
-      cache_strategy = #noCache; // TODO: Cache for 1 hour
+      cache_strategy = #default; // TODO: Cache for 1 hour
       streaming_strategy = null;
       headers = [("Content-Type", "text/plain")];
     });
