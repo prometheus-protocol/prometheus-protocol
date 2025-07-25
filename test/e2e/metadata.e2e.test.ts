@@ -14,6 +14,8 @@ describe('Server Metadata Endpoints', () => {
       `${replicaUrl}/.well-known/oauth-authorization-server`,
     );
     metadataUrl.searchParams.set('canisterId', backendCanisterId.toText());
+    // TODO: Fix caching to work with query params? Add cache busting to ensure we always get the latest metadata
+    metadataUrl.searchParams.set('cb', Date.now().toString());
 
     // Act: Fetch the metadata
     const response = await fetch(metadataUrl.toString());
@@ -46,6 +48,8 @@ describe('Server Metadata Endpoints', () => {
     // Arrange: Construct the URL for the JWKS endpoint
     const jwksUrl = new URL(`${replicaUrl}/.well-known/jwks.json`);
     jwksUrl.searchParams.set('canisterId', backendCanisterId.toText());
+    // TODO: Fix caching to work with query params? Add cache busting to ensure we always get the latest keys
+    jwksUrl.searchParams.set('cb', Date.now().toString());
 
     // Act: Fetch the JWKS
     const response = await fetch(jwksUrl.toString());

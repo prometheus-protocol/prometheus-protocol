@@ -58,6 +58,8 @@ describe('Token Endpoint', () => {
       // Assert: JWT is valid and has the correct claims
       const jwksUrl = new URL(`${replicaUrl}/.well-known/jwks.json`);
       jwksUrl.searchParams.set('canisterId', backendCanisterId.toText());
+      // TODO: Fix caching to work with query params? Add cache busting to ensure we always get the latest keys
+      jwksUrl.searchParams.set('cb', Date.now().toString());
       const remoteJwks = jose.createRemoteJWKSet(new URL(jwksUrl.toString()));
       const { payload } = await jose.jwtVerify(
         tokenData.access_token,
