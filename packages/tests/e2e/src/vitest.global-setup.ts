@@ -2,11 +2,11 @@ import { fetch } from 'cross-fetch';
 import { Principal } from '@dfinity/principal';
 import { HttpAgent, Identity } from '@dfinity/agent';
 import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
-import { createActor } from '../src/declarations/auth';
-import canisterIds from '../.dfx/local/canister_ids.json';
+import { createActor } from '@declarations/auth';
+import canisterIds from '../../../../.dfx/local/canister_ids.json';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { ResourceServer } from '../src/declarations/auth/auth.did';
+import { ResourceServer } from '@declarations/auth/auth.did';
 
 const backendCanisterId = Principal.fromText(canisterIds.auth.local);
 const icrc2CanisterId = Principal.fromText('aaaaa-aa');
@@ -101,7 +101,7 @@ export async function setup() {
 E2E_CLIENT_ID=${dcrResponse.client_id}
 E2E_RESOURCE_SERVER_ID=${resourceServer.resource_server_id}
   `;
-  const envPath = path.join(__dirname, '.test.env');
+  const envPath = path.join(__dirname, '..', '.test.env');
   await fs.writeFile(envPath, envContent.trim());
 
   console.log(

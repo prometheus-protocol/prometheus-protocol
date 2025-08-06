@@ -1,10 +1,10 @@
-import Utils "../src/auth/oauth/Utils";
-import Types "../src/auth/oauth/Types";
+import Utils "../src/oauth/Utils";
+import Types "../src/oauth/Types";
 import Principal "mo:base/Principal";
 import Text "mo:base/Text";
 import Map "mo:map/Map";
 import { test; suite; expect } "mo:test/async";
-import HttpParser "../src/auth/http-parser";
+import HttpParser "../src/http-parser";
 import Blob "mo:base/Blob";
 
 // =================================================================================================

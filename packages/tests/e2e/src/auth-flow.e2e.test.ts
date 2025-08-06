@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll } from 'vitest';
 import { Principal } from '@dfinity/principal';
 import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
-import canisterIds from '../../.dfx/local/canister_ids.json';
+import canisterIds from '../../../../.dfx/local/canister_ids.json';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { createActorFor, generatePkce } from './shared';

@@ -19,10 +19,9 @@
     "build": "pnpm --filter \"./packages/**\" build",
     "prebuild": "dfx generate",
     "deploy": "dfx deploy",
-    "test": "vitest",
-    "format": "prettier --write .",
-    "bootstrap": "./scripts/set_frontend_canister_id.sh",
-    "generate-auth-url": "node scripts/generate-auth-url.js"
+    "test": "pnpm --filter @prometheus-protocol/e2e-tests test",
+    "test:mo": "pnpm --filter \"./packages/canisters/*\" test:mo",
+    "format": "prettier --write ."
   },
   "devDependencies": {
     "prettier": "^3.6.2",

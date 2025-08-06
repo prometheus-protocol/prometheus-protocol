@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll } from 'vitest';
 import { Principal } from '@dfinity/principal';
 import * as jose from 'jose';
-import canisterIds from '../../.dfx/local/canister_ids.json';
+import canisterIds from '../../../../.dfx/local/canister_ids.json';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { executeFullLoginFlow } from './shared';

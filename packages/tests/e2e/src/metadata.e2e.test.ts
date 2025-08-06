@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'vitest';
 import { Principal } from '@dfinity/principal';
-import canisterIds from '../../.dfx/local/canister_ids.json';
+import canisterIds from '../../../../.dfx/local/canister_ids.json';
 
 // --- Test Configuration ---
 const backendCanisterId = Principal.fromText(canisterIds.auth.local);

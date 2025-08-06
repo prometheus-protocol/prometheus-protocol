@@ -9,12 +9,12 @@ import {
 import { HttpAgent, Identity } from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
 import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
-import { createActor } from '../../src/declarations/auth';
+import { createActor } from '@declarations/auth';
 import {
   _SERVICE as BackendService,
   ResourceServer,
-} from '../../src/declarations/auth/auth.did';
-import canisterIds from '../../.dfx/local/canister_ids.json';
+} from '@declarations/auth/auth.did';
+import canisterIds from '../../../../.dfx/local/canister_ids.json';
 import { toNullable } from '@dfinity/utils';
 
 // --- Test Configuration ---

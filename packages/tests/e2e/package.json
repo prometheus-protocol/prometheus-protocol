@@ -1,0 +1,15 @@
+{
+  "name": "@prometheus-protocol/e2e-tests",
+  "private": true,
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@dfinity/agent": "^2.4.1",
+    "@types/node": "^24.0.15",
+    "cross-fetch": "^4.1.0",
+    "execa": "^9.6.0",
+    "jose": "^6.0.12",
+    "vitest": "^3.2.4"
+  }
+}

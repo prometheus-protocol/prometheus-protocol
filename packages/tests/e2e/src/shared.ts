@@ -1,9 +1,9 @@
 import { HttpAgent, Identity } from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
 import * as jose from 'jose';
-import canisterIds from '../../.dfx/local/canister_ids.json';
+import canisterIds from '../../../../.dfx/local/canister_ids.json';
 import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
-import { createActor } from '../../src/declarations/auth';
+import { createActor } from '@declarations/auth';
 
 // --- Test Configuration ---
 const backendCanisterId = Principal.fromText(canisterIds.auth.local);

@@ -1,7 +1,7 @@
 {
   "canisters": {
     "auth": {
-      "main": "packages/canisters/auth/main.mo",
+      "main": "packages/canisters/auth/src/main.mo",
       "type": "motoko",
       "init_arg": "(principal \"a4tbr-q4aaa-aaaaa-qaafq-cai\")",
       "declarations": {
