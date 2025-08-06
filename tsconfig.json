@@ -1,18 +1,7 @@
 {
-  "compilerOptions": {
-    "outDir": "./dist/",
-    "noImplicitAny": true,
-    "module": "nodenext",
-    "target": "es2020",
-    "jsx": "react-jsx",
-    "allowJs": true,
-    "moduleResolution": "nodenext",
-    "resolveJsonModule": true,
-    "allowSyntheticDefaultImports": true,
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/frontend/src/*"]
-    }
-  },
-  "include": ["src/frontend/src/**/*.ts", "src/frontend/src/**/*.tsx"]
+  "files": [],
+  "references": [
+    { "path": "packages/apps/frontend" },
+    { "path": "packages/libs/ic-js" }
+  ]
 }

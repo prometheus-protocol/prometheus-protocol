@@ -1,16 +1,16 @@
 {
   "canisters": {
     "auth": {
-      "main": "src/auth/main.mo",
+      "main": "packages/canisters/auth/main.mo",
       "type": "motoko",
       "init_arg": "(principal \"a4tbr-q4aaa-aaaaa-qaafq-cai\")"
     },
     "frontend": {
       "dependencies": ["auth"],
       "frontend": {
-        "entrypoint": "src/frontend/src/index.html"
+        "entrypoint": "packages/apps/frontend/src/index.html"
       },
-      "source": ["src/frontend/assets", "dist/frontend/"],
+      "source": ["dist/frontend/"],
       "type": "assets"
     },
     "internet_identity": {

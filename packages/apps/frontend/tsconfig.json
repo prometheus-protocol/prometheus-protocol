@@ -1,0 +1,12 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@declarations/*": ["../../../declarations/*"]
+    }
+  },
+  "include": ["src"],
+  "references": [{ "path": "../../libs/ic-js" }]
+}

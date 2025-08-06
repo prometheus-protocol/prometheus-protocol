@@ -1,0 +1,25 @@
+{
+  "name": "@prometheus-protocol/ic-js",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@dfinity/agent": "^2.4.1",
+    "@dfinity/auth-client": "^2.4.1",
+    "@dfinity/candid": "^2.4.1",
+    "@dfinity/identity": "^2.4.1",
+    "@dfinity/identity-secp256k1": "^2.4.1",
+    "@dfinity/ledger-icp": "^4.0.0",
+    "@dfinity/ledger-icrc": "^2.9.0",
+    "@dfinity/principal": "^2.4.1",
+    "@dfinity/utils": "^2.13.2",
+    "cross-fetch": "^4.1.0",
+    "jose": "^6.0.12"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
