@@ -1,7 +1,11 @@
 [dependencies]
 base = "0.14.14"
 new-base = "0.4.0"
+class-plus = "0.0.1"
+timer-tool = "0.1.1"
 map = "9.0.1"
+icrc10-mo = "0.0.1"
+stable-local-log = "0.1.1"
 http-parser = "0.3.4"
 base-x-encoder = "1.2.0"
 server = "2.0.0"
@@ -11,6 +15,7 @@ ecdsa = "6.0.0"
 xtended-numbers = "0.4.0"
 sha2 = "0.1.6"
 icrc2-types = "1.1.0"
+icrc3-mo = "0.3.0"
 
 [toolchain]
 moc = "0.14.14"
