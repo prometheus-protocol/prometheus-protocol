@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - edited
+      - synchronize
+
+jobs:
+  # =================================================================
+  # Job 1: Run fast Motoko unit tests first
+  # =================================================================
+  unit-tests:
+    name: Motoko Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Checkout Repository
+        uses: actions/checkout@v4
+
+      - uses: ZenVoich/setup-mops@v1
+        with:
+          mops-version: 1
+
+      - name: 2. Setup PNPM
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: 3. Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: 4. Install Dependencies
+        run: pnpm install
+        # This installs mops and all other dev dependencies
+
+      - name: 5. Run Motoko Tests
+        run: pnpm test:mo
+        # This uses our package.json script to run `mops test` in all canister packages
+
+  # =================================================================
+  # Job 2: Run slower E2E tests only if unit tests pass
+  # =================================================================
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests # This job will only start if 'unit-tests' succeeds
+
+    steps:
+      - name: 1. Checkout Repository
+        uses: actions/checkout@v4
+
+      - uses: ZenVoich/setup-mops@v1
+        with:
+          mops-version: 1
+
+      - name: 2. Setup PNPM
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: 3. Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: 4. Setup DFX
+        uses: dfinity/setup-dfx@main
+
+      - name: 5. Install Dependencies
+        run: pnpm install
+
+      - name: 6. Start Local Replica
+        run: dfx start --background --clean
+
+      - name: 7. Deploy All Canisters
+        run: dfx deploy
+
+      - name: 8. Run E2E Tests
+        run: pnpm test
+
+      - name: 9. Stop Local Replica
+        if: always() # Ensure this runs even if tests fail
+        run: dfx stop
+
+  # =================================================================
+  # Job 3: Aggregate status for a single required check
+  # =================================================================
+  ci-status-check:
+    name: CI Status Check
+    if: always()
+    needs: [unit-tests, e2e-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check status of all jobs
+        if: ${{ needs.unit-tests.result != 'success' || needs.e2e-tests.result != 'success' }}
+        run: exit 1

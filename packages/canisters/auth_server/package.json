@@ -1,0 +1,11 @@
+{
+  "name": "@prometheus-protocol/auth",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The Motoko canister for the Prometheus Protocol Authorization Server.",
+  "scripts": {
+    "test:mo": "mops test",
+    "bootstrap": "./scripts/set_frontend_canister_id.sh",
+    "generate-auth-url": "node scripts/generate-auth-url.js"
+  }
+}

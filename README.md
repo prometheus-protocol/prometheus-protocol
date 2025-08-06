@@ -222,7 +222,7 @@ A Resource Server would perform this step to validate the token it receives.
 1.  **Go to [jwt.io](https://jwt.io)** and paste the `access_token` into the "Encoded" box.
 2.  **Get the Public Key:** Run the following command to fetch the server's public key set.
     ```bash
-    curl http://$(dfx canister id oauth_backend).localhost:4943/.well-known/jwks.json | jq
+    curl http://$(dfx canister id auth).localhost:4943/.well-known/jwks.json | jq
     ```
 3.  **Verify Signature:**
     - Copy the key object from the `keys` array in the terminal output.

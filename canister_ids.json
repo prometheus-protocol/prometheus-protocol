@@ -2,10 +2,10 @@
   "icrc1_ledger": {
     "ic": "dy3i7-mqaaa-aaaai-q32ja-cai"
   },
-  "oauth_backend": {
+  "auth_server": {
     "ic": "bfggx-7yaaa-aaaai-q32gq-cai"
   },
-  "oauth_frontend": {
+  "frontend": {
     "ic": "bmfnl-jqaaa-aaaai-q32ha-cai"
   }
 }
