@@ -1,6 +1,6 @@
 # Prometheus Auth Server
 
-This README is for the `auth-server` canister, the on-chain OAuth 2.1 provider for the Prometheus Protocol ecosystem. It is located within the main [`prometheus-protocol`](https://github.com/prometheus-protocol/prometheus-protocol) monorepo.
+This README is for the `auth_server` canister, the on-chain OAuth 2.1 provider for the Prometheus Protocol ecosystem. It is located within the main [`prometheus-protocol`](https://github.com/prometheus-protocol/prometheus-protocol) monorepo.
 
 <img width="1536" alt="Prometheus Protocol Banner" src="../../../images/banner-professional.png" />
 
@@ -184,8 +184,8 @@ A Resource Server performs this step to validate the token.
 1.  **Go to [jwt.io](https://jwt.io)** and paste the `access_token` into the "Encoded" box.
 2.  **Get the Public Key:** Run the following command to fetch the server's public key set.
     ```bash
-    # Note: 'auth-server' must match the canister name in dfx.json
-    curl http://$(dfx canister id auth-server).localhost:4943/.well-known/jwks.json | jq
+    # Note: 'auth_server' must match the canister name in dfx.json
+    curl http://$(dfx canister id auth_server).localhost:4943/.well-known/jwks.json | jq
     ```
 3.  **Verify Signature:** Paste the key object from the terminal into the "Public Key" box on jwt.io and change the format dropdown to `JWK`.
 

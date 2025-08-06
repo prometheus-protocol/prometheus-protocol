@@ -6,7 +6,7 @@ import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
 import { createActor } from '@declarations/auth';
 
 // --- Test Configuration ---
-const backendCanisterId = Principal.fromText(canisterIds.auth.local);
+const backendCanisterId = Principal.fromText(canisterIds.auth_server.local);
 const replicaUrl = `http://127.0.0.1:4943`;
 
 // --- Helper Functions ---

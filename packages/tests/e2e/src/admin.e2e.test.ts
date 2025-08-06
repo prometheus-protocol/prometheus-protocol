@@ -13,12 +13,12 @@ import { createActor } from '@declarations/auth';
 import {
   _SERVICE as BackendService,
   ResourceServer,
-} from '@declarations/auth/auth.did';
+} from '@declarations/auth_server/auth_server.did';
 import canisterIds from '../../../../.dfx/local/canister_ids.json';
 import { toNullable } from '@dfinity/utils';
 
 // --- Test Configuration ---
-const backendCanisterId = Principal.fromText(canisterIds.auth.local);
+const backendCanisterId = Principal.fromText(canisterIds.auth_server.local);
 const replicaUrl = `http://127.0.0.1:4943`;
 
 // --- State Variables ---

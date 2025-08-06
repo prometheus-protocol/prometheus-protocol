@@ -6,9 +6,9 @@ import { createActor } from '@declarations/auth';
 import canisterIds from '../../../../.dfx/local/canister_ids.json';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { ResourceServer } from '@declarations/auth/auth.did';
+import { ResourceServer } from '@declarations/auth_server/auth_server.did';
 
-const backendCanisterId = Principal.fromText(canisterIds.auth.local);
+const backendCanisterId = Principal.fromText(canisterIds.auth_server.local);
 const icrc2CanisterId = Principal.fromText('aaaaa-aa');
 const replicaUrl = `http://127.0.0.1:4943`;
 

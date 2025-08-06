@@ -10,7 +10,7 @@ import { createActorFor, generatePkce } from './shared';
 dotenv.config({ path: path.resolve(__dirname, '../.test.env') });
 
 // --- Test Configuration ---
-const backendCanisterId = Principal.fromText(canisterIds.auth.local);
+const backendCanisterId = Principal.fromText(canisterIds.auth_server.local);
 const replicaUrl = `http://127.0.0.1:4943`;
 const clientId = process.env.E2E_CLIENT_ID!;
 

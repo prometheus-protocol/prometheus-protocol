@@ -3,7 +3,7 @@ import { Principal } from '@dfinity/principal';
 import canisterIds from '../../../../.dfx/local/canister_ids.json';
 
 // --- Test Configuration ---
-const backendCanisterId = Principal.fromText(canisterIds.auth.local);
+const backendCanisterId = Principal.fromText(canisterIds.auth_server.local);
 const replicaUrl = `http://127.0.0.1:4943`;
 
 // --- Test Suite ---

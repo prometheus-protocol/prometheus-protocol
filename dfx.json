@@ -1,15 +1,15 @@
 {
   "canisters": {
-    "auth": {
-      "main": "packages/canisters/auth/src/main.mo",
+    "auth_server": {
+      "main": "packages/canisters/auth_server/src/main.mo",
       "type": "motoko",
       "init_arg": "(principal \"a4tbr-q4aaa-aaaaa-qaafq-cai\")",
       "declarations": {
-        "output": "packages/declarations/auth"
+        "output": "packages/declarations/auth_server"
       }
     },
     "frontend": {
-      "dependencies": ["auth"],
+      "dependencies": ["auth_server"],
       "frontend": {
         "entrypoint": "packages/apps/frontend/src/index.html"
       },

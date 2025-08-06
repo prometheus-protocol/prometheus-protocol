@@ -83,7 +83,7 @@ jobs:
         run: dfx start --background --clean
 
       - name: 7. Deploy All Canisters
-        run: pnpm deploy:local
+        run: dfx deploy
 
       - name: 8. Run E2E Tests
         run: pnpm test

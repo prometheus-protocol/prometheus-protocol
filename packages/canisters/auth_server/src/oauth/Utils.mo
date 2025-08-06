@@ -72,7 +72,7 @@ module {
    * This version is robust enough to handle both production and local test environments.
    * @param context The canister's context, containing its own Principal (self).
    * @param req The incoming HTTP request, used to determine the host.
-   * @returns The issuer URL (e.g., "https://<auth_canister_id>.icp0.io").
+   * @returns The issuer URL (e.g., "https://<auth_server_id>.icp0.io").
    */
   public func get_issuer(context : Types.Context, req : Types.Request) : Text {
     let host_from_header = get_host_from_req(req);
