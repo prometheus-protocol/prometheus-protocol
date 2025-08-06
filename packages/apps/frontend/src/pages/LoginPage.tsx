@@ -75,8 +75,6 @@ export default function LoginPage() {
     login();
   };
 
-  console.log(process.env);
-
   // Determine the correct text based on the context.
   const title = sessionId ? 'Log In to Continue' : 'Manage Your Connections';
   const description = sessionId

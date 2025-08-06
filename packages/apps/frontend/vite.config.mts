@@ -64,6 +64,7 @@ export default defineConfig(({ mode }) => {
       environment({
         NODE_ENV: isDevelopment ? 'development' : 'production',
         II_URL: internetIdentityUrl,
+        DFX_NETWORK: network,
         ...canisterEnvVariables,
       }),
     ],
@@ -79,13 +80,7 @@ export default defineConfig(({ mode }) => {
         { find: '@', replacement: path.resolve(__dirname, 'src') },
         {
           find: '@declarations',
-          replacement: path.resolve(
-            __dirname,
-            '..',
-            '..',
-            '..',
-            'declarations',
-          ),
+          replacement: path.resolve(__dirname, '..', '..', 'declarations'),
         },
       ],
     },
