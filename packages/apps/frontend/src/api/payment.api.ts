@@ -1,6 +1,7 @@
 import { Identity } from '@dfinity/agent';
 import { getIcrcActor, getAuthActor } from './actors';
 import { toNullable } from '@dfinity/utils';
+import { mapTokenMetadata } from '@dfinity/ledger-icrc';
 import { Principal } from '@dfinity/principal';
 
 export interface TokenInfo {
@@ -42,14 +43,15 @@ export const getTokenInfo = async (
   const icrcActor = getIcrcActor(identity, icrc2CanisterId);
   const metadata = await icrcActor.icrc1_metadata();
 
-  const findMetaValue = (key: string): any => {
-    const entry = metadata.find((m) => m[0] === key);
-    return entry ? entry[1] : null;
-  };
+  const mappedMeta = mapTokenMetadata(metadata);
 
-  const decimalsValue = findMetaValue('icrc1:decimals')?.Nat;
-  const nameValue = findMetaValue('icrc1:name')?.Text;
-  const symbolValue = findMetaValue('icrc1:symbol')?.Text;
+  if (!mappedMeta) {
+    throw new Error('Token metadata not found or invalid.');
+  }
+
+  const decimalsValue = mappedMeta['decimals'];
+  const nameValue = mappedMeta['name'];
+  const symbolValue = mappedMeta['symbol'];
 
   if (decimalsValue === undefined || !nameValue || !symbolValue) {
     throw new Error(
