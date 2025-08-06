@@ -17,6 +17,7 @@ const isDevelopment = process.env.NODE_ENV !== 'production';
 
 // The host should be the URL of your frontend, NOT the replica URL
 const host = isDevelopment ? 'http://localhost:3000' : 'https://icp-api.io';
+
 /**
  * Creates a typed actor for the Oauth Backend canister.
  * @param agent The agent (authenticated or unauthenticated) to use for creating the actor.

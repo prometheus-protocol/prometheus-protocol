@@ -11,18 +11,18 @@ import Authorize "oauth/Authorize";
 import Crypto "oauth/Crypto";
 import Grants "oauth/Grants";
 
-shared ({ caller = creator }) actor class AuthCanister() = self {
+shared ({ caller = creator }) persistent actor class AuthCanister() = self {
 
   // =================================================================================================
   // CONTEXT & INITIALIZATION
   // =================================================================================================
 
   // The context object that bundles state for logic modules.
-  stable var context : Types.Context = State.init(Principal.fromActor(self), creator);
-  stable var serializedEntries : Server.SerializedEntries = ([], [], [creator]);
+  var context : Types.Context = State.init(Principal.fromActor(self), creator);
+  var serializedEntries : Server.SerializedEntries = ([], [], [creator]);
 
   // The server instance.
-  var server = Server.Server({ serializedEntries = serializedEntries });
+  transient var server = Server.Server({ serializedEntries = serializedEntries });
 
   // 3. Enable CORS for all endpoints
   // This should be done before registering routes if you want it to apply to all of them.
