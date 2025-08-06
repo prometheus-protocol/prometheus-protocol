@@ -16,6 +16,8 @@ xtended-numbers = "0.4.0"
 sha2 = "0.1.6"
 icrc2-types = "1.1.0"
 icrc3-mo = "0.3.0"
+base16 = "1.0.0"
+candy = "0.3.1"
 
 [toolchain]
 moc = "0.14.14"

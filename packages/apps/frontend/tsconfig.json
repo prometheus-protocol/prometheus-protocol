@@ -4,7 +4,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@declarations/*": ["../../declarations/*"]
+      "@declarations/*": ["../../old_declarations/*ns/*"]
     }
   },
   "include": ["src"],

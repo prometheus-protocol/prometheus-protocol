@@ -1,0 +1,396 @@
+type WasmVersionPointer = 
+ record {
+   canister_type_namespace: text;
+   version_number: record {
+                     nat;
+                     nat;
+                     nat;
+                   };
+ };
+type Wasm = 
+ record {
+   calculated_hash: blob;
+   canister_type_namespace: text;
+   chunkCount: nat;
+   chunks: vec blob;
+   created: nat;
+   deprecated: bool;
+   description: text;
+   hash: blob;
+   metadata: ICRC16Map;
+   previous: opt CanisterVersion;
+   repo: text;
+   version_number: record {
+                     nat;
+                     nat;
+                     nat;
+                   };
+ };
+type Value = 
+ variant {
+   Array: vec Value;
+   Blob: blob;
+   Int: int;
+   Map: vec record {
+              text;
+              Value;
+            };
+   Nat: nat;
+   Text: text;
+ };
+type UploadResponse = 
+ record {
+   chunk_id: nat;
+   total_chunks: nat;
+ };
+type UploadRequest = 
+ record {
+   canister_type_namespace: text;
+   chunk_id: nat;
+   expected_chunk_hash: blob;
+   version_number: record {
+                     nat;
+                     nat;
+                     nat;
+                   };
+   wasm_chunk: blob;
+ };
+type UpdateWasmResult = 
+ variant {
+   Error: variant {
+            Generic: text;
+            NonDeprecatedWasmFound: blob;
+            Unauthorized;
+          };
+   Ok: nat;
+ };
+type UpdateWasmRequest = 
+ record {
+   canister_type_namespace: text;
+   description: text;
+   expected_chunks: vec blob;
+   expected_hash: blob;
+   metadata: ICRC16Map;
+   previous: opt CanisterVersion;
+   repo: text;
+   version_number: record {
+                     nat;
+                     nat;
+                     nat;
+                   };
+ };
+type TransactionRange = 
+ record {
+   length: nat;
+   start: nat;
+ };
+type Tip = 
+ record {
+   hash_tree: blob;
+   last_block_hash: blob;
+   last_block_index: blob;
+ };
+type Time = nat;
+type SupportedStandard = 
+ record {
+   name: text;
+   url: text;
+ };
+type ManageControllerResult = 
+ variant {
+   Error: variant {
+            Generic: text;
+            NotFound;
+            Unauthorized;
+          };
+   Ok: nat;
+ };
+type ManageControllerRequest = 
+ record {
+   canister_type_namespace: text;
+   controller: principal;
+   op: variant {
+         Add;
+         Remove;
+       };
+ };
+type InitArgs = record {};
+type InitArgList = 
+ record {
+   expectedExecutionTime: Time;
+   initialTimers: vec record {
+                        ActionId;
+                        Action;
+                      };
+   lastActionIdReported: opt nat;
+   lastCycleReport: opt nat;
+   lastExecutionTime: Time;
+   maxExecutions: opt nat;
+   nextActionId: nat;
+   nextCycleActionId: opt nat;
+ };
+type ICRC16Property = 
+ record {
+   immutable: bool;
+   name: text;
+   value: ICRC16;
+ };
+type ICRC16Map = 
+ vec record {
+       text;
+       ICRC16;
+     };
+type ICRC16 = 
+ variant {
+   Array: vec ICRC16;
+   Blob: blob;
+   Bool: bool;
+   Bytes: vec nat8;
+   Class: vec ICRC16Property;
+   Float: float64;
+   Floats: vec float64;
+   Int: int;
+   Int16: int16;
+   Int32: int32;
+   Int64: int64;
+   Int8: int8;
+   Map: ICRC16Map;
+   Nat: nat;
+   Nat16: nat16;
+   Nat32: nat32;
+   Nat64: nat64;
+   Nat8: nat8;
+   Nats: vec nat;
+   Option: opt ICRC16;
+   Principal: principal;
+   Set: vec ICRC16;
+   Text: text;
+   ValueMap: vec record {
+                   ICRC16;
+                   ICRC16;
+                 };
+ };
+type ICRC118WasmRegistryCanister = 
+ service {
+   get_tip: () -> (Tip) query;
+   hello: () -> (text);
+   icrc10_supported_standards: () -> (vec SupportedStandard) query;
+   icrc118_create_canister_type: (reqs: vec CreateCanisterType) ->
+    (vec CreateCanisterTypeResult);
+   icrc118_deprecate: (req: DeprecateRequest) -> (DeprecateResult);
+   icrc118_get_canister_types: (req: GetCanisterTypesRequest) ->
+    (vec CanisterType) query;
+   icrc118_get_upgrade_path: (req: GetUpgradePathRequest) ->
+    (vec CanisterVersion) query;
+   icrc118_get_wasm_chunk: (req: GetWasmChunkRequest) ->
+    (GetWasmChunkResponse) query;
+   icrc118_get_wasms: (request:
+    record {
+      filter: opt vec GetWasmsFilter;
+      prev: opt WasmVersionPointer;
+      take: opt nat;
+    }) -> (vec Wasm) query;
+   icrc118_manage_controller: (reqs: vec ManageControllerRequest) ->
+    (vec ManageControllerResult);
+   icrc118_update_wasm: (req: UpdateWasmRequest) -> (UpdateWasmResult);
+   icrc118_upload_wasm_chunk: (req: UploadRequest) -> (UploadResponse);
+   icrc3_get_archives: (args: GetArchivesArgs) -> (GetArchivesResult) query;
+   icrc3_get_blocks: (args: GetBlocksArgs) -> (GetBlocksResult) query;
+   icrc3_get_tip_certificate: () -> (opt DataCertificate) query;
+   icrc3_supported_block_types: () -> (vec BlockType) query;
+   test_simulate_install: (canister: principal, canister_type_namespace:
+    text, version: record {
+                     nat;
+                     nat;
+                     nat;
+                   }) -> (bool);
+ };
+type GetWasmsFilter = 
+ variant {
+   canister: principal;
+   canister_type_namespace: text;
+   controllers: vec principal;
+   hash: blob;
+   previous: CanisterVersion;
+   version_max: record {
+                  nat;
+                  opt nat;
+                  opt nat;
+                };
+   version_min: record {
+                  nat;
+                  opt nat;
+                  opt nat;
+                };
+   version_number: record {
+                     nat;
+                     nat;
+                     nat;
+                   };
+ };
+type GetWasmChunkResponse = 
+ variant {
+   Err: text;
+   Ok:
+    record {
+      canister_type_namespace: text;
+      chunk_id: nat;
+      expected_chunk_hash: blob;
+      expected_wasm_hash: blob;
+      version_number: record {
+                        nat;
+                        nat;
+                        nat;
+                      };
+      wasm_chunk: blob;
+    };
+ };
+type GetWasmChunkRequest = 
+ record {
+   canister_type_namespace: text;
+   chunk_id: nat;
+   hash: blob;
+   version_number: record {
+                     nat;
+                     nat;
+                     nat;
+                   };
+ };
+type GetUpgradePathRequest = 
+ record {
+   canister_type_namespace: text;
+   current_version: blob;
+   target_version: blob;
+ };
+type GetTransactionsResult = 
+ record {
+   archived_blocks: vec ArchivedTransactionResponse;
+   blocks: vec record {
+                 block: Value;
+                 id: nat;
+               };
+   log_length: nat;
+ };
+type GetTransactionsFn = func (vec TransactionRange) ->
+                          (GetTransactionsResult) query;
+type GetCanisterTypesRequest = 
+ record {
+   filter: vec GetCanisterTypesFilter;
+   prev: opt text;
+   take: opt nat;
+ };
+type GetCanisterTypesFilter = 
+ variant {
+   controller: principal;
+   namespace: text;
+ };
+type GetBlocksResult = 
+ record {
+   archived_blocks: vec ArchivedTransactionResponse;
+   blocks: vec record {
+                 block: Value;
+                 id: nat;
+               };
+   log_length: nat;
+ };
+type GetBlocksArgs = vec TransactionRange;
+type GetArchivesResultItem = 
+ record {
+   canister_id: principal;
+   end: nat;
+   start: nat;
+ };
+type GetArchivesResult = vec GetArchivesResultItem;
+type GetArchivesArgs = record {from: opt principal;};
+type DeprecateResult = 
+ variant {
+   Error: variant {
+            Generic: text;
+            NotFound;
+            Unauthorized;
+          };
+   Ok: nat;
+ };
+type DeprecateRequest = 
+ record {
+   canister_type_namespace: text;
+   deprecation_flag: opt bool;
+   hash: blob;
+   reason: opt text;
+   version_number: record {
+                     nat;
+                     nat;
+                     nat;
+                   };
+ };
+type DataCertificate = 
+ record {
+   certificate: blob;
+   hash_tree: blob;
+ };
+type CreateCanisterTypeResult = 
+ variant {
+   Error: variant {
+            Generic: text;
+            Unauthorized;
+          };
+   Ok: nat;
+ };
+type CreateCanisterType = 
+ record {
+   canister_type_name: text;
+   canister_type_namespace: text;
+   controllers: opt vec principal;
+   description: text;
+   forked_from: opt CanisterVersion;
+   metadata: ICRC16Map;
+   repo: text;
+ };
+type CanisterVersion = 
+ record {
+   calculated_hash: blob;
+   canister_type_namespace: text;
+   version_number: record {
+                     nat;
+                     nat;
+                     nat;
+                   };
+ };
+type CanisterType = 
+ record {
+   canister_type_name: text;
+   canister_type_namespace: text;
+   controllers: vec principal;
+   description: text;
+   forked_from: opt CanisterVersion;
+   metadata: ICRC16Map;
+   repo: text;
+   versions: vec CanisterVersion;
+ };
+type BlockType = 
+ record {
+   block_type: text;
+   url: text;
+ };
+type ArchivedTransactionResponse = 
+ record {
+   args: vec TransactionRange;
+   callback: GetTransactionsFn;
+ };
+type ActionId = 
+ record {
+   id: nat;
+   time: Time;
+ };
+type Action = 
+ record {
+   aSync: opt nat;
+   actionType: text;
+   params: blob;
+   retries: nat;
+ };
+service : (args: opt
+                  record {
+                    icrc118wasmregistryArgs: opt InitArgs;
+                    ttArgs: opt InitArgList;
+                  }) -> ICRC118WasmRegistryCanister
