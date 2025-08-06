@@ -8,6 +8,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@dfinity/agent": "^2.4.1",
+    "@dfinity/candid": "^2.4.1",
+    "@dfinity/identity": "^2.4.1",
+    "@dfinity/identity-secp256k1": "^2.4.1",
+    "@dfinity/principal": "^2.4.1",
+    "@dfinity/utils": "^2.13.2",
+    "cross-fetch": "^4.1.0",
     "@hookform/resolvers": "^5.1.1",
     "@prometheus-protocol/ic-js": "workspace:*",
     "@radix-ui/react-alert-dialog": "^1.1.14",
