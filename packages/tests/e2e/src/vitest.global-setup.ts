@@ -61,9 +61,11 @@ export async function setup() {
   const existingServers = existingServersRes.ok;
   console.log(
     'uris:',
-    existingServers.map((s) => s.uris),
+    existingServers.map((s: ResourceServer) => s.uris),
   );
-  resourceServer = existingServers.find((s) => s.uris.includes(targetUri));
+  resourceServer = existingServers.find((s: ResourceServer) =>
+    s.uris.includes(targetUri),
+  );
 
   // Step 2b: If it doesn't exist, create it
   if (!resourceServer) {

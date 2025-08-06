@@ -4,3 +4,7 @@ packages:
   - packages/services/*
   - packages/libs/*
   - packages/tests/*
+
+onlyBuiltDependencies:
+  - '@tailwindcss/oxide'
+  - esbuild

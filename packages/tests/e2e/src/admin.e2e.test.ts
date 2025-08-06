@@ -9,16 +9,13 @@ import {
 import { HttpAgent, Identity } from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
 import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
+import { toNullable } from '@dfinity/utils';
 import { createActor } from '@declarations/auth';
 import {
   _SERVICE as BackendService,
   ResourceServer,
 } from '@declarations/auth_server/auth_server.did';
 import canisterIds from '../../../../.dfx/local/canister_ids.json';
-
-const toNullable = <T>(value: T | null): T[] | null => {
-  return value ? [value] : null;
-};
 
 // --- Test Configuration ---
 const backendCanisterId = Principal.fromText(canisterIds.auth_server.local);
