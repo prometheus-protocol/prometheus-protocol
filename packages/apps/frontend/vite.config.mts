@@ -83,6 +83,11 @@ export default defineConfig(({ mode }) => {
           replacement: path.resolve(__dirname, '..', '..', 'declarations'),
         },
       ],
+
+      dedupe: ['@dfinity/agent', '@dfinity/candid', '@dfinity/principal'],
+    },
+    optimizeDeps: {
+      include: ['@dfinity/agent', '@dfinity/candid', '@dfinity/principal'],
     },
     build: {
       outDir: path.resolve(__dirname, '..', '..', '..', 'dist', 'frontend'),

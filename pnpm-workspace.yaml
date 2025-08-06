@@ -1,6 +1,6 @@
 packages:
-  - 'packages/canisters/*'
-  - 'packages/apps/*'
-  - 'packages/services/*'
-  - 'packages/libs/*'
-  - 'packages/tests/*'
+  - packages/canisters/*
+  - packages/apps/*
+  - packages/services/*
+  - packages/libs/*
+  - packages/tests/*

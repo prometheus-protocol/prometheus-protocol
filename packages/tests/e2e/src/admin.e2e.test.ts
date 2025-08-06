@@ -15,7 +15,10 @@ import {
   ResourceServer,
 } from '@declarations/auth_server/auth_server.did';
 import canisterIds from '../../../../.dfx/local/canister_ids.json';
-import { toNullable } from '@dfinity/utils';
+
+const toNullable = <T>(value: T | null): T[] | null => {
+  return value ? [value] : null;
+};
 
 // --- Test Configuration ---
 const backendCanisterId = Principal.fromText(canisterIds.auth_server.local);
