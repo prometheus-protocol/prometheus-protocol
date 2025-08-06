@@ -4,8 +4,8 @@ import Result "mo:base/Result";
 import Map "mo:map/Map";
 import { thash } "mo:map/Map";
 import Text "mo:base/Text";
-import Types "../src/oauth_backend/oauth/Types";
-import Admin "../src/oauth_backend/oauth/Admin";
+import Types "../src/auth/oauth/Types";
+import Admin "../src/auth/oauth/Admin";
 import { test; suite; expect } "mo:test/async";
 
 // =================================================================================================

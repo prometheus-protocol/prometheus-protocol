@@ -11,11 +11,8 @@
     "allowSyntheticDefaultImports": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/oauth_frontend/src/*"]
+      "@/*": ["src/frontend/src/*"]
     }
   },
-  "include": [
-    "src/oauth_frontend/src/**/*.ts",
-    "src/oauth_frontend/src/**/*.tsx"
-  ]
+  "include": ["src/frontend/src/**/*.ts", "src/frontend/src/**/*.tsx"]
 }

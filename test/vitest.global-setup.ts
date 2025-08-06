@@ -2,13 +2,13 @@ import { fetch } from 'cross-fetch';
 import { Principal } from '@dfinity/principal';
 import { HttpAgent, Identity } from '@dfinity/agent';
 import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
-import { createActor } from '../src/declarations/oauth_backend';
+import { createActor } from '../src/declarations/auth';
 import canisterIds from '../.dfx/local/canister_ids.json';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { ResourceServer } from '../src/declarations/oauth_backend/oauth_backend.did';
+import { ResourceServer } from '../src/declarations/auth/auth.did';
 
-const backendCanisterId = Principal.fromText(canisterIds.oauth_backend.local);
+const backendCanisterId = Principal.fromText(canisterIds.auth.local);
 const icrc2CanisterId = Principal.fromText('aaaaa-aa');
 const replicaUrl = `http://127.0.0.1:4943`;
 

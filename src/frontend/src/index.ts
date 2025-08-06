@@ -7,8 +7,8 @@ import { toNullable } from '@dfinity/utils';
 import {
   createActor,
   canisterId as auth_canister_id,
-} from '../../declarations/oauth_backend';
-import { _SERVICE } from '../../declarations/oauth_backend/oauth_backend.did';
+} from '../../declarations/auth';
+import { _SERVICE } from '../../declarations/auth/auth.did';
 
 // --- UI Element References ---
 // Views

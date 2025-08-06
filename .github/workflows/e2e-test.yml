@@ -44,10 +44,10 @@ jobs:
         run: dfx start --background --clean --host 127.0.0.1:4943
 
       - name: Deploy canister
-        run: dfx deploy oauth_backend
+        run: dfx deploy auth
 
       - name: Generate Declarations
-        run: dfx generate oauth_backend
+        run: dfx generate auth
 
       - name: Run e2e tests
         run: npm run test

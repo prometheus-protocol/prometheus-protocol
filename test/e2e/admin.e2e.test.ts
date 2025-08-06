@@ -9,16 +9,16 @@ import {
 import { HttpAgent, Identity } from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
 import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
-import { createActor } from '../../src/declarations/oauth_backend';
+import { createActor } from '../../src/declarations/auth';
 import {
   _SERVICE as BackendService,
   ResourceServer,
-} from '../../src/declarations/oauth_backend/oauth_backend.did';
+} from '../../src/declarations/auth/auth.did';
 import canisterIds from '../../.dfx/local/canister_ids.json';
 import { toNullable } from '@dfinity/utils';
 
 // --- Test Configuration ---
-const backendCanisterId = Principal.fromText(canisterIds.oauth_backend.local);
+const backendCanisterId = Principal.fromText(canisterIds.auth.local);
 const replicaUrl = `http://127.0.0.1:4943`;
 
 // --- State Variables ---

@@ -3,10 +3,10 @@ import { Principal } from '@dfinity/principal';
 import * as jose from 'jose';
 import canisterIds from '../../.dfx/local/canister_ids.json';
 import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
-import { createActor } from '../../src/declarations/oauth_backend';
+import { createActor } from '../../src/declarations/auth';
 
 // --- Test Configuration ---
-const backendCanisterId = Principal.fromText(canisterIds.oauth_backend.local);
+const backendCanisterId = Principal.fromText(canisterIds.auth.local);
 const replicaUrl = `http://127.0.0.1:4943`;
 
 // --- Helper Functions ---

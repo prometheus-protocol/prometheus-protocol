@@ -4,7 +4,7 @@ import { Principal } from '@dfinity/principal';
 
 // --- Type Definitions ---
 // It's good practice to define the expected return types.
-// These should match the types in your oauth_backend.did.js file.
+// These should match the types in your auth.did.js file.
 
 interface ScopeDetails {
   id: string;

@@ -40,7 +40,7 @@ const internetIdentityUrl =
     ? `http://${canisterEnvVariables['CANISTER_ID_INTERNET_IDENTITY']}.localhost:4943/`
     : `https://identity.ic0.app`;
 
-const frontendDirectory = 'oauth_frontend';
+const frontendDirectory = 'frontend';
 
 module.exports = {
   target: 'web',

@@ -5,8 +5,8 @@ import { phash; thash } "mo:map/Map";
 import Text "mo:base/Text";
 import Blob "mo:base/Blob";
 import Iter "mo:base/Iter";
-import Types "../src/oauth_backend/oauth/Types";
-import Grants "../src/oauth_backend/oauth/Grants";
+import Types "../src/auth/oauth/Types";
+import Grants "../src/auth/oauth/Grants";
 import { test; suite; expect } "mo:test/async";
 
 // =================================================================================================

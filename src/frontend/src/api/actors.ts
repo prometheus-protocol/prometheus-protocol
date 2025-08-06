@@ -1,15 +1,15 @@
 import { HttpAgent, Identity } from '@dfinity/agent';
 
 // Import our backend's service definition and idlFactory
-import { _SERVICE as AuthService } from '../../../declarations/oauth_backend/oauth_backend.did.js';
-import { createActor as createOAuthActor } from '../../../declarations/oauth_backend/index.js';
+import { _SERVICE as AuthService } from '../../../declarations/auth/auth.did.js';
+import { createActor as createOAuthActor } from '../../../declarations/auth/index.js';
 
 // Import an ICRC token's service definition and idlFactory
 import { _SERVICE as ICRCService } from '../../../declarations/icrc1_ledger/icrc1_ledger.did.js';
 import { createActor as createIcrcActor } from '../../../declarations/icrc1_ledger/index.js';
 import { Principal } from '@dfinity/principal';
 
-const OAUTH_CANISTER_ID = process.env.CANISTER_ID_OAUTH_BACKEND;
+const OAUTH_CANISTER_ID = process.env.CANISTER_ID_auth;
 
 /**
  * Creates a typed actor for the Oauth Backend canister.

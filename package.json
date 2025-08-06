@@ -1,5 +1,5 @@
 {
-  "name": "oauth_frontend",
+  "name": "frontend",
   "version": "0.1.0",
   "description": "Prometheus Protocol OAuth Frontend",
   "keywords": [
@@ -13,7 +13,7 @@
     "prebuild": "npm run generate",
     "start": "webpack serve --mode development --env development",
     "prestart": "npm run generate",
-    "generate": "dfx generate oauth_backend && dfx generate icrc1_ledger",
+    "generate": "dfx generate auth && dfx generate icrc1_ledger",
     "generate-auth-url": "node scripts/generate-auth-url.js",
     "bootstrap": "./scripts/set_frontend_canister_id.sh",
     "test": "vitest"
