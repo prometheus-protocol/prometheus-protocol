@@ -43,7 +43,9 @@ jobs:
 
       - name: 4. Install Dependencies
         run: pnpm install
-        # This installs mops and all other dev dependencies
+
+      - name: 4b. Install Mops Dependencies
+        run: mops install
 
       - name: 5. Run Motoko Tests
         run: pnpm test:mo
@@ -84,6 +86,9 @@ jobs:
 
       - name: 5. Install Dependencies
         run: pnpm install
+
+      - name: 5b. Install Mops Dependencies
+        run: mops install
 
       - name: 6. Start Local Replica
         run: dfx start --background --clean
