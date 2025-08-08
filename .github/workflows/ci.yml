@@ -144,7 +144,7 @@ jobs:
         run: dfx deploy
 
       - name: 10. Run E2E Tests
-        run: pnpm test
+        run: pnpm test:e2e
 
       - name: 11. Stop Local Replica
         if: always() # Ensure this runs even if tests fail
