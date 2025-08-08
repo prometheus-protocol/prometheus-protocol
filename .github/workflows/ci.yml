@@ -103,7 +103,7 @@ jobs:
   e2e-tests:
     name: End-to-End Tests
     runs-on: ubuntu-latest
-    needs: unit-tests # This job will only start if 'unit-tests' succeeds
+    needs: [unit-tests, picjs-tests]
 
     steps:
       - name: 1. Check out repository and submodules
