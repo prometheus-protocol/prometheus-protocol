@@ -1,3 +1,9 @@
 [submodule "packages/canisters/mcp_registry/src/icrc118"]
 	path = packages/canisters/mcp_registry/src/icrc118
 	url = git@github.com:icdevsorg/icrc118.mo.git
+[submodule "libs/icrc118"]
+	path = libs/icrc118
+	url = git@github.com:icdevsorg/icrc118.mo.git
+[submodule "libs/icrc120"]
+	path = libs/icrc120
+	url = git@github.com:icdevsorg/icrc120.mo.git

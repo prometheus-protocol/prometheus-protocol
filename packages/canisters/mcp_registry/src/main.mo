@@ -18,8 +18,8 @@ import Blob "mo:base/Blob";
 import Debug "mo:base/Debug";
 import Sha256 "mo:sha2/Sha256";
 
-import ICRC118WasmRegistry "./icrc118/src";
-import Service "./icrc118/src/service";
+import ICRC118WasmRegistry "../../../../libs/icrc118/src";
+import Service "../../../../libs/icrc118/src/service";
 
 // ICRC-118 Registry Canister exposing the full public API contract
 shared (deployer) actor class ICRC118WasmRegistryCanister<system>(

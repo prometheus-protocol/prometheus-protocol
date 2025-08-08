@@ -19,7 +19,6 @@
     "build": "pnpm --filter \"./packages/**\" build",
     "prebuild": "dfx generate",
     "deploy": "dfx deploy",
-    "test:mo": "pnpm --filter \"./packages/canisters/*\" test:mo",
     "test:canisters": "vitest --project canister-tests",
     "test:e2e": "vitest --project e2e-tests",
     "format": "prettier --write ."
