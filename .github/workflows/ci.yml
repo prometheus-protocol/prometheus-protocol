@@ -82,7 +82,7 @@ jobs:
           node-version: 20
           cache: 'pnpm'
 
-      - name: 5. Setup DFX # <<< ADDED
+      - name: 5. Setup DFX
         uses: dfinity/setup-dfx@main
 
       - name: 6. Install Dependencies
@@ -91,8 +91,8 @@ jobs:
       - name: 7. Install Mops Dependencies
         run: mops install
 
-      - name: 8. Build Canister Declarations # <<< ADDED
-        run: dfx generate
+      - name: 8. Build Canister Declarations
+        run: dfx generate mcp_registry && dfx generate auth_server && dfx generate icrc1_ledger
 
       - name: 9. Run PicJS Tests
         run: pnpm test:canisters
