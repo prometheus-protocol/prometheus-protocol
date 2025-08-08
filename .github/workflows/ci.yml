@@ -91,11 +91,18 @@ jobs:
       - name: 7. Install Mops Dependencies
         run: mops install
 
-      - name: 8. Build Canister Declarations
-        run: dfx generate mcp_registry && dfx generate auth_server && dfx generate icrc1_ledger
+      - name: 8. Start Local Replica
+        run: dfx start --background --clean
 
-      - name: 9. Run PicJS Tests
+      - name: 9. Deploy All Canisters
+        run: dfx deploy
+
+      - name: 10. Run PicJS Tests
         run: pnpm test:canisters
+
+      - name: 11. Stop Local Replica
+        if: always() # Ensure this runs even if tests fail
+        run: dfx stop
 
   # =================================================================
   # Job 2: Run slower E2E tests only if unit tests pass
