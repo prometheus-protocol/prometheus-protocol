@@ -2,7 +2,7 @@ import { fetch } from 'cross-fetch';
 import { Principal } from '@dfinity/principal';
 import { HttpAgent, Identity } from '@dfinity/agent';
 import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
-import { createActor } from '@declarations/auth';
+import { createActor } from '@declarations/auth_server';
 import canisterIds from '../../../../.dfx/local/canister_ids.json';
 import * as fs from 'fs/promises';
 import * as path from 'path';

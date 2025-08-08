@@ -19,11 +19,20 @@
     "build": "pnpm --filter \"./packages/**\" build",
     "prebuild": "dfx generate",
     "deploy": "dfx deploy",
-    "test": "pnpm --filter @prometheus-protocol/e2e-tests test",
     "test:mo": "pnpm --filter \"./packages/canisters/*\" test:mo",
+    "test:canisters": "vitest --project canister-tests",
+    "test:e2e": "vitest --project e2e-tests",
     "format": "prettier --write ."
   },
   "devDependencies": {
+    "@dfinity/agent": "^2.4.1",
+    "@dfinity/candid": "^2.4.1",
+    "@dfinity/identity-secp256k1": "^2.4.1",
+    "@dfinity/pic": "^0.13.1",
+    "@dfinity/principal": "^2.4.1",
+    "@dfinity/utils": "^2.13.2",
+    "cross-fetch": "^4.1.0",
+    "jose": "^6.0.12",
     "prettier": "^3.6.2",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"

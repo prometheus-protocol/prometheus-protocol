@@ -3,7 +3,7 @@ import { Principal } from '@dfinity/principal';
 import * as jose from 'jose';
 import canisterIds from '../../../../.dfx/local/canister_ids.json';
 import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
-import { createActor } from '@declarations/auth';
+import { createActor } from '@declarations/auth_server';
 
 // --- Test Configuration ---
 const backendCanisterId = Principal.fromText(canisterIds.auth_server.local);

@@ -10,7 +10,7 @@ import { HttpAgent, Identity } from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
 import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
 import { toNullable } from '@dfinity/utils';
-import { createActor } from '@declarations/auth';
+import { createActor } from '@declarations/auth_server';
 import {
   _SERVICE as BackendService,
   ResourceServer,
