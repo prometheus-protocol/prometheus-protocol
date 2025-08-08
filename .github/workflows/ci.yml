@@ -20,31 +20,89 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 1. Checkout Repository
+      - name: 1. Check out repository and submodules
         uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+          ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - uses: ZenVoich/setup-mops@v1
+      - name: 2. Setup Mops
+        uses: ZenVoich/setup-mops@v1
         with:
           mops-version: 1
 
-      - name: 2. Setup PNPM
+      - name: 3. Setup PNPM
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: 3. Setup Node.js 20
+      - name: 4. Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'pnpm'
 
-      - name: 4. Install Dependencies
-        run: pnpm install
-        # This installs mops and all other dev dependencies
+      - name: 5. Setup DFX # <<< ADDED
+        uses: dfinity/setup-dfx@main
 
-      - name: 5. Run Motoko Tests
+      - name: 6. Install Dependencies
+        run: pnpm install
+
+      - name: 7. Install Mops Dependencies
+        run: mops install
+
+      - name: 8. Run Motoko Tests
         run: pnpm test:mo
         # This uses our package.json script to run `mops test` in all canister packages
+
+  picjs-tests:
+    name: PicJS Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Check out repository and submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+          ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: 2. Setup Mops
+        uses: ZenVoich/setup-mops@v1
+        with:
+          mops-version: 1
+
+      - name: 3. Setup PNPM
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: 4. Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: 5. Setup DFX
+        uses: dfinity/setup-dfx@main
+
+      - name: 6. Install Dependencies
+        run: pnpm install
+
+      - name: 7. Install Mops Dependencies
+        run: mops install
+
+      - name: 8. Start Local Replica
+        run: dfx start --background --clean
+
+      - name: 9. Deploy All Canisters
+        run: dfx deploy
+
+      - name: 10. Run PicJS Tests
+        run: pnpm test:canisters
+
+      - name: 11. Stop Local Replica
+        if: always() # Ensure this runs even if tests fail
+        run: dfx stop
 
   # =================================================================
   # Job 2: Run slower E2E tests only if unit tests pass
@@ -52,43 +110,50 @@ jobs:
   e2e-tests:
     name: End-to-End Tests
     runs-on: ubuntu-latest
-    needs: unit-tests # This job will only start if 'unit-tests' succeeds
+    needs: [unit-tests, picjs-tests]
 
     steps:
-      - name: 1. Checkout Repository
+      - name: 1. Check out repository and submodules
         uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+          ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - uses: ZenVoich/setup-mops@v1
+      - name: 2. Setup Mops
+        uses: ZenVoich/setup-mops@v1
         with:
           mops-version: 1
 
-      - name: 2. Setup PNPM
+      - name: 3. Setup PNPM
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: 3. Setup Node.js 20
+      - name: 4. Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'pnpm'
 
-      - name: 4. Setup DFX
+      - name: 5. Setup DFX
         uses: dfinity/setup-dfx@main
 
-      - name: 5. Install Dependencies
+      - name: 6. Install Dependencies
         run: pnpm install
 
-      - name: 6. Start Local Replica
+      - name: 7. Install Mops Dependencies
+        run: mops install
+
+      - name: 8. Start Local Replica
         run: dfx start --background --clean
 
-      - name: 7. Deploy All Canisters
+      - name: 9. Deploy All Canisters
         run: dfx deploy
 
-      - name: 8. Run E2E Tests
-        run: pnpm test
+      - name: 10. Run E2E Tests
+        run: pnpm test:e2e
 
-      - name: 9. Stop Local Replica
+      - name: 11. Stop Local Replica
         if: always() # Ensure this runs even if tests fail
         run: dfx stop
 
@@ -98,9 +163,9 @@ jobs:
   ci-status-check:
     name: CI Status Check
     if: always()
-    needs: [unit-tests, e2e-tests]
+    needs: [unit-tests, picjs-tests, e2e-tests]
     runs-on: ubuntu-latest
     steps:
       - name: Check status of all jobs
-        if: ${{ needs.unit-tests.result != 'success' || needs.e2e-tests.result != 'success' }}
+        if: ${{ needs.unit-tests.result != 'success' || needs.picjs-tests.result != 'success' || needs.e2e-tests.result != 'success' }}
         run: exit 1

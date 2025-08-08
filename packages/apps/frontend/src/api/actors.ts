@@ -2,7 +2,7 @@ import { HttpAgent, Identity } from '@dfinity/agent';
 
 // Import our backend's service definition and idlFactory
 import { _SERVICE as AuthService } from '@declarations/auth_server/auth_server.did.js';
-import { createActor as createOAuthActor } from '@declarations/auth/index.js';
+import { createActor as createOAuthActor } from '@declarations/auth_server/index.js';
 
 // Import an ICRC token's service definition and idlFactory
 import { _SERVICE as ICRCService } from '@declarations/icrc1_ledger/icrc1_ledger.did.js';

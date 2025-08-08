@@ -8,6 +8,13 @@
         "output": "packages/declarations/auth_server"
       }
     },
+    "mcp_registry": {
+      "main": "packages/canisters/mcp_registry/src/main.mo",
+      "type": "motoko",
+      "declarations": {
+        "output": "packages/declarations/mcp_registry"
+      }
+    },
     "frontend": {
       "dependencies": ["auth_server"],
       "frontend": {

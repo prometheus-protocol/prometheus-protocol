@@ -1,0 +1,3 @@
+[submodule "libs/icrc118"]
+	path = libs/icrc118
+	url = git@github.com:icdevsorg/icrc118.mo.git
