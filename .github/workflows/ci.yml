@@ -20,34 +20,38 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out repository and submodules
+      - name: 1. Check out repository and submodules
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
           ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - uses: ZenVoich/setup-mops@v1
+      - name: 2. Setup Mops
+        uses: ZenVoich/setup-mops@v1
         with:
           mops-version: 1
 
-      - name: 2. Setup PNPM
+      - name: 3. Setup PNPM
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: 3. Setup Node.js 20
+      - name: 4. Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'pnpm'
 
-      - name: 4. Install Dependencies
+      - name: 5. Setup DFX # <<< ADDED
+        uses: dfinity/setup-dfx@main
+
+      - name: 6. Install Dependencies
         run: pnpm install
 
-      - name: 4b. Install Mops Dependencies
+      - name: 7. Install Mops Dependencies
         run: mops install
 
-      - name: 5. Run Motoko Tests
+      - name: 8. Run Motoko Tests
         run: pnpm test:mo
         # This uses our package.json script to run `mops test` in all canister packages
 
@@ -56,34 +60,41 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out repository and submodules
+      - name: 1. Check out repository and submodules
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
           ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - uses: ZenVoich/setup-mops@v1
+      - name: 2. Setup Mops
+        uses: ZenVoich/setup-mops@v1
         with:
           mops-version: 1
 
-      - name: 2. Setup PNPM
+      - name: 3. Setup PNPM
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: 3. Setup Node.js 20
+      - name: 4. Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'pnpm'
 
-      - name: 4. Install Dependencies
+      - name: 5. Setup DFX # <<< ADDED
+        uses: dfinity/setup-dfx@main
+
+      - name: 6. Install Dependencies
         run: pnpm install
 
-      - name: 4b. Install Mops Dependencies
+      - name: 7. Install Mops Dependencies
         run: mops install
 
-      - name: 5. Run Motoko Tests
+      - name: 8. Build Canister Declarations # <<< ADDED
+        run: dfx generate
+
+      - name: 9. Run PicJS Tests
         run: pnpm test:canisters
 
   # =================================================================
@@ -95,46 +106,47 @@ jobs:
     needs: unit-tests # This job will only start if 'unit-tests' succeeds
 
     steps:
-      - name: Check out repository and submodules
+      - name: 1. Check out repository and submodules
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
           ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - uses: ZenVoich/setup-mops@v1
+      - name: 2. Setup Mops
+        uses: ZenVoich/setup-mops@v1
         with:
           mops-version: 1
 
-      - name: 2. Setup PNPM
+      - name: 3. Setup PNPM
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: 3. Setup Node.js 20
+      - name: 4. Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'pnpm'
 
-      - name: 4. Setup DFX
+      - name: 5. Setup DFX
         uses: dfinity/setup-dfx@main
 
-      - name: 5. Install Dependencies
+      - name: 6. Install Dependencies
         run: pnpm install
 
-      - name: 5b. Install Mops Dependencies
+      - name: 7. Install Mops Dependencies
         run: mops install
 
-      - name: 6. Start Local Replica
+      - name: 8. Start Local Replica
         run: dfx start --background --clean
 
-      - name: 7. Deploy All Canisters
+      - name: 9. Deploy All Canisters
         run: dfx deploy
 
-      - name: 8. Run E2E Tests
+      - name: 10. Run E2E Tests
         run: pnpm test
 
-      - name: 9. Stop Local Replica
+      - name: 11. Stop Local Replica
         if: always() # Ensure this runs even if tests fail
         run: dfx stop
 
