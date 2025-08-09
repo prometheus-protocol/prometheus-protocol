@@ -1,10 +1,9 @@
 {
-  "name": "@prometheus-protocol/mcp-registry",
+  "name": "@prometheus-protocol/mcp-orchestrator",
   "private": true,
   "version": "0.1.0",
-  "description": "The Motoko canister for the Prometheus Protocol MCP Registry.",
+  "description": "The Motoko canister for the Prometheus Protocol MCP Orchestrator.",
   "scripts": {
-    "test:mo": "mops test mcp_registry",
     "bootstrap": "./scripts/set_frontend_canister_id.sh",
     "generate-auth-url": "node scripts/generate-auth-url.js"
   },

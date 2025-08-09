@@ -14,6 +14,9 @@ importers:
       '@dfinity/candid':
         specifier: ^2.4.1
         version: 2.4.1(@dfinity/principal@2.4.1)
+      '@dfinity/ic-management':
+        specifier: ^6.2.1
+        version: 6.2.1(@dfinity/agent@2.4.1(@dfinity/candid@2.4.1(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1))(@dfinity/candid@2.4.1(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1)(@dfinity/utils@2.13.2(@dfinity/agent@2.4.1(@dfinity/candid@2.4.1(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1))(@dfinity/candid@2.4.1(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1))
       '@dfinity/identity-secp256k1':
         specifier: ^2.4.1
         version: 2.4.1(@dfinity/candid@2.4.1(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1)
@@ -164,6 +167,12 @@ importers:
         version: 1.1.3(vite@5.4.19(@types/node@24.2.0)(lightningcss@1.30.1))
 
   packages/canisters/auth_server: {}
+
+  packages/canisters/mcp_orchestrator:
+    devDependencies:
+      '@dfinity/pic':
+        specifier: ^0.13.1
+        version: 0.13.1(@dfinity/agent@2.4.1(@dfinity/candid@2.4.1(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1))(@dfinity/candid@2.4.1(@dfinity/principal@2.4.1))(@dfinity/identity@2.4.1(@dfinity/agent@2.4.1(@dfinity/candid@2.4.1(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1)
 
   packages/canisters/mcp_registry:
     devDependencies:
@@ -360,6 +369,14 @@ packages:
     resolution: {integrity: sha512-kOaIKfhR2PYN8vD4M0Pc4s/7wb1nKjlTJUw+5E9jh26T03fITIZmaafIuwlX+wmdxwIT9Xoy7PlsxOEpzv203A==}
     peerDependencies:
       '@dfinity/principal': ^2.4.1
+
+  '@dfinity/ic-management@6.2.1':
+    resolution: {integrity: sha512-veH2PcdR9hrtXfZxUzrRsnWOPSlKr76zniCzXP4Dh5fEQdsvp2/TdBcCglSaAidsuAy6GSgj7Nib0Skr3WUK2Q==}
+    peerDependencies:
+      '@dfinity/agent': ^2.0.0
+      '@dfinity/candid': ^2.0.0
+      '@dfinity/principal': ^2.0.0
+      '@dfinity/utils': ^2.13.0
 
   '@dfinity/identity-secp256k1@2.4.1':
     resolution: {integrity: sha512-YP6AYObQc3bADwVhjqQ90V6mIKyN0vDISRBk9izKpiPStK29lbxF8zLkqY7wYhgrxDNvtSlmd+VMQrvbE7K3lg==}
@@ -2209,6 +2226,13 @@ snapshots:
   '@dfinity/candid@2.4.1(@dfinity/principal@2.4.1)':
     dependencies:
       '@dfinity/principal': 2.4.1
+
+  '@dfinity/ic-management@6.2.1(@dfinity/agent@2.4.1(@dfinity/candid@2.4.1(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1))(@dfinity/candid@2.4.1(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1)(@dfinity/utils@2.13.2(@dfinity/agent@2.4.1(@dfinity/candid@2.4.1(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1))(@dfinity/candid@2.4.1(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1))':
+    dependencies:
+      '@dfinity/agent': 2.4.1(@dfinity/candid@2.4.1(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1)
+      '@dfinity/candid': 2.4.1(@dfinity/principal@2.4.1)
+      '@dfinity/principal': 2.4.1
+      '@dfinity/utils': 2.13.2(@dfinity/agent@2.4.1(@dfinity/candid@2.4.1(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1))(@dfinity/candid@2.4.1(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1)
 
   '@dfinity/identity-secp256k1@2.4.1(@dfinity/candid@2.4.1(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1)':
     dependencies:
