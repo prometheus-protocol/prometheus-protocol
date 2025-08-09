@@ -15,6 +15,13 @@
         "output": "packages/declarations/mcp_registry"
       }
     },
+    "mcp_orchestrator": {
+      "main": "packages/canisters/mcp_orchestrator/src/main.mo",
+      "type": "motoko",
+      "declarations": {
+        "output": "packages/declarations/mcp_orchestrator"
+      }
+    },
     "frontend": {
       "dependencies": ["auth_server"],
       "frontend": {

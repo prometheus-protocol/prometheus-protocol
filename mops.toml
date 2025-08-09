@@ -19,6 +19,8 @@ icrc3-mo = "0.3.0"
 base16 = "1.0.0"
 candy = "0.3.1"
 ovs-fixed = "0.1.4"
+stableheapbtreemap = "1.5.0"
+
 
 [toolchain]
 moc = "0.14.14"
