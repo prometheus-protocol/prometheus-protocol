@@ -17,10 +17,10 @@ module {
   // from: service AuditorCredentialCanister { ... };
   public type Service = actor {
     // from: get_credentials_for_auditor: (auditor: principal) -> (vec text) query;
-    get_credentials_for_auditor : (auditor : Principal) -> async [Text] query;
+    get_credentials_for_auditor : query (auditor : Principal) -> async [Text];
 
     // from: get_owner: () -> (principal) query;
-    get_owner : () -> async Principal query;
+    get_owner : query () -> async Principal;
 
     // from: issue_credential: (auditor: principal, audit_type: text) -> (Result);
     issue_credential : (auditor : Principal, audit_type : Text) -> async CallResult;
@@ -32,6 +32,6 @@ module {
     transfer_ownership : (new_owner : Principal) -> async CallResult;
 
     // from: verify_credential: (auditor: principal, audit_type: text) -> (bool) query;
-    verify_credential : (auditor : Principal, audit_type : Text) -> async Bool query;
+    verify_credential : query (auditor : Principal, audit_type : Text) -> async Bool;
   };
 };

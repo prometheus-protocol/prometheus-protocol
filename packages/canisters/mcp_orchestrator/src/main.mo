@@ -17,10 +17,12 @@ import Sha256 "mo:sha2/Sha256";
 import Result "mo:base/Result";
 import Map "mo:map/Map";
 import { phash } "mo:map/Map";
+import Debug "mo:base/Debug";
 
 import McpRegistry "McpRegistry";
 
 import ICRC118WasmRegistryClient "../../../../libs/icrc118/src/client";
+import System "../../../../libs/icrc120/src/system";
 import ICRC120 "../../../../libs/icrc120/src";
 import ICRC120Types "../../../../libs/icrc120/src/migrations/types";
 
@@ -95,7 +97,6 @@ shared (deployer) actor class ICRC120Canister<system>(
           tt = tt();
           advanced = null; // Add any advanced options if needed
           onEvict = null;
-          icrc118 = null;
         };
       }
     );
@@ -107,8 +108,6 @@ shared (deployer) actor class ICRC120Canister<system>(
 
   let d = localLog().log_debug;
 
-  //------------------- Test FUNCTION -------------------//
-
   private stable var wasm : ?Blob = null;
   private stable var wasmHash : ?Blob = null;
 
@@ -117,7 +116,7 @@ shared (deployer) actor class ICRC120Canister<system>(
   // Store the registry ID provided at initialization
   stable var _mcp_registry_id : Principal = args.registryId;
 
-  func can_admin_canister({
+  func canAdminCanister({
     canisterId : Principal;
     caller : Principal;
   }) : async* Bool {
@@ -136,9 +135,45 @@ shared (deployer) actor class ICRC120Canister<system>(
     };
   };
 
+  private func canInstallCanister(
+    {
+      args;
+      caller;
+      canisterId;
+    } : {
+      // Use the types provided by the ICRC-120 library
+      args : System.install_chunked_code_args;
+      caller : Principal;
+      canisterId : Principal;
+    }
+  ) : async* Bool {
+    Debug.print("Checking if canister installation is authorized for " # Principal.toText(caller) # " on " # Principal.toText(canisterId));
+    switch (Map.get(managed_canisters, phash, canisterId)) {
+      case (null) {
+        // This canister is not managed by the orchestrator.
+        return false;
+      };
+      case (?namespace) {
+        let registry : McpRegistry.Service = actor (Principal.toText(_mcp_registry_id));
+
+        // --- CHECK 1: Is the Wasm itself verified by the DAO? ---
+        // We get the hash from the new, context-rich `args` object.
+        let verified_check = await registry.is_wasm_verified(args.wasm_module_hash);
+        Debug.print("Wasm verified check: " # debug_show (verified_check));
+        if (not verified_check) {
+          // The code has not passed the final audit gate.
+          return false;
+        };
+
+        // If both checks pass, the installation/upgrade is authorized.
+        return true;
+      };
+    };
+  };
+
   stable var icrc120_migration_state : ICRC120.State = ICRC120.initialState();
 
-  let registryClient = ICRC118WasmRegistryClient.ICRC118WasmRegistryClient(_mcp_registry_id);
+  let ICRC118Client = ICRC118WasmRegistryClient.ICRC118WasmRegistryClient(_mcp_registry_id);
 
   let icrc120 = ICRC120.Init<system>({
     manager = initManager;
@@ -151,9 +186,10 @@ shared (deployer) actor class ICRC120Canister<system>(
           advanced = null; // Add any advanced options if needed
           log = localLog();
           add_record = null;
-          get_wasm_store = registryClient.getWasmStore;
-          get_wasm_chunk = registryClient.getWasmChunk;
-          can_admin_canister = can_admin_canister;
+          get_wasm_store = ICRC118Client.getWasmStore;
+          get_wasm_chunk = ICRC118Client.getWasmChunk;
+          can_admin_canister = canAdminCanister;
+          can_install_canister = ?canInstallCanister;
         };
       }
     );
@@ -213,10 +249,6 @@ shared (deployer) actor class ICRC120Canister<system>(
       icrc3_migration_state := state;
     };
   });
-
-  public shared func hello() : async Text {
-    return "world!";
-  };
 
   // --- Expose ICRC-120 orchestration endpoints from icrc120 class through actor ---
   public shared func icrc120_metadata() : async ICRC120Types.Current.ICRC16Map {
@@ -293,5 +325,11 @@ shared (deployer) actor class ICRC120Canister<system>(
         };
       };
     };
+  };
+
+  //------------------- Test FUNCTION -------------------//
+
+  public shared func hello() : async Text {
+    return "world!";
   };
 };

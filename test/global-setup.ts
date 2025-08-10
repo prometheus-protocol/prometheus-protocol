@@ -1,14 +1,12 @@
 import type { GlobalSetupContext } from 'vitest/node';
-import { PocketIc, PocketIcServer } from '@dfinity/pic';
+import { PocketIcServer } from '@dfinity/pic';
 
-let pic: PocketIcServer | undefined;
 let picServer: PocketIcServer;
-let keepAliveInterval: NodeJS.Timeout;
 
 export async function setup(ctx: GlobalSetupContext) {
-  console.log('Starting global PocketIC server with keep-alive...');
+  console.log('Starting global PocketIC server...');
 
-  picServer = await PocketIcServer.start();
+  picServer = await PocketIcServer.start({ showCanisterLogs: true });
   const url = picServer.getUrl();
   ctx.provide('PIC_URL', url);
 

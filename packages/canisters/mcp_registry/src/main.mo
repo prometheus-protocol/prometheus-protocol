@@ -23,11 +23,16 @@ import Iter "mo:base/Iter";
 import Result "mo:base/Result";
 import BTree "mo:stableheapbtreemap/BTree";
 import Text "mo:base/Text";
+import Base16 "mo:base16/Base16";
 
 import AuditorCredentials "AuditorCredentials";
 
 import ICRC118WasmRegistry "../../../../libs/icrc118/src";
 import Service "../../../../libs/icrc118/src/service";
+
+// --- ICRC-126 INTEGRATION ---
+import ICRC126 "../../../../libs/icrc126/src/lib";
+import ICRC126Service "../../../../libs/icrc126/src/service";
 
 // ICRC-118 Registry Canister exposing the full public API contract
 shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
@@ -39,6 +44,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
 ) = this {
   let thisPrincipal = Principal.fromActor(this);
   stable var _owner = deployer.caller;
+  stable var _credentials_canister_id : Principal = args.auditorCredentialCanisterId;
 
   let initManager = ClassPlus.ClassPlusInitializationManager(_owner, thisPrincipal, true);
   let icrc118wasmregistryInitArgs = do ? { args.icrc118wasmregistryArgs! };
@@ -120,7 +126,13 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           advanced = null; /* Add any advanced options if needed */
           log = localLog();
           add_record = null;
-          validateCanisterTypeCreation = null;
+          validateCanisterTypeCreation = ?(
+            func(caller : Principal, req : Service.CreateCanisterType) : async* Result.Result<(), Text> {
+              // For our public registry, we allow any principal to create a new type.
+              // More complex logic could be added here in the future, e.g., checking for a registration fee.
+              return #ok(());
+            }
+          );
         };
       }
     );
@@ -176,14 +188,89 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
   });
 
-  //------------------- API IMPLEMENTATION -------------------//
+  // --- ICRC-126 Integration ---
 
-  public shared query func icrc10_supported_standards() : async [Service.SupportedStandard] {
-    icrc118wasmregistry().icrc10_supported_standards();
+  // This private helper function converts the rich ICRC126 value type
+  // into the simpler Value type expected by the ICRC3 logger.
+  private func convertIcrc126ValueToIcrc3Value(val : ICRC126.ICRC16) : ICRC3.Value {
+    switch (val) {
+      case (#Nat(n)) { return #Nat(n) };
+      case (#Int(i)) { return #Int(i) };
+      case (#Text(t)) { return #Text(t) };
+      case (#Blob(b)) { return #Blob(b) };
+      case (#Array(arr)) {
+        // Recursively convert each element in the array.
+        let converted_arr = Array.map<ICRC126.ICRC16, ICRC3.Value>(arr, convertIcrc126ValueToIcrc3Value);
+        return #Array(converted_arr);
+      };
+      case (#Map(map)) {
+        // Recursively convert each value in the map.
+        let converted_map = Array.map<(Text, ICRC126.ICRC16), (Text, ICRC3.Value)>(map, func((k, v)) { (k, convertIcrc126ValueToIcrc3Value(v)) });
+        return #Map(converted_map);
+      };
+      // --- Fallback cases for types not supported by ICRC3.Value ---
+      // We convert them to text to preserve the data in a readable format.
+      case (#Bool(b)) { return #Text(debug_show (b)) };
+      case (#Principal(p)) { return #Text(Principal.toText(p)) };
+      case (_) {
+        // For any other complex type, just represent it as text.
+        return #Text("Unsupported ICRC-3 Value Type");
+      };
+    };
   };
 
+  stable var icrc126_migration_state : ICRC126.State = ICRC126.initialState();
+  let icrc126 = ICRC126.Init<system>({
+    manager = initManager;
+    initialState = icrc126_migration_state;
+    args = null; // Optionally add ICRC126.InitArgs if needed
+    pullEnvironment = ?(
+      func() : ICRC126.Environment {
+        {
+          tt = tt();
+          advanced = null;
+          log = localLog(); // Provide the logger
+          add_record = ?(
+            func<system>(data : ICRC126.ICRC16, meta : ?ICRC126.ICRC16) : Nat {
+              let converted_data = convertIcrc126ValueToIcrc3Value(data);
+              let converted_meta = Option.map(meta, convertIcrc126ValueToIcrc3Value);
+              D.print("ICRC126: Adding record: " # debug_show ((converted_data, converted_meta)));
+              icrc3().add_record<system>(converted_data, converted_meta);
+            }
+          );
+          can_auditor_audit = func(auditor : Principal, audit_type : Text) : async Bool {
+            let credentials : AuditorCredentials.Service = actor (Principal.toText(_credentials_canister_id));
+            let permission_result = await credentials.verify_credential(auditor, audit_type);
+            return permission_result;
+          };
+        };
+      }
+    );
+    onStorageChange = func(state) { icrc126_migration_state := state };
+    onInitialize = ?(
+      func(icrc126 : ICRC126.ICRC126Verification) : async* () {
+        D.print("ICRC126: Initialized");
+      }
+    );
+  });
+
+  //------------------- API IMPLEMENTATION -------------------//
+
+  // --- ICRC10 Endpoints ---
+
+  public shared query func icrc10_supported_standards() : async [Service.SupportedStandard] {
+    let standards = [
+      { name = "ICRC-3"; url = "..." },
+      { name = "ICRC-10"; url = "..." },
+      { name = "ICRC-118"; url = "..." },
+      { name = "ICRC-126"; url = "..." },
+    ];
+
+    return standards;
+  };
+
+  // --- ICRC118 Endpoints ---
   public shared (msg) func icrc118_create_canister_type(reqs : [Service.CreateCanisterType]) : async [Service.CreateCanisterTypeResult] {
-    d("icrc118_create_canister_type" # debug_show (reqs), "main");
     await* icrc118wasmregistry().icrc118_create_canister_type(msg.caller, reqs);
   };
 
@@ -192,7 +279,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   };
 
   public shared query func icrc118_get_wasms(request : { filter : ?[Service.GetWasmsFilter]; prev : ?Service.WasmVersionPointer; take : ?Nat }) : async [Service.Wasm] {
-    d("icrc118_get_wasms" # debug_show (request), "main");
     icrc118wasmregistry().icrc118_get_wasms(request);
   };
 
@@ -216,32 +302,21 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     icrc118wasmregistry().icrc118_get_upgrade_path(req);
   };
 
-  public shared (msg) func test_simulate_install(canister : Principal, canister_type_namespace : Text, version : (Nat, Nat, Nat)) : async Bool {
-    // Only allow in development/test (optionally restrict by caller)
-    let registry = icrc118wasmregistry();
-    let state = registry.state;
-    let set = switch (ICRC118WasmRegistry.Map.get(state.canisterIndex, ICRC118WasmRegistry.Map.phash, canister)) {
-      case (?s) s;
-      case null {
-        let s = ICRC118WasmRegistry.Set.new<ICRC118WasmRegistry.WasmVersionPointer>();
-        ignore ICRC118WasmRegistry.Map.put(state.canisterIndex, ICRC118WasmRegistry.Map.phash, canister, s);
-        s;
-      };
-    };
-    ignore ICRC118WasmRegistry.Set.put<ICRC118WasmRegistry.WasmVersionPointer>(
-      set,
-      ICRC118WasmRegistry.wasmVersionTool,
-      {
-        canister_type_namespace = canister_type_namespace;
-        version_number = version;
-      },
-    );
-    ignore ICRC118WasmRegistry.Map.put(state.canisterIndex, ICRC118WasmRegistry.Map.phash, canister, set);
-    true;
-  };
-
   public shared query func icrc118_get_wasm_chunk(req : Service.GetWasmChunkRequest) : async Service.GetWasmChunkResponse {
     icrc118wasmregistry().icrc118_get_wasm_chunk(req);
+  };
+
+  // --- ICRC126 Endpoints ---
+  public shared (msg) func icrc126_verification_request(req : ICRC126Service.VerificationRequest) : async Nat {
+    await icrc126().icrc126_verification_request(msg.caller, req);
+  };
+
+  public shared (msg) func icrc126_file_attestation(req : ICRC126Service.AttestationRequest) : async ICRC126Service.AttestationResult {
+    await icrc126().icrc126_file_attestation(msg.caller, req);
+  };
+
+  public shared (msg) func icrc126_file_divergence(req : ICRC126Service.DivergenceReportRequest) : async ICRC126Service.DivergenceResult {
+    await icrc126().icrc126_file_divergence(msg.caller, req);
   };
 
   // --- ICRC3 Endpoints ---
@@ -262,8 +337,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   };
 
   // --- MCP Orchestrator InterCanister Endpoints ---
-
-  stable var _auditor_credentials : Principal = args.auditorCredentialCanisterId;
+  // Used by the MCP Orchestrator to validate user requests.
 
   stable var _mcp_orchestrator : ?Principal = null;
 
@@ -316,37 +390,83 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
   };
 
-  // HOOK 2: Get Wasm info by its hash. This is a query and can remain as an optional.
-  // Your simplified implementation using the library's filter is much better.
-  public shared query func get_wasm_by_hash(hash : Blob) : async ?{
-    pointer : Service.WasmVersionPointer;
-    chunk_hashes : [Blob];
-  } {
+  // The outcome of a DAO-led verification process.
+  type VerificationOutcome = {
+    #Verified;
+    #Rejected;
+  };
 
-    // Call the underlying library function, filtering by the provided hash.
-    let wasms = icrc118wasmregistry().icrc118_get_wasms({
-      filter = ?[#hash(hash)];
-      prev = null;
-      take = null;
-    });
+  // A record of the final decision.
+  type FinalizationRecord = {
+    outcome : VerificationOutcome;
+    timestamp : Time.Time;
+    metadata : ICRC126.ICRC16Map;
+  };
 
-    // The result should be an array with exactly one Wasm.
-    if (wasms.size() == 1) {
-      // Success! Return the chunk hashes the orchestrator needs.
-      // Note: The field is `chunk_hashes`, not `chunks`.
-      let wasm = wasms[0];
+  // The new stable variable to store the final word on each wasm_id.
+  stable var finalization_log = BTree.init<Text, FinalizationRecord>(null);
 
-      return ?{
-        // Add the pointer to the return object
-        pointer = {
-          canister_type_namespace = wasm.canister_type_namespace;
-          version_number = wasm.version_number;
-        };
-        chunk_hashes = wasm.chunks;
+  public shared (msg) func finalize_verification(
+    wasm_id : Text,
+    outcome : VerificationOutcome,
+    metadata : ICRC126.ICRC16Map,
+  ) : async Result.Result<Nat, Text> {
+    // 1. Authorization: Only the owner (DAO) can call this.
+    if (not _is_owner(msg.caller)) {
+      return #err("Caller is not the owner");
+    };
+
+    // 2. Check if already finalized.
+    if (BTree.get(finalization_log, Text.compare, wasm_id) != null) {
+      return #err("This wasm_id has already been finalized.");
+    };
+
+    // 3. Create and store the finalization record.
+    let record : FinalizationRecord = {
+      outcome = outcome;
+      timestamp = Time.now();
+      metadata = metadata;
+    };
+    ignore BTree.insert(finalization_log, Text.compare, wasm_id, record);
+
+    // 4. Log the official ICRC-3 block.
+    let btype = switch (outcome) {
+      case (#Verified) "126verified";
+      case (#Rejected) "126rejected";
+    };
+    let tx : ICRC126.ICRC16Map = [
+      ("wasm_id", #Text(wasm_id)),
+      ("metadata", #Map(metadata)),
+    ];
+    let trx_id = icrc3().add_record<system>(
+      convertIcrc126ValueToIcrc3Value(#Map(tx)),
+      ?convertIcrc126ValueToIcrc3Value(#Map([("btype", #Text(btype))])),
+    );
+
+    return #ok(trx_id);
+  };
+
+  public shared query func is_wasm_verified(hash : Blob) : async Bool {
+    let wasm_id = Base16.encode(hash);
+    let final_status = BTree.get(finalization_log, Text.compare, wasm_id);
+
+    switch (final_status) {
+      case (null) {
+        // Not yet finalized.
+        return false;
       };
-    } else {
-      // Wasm not found or data is inconsistent. Return null as per the optional return type.
-      return null;
+      case (?record) {
+        switch (record.outcome) {
+          case (#Verified) {
+            // Explicitly verified!
+            return true;
+          };
+          case (#Rejected) {
+            // Explicitly rejected.
+            return false;
+          };
+        };
+      };
     };
   };
 
