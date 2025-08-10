@@ -61,7 +61,13 @@ async function setupEnvironment(pic: PocketIc) {
     idlFactory: registryIdlFactory,
     wasm: REGISTRY_WASM_PATH,
     sender: adminIdentity.getPrincipal(),
-    arg: IDL.encode(registryInit({ IDL }), [[]]),
+    arg: IDL.encode(registryInit({ IDL }), [
+      {
+        auditorCredentialCanisterId: Principal.anonymous(),
+        icrc118wasmregistryArgs: [],
+        ttArgs: [],
+      },
+    ]),
   });
 
   // 2. Deploy Orchestrator, injecting the live registry ID

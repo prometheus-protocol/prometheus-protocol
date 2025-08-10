@@ -24,22 +24,25 @@ import Result "mo:base/Result";
 import BTree "mo:stableheapbtreemap/BTree";
 import Text "mo:base/Text";
 
+import AuditorCredentials "AuditorCredentials";
+
 import ICRC118WasmRegistry "../../../../libs/icrc118/src";
 import Service "../../../../libs/icrc118/src/service";
 
 // ICRC-118 Registry Canister exposing the full public API contract
 shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
-  args : ?{
+  args : {
     icrc118wasmregistryArgs : ?ICRC118WasmRegistry.InitArgs;
     ttArgs : ?TT.InitArgList;
+    auditorCredentialCanisterId : Principal; // The canister ID of the Auditor Credential Canister
   }
 ) = this {
   let thisPrincipal = Principal.fromActor(this);
   stable var _owner = deployer.caller;
 
   let initManager = ClassPlus.ClassPlusInitializationManager(_owner, thisPrincipal, true);
-  let icrc118wasmregistryInitArgs = do ? { args!.icrc118wasmregistryArgs! };
-  let ttInitArgs : ?TT.InitArgList = do ? { args!.ttArgs! };
+  let icrc118wasmregistryInitArgs = do ? { args.icrc118wasmregistryArgs! };
+  let ttInitArgs : ?TT.InitArgList = do ? { args.ttArgs! };
 
   stable var icrc10 = ICRC10.initCollection();
 
@@ -259,6 +262,8 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   };
 
   // --- MCP Orchestrator InterCanister Endpoints ---
+
+  stable var _auditor_credentials : Principal = args.auditorCredentialCanisterId;
 
   stable var _mcp_orchestrator : ?Principal = null;
 

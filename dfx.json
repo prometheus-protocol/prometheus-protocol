@@ -3,7 +3,6 @@
     "auth_server": {
       "main": "packages/canisters/auth_server/src/main.mo",
       "type": "motoko",
-      "init_arg": "(principal \"a4tbr-q4aaa-aaaaa-qaafq-cai\")",
       "declarations": {
         "output": "packages/declarations/auth_server"
       }
@@ -20,6 +19,13 @@
       "type": "motoko",
       "declarations": {
         "output": "packages/declarations/mcp_orchestrator"
+      }
+    },
+    "auditor_credentials": {
+      "main": "packages/canisters/auditor_credentials/src/main.mo",
+      "type": "motoko",
+      "declarations": {
+        "output": "packages/declarations/auditor_credentials"
       }
     },
     "frontend": {

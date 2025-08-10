@@ -20,6 +20,7 @@ import { phash } "mo:map/Map";
 
 import McpRegistry "McpRegistry";
 
+import ICRC118WasmRegistryClient "../../../../libs/icrc118/src/client";
 import ICRC120 "../../../../libs/icrc120/src";
 import ICRC120Types "../../../../libs/icrc120/src/migrations/types";
 
@@ -111,44 +112,6 @@ shared (deployer) actor class ICRC120Canister<system>(
   private stable var wasm : ?Blob = null;
   private stable var wasmHash : ?Blob = null;
 
-  private func getWasm(b : Blob) : async* Result.Result<(Principal, [Blob]), Text> {
-    return #ok(
-      Principal.fromActor(this),
-      [
-        switch (wasmHash) {
-          case (?w) w;
-          case null {
-            D.trap("Wasm hash is null");
-          };
-        }
-      ],
-    );
-  };
-
-  private func localWasmStore(blob : Blob, chunk : Nat, expected : ?Blob) : async* Result.Result<Blob, Text> {
-    return (
-      switch (wasm) {
-        case (?w) {
-
-          let wasm_chunk = w;
-          return #ok(wasm_chunk);
-        };
-        case null {
-          D.trap("Wasm is null");
-        };
-      }
-    );
-  };
-
-  public shared func uploadTestWasmChunk(
-    chunk : Blob
-  ) : async Bool {
-    wasm := ?chunk;
-
-    wasmHash := ?Sha256.fromBlob(#sha256, chunk);
-    true;
-  };
-
   stable var managed_canisters = Map.new<Principal, Text>();
 
   // Store the registry ID provided at initialization
@@ -173,52 +136,9 @@ shared (deployer) actor class ICRC120Canister<system>(
     };
   };
 
-  func get_wasm_store(hash : Blob) : async* Result.Result<(Principal, [Blob]), Text> {
-    let registry : McpRegistry.Service = actor (Principal.toText(_mcp_registry_id));
-
-    let wasm_info = await registry.get_wasm_by_hash(hash);
-    switch (wasm_info) {
-      case (null) {
-        return #err("Wasm hash not found in Prometheus Registry.");
-      };
-      case (?info) {
-        // The optional record is decoded as a single-element array
-        // Success! The "store" is the registry itself.
-        return #ok(_mcp_registry_id, info.chunk_hashes);
-      };
-    };
-  };
-
-  func get_wasm_chunk(hash : Blob, chunk_id : Nat, expected_chunk_hash : ?Blob) : async* Result.Result<Blob, Text> {
-    let registry : McpRegistry.Service = actor (Principal.toText(_mcp_registry_id));
-
-    let wasm_info = await registry.get_wasm_by_hash(hash);
-    switch (wasm_info) {
-      case (null) { return #err("Wasm hash disappeared from registry.") };
-      case (?info) {
-        // Construct the request for the registry's chunk endpoint
-        let getChunkRequest : {
-          canister_type_namespace : Text;
-          version_number : (Nat, Nat, Nat);
-          hash : Blob;
-          chunk_id : Nat;
-        } = {
-          canister_type_namespace = info.pointer.canister_type_namespace;
-          version_number = info.pointer.version_number;
-          hash = hash;
-          chunk_id = chunk_id;
-        };
-
-        let chunk_response = await registry.icrc118_get_wasm_chunk(getChunkRequest);
-        switch (chunk_response) {
-          case (#Ok(chunk)) { return #ok(chunk.wasm_chunk) };
-          case (#Err(err)) { return #err(debug_show (err)) };
-        };
-      };
-    };
-  };
-
   stable var icrc120_migration_state : ICRC120.State = ICRC120.initialState();
+
+  let registryClient = ICRC118WasmRegistryClient.ICRC118WasmRegistryClient(_mcp_registry_id);
 
   let icrc120 = ICRC120.Init<system>({
     manager = initManager;
@@ -231,8 +151,8 @@ shared (deployer) actor class ICRC120Canister<system>(
           advanced = null; // Add any advanced options if needed
           log = localLog();
           add_record = null;
-          get_wasm_store = get_wasm_store;
-          get_wasm_chunk = get_wasm_chunk;
+          get_wasm_store = registryClient.getWasmStore;
+          get_wasm_chunk = registryClient.getWasmChunk;
           can_admin_canister = can_admin_canister;
         };
       }

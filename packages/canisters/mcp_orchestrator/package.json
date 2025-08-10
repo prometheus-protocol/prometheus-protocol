@@ -3,10 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "The Motoko canister for the Prometheus Protocol MCP Orchestrator.",
-  "scripts": {
-    "bootstrap": "./scripts/set_frontend_canister_id.sh",
-    "generate-auth-url": "node scripts/generate-auth-url.js"
-  },
+  "scripts": {},
   "devDependencies": {
     "@dfinity/pic": "^0.13.1"
   }

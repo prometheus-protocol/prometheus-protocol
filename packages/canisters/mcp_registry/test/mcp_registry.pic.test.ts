@@ -15,6 +15,7 @@ import {
 } from '@declarations/mcp_registry/mcp_registry.did.js';
 import { Identity } from '@dfinity/agent';
 import { createHash } from 'node:crypto';
+import { Principal } from '@dfinity/principal';
 
 const REGISTRY_WASM_PATH = path.resolve(
   __dirname,
@@ -38,7 +39,13 @@ describe('MCP Registry Canister (Isolated Tests)', () => {
       idlFactory: registryIdlFactory,
       wasm: REGISTRY_WASM_PATH,
       sender: platformOwner.getPrincipal(),
-      arg: IDL.encode(init({ IDL }), [[]]),
+      arg: IDL.encode(init({ IDL }), [
+        {
+          auditorCredentialCanisterId: Principal.anonymous(),
+          icrc118wasmregistryArgs: [],
+          ttArgs: [],
+        },
+      ]),
     });
 
     registryActor = fixture.actor;

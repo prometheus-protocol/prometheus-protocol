@@ -1,0 +1,10 @@
+{
+  "name": "@prometheus-protocol/auditor-credentials",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The Motoko canister for the Prometheus Protocol Auditor Credentials.",
+  "scripts": {},
+  "devDependencies": {
+    "@dfinity/pic": "^0.13.1"
+  }
+}

@@ -4,3 +4,6 @@
 [submodule "libs/icrc120"]
 	path = libs/icrc120
 	url = git@github.com:icdevsorg/icrc120.mo.git
+[submodule "libs/icrc126"]
+	path = libs/icrc126
+	url = git@github.com:prometheus-protocol/icrc126.mo.git
