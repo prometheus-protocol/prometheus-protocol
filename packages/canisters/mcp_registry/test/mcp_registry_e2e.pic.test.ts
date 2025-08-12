@@ -123,6 +123,10 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     registryCanisterId = registryFixture.canisterId;
 
     // 3. Setup Permissions and Funds
+    registryActor.setIdentity(daoIdentity);
+    await registryActor.set_auditor_credentials_canister_id(
+      credentialFixture.canisterId,
+    );
     credentialFixture.actor.setIdentity(daoIdentity);
     await credentialFixture.actor.issue_credential(
       reproAuditorIdentity.getPrincipal(),

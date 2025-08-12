@@ -60,10 +60,9 @@ describe('MCP Registry ICRC-126 Integration', () => {
     const registryFixture = await pic.setupCanister<RegistryService>({
       idlFactory: registryIdlFactory,
       wasm: REGISTRY_WASM_PATH,
-      sender: developerIdentity.getPrincipal(),
+      sender: daoIdentity.getPrincipal(),
       arg: IDL.encode(registryInit({ IDL }), [
         {
-          auditorCredentialCanisterId: credentialFixture.canisterId, // Pass the real ID
           icrc118wasmregistryArgs: [],
           ttArgs: [],
         },
@@ -72,7 +71,12 @@ describe('MCP Registry ICRC-126 Integration', () => {
     registryActor = registryFixture.actor;
 
     // 3. Setup Permissions
+    registryActor.setIdentity(daoIdentity);
+    await registryActor.set_auditor_credentials_canister_id(
+      credentialFixture.canisterId,
+    );
     credentialActor.setIdentity(daoIdentity);
+
     await credentialActor.issue_credential(
       securityAuditorIdentity.getPrincipal(),
       'security',
@@ -216,7 +220,7 @@ describe('MCP Registry ICRC-126 Integration', () => {
     });
 
     it('should allow the owner to finalize a request as #Verified', async () => {
-      registryActor.setIdentity(developerIdentity); // The owner
+      registryActor.setIdentity(daoIdentity); // The owner
 
       const result = await registryActor.finalize_verification(
         wasmIdToVerify,
@@ -262,7 +266,7 @@ describe('MCP Registry ICRC-126 Integration', () => {
     });
 
     it('should REJECT finalizing an already finalized request', async () => {
-      registryActor.setIdentity(developerIdentity);
+      registryActor.setIdentity(daoIdentity);
 
       const result = await registryActor.finalize_verification(
         wasmIdToVerify, // Try to finalize the same one again

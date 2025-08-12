@@ -125,10 +125,9 @@ describe('MCP Registry ICRC-127 Integration', () => {
     const registryFixture = await pic.setupCanister<RegistryService>({
       idlFactory: registryIdlFactory,
       wasm: REGISTRY_WASM_PATH,
-      sender: developerIdentity.getPrincipal(),
+      sender: daoIdentity.getPrincipal(),
       arg: IDL.encode(registryInit({ IDL }), [
         {
-          auditorCredentialCanisterId: credentialFixture.canisterId,
           icrc118wasmregistryArgs: [],
           ttArgs: [],
         },
@@ -138,6 +137,10 @@ describe('MCP Registry ICRC-127 Integration', () => {
     registryCanisterId = registryFixture.canisterId;
 
     // 3. Setup Funds and Permissions
+    registryActor.setIdentity(daoIdentity);
+    await registryActor.set_auditor_credentials_canister_id(
+      credentialFixture.canisterId,
+    );
     // Mint tokens to the bounty creator
     ledgerActor.setIdentity(daoIdentity);
     await ledgerActor.icrc1_transfer({

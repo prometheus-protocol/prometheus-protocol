@@ -45,12 +45,11 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   args : {
     icrc118wasmregistryArgs : ?ICRC118WasmRegistry.InitArgs;
     ttArgs : ?TT.InitArgList;
-    auditorCredentialCanisterId : Principal; // The canister ID of the Auditor Credential Canister
   }
 ) = this {
   let thisPrincipal = Principal.fromActor(this);
   stable var _owner = deployer.caller;
-  stable var _credentials_canister_id : Principal = args.auditorCredentialCanisterId;
+  stable var _credentials_canister_id : ?Principal = null;
 
   let initManager = ClassPlus.ClassPlusInitializationManager(_owner, thisPrincipal, true);
   let icrc118wasmregistryInitArgs = do ? { args.icrc118wasmregistryArgs! };
@@ -225,6 +224,17 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
   };
 
+  // --- a post-deployment, one-time setter function ---
+  public shared ({ caller }) func set_auditor_credentials_canister_id(canister_id : Principal) : async Result.Result<(), Text> {
+    if (caller != _owner) { return #err("Caller is not the owner") };
+    if (_credentials_canister_id != null) {
+      return #err("Auditor Credentials Canister ID has already been set");
+    };
+
+    _credentials_canister_id := ?canister_id;
+    return #ok(());
+  };
+
   stable var icrc126_migration_state : ICRC126.State = ICRC126.initialState();
   let icrc126 = ICRC126.Init<system>({
     manager = initManager;
@@ -245,9 +255,18 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
             }
           );
           can_auditor_audit = func(auditor : Principal, audit_type : Text) : async Bool {
-            let credentials : AuditorCredentials.Service = actor (Principal.toText(_credentials_canister_id));
-            let permission_result = await credentials.verify_credential(auditor, audit_type);
-            return permission_result;
+            switch (_credentials_canister_id) {
+              case (null) {
+                // If the credential canister ID is not set, no one can be an auditor.
+                return false;
+              };
+              case (?id) {
+                // The ID is set, so we can proceed with the check.
+                let credentials : AuditorCredentials.Service = actor (Principal.toText(id));
+                let permission_result = await credentials.verify_credential(auditor, audit_type);
+                return permission_result;
+              };
+            };
           };
         };
       }
