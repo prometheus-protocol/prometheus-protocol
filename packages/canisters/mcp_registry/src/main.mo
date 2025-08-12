@@ -24,6 +24,8 @@ import Result "mo:base/Result";
 import BTree "mo:stableheapbtreemap/BTree";
 import Text "mo:base/Text";
 import Base16 "mo:base16/Base16";
+import ICRC2 "mo:icrc2-types";
+import Map "mo:map/Map";
 
 import AuditorCredentials "AuditorCredentials";
 
@@ -33,6 +35,10 @@ import Service "../../../../libs/icrc118/src/service";
 // --- ICRC-126 INTEGRATION ---
 import ICRC126 "../../../../libs/icrc126/src/lib";
 import ICRC126Service "../../../../libs/icrc126/src/service";
+
+// --- ICRC-127 INTEGRATION ---
+import ICRC127 "../../../../libs/icrc127/src/lib";
+import ICRC127Service "../../../../libs/icrc127/src/service";
 
 // ICRC-118 Registry Canister exposing the full public API contract
 shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
@@ -254,6 +260,171 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     );
   });
 
+  // The new stable variable to store the final word on each wasm_id.
+  stable var finalization_log = BTree.init<Text, FinalizationRecord>(null);
+
+  public shared query func is_wasm_verified(hash : Blob) : async Bool {
+    let wasm_id = Base16.encode(hash);
+    let final_status = BTree.get(finalization_log, Text.compare, wasm_id);
+
+    switch (final_status) {
+      case (null) {
+        // Not yet finalized.
+        return false;
+      };
+      case (?record) {
+        switch (record.outcome) {
+          case (#Verified) {
+            // Explicitly verified!
+            return true;
+          };
+          case (#Rejected) {
+            // Explicitly rejected.
+            return false;
+          };
+        };
+      };
+    };
+  };
+
+  private func has_attestation(wasm_id : Text, audit_type : Text) : Bool {
+    // 1. Get the current state from the ICRC-126 library instance.
+    let state = icrc126().state;
+
+    // 2. Look up the wasm_id in the `audits` map.
+    switch (Map.get(state.audits, Map.thash, wasm_id)) {
+      case (null) {
+        // If there's no entry for this wasm_id, there are no audits.
+        return false;
+      };
+      case (?audit_records) {
+        // 3. We have an array of audits. Find one that is an Attestation of the correct type.
+        let found_match = Array.find<ICRC126.AuditRecord>(
+          audit_records,
+          func(record : ICRC126.AuditRecord) : Bool {
+            switch (record) {
+              case (#Attestation(att_record)) {
+                // This is an attestation. Check if its audit_type matches.
+                return att_record.audit_type == audit_type;
+              };
+              case (#Divergence(_)) {
+                // This is a divergence report, not an attestation. Ignore it.
+                return false;
+              };
+            };
+          },
+        );
+
+        // 4. Return true if we found a matching attestation, false otherwise.
+        return Option.isSome(found_match);
+      };
+    };
+  };
+
+  // --- ICRC-127 Library Setup (The Core of this Canister) ---
+  stable var icrc127_migration_state : ICRC127.State = ICRC127.initialState();
+  let icrc127 = ICRC127.Init<system>({
+    manager = initManager;
+    initialState = icrc127_migration_state;
+    args = null;
+    pullEnvironment = ?(
+      func() : ICRC127.Environment {
+        {
+          tt = tt();
+          advanced = null;
+          log = localLog();
+          add_record = ?(
+            func<system>(data : ICRC127.ICRC16, meta : ?ICRC127.ICRC16) : Nat {
+              let converted_data = convertIcrc126ValueToIcrc3Value(data);
+              let converted_meta = Option.map(meta, convertIcrc126ValueToIcrc3Value);
+              icrc3().add_record<system>(converted_data, converted_meta);
+            }
+          );
+
+          // --- Provide real token transfer hooks ---
+          icrc1_fee = func(canister : Principal) : async Nat {
+            let ledger : ICRC2.Service = actor (Principal.toText(canister));
+            await ledger.icrc1_fee();
+          };
+          icrc1_transfer = func(canister : Principal, args : ICRC2.TransferArgs) : async ICRC2.TransferResult {
+            let ledger : ICRC2.Service = actor (Principal.toText(canister));
+            await ledger.icrc1_transfer(args);
+          };
+          icrc2_transfer_from = func(canister : Principal, args : ICRC2.TransferFromArgs) : async ICRC2.TransferFromResult {
+            let ledger : ICRC2.Service = actor (Principal.toText(canister));
+            await ledger.icrc2_transfer_from(args);
+          };
+          // --- Provide the core validation logic ---
+          validate_submission = func(req : ICRC127Service.RunBountyRequest) : async ICRC127Service.RunBountyResult {
+            // The challenge is now a map containing the wasm_hash and the required audit_type.
+            let params_map = switch (req.challenge_parameters) {
+              case (#Map(m)) { m };
+              case (_) {
+                return {
+                  result = #Invalid;
+                  metadata = #Map([("error", #Text("Challenge parameters must be a Map."))]);
+                  trx_id = null;
+                };
+              };
+            };
+
+            // Safely extract wasm_hash and audit_type from the map
+            var wasm_hash : ?Blob = null;
+            var audit_type : ?Text = null;
+
+            for ((key, val) in params_map.vals()) {
+              if (key == "wasm_hash") {
+                switch (val) {
+                  case (#Blob(b)) { wasm_hash := ?b };
+                  case (_) {};
+                };
+              } else if (key == "audit_type") {
+                switch (val) {
+                  case (#Text(t)) { audit_type := ?t };
+                  case (_) {};
+                };
+              };
+            };
+
+            switch (wasm_hash, audit_type) {
+              case (?wasm_hash_exists, ?audit_type_exists) {
+                // Both required parameters are present.
+                let wasm_id = Base16.encode(wasm_hash_exists);
+                if (has_attestation(wasm_id, audit_type_exists)) {
+                  return {
+                    result = #Valid;
+                    metadata = #Map([("status", #Text("Attestation found for audit type: " # audit_type_exists))]);
+                    trx_id = null;
+                  };
+                } else {
+                  return {
+                    result = #Invalid;
+                    metadata = #Map([("status", #Text("No attestation found for audit type: " # audit_type_exists))]);
+                    trx_id = null;
+                  };
+                };
+
+              };
+              case (_, _) {
+                return {
+                  result = #Invalid;
+                  metadata = #Map([("error", #Text("Challenge map must contain wasm_hash (Blob) and audit_type (Text)."))]);
+                  trx_id = null;
+                };
+              };
+            };
+          };
+        };
+      }
+    );
+    onStorageChange = func(state) { icrc127_migration_state := state };
+    onInitialize = ?(
+      func(icrc127 : ICRC127.ICRC127Bounty) : async* () {
+        D.print("ICRC127: Initialized");
+      }
+    );
+  });
+
   //------------------- API IMPLEMENTATION -------------------//
 
   // --- ICRC10 Endpoints ---
@@ -317,6 +488,27 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
 
   public shared (msg) func icrc126_file_divergence(req : ICRC126Service.DivergenceReportRequest) : async ICRC126Service.DivergenceResult {
     await icrc126().icrc126_file_divergence(msg.caller, req);
+  };
+
+  // --- ICRC127 Endpoints ---
+  public shared (msg) func icrc127_create_bounty(req : ICRC127Service.CreateBountyRequest) : async ICRC127Service.CreateBountyResult {
+    await icrc127().icrc127_create_bounty<system>(msg.caller, req);
+  };
+  public shared (msg) func icrc127_submit_bounty(req : ICRC127Service.BountySubmissionRequest) : async ICRC127Service.BountySubmissionResult {
+    await icrc127().icrc127_submit_bounty(msg.caller, req);
+  };
+  public query func icrc127_get_bounty(bounty_id : Nat) : async ?ICRC127.Bounty {
+    icrc127().icrc127_get_bounty(bounty_id);
+  };
+  public query func icrc127_list_bounties({
+    filter : ?[ICRC127Service.ListBountiesFilter];
+    prev : ?Nat;
+    take : ?Nat;
+  }) : async [ICRC127.Bounty] {
+    icrc127().icrc127_list_bounties(filter, prev, take);
+  };
+  public query func icrc127_metadata() : async ICRC127.ICRC16Map {
+    icrc127().icrc127_metadata();
   };
 
   // --- ICRC3 Endpoints ---
@@ -403,9 +595,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     metadata : ICRC126.ICRC16Map;
   };
 
-  // The new stable variable to store the final word on each wasm_id.
-  stable var finalization_log = BTree.init<Text, FinalizationRecord>(null);
-
   public shared (msg) func finalize_verification(
     wasm_id : Text,
     outcome : VerificationOutcome,
@@ -444,30 +633,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     );
 
     return #ok(trx_id);
-  };
-
-  public shared query func is_wasm_verified(hash : Blob) : async Bool {
-    let wasm_id = Base16.encode(hash);
-    let final_status = BTree.get(finalization_log, Text.compare, wasm_id);
-
-    switch (final_status) {
-      case (null) {
-        // Not yet finalized.
-        return false;
-      };
-      case (?record) {
-        switch (record.outcome) {
-          case (#Verified) {
-            // Explicitly verified!
-            return true;
-          };
-          case (#Rejected) {
-            // Explicitly rejected.
-            return false;
-          };
-        };
-      };
-    };
   };
 
   //------------------- SAMPLE FUNCTION -------------------//
