@@ -39,13 +39,7 @@ describe('MCP Registry Canister (Isolated Tests)', () => {
       idlFactory: registryIdlFactory,
       wasm: REGISTRY_WASM_PATH,
       sender: platformOwner.getPrincipal(),
-      arg: IDL.encode(init({ IDL }), [
-        {
-          auditorCredentialCanisterId: Principal.anonymous(),
-          icrc118wasmregistryArgs: [],
-          ttArgs: [],
-        },
-      ]),
+      arg: IDL.encode(init({ IDL }), [[]]),
     });
 
     registryActor = fixture.actor;

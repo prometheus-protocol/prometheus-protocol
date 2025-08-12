@@ -58,13 +58,7 @@ async function setupEnvironment(pic: PocketIc) {
     idlFactory: registryIdlFactory,
     wasm: REGISTRY_WASM_PATH,
     sender: daoIdentity.getPrincipal(),
-    arg: IDL.encode(registryInit({ IDL }), [
-      {
-        auditorCredentialCanisterId: credentialFixture.canisterId,
-        icrc118wasmregistryArgs: [],
-        ttArgs: [],
-      },
-    ]),
+    arg: IDL.encode(registryInit({ IDL }), [[]]),
   });
   const orchestratorFixture = await pic.setupCanister<OrchestratorService>({
     idlFactory: orchestratorIdlFactory,

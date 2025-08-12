@@ -111,13 +111,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       idlFactory: registryIdlFactory,
       wasm: REGISTRY_WASM_PATH,
       sender: daoIdentity.getPrincipal(),
-      arg: IDL.encode(registryInit({ IDL }), [
-        {
-          auditorCredentialCanisterId: credentialFixture.canisterId,
-          icrc118wasmregistryArgs: [],
-          ttArgs: [],
-        },
-      ]),
+      arg: IDL.encode(registryInit({ IDL }), [[]]),
     });
     registryActor = registryFixture.actor;
     registryCanisterId = registryFixture.canisterId;

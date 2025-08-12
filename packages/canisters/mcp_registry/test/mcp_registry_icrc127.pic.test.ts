@@ -126,12 +126,7 @@ describe('MCP Registry ICRC-127 Integration', () => {
       idlFactory: registryIdlFactory,
       wasm: REGISTRY_WASM_PATH,
       sender: daoIdentity.getPrincipal(),
-      arg: IDL.encode(registryInit({ IDL }), [
-        {
-          icrc118wasmregistryArgs: [],
-          ttArgs: [],
-        },
-      ]),
+      arg: IDL.encode(registryInit({ IDL }), [[]]),
     });
     registryActor = registryFixture.actor;
     registryCanisterId = registryFixture.canisterId;
