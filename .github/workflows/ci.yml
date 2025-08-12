@@ -35,6 +35,14 @@ jobs:
         # Now that the SSH agent is configured, we can fetch the submodules.
         run: git submodule update --init --recursive
 
+      - name: 4. Create Symlink for ICRC-118 Compatibility
+        # This creates a "shortcut" so the hardcoded import in icrc120
+        # can find the icrc118 library at the path it expects.
+        run: |
+          cd libs
+          ln -s icrc118 ICRC118WasmRegistry-mo
+          cd ..
+
       - name: 4. Setup Mops
         uses: ZenVoich/setup-mops@v1
         with:
@@ -83,6 +91,14 @@ jobs:
       - name: 3. Initialize and update submodules
         # Now that the SSH agent is configured, we can fetch the submodules.
         run: git submodule update --init --recursive
+
+      - name: 4. Create Symlink for ICRC-118 Compatibility
+        # This creates a "shortcut" so the hardcoded import in icrc120
+        # can find the icrc118 library at the path it expects.
+        run: |
+          cd libs
+          ln -s icrc118 ICRC118WasmRegistry-mo
+          cd ..
 
       - name: 4. Setup Mops
         uses: ZenVoich/setup-mops@v1
@@ -145,6 +161,14 @@ jobs:
       - name: 3. Initialize and update submodules
         # Now that the SSH agent is configured, we can fetch the submodules.
         run: git submodule update --init --recursive
+
+      - name: 4. Create Symlink for ICRC-118 Compatibility
+        # This creates a "shortcut" so the hardcoded import in icrc120
+        # can find the icrc118 library at the path it expects.
+        run: |
+          cd libs
+          ln -s icrc118 ICRC118WasmRegistry-mo
+          cd ..
 
       - name: 4. Setup Mops
         uses: ZenVoich/setup-mops@v1
