@@ -42,7 +42,7 @@ import ICRC127Service "../../../../libs/icrc127/src/service";
 
 // ICRC-118 Registry Canister exposing the full public API contract
 shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
-  args : {
+  args : ?{
     icrc118wasmregistryArgs : ?ICRC118WasmRegistry.InitArgs;
     ttArgs : ?TT.InitArgList;
   }
@@ -52,8 +52,8 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   stable var _credentials_canister_id : ?Principal = null;
 
   let initManager = ClassPlus.ClassPlusInitializationManager(_owner, thisPrincipal, true);
-  let icrc118wasmregistryInitArgs = do ? { args.icrc118wasmregistryArgs! };
-  let ttInitArgs : ?TT.InitArgList = do ? { args.ttArgs! };
+  let icrc118wasmregistryInitArgs = do ? { args!.icrc118wasmregistryArgs! };
+  let ttInitArgs : ?TT.InitArgList = do ? { args!.ttArgs! };
 
   stable var icrc10 = ICRC10.initCollection();
 
