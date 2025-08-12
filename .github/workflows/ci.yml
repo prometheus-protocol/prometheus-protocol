@@ -20,38 +20,47 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 1. Check out repository and submodules
+      - name: 1. Check out repository (main repo only)
         uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
-          ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
+        # We do NOT initialize submodules here.
 
-      - name: 2. Setup Mops
+      - name: 2. Setup SSH Agent with Multiple Keys
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.DEPLOY_KEY_ICRC118 }}
+            ${{ secrets.DEPLOY_KEY_ICRC120 }}
+
+      - name: 3. Initialize and update submodules
+        # Now that the SSH agent is configured, we can fetch the submodules.
+        run: git submodule update --init --recursive
+
+      - name: 4. Setup Mops
         uses: ZenVoich/setup-mops@v1
         with:
           mops-version: 1
 
-      - name: 3. Setup PNPM
+      - name: 5. Setup PNPM
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: 4. Setup Node.js 20
+      - name: 6. Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'pnpm'
 
-      - name: 5. Setup DFX # <<< ADDED
+      - name: 7. Setup DFX
         uses: dfinity/setup-dfx@main
 
-      - name: 6. Install Dependencies
+      - name: 8. Install Dependencies
         run: pnpm install
 
-      - name: 7. Install Mops Dependencies
+      - name: 9. Install Mops Dependencies
         run: mops install
 
-      - name: 8. Run Motoko Tests
+      - name: 10. Run Motoko Tests
         run: pnpm test:mo
         # This uses our package.json script to run `mops test` in all canister packages
 
@@ -60,47 +69,56 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 1. Check out repository and submodules
+      - name: 1. Check out repository (main repo only)
         uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
-          ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
+        # We do NOT initialize submodules here.
 
-      - name: 2. Setup Mops
+      - name: 2. Setup SSH Agent with Multiple Keys
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.DEPLOY_KEY_ICRC118 }}
+            ${{ secrets.DEPLOY_KEY_ICRC120 }}
+
+      - name: 3. Initialize and update submodules
+        # Now that the SSH agent is configured, we can fetch the submodules.
+        run: git submodule update --init --recursive
+
+      - name: 4. Setup Mops
         uses: ZenVoich/setup-mops@v1
         with:
           mops-version: 1
 
-      - name: 3. Setup PNPM
+      - name: 5. Setup PNPM
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: 4. Setup Node.js 20
+      - name: 6. Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'pnpm'
 
-      - name: 5. Setup DFX
+      - name: 7. Setup DFX
         uses: dfinity/setup-dfx@main
 
-      - name: 6. Install Dependencies
+      - name: 8. Install Dependencies
         run: pnpm install
 
-      - name: 7. Install Mops Dependencies
+      - name: 9. Install Mops Dependencies
         run: mops install
 
-      - name: 8. Start Local Replica
+      - name: 10. Start Local Replica
         run: dfx start --background --clean
 
-      - name: 9. Deploy All Canisters
+      - name: 11. Deploy All Canisters
         run: dfx deploy
 
-      - name: 10. Run PicJS Tests
+      - name: 12. Run PicJS Tests
         run: pnpm test:canisters
 
-      - name: 11. Stop Local Replica
+      - name: 13. Stop Local Replica
         if: always() # Ensure this runs even if tests fail
         run: dfx stop
 
@@ -113,47 +131,56 @@ jobs:
     needs: [unit-tests, picjs-tests]
 
     steps:
-      - name: 1. Check out repository and submodules
+      - name: 1. Check out repository (main repo only)
         uses: actions/checkout@v4
-        with:
-          submodules: 'recursive'
-          ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
+        # We do NOT initialize submodules here.
 
-      - name: 2. Setup Mops
+      - name: 2. Setup SSH Agent with Multiple Keys
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.DEPLOY_KEY_ICRC118 }}
+            ${{ secrets.DEPLOY_KEY_ICRC120 }}
+
+      - name: 3. Initialize and update submodules
+        # Now that the SSH agent is configured, we can fetch the submodules.
+        run: git submodule update --init --recursive
+
+      - name: 4. Setup Mops
         uses: ZenVoich/setup-mops@v1
         with:
           mops-version: 1
 
-      - name: 3. Setup PNPM
+      - name: 5. Setup PNPM
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: 4. Setup Node.js 20
+      - name: 6. Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'pnpm'
 
-      - name: 5. Setup DFX
+      - name: 7. Setup DFX
         uses: dfinity/setup-dfx@main
 
-      - name: 6. Install Dependencies
+      - name: 8. Install Dependencies
         run: pnpm install
 
-      - name: 7. Install Mops Dependencies
+      - name: 9. Install Mops Dependencies
         run: mops install
 
-      - name: 8. Start Local Replica
+      - name: 10. Start Local Replica
         run: dfx start --background --clean
 
-      - name: 9. Deploy All Canisters
+      - name: 11. Deploy All Canisters
         run: dfx deploy
 
-      - name: 10. Run E2E Tests
+      - name: 12. Run E2E Tests
         run: pnpm test:e2e
 
-      - name: 11. Stop Local Replica
+      - name: 13. Stop Local Replica
         if: always() # Ensure this runs even if tests fail
         run: dfx stop
 
