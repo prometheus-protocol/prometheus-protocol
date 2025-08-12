@@ -27,6 +27,7 @@
   "devDependencies": {
     "@dfinity/agent": "^2.4.1",
     "@dfinity/candid": "^2.4.1",
+    "@dfinity/ic-management": "^6.2.1",
     "@dfinity/identity-secp256k1": "^2.4.1",
     "@dfinity/pic": "^0.13.1",
     "@dfinity/principal": "^2.4.1",

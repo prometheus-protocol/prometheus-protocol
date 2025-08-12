@@ -2,12 +2,7 @@
   "name": "@prometheus-protocol/mcp-registry",
   "private": true,
   "version": "0.1.0",
-  "description": "The Motoko canister for the Prometheus Protocol Authorization Server.",
-  "scripts": {
-    "test:mo": "mops test mcp_registry",
-    "bootstrap": "./scripts/set_frontend_canister_id.sh",
-    "generate-auth-url": "node scripts/generate-auth-url.js"
-  },
+  "description": "The Motoko canister for the Prometheus Protocol MCP Registry.",
   "devDependencies": {
     "@dfinity/pic": "^0.13.1"
   }

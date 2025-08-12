@@ -1,0 +1,10 @@
+{
+  "name": "@prometheus-protocol/mcp-orchestrator",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The Motoko canister for the Prometheus Protocol MCP Orchestrator.",
+  "scripts": {},
+  "devDependencies": {
+    "@dfinity/pic": "^0.13.1"
+  }
+}
