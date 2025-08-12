@@ -21,8 +21,8 @@ import {
   type UpgradeToRequest,
   type ConfigCanisterRequest,
 } from '@declarations/mcp_orchestrator/mcp_orchestrator.did.js';
-import { idlFactory as credentialIdlFactory } from '@declarations/auditor_credential_canister/auditor_credential_canister.did.js';
-import type { _SERVICE as CredentialService } from '@declarations/auditor_credential_canister/auditor_credential_canister.did';
+import { idlFactory as credentialIdlFactory } from '@declarations/auditor_credentials/auditor_credentials.did.js';
+import type { _SERVICE as CredentialService } from '@declarations/auditor_credentials/auditor_credentials.did';
 
 // --- Wasm Paths ---
 const ORCHESTRATOR_WASM_PATH = path.resolve(
