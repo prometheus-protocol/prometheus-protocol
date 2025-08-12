@@ -13,8 +13,6 @@ import {
   idlFactory as registryIdlFactory,
   init as registryInit,
   type _SERVICE as RegistryService,
-  type CreateCanisterType,
-  type UpdateWasmRequest,
 } from '@declarations/mcp_registry/mcp_registry.did.js';
 import {
   idlFactory as orchestratorIdlFactory,
@@ -72,18 +70,15 @@ async function setupEnvironment(pic: PocketIc) {
     idlFactory: orchestratorIdlFactory,
     wasm: ORCHESTRATOR_WASM_PATH,
     sender: daoIdentity.getPrincipal(),
-    arg: IDL.encode(orchestratorInit({ IDL }), [
-      { registryId: registryFixture.canisterId, icrc120Args: [], ttArgs: [] },
-    ]),
+    arg: IDL.encode(orchestratorInit({ IDL }), [[]]),
   });
+
   const managedCanisterFixture = await pic.setupCanister({
     idlFactory: orchestratorIdlFactory,
     wasm: ORCHESTRATOR_WASM_PATH,
     sender: daoIdentity.getPrincipal(),
     controllers: [orchestratorFixture.canisterId, daoIdentity.getPrincipal()],
-    arg: IDL.encode(orchestratorInit({ IDL }), [
-      { registryId: registryFixture.canisterId, icrc120Args: [], ttArgs: [] },
-    ]),
+    arg: IDL.encode(orchestratorInit({ IDL }), [[]]),
   });
 
   return {
@@ -91,6 +86,7 @@ async function setupEnvironment(pic: PocketIc) {
     orchestratorActor: orchestratorFixture.actor,
     orchestratorCanisterId: orchestratorFixture.canisterId,
     managedCanisterId: managedCanisterFixture.canisterId,
+    registryCanisterId: registryFixture.canisterId,
   };
 }
 
@@ -124,6 +120,7 @@ describe('MCP Orchestrator Canister (Baseline Tests)', () => {
         forked_from: [],
       },
     ]);
+    await orchestratorActor.set_mcp_registry_id(env.registryCanisterId);
     await orchestratorActor.register_canister(
       managedCanisterId,
       baselineNamespace,
@@ -183,6 +180,9 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
     const secureNamespace = 'com.prometheus.secure-server';
     registryActor.setIdentity(daoIdentity);
     await registryActor.set_mcp_orchestrator(env.orchestratorCanisterId);
+    await orchestratorActor.set_mcp_registry_id(env.registryCanisterId);
+    orchestratorActor.setIdentity(daoIdentity);
+    await orchestratorActor.set_mcp_registry_id(env.registryCanisterId);
 
     registryActor.setIdentity(developerIdentity);
     const res1 = await registryActor.icrc118_create_canister_type([

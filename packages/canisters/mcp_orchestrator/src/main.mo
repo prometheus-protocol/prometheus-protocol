@@ -18,19 +18,19 @@ import Result "mo:base/Result";
 import Map "mo:map/Map";
 import { phash } "mo:map/Map";
 import Debug "mo:base/Debug";
+import Error "mo:base/Error";
 
 import McpRegistry "McpRegistry";
 
-import ICRC118WasmRegistryClient "../../../../libs/icrc118/src/client";
+import ICRC118WasmRegistry "../../../../libs/icrc118/src/service";
 import System "../../../../libs/icrc120/src/system";
 import ICRC120 "../../../../libs/icrc120/src";
 import ICRC120Types "../../../../libs/icrc120/src/migrations/types";
 
 shared (deployer) actor class ICRC120Canister<system>(
-  args : {
+  args : ?{
     icrc120Args : ?ICRC120Types.Current.InitArgs;
     ttArgs : ?TT.InitArgList;
-    registryId : Principal; // The ID of the McpRegistry canister
   }
 ) = this {
 
@@ -38,8 +38,8 @@ shared (deployer) actor class ICRC120Canister<system>(
   stable var _owner = deployer.caller;
 
   let initManager = ClassPlus.ClassPlusInitializationManager(_owner, Principal.fromActor(this), true);
-  let icrc120InitArgs = do ? { args.icrc120Args! };
-  let ttInitArgs : ?TT.InitArgList = do ? { args.ttArgs! };
+  let icrc120InitArgs = do ? { args!.icrc120Args! };
+  let ttInitArgs : ?TT.InitArgList = do ? { args!.ttArgs! };
 
   stable var icrc10 = ICRC10.initCollection();
 
@@ -113,23 +113,36 @@ shared (deployer) actor class ICRC120Canister<system>(
 
   stable var managed_canisters = Map.new<Principal, Text>();
 
-  // Store the registry ID provided at initialization
-  stable var _mcp_registry_id : Principal = args.registryId;
+  // --- FIX 1: The stable variable to hold the registry ID ---
+  stable var _mcp_registry_id : ?Principal = null;
+
+  // --- FIX 2: A post-deployment, one-time setter for the registry ID ---
+  public shared ({ caller }) func set_mcp_registry_id(registryId : Principal) : async Result.Result<(), Text> {
+    if (caller != _owner) { return #err("Caller is not the owner") };
+    if (_mcp_registry_id != null) {
+      return #err("MCP Registry ID has already been set");
+    };
+
+    _mcp_registry_id := ?registryId;
+    return #ok(());
+  };
 
   func canAdminCanister({
     canisterId : Principal;
     caller : Principal;
   }) : async* Bool {
-    switch (Map.get(managed_canisters, phash, canisterId)) {
-      case (null) { return false }; // Not a managed canister
-      case (?namespace) {
-        // Directly call the imported canister actor
-        let registry : McpRegistry.Service = actor (Principal.toText(_mcp_registry_id));
-
-        let result = await registry.is_controller_of_type(namespace, caller);
-        switch (result) {
-          case (#ok(is_controller)) { return is_controller };
-          case (#err(_)) { return false }; // Registry rejected the call
+    switch (_mcp_registry_id) {
+      case (null) { return false }; // Cannot admin if registry is not set
+      case (?registryId) {
+        switch (Map.get(managed_canisters, phash, canisterId)) {
+          case (?namespace) {
+            let registry : McpRegistry.Service = actor (Principal.toText(registryId));
+            switch (await registry.is_controller_of_type(namespace, caller)) {
+              case (#ok(is_controller)) { return is_controller };
+              case (#err(_)) { return false };
+            };
+          };
+          case (_) { return false };
         };
       };
     };
@@ -147,33 +160,23 @@ shared (deployer) actor class ICRC120Canister<system>(
       canisterId : Principal;
     }
   ) : async* Bool {
-    Debug.print("Checking if canister installation is authorized for " # Principal.toText(caller) # " on " # Principal.toText(canisterId));
-    switch (Map.get(managed_canisters, phash, canisterId)) {
-      case (null) {
-        // This canister is not managed by the orchestrator.
-        return false;
-      };
-      case (?namespace) {
-        let registry : McpRegistry.Service = actor (Principal.toText(_mcp_registry_id));
-
-        // --- CHECK 1: Is the Wasm itself verified by the DAO? ---
-        // We get the hash from the new, context-rich `args` object.
-        let verified_check = await registry.is_wasm_verified(args.wasm_module_hash);
-        Debug.print("Wasm verified check: " # debug_show (verified_check));
-        if (not verified_check) {
-          // The code has not passed the final audit gate.
-          return false;
+    switch (_mcp_registry_id) {
+      case (null) { return false }; // Cannot install if registry is not set
+      case (?registryId) {
+        switch (Map.get(managed_canisters, phash, canisterId)) {
+          case (?namespace) {
+            let registry : McpRegistry.Service = actor (Principal.toText(registryId));
+            let verified_check = await registry.is_wasm_verified(args.wasm_module_hash);
+            if (not verified_check) { return false };
+            return true;
+          };
+          case (_) { return false };
         };
-
-        // If both checks pass, the installation/upgrade is authorized.
-        return true;
       };
     };
   };
 
   stable var icrc120_migration_state : ICRC120.State = ICRC120.initialState();
-
-  let ICRC118Client = ICRC118WasmRegistryClient.ICRC118WasmRegistryClient(_mcp_registry_id);
 
   let icrc120 = ICRC120.Init<system>({
     manager = initManager;
@@ -186,14 +189,89 @@ shared (deployer) actor class ICRC120Canister<system>(
           advanced = null; // Add any advanced options if needed
           log = localLog();
           add_record = null;
-          get_wasm_store = ICRC118Client.getWasmStore;
-          get_wasm_chunk = ICRC118Client.getWasmChunk;
           can_admin_canister = canAdminCanister;
           can_install_canister = ?canInstallCanister;
+
+          get_wasm_store = func(wasm_hash : Blob) : async* Result.Result<(Principal, [Blob]), Text> {
+            switch (_mcp_registry_id) {
+              case (null) { return #err("MCP Registry ID has not been set.") };
+              case (?registryId) {
+                let registry : ICRC118WasmRegistry.Service = actor (Principal.toText(registryId));
+                try {
+                  let result = await registry.icrc118_get_wasms({
+                    filter = ?[#hash(wasm_hash)];
+                    prev = null;
+                    take = null;
+                  });
+                  if (result.size() == 0) {
+                    return #err("No Wasm found for the given hash.");
+                  } else {
+                    // Return the registry's ID and the list of chunk hashes
+                    return #ok((registryId, result[0].chunks));
+                  };
+                } catch (err) {
+                  return #err("Error calling get_wasms: " # Error.message(err));
+                };
+              };
+            };
+          };
+
+          get_wasm_chunk = func(hash : Blob, chunkId : Nat, expectedHash : ?Blob) : async* Result.Result<Blob, Text> {
+            switch (_mcp_registry_id) {
+              case (null) { return #err("MCP Registry ID has not been set.") };
+              case (?registryId) {
+                let registry : ICRC118WasmRegistry.Service = actor (Principal.toText(registryId));
+                // Step 1: Get the WASM metadata to find its namespace and version
+                let wasm_record = try {
+                  let result = await registry.icrc118_get_wasms({
+                    filter = ?[#hash(hash)];
+                    prev = null;
+                    take = null;
+                  });
+                  if (result.size() == 0) {
+                    return #err("No Wasm found for the given hash.");
+                  } else { result[0] };
+                } catch (err) {
+                  return #err("Error fetching wasm metadata: " # Error.message(err));
+                };
+
+                // Step 2: Use the metadata to fetch the specific chunk
+                try {
+                  let result = await registry.icrc118_get_wasm_chunk({
+                    canister_type_namespace = wasm_record.canister_type_namespace;
+                    version_number = wasm_record.version_number;
+                    hash = hash;
+                    chunk_id = chunkId;
+                  });
+
+                  switch (result) {
+                    case (#Ok(chunk)) {
+                      switch (expectedHash) {
+                        case (?expected) {
+                          let sha = Sha256.fromBlob(#sha256, chunk.wasm_chunk);
+                          if (expected != sha) {
+                            return #err("Chunk hash does not match expected hash.");
+                          } else { return #ok(chunk.wasm_chunk) };
+                        };
+                        case (null) {
+                          return #ok(chunk.wasm_chunk);
+                        };
+                      };
+                    };
+                    case (#Err(err)) {
+                      // The service type for err is just Text, so we can use it directly.
+                      return #err("Error from get_wasm_chunk: " # err);
+                    };
+                  };
+                } catch (err) {
+                  return #err("Error calling get_wasm_chunk: " # Error.message(err));
+                };
+              };
+            };
+          };
         };
       }
     );
-
     onInitialize = ?(
       func(
         newClass : ICRC120.ICRC120
@@ -299,12 +377,17 @@ shared (deployer) actor class ICRC120Canister<system>(
     icrc3().get_tip();
   };
 
-  // --- McpRegistry Endpoints ---
+  // --- ICRC118WasmRegistryService Endpoints ---
   public shared (msg) func register_canister(canister_id : Principal, namespace : Text) : async Result.Result<(), Text> {
     // 1. Ask the registry if the caller is a controller for the given namespace.
     // let service : Service = actor("um5iw-rqaaa-aaaaq-qaaba-cai");
 
-    let registry : McpRegistry.Service = actor (Principal.toText(_mcp_registry_id));
+    let registryId = switch (_mcp_registry_id) {
+      case (null) return #err("MCP Registry ID is not set. Please set it before registering canisters.");
+      case (?exists) { exists };
+    };
+
+    let registry : McpRegistry.Service = actor (Principal.toText(registryId));
     let permission_result = await registry.is_controller_of_type(namespace, msg.caller);
 
     // 2. Handle all possible outcomes from the registry call.
