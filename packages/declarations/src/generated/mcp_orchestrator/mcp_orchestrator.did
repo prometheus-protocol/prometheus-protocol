@@ -1,0 +1,363 @@
+type canister_install_mode = 
+ variant {
+   install;
+   reinstall;
+   upgrade:
+    opt
+     record {
+       skip_pre_upgrade: opt bool;
+       wasm_memory_persistence: opt variant {
+                                      keep;
+                                      replace;
+                                    };
+     };
+ };
+type Value = 
+ variant {
+   Array: vec Value;
+   Blob: blob;
+   Int: int;
+   Map: vec record {
+              text;
+              Value;
+            };
+   Nat: nat;
+   Text: text;
+ };
+type UpgradeToResult = 
+ variant {
+   Err: UpgradeToError;
+   Ok: UpgradeToRequestId;
+ };
+type UpgradeToRequestId = nat;
+type UpgradeToRequest = 
+ record {
+   args: blob;
+   canister_id: principal;
+   hash: blob;
+   mode: canister_install_mode;
+   parameters: opt vec record {
+                         text;
+                         ICRC16;
+                       };
+   restart: bool;
+   snapshot: bool;
+   stop: bool;
+   timeout: nat;
+ };
+type UpgradeToError = 
+ variant {
+   Generic: text;
+   InvalidPayment;
+   Unauthorized;
+   WasmUnavailable;
+ };
+type UpgradeFinishedResult = 
+ variant {
+   Failed: record {
+             nat;
+             text;
+           };
+   InProgress: nat;
+   Success: nat;
+ };
+type TransactionRange = 
+ record {
+   length: nat;
+   start: nat;
+ };
+type Tip = 
+ record {
+   hash_tree: blob;
+   last_block_hash: blob;
+   last_block_index: blob;
+ };
+type Time = nat;
+type StopCanisterResult = 
+ variant {
+   Err: StopCanisterError;
+   Ok: nat;
+ };
+type StopCanisterRequest = 
+ record {
+   canister_id: principal;
+   timeout: nat;
+ };
+type StopCanisterError = 
+ variant {
+   Generic: text;
+   NotFound;
+   Unauthorized;
+ };
+type StartCanisterResult = 
+ variant {
+   Err: StartCanisterError;
+   Ok: nat;
+ };
+type StartCanisterRequest = 
+ record {
+   canister_id: principal;
+   timeout: nat;
+ };
+type StartCanisterError = 
+ variant {
+   Generic: text;
+   NotFound;
+   Unauthorized;
+ };
+type RevertSnapshotResult = 
+ variant {
+   Err: RevertSnapshotError;
+   Ok: nat;
+ };
+type RevertSnapshotRequest = 
+ record {
+   canister_id: principal;
+   restart: bool;
+   snapshot_id: blob;
+ };
+type RevertSnapshotError = 
+ variant {
+   Generic: text;
+   NotFound;
+   TooManyRequests;
+   Unauthorized;
+ };
+type Result = 
+ variant {
+   err: text;
+   ok;
+ };
+type OrchestrationEventType = 
+ variant {
+   canister_started;
+   canister_stopped;
+   configuration_changed;
+   snapshot_cleaned;
+   snapshot_created;
+   snapshot_requested;
+   snapshot_revert_requested;
+   snapshot_reverted;
+   upgrade_finished;
+   upgrade_initiated;
+ };
+type OrchestrationEvent = 
+ record {
+   canister_id: principal;
+   details: ICRC16;
+   event_type: OrchestrationEventType;
+   id: nat;
+   timestamp: nat;
+ };
+type InitArgs = record {};
+type InitArgList = 
+ record {
+   expectedExecutionTime: Time;
+   initialTimers: vec record {
+                        ActionId;
+                        Action;
+                      };
+   lastActionIdReported: opt nat;
+   lastCycleReport: opt nat;
+   lastExecutionTime: Time;
+   maxExecutions: opt nat;
+   nextActionId: nat;
+   nextCycleActionId: opt nat;
+ };
+type ICRC16Property = 
+ record {
+   immutable: bool;
+   name: text;
+   value: ICRC16;
+ };
+type ICRC16Map = 
+ vec record {
+       text;
+       ICRC16;
+     };
+type ICRC16 = 
+ variant {
+   Array: vec ICRC16;
+   Blob: blob;
+   Bool: bool;
+   Bytes: vec nat8;
+   Class: vec ICRC16Property;
+   Float: float64;
+   Floats: vec float64;
+   Int: int;
+   Int16: int16;
+   Int32: int32;
+   Int64: int64;
+   Int8: int8;
+   Map: vec record {
+              text;
+              ICRC16;
+            };
+   Nat: nat;
+   Nat16: nat16;
+   Nat32: nat32;
+   Nat64: nat64;
+   Nat8: nat8;
+   Nats: vec nat;
+   Option: opt ICRC16;
+   Principal: principal;
+   Set: vec ICRC16;
+   Text: text;
+   ValueMap: vec record {
+                   ICRC16;
+                   ICRC16;
+                 };
+ };
+type ICRC120Canister = 
+ service {
+   get_tip: () -> (Tip) query;
+   hello: () -> (text);
+   icrc120_clean_snapshot: (requests: vec CleanSnapshotRequest) ->
+    (vec CleanSnapshotResult);
+   icrc120_config_canister: (requests: vec ConfigCanisterRequest) ->
+    (vec ConfigCanisterResult);
+   icrc120_create_snapshot: (requests: vec CreateSnapshotRequest) ->
+    (vec CreateSnapshotResult);
+   icrc120_get_events: (input:
+    record {
+      filter: opt GetEventsFilter;
+      prev: opt blob;
+      take: opt nat;
+    }) -> (vec OrchestrationEvent) query;
+   icrc120_metadata: () -> (ICRC16Map);
+   icrc120_revert_snapshot: (requests: vec RevertSnapshotRequest) ->
+    (vec RevertSnapshotResult);
+   icrc120_start_canister: (requests: vec StartCanisterRequest) ->
+    (vec StartCanisterResult);
+   icrc120_stop_canister: (requests: vec StopCanisterRequest) ->
+    (vec StopCanisterResult);
+   icrc120_upgrade_finished: () -> (UpgradeFinishedResult);
+   icrc120_upgrade_to: (requests: vec UpgradeToRequest) ->
+    (vec UpgradeToResult);
+   icrc3_get_archives: (args: GetArchivesArgs) -> (GetArchivesResult) query;
+   icrc3_get_blocks: (args: GetBlocksArgs) -> (GetBlocksResult) query;
+   icrc3_get_tip_certificate: () -> (opt DataCertificate) query;
+   icrc3_supported_block_types: () -> (vec BlockType) query;
+   register_canister: (canister_id: principal, namespace: text) -> (Result);
+   set_mcp_registry_id: (registryId: principal) -> (Result);
+ };
+type GetTransactionsResult = 
+ record {
+   archived_blocks: vec ArchivedTransactionResponse;
+   blocks: vec record {
+                 block: Value;
+                 id: nat;
+               };
+   log_length: nat;
+ };
+type GetTransactionsFn = func (vec TransactionRange) ->
+                          (GetTransactionsResult) query;
+type GetEventsFilter = 
+ record {
+   canister: opt principal;
+   end_time: opt nat;
+   event_types: opt vec OrchestrationEventType;
+   start_time: opt nat;
+ };
+type GetBlocksResult = 
+ record {
+   archived_blocks: vec ArchivedTransactionResponse;
+   blocks: vec record {
+                 block: Value;
+                 id: nat;
+               };
+   log_length: nat;
+ };
+type GetBlocksArgs = vec TransactionRange;
+type GetArchivesResultItem = 
+ record {
+   canister_id: principal;
+   end: nat;
+   start: nat;
+ };
+type GetArchivesResult = vec GetArchivesResultItem;
+type GetArchivesArgs = record {from: opt principal;};
+type DataCertificate = 
+ record {
+   certificate: blob;
+   hash_tree: blob;
+ };
+type CreateSnapshotResult = 
+ variant {
+   Err: CreateSnapshotError;
+   Ok: nat;
+ };
+type CreateSnapshotRequest = 
+ record {
+   canister_id: principal;
+   restart: bool;
+ };
+type CreateSnapshotError = 
+ variant {
+   Generic: text;
+   NotFound;
+   Unauthorized;
+ };
+type ConfigCanisterResult = 
+ variant {
+   Err: ConfigCanisterError;
+   Ok: nat;
+ };
+type ConfigCanisterRequest = 
+ record {
+   canister_id: principal;
+   configs: vec record {
+                  text;
+                  ICRC16;
+                };
+ };
+type ConfigCanisterError = 
+ variant {
+   Generic: text;
+   InvalidConfig: text;
+   Unauthorized;
+ };
+type CleanSnapshotResult = 
+ variant {
+   Err: CleanSnapshotError;
+   Ok: nat;
+ };
+type CleanSnapshotRequest = 
+ record {
+   canister_id: principal;
+   snapshot_id: blob;
+ };
+type CleanSnapshotError = 
+ variant {
+   Generic: text;
+   NotFound;
+   TooManyRequests;
+   Unauthorized;
+ };
+type BlockType = 
+ record {
+   block_type: text;
+   url: text;
+ };
+type ArchivedTransactionResponse = 
+ record {
+   args: vec TransactionRange;
+   callback: GetTransactionsFn;
+ };
+type ActionId = 
+ record {
+   id: nat;
+   time: Time;
+ };
+type Action = 
+ record {
+   aSync: opt nat;
+   actionType: text;
+   params: blob;
+   retries: nat;
+ };
+service : (args: opt
+                  record {
+                    icrc120Args: opt InitArgs;
+                    ttArgs: opt InitArgList;
+                  }) -> ICRC120Canister

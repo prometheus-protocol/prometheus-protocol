@@ -16,6 +16,7 @@
     "@dfinity/principal": "^2.4.1",
     "@dfinity/utils": "^2.13.2",
     "@hookform/resolvers": "^5.1.1",
+    "@prometheus-protocol/ic-js": "workspace:",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-label": "^2.1.7",
     "@radix-ui/react-select": "^2.2.5",

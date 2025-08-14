@@ -4,28 +4,32 @@
       "main": "packages/canisters/auth_server/src/main.mo",
       "type": "motoko",
       "declarations": {
-        "output": "packages/declarations/auth_server"
+        "output": "packages/declarations/src/generated/auth_server",
+        "node_compatibility": true
       }
     },
     "mcp_registry": {
       "main": "packages/canisters/mcp_registry/src/main.mo",
       "type": "motoko",
       "declarations": {
-        "output": "packages/declarations/mcp_registry"
+        "output": "packages/declarations/src/generated/mcp_registry",
+        "node_compatibility": true
       }
     },
     "mcp_orchestrator": {
       "main": "packages/canisters/mcp_orchestrator/src/main.mo",
       "type": "motoko",
       "declarations": {
-        "output": "packages/declarations/mcp_orchestrator"
+        "output": "packages/declarations/src/generated/mcp_orchestrator",
+        "node_compatibility": true
       }
     },
     "auditor_credentials": {
       "main": "packages/canisters/auditor_credentials/src/main.mo",
       "type": "motoko",
       "declarations": {
-        "output": "packages/declarations/auditor_credentials"
+        "output": "packages/declarations/src/generated/auditor_credentials",
+        "node_compatibility": true
       }
     },
     "frontend": {
@@ -53,7 +57,8 @@
       "wasm": "https://github.com/dfinity/ic/releases/download/ledger-suite-icrc-2025-06-19/ic-icrc1-ledger.wasm.gz",
       "init_arg": "(variant { Init = record { token_symbol = \"PMP\"; token_name = \"Prometheus Protocol Token\"; minting_account = record { owner = principal \"amcyq-57mpp-32zru-iuv42-nthar-zphnv-s7shv-fmpn6-c3aep-dqsaw-7ae\" }; transfer_fee = 1_000; initial_balances = vec {}; archive_options = record { num_blocks_to_archive = 1000; trigger_threshold = 2000; controller_id = principal \"amcyq-57mpp-32zru-iuv42-nthar-zphnv-s7shv-fmpn6-c3aep-dqsaw-7ae\" }; metadata = vec {}; feature_flags = opt record { icrc2 = true }; } })",
       "declarations": {
-        "output": "packages/declarations/icrc1_ledger"
+        "output": "packages/declarations/src/generated/icrc1_ledger",
+        "node_compatibility": true
       }
     }
   },

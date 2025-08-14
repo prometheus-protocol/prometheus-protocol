@@ -5,7 +5,7 @@ import {
   getBalance,
   getTokenInfo,
   TokenInfo,
-} from '@/api/payment.api';
+} from '@prometheus-protocol/ic-js';
 import { useMutation } from './useMutation';
 import { Identity } from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';

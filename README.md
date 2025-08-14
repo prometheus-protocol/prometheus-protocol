@@ -35,6 +35,7 @@ npx @prometheus-protocol/cli init
 You will be prompted for your app's name and namespace. Then, edit the generated file to add your repository URL and the path to your compiled WASM.
 
 **`prometheus.yml`**
+
 ```yaml
 name: My Awesome App
 namespace: com.mycompany.app
@@ -70,33 +71,33 @@ npx @prometheus-protocol/cli publish
 
 The protocol is composed of several key canisters and tools working in concert:
 
--   **`mcp_registry`:** The core of the app store. It implements `ICRC-118` for version management and `ICRC-126`/`ICRC-127` to manage the verification, auditing, and bounty lifecycle.
--   **`mcp_orchestrator`:** The deployment engine. It implements `ICRC-120` to securely deploy new canister instances using only DAO-verified WASM files.
--   **`auth_server`:** A full-featured, on-chain OAuth 2.1 provider that handles identity and authorization for the entire ecosystem.
--   **`prom-publish` (CLI):** The developer-facing tool for interacting with the entire publishing lifecycle.
+- **`mcp_registry`:** The core of the app store. It implements `ICRC-118` for version management and `ICRC-126`/`ICRC-127` to manage the verification, auditing, and bounty lifecycle.
+- **`mcp_orchestrator`:** The deployment engine. It implements `ICRC-120` to securely deploy new canister instances using only DAO-verified WASM files.
+- **`auth_server`:** A full-featured, on-chain OAuth 2.1 provider that handles identity and authorization for the entire ecosystem.
+- **`@prometheus-protocol/cli` (CLI):** The developer-facing tool for interacting with the entire publishing lifecycle.
 
 <details>
   <summary><strong>Deep Dive: The Authentication Layer (OAuth 2.1)</strong></summary>
 
-  ### Auth Server Features & Compliance
+### Auth Server Features & Compliance
 
-  The `auth_server` canister is a general-purpose OAuth 2.1 provider built for the IC.
+The `auth_server` canister is a general-purpose OAuth 2.1 provider built for the IC.
 
-  - ✓ **OAuth 2.1 Core:** Implements the modern, secure baseline for OAuth, including mandatory PKCE (`RFC 7636`).
-  - ✓ **Refresh Token Rotation:** Enhances security by issuing a new, single-use refresh token each time one is used.
-  - ✓ **Dynamic Client Registration (DCR):** A public `/register` endpoint (`RFC 7591`) for programmatic client registration.
-  - ✓ **Resource Indicators:** Supports token audience binding via the `resource` parameter (`RFC 8707`).
-  - ✓ **ICRC-2 Payment Authorization:** Enables resource servers to specify a list of accepted ICRC-2 tokens for payment-gated scopes.
-  - ✓ **Server Metadata:** Provides `/.well-known/oauth-authorization-server` (`RFC 8414`) for automated client configuration.
-  - ✓ **MCP Authorization Spec Compliant:** Fully adheres to the requirements for an Authorization Server within the MCP ecosystem.
+- ✓ **OAuth 2.1 Core:** Implements the modern, secure baseline for OAuth, including mandatory PKCE (`RFC 7636`).
+- ✓ **Refresh Token Rotation:** Enhances security by issuing a new, single-use refresh token each time one is used.
+- ✓ **Dynamic Client Registration (DCR):** A public `/register` endpoint (`RFC 7591`) for programmatic client registration.
+- ✓ **Resource Indicators:** Supports token audience binding via the `resource` parameter (`RFC 8707`).
+- ✓ **ICRC-2 Payment Authorization:** Enables resource servers to specify a list of accepted ICRC-2 tokens for payment-gated scopes.
+- ✓ **Server Metadata:** Provides `/.well-known/oauth-authorization-server` (`RFC 8414`) for automated client configuration.
+- ✓ **MCP Authorization Spec Compliant:** Fully adheres to the requirements for an Authorization Server within the MCP ecosystem.
 
-  ### On-Chain Security Model
+### On-Chain Security Model
 
-  Building a secure OAuth 2.1 provider on a public blockchain requires a specific design. The core principles are:
+Building a secure OAuth 2.1 provider on a public blockchain requires a specific design. The core principles are:
 
-  1.  **PKCE as a Hard Requirement:** This is the primary defense against authorization code interception attacks.
-  2.  **Secret `request_id` for Token Exchange:** For non-IC clients, the `/token` endpoint is an `update` call. The response (containing the secret access token) is stored at a path in the IC's state tree derived from a secret `request_id`. This ID is a hash of secrets known only to the client, making the path unguessable by an attacker.
-  3.  **Certified Responses:** The response delivered to the client is cryptographically certified by the IC, ensuring it is authentic and untampered, even if delivered by a malicious boundary node.
+1.  **PKCE as a Hard Requirement:** This is the primary defense against authorization code interception attacks.
+2.  **Secret `request_id` for Token Exchange:** For non-IC clients, the `/token` endpoint is an `update` call. The response (containing the secret access token) is stored at a path in the IC's state tree derived from a secret `request_id`. This ID is a hash of secrets known only to the client, making the path unguessable by an attacker.
+3.  **Certified Responses:** The response delivered to the client is cryptographically certified by the IC, ensuring it is authentic and untampered, even if delivered by a malicious boundary node.
 
 </details>
 

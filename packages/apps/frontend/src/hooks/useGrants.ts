@@ -5,7 +5,7 @@ import {
   getPublicResourceServer,
   PublicResourceServer,
   revokeGrant,
-} from '@/api/grant.api';
+} from '@prometheus-protocol/ic-js';
 
 /**
  * React Query hook to fetch the current user's list of granted resource server IDs.

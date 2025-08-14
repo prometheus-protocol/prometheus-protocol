@@ -1,8 +1,8 @@
 import { Identity } from '@dfinity/agent';
-import { getIcrcActor, getAuthActor } from './actors';
 import { toNullable } from '@dfinity/utils';
 import { mapTokenMetadata } from '@dfinity/ledger-icrc';
 import { Principal } from '@dfinity/principal';
+import { getIcrcActor } from '../actors.js';
 
 export interface TokenInfo {
   canisterId: Principal;
@@ -40,7 +40,7 @@ export const getTokenInfo = async (
     return tokenInfoCache.get(canisterIdText)!;
   }
 
-  const icrcActor = getIcrcActor(identity, icrc2CanisterId);
+  const icrcActor = getIcrcActor(icrc2CanisterId, identity);
   const metadata = await icrcActor.icrc1_metadata();
 
   const mappedMeta = mapTokenMetadata(metadata);
@@ -80,7 +80,7 @@ export const approveAllowance = async (
   spenderPrincipal: Principal,
   icrc2CanisterId: Principal,
 ) => {
-  const icrcActor = getIcrcActor(identity, icrc2CanisterId);
+  const icrcActor = getIcrcActor(icrc2CanisterId, identity);
 
   // --- THE FIX ---
   // MODIFIED: Dynamically fetch the decimals instead of hardcoding them.
@@ -111,31 +111,13 @@ export const approveAllowance = async (
 };
 
 /**
- * Notifies our backend that the payment setup is complete,
- * allowing the session state to be updated.
- */
-export const completePaymentSetup = async (
-  identity: Identity,
-  sessionId: string,
-) => {
-  const authActor = getAuthActor(identity);
-  const result = await authActor.complete_payment_setup(sessionId);
-
-  if ('err' in result) {
-    throw new Error(result.err);
-  }
-
-  return result.ok;
-};
-
-/**
  * Fetches the user's ckUSDC balance from the ledger.
  */
 export const getBalance = async (
   identity: Identity,
   icrc2CanisterId: Principal,
 ): Promise<number> => {
-  const icrcActor = getIcrcActor(identity, icrc2CanisterId);
+  const icrcActor = getIcrcActor(icrc2CanisterId, identity);
   const owner = identity.getPrincipal();
   const { decimals } = await getTokenInfo(identity, icrc2CanisterId);
 
@@ -155,7 +137,7 @@ export const getAllowance = async (
   spender: Principal,
   icrc2CanisterId: Principal,
 ): Promise<number> => {
-  const icrcActor = getIcrcActor(identity, icrc2CanisterId);
+  const icrcActor = getIcrcActor(icrc2CanisterId, identity);
   const owner = identity.getPrincipal();
   const { decimals } = await getTokenInfo(identity, icrc2CanisterId);
 

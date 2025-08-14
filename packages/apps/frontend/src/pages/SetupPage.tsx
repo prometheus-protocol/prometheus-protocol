@@ -9,7 +9,7 @@ import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useSessionInfoQuery } from '@/hooks/useSessionInfo';
 import { AllowanceManager } from '@/components/connections/AllowanceManager';
-import { PublicResourceServer } from '@/api/grant.api';
+import { PublicResourceServer } from '@prometheus-protocol/ic-js';
 import { Principal } from '@dfinity/principal';
 import { useMemo } from 'react';
 

@@ -132,7 +132,10 @@ shared (deployer) actor class ICRC120Canister<system>(
     caller : Principal;
   }) : async* Bool {
     switch (_mcp_registry_id) {
-      case (null) { return false }; // Cannot admin if registry is not set
+      case (null) {
+        Debug.print("Cannot admin canister: MCP Registry ID is not set.");
+        return false;
+      }; // Cannot admin if registry is not set
       case (?registryId) {
         switch (Map.get(managed_canisters, phash, canisterId)) {
           case (?namespace) {
@@ -142,7 +145,10 @@ shared (deployer) actor class ICRC120Canister<system>(
               case (#err(_)) { return false };
             };
           };
-          case (_) { return false };
+          case (_) {
+            Debug.print("Cannot admin canister: Unknown canister.");
+            return false;
+          };
         };
       };
     };
@@ -161,7 +167,10 @@ shared (deployer) actor class ICRC120Canister<system>(
     }
   ) : async* Bool {
     switch (_mcp_registry_id) {
-      case (null) { return false }; // Cannot install if registry is not set
+      case (null) {
+        Debug.print("Cannot install canister: MCP Registry ID is not set.");
+        return false;
+      }; // Cannot install if registry is not set
       case (?registryId) {
         switch (Map.get(managed_canisters, phash, canisterId)) {
           case (?namespace) {
@@ -170,7 +179,10 @@ shared (deployer) actor class ICRC120Canister<system>(
             if (not verified_check) { return false };
             return true;
           };
-          case (_) { return false };
+          case (_) {
+            Debug.print("Cannot install canister: Unknown canister.");
+            return false;
+          };
         };
       };
     };

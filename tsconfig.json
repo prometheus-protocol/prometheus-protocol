@@ -13,12 +13,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "react-jsx",
-
-    "baseUrl": ".",
-    "paths": {
-      "@declarations/*": ["packages/declarations/*"]
-    }
+    "jsx": "react-jsx"
   },
   "include": [
     "packages/**/*.ts",

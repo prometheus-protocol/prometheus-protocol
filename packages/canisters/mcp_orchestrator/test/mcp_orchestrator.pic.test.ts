@@ -21,8 +21,6 @@ import {
   type UpgradeToRequest,
   type ConfigCanisterRequest,
 } from '@declarations/mcp_orchestrator/mcp_orchestrator.did.js';
-import { idlFactory as credentialIdlFactory } from '@declarations/auditor_credentials/auditor_credentials.did.js';
-import type { _SERVICE as CredentialService } from '@declarations/auditor_credentials/auditor_credentials.did';
 
 // --- Wasm Paths ---
 const ORCHESTRATOR_WASM_PATH = path.resolve(
@@ -35,11 +33,6 @@ const REGISTRY_WASM_PATH = path.resolve(
   '../../../../',
   '.dfx/local/canisters/mcp_registry/mcp_registry.wasm',
 );
-const CREDENTIAL_WASM_PATH = path.resolve(
-  __dirname,
-  '../../../../',
-  '.dfx/local/canisters/auditor_credentials/auditor_credentials.wasm',
-);
 const DUMMY_UPGRADE_WASM_PATH = REGISTRY_WASM_PATH;
 
 // --- Identities ---
@@ -49,11 +42,6 @@ const unauthorizedUser: Identity = createIdentity('unauthorized-user'); // Not a
 
 // --- SHARED SETUP FUNCTION ---
 async function setupEnvironment(pic: PocketIc) {
-  const credentialFixture = await pic.setupCanister<CredentialService>({
-    idlFactory: credentialIdlFactory,
-    wasm: CREDENTIAL_WASM_PATH,
-    sender: daoIdentity.getPrincipal(),
-  });
   const registryFixture = await pic.setupCanister<RegistryService>({
     idlFactory: registryIdlFactory,
     wasm: REGISTRY_WASM_PATH,
@@ -174,7 +162,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
     const secureNamespace = 'com.prometheus.secure-server';
     registryActor.setIdentity(daoIdentity);
     await registryActor.set_mcp_orchestrator(env.orchestratorCanisterId);
-    await orchestratorActor.set_mcp_registry_id(env.registryCanisterId);
+
     orchestratorActor.setIdentity(daoIdentity);
     await orchestratorActor.set_mcp_registry_id(env.registryCanisterId);
 
@@ -190,15 +178,14 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
         forked_from: [],
       },
     ]);
-
-    console.log('Canister type creation response:', res1);
+    expect(res1[0]).toHaveProperty('Ok');
 
     orchestratorActor.setIdentity(developerIdentity);
     const res = await orchestratorActor.register_canister(
       targetCanisterId,
       secureNamespace,
     );
-    console.log('Canister registration response:', res);
+    expect(res).toHaveProperty('ok');
 
     const wasmBytes = fs.readFileSync(DUMMY_UPGRADE_WASM_PATH);
     unverifiedWasmHash = createHash('sha256').update(wasmBytes).digest();
@@ -288,7 +275,6 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       parameters: [],
     };
     const result = await orchestratorActor.icrc120_upgrade_to([upgradeRequest]);
-    console.log('Upgrade result:', result);
     // @ts-ignore
     expect(result[0].Err).toHaveProperty('Unauthorized');
   });
@@ -319,5 +305,30 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
     };
     const result = await orchestratorActor.icrc120_upgrade_to([upgradeRequest]);
     expect(result[0]).toHaveProperty('Ok');
+  });
+
+  it('should POLL for the upgrade to complete', async () => {
+    orchestratorActor.setIdentity(developerIdentity);
+
+    let finalStatus;
+    const maxRetries = 10;
+    let retries = 0;
+
+    while (retries < maxRetries) {
+      const status = await orchestratorActor.icrc120_upgrade_finished();
+
+      if ('InProgress' in status) {
+        await pic.advanceTime(200); // Advance time by 200ms
+        await pic.tick(); // Process the next round of inter-canister calls
+        retries++;
+      } else {
+        // Status is either Success or Failed, so we're done polling.
+        finalStatus = status;
+        break;
+      }
+    }
+
+    expect(finalStatus).toBeDefined();
+    expect('Success' in finalStatus!).toBe(true);
   });
 });

@@ -1,0 +1,785 @@
+type WasmVersionPointer = 
+ record {
+   canister_type_namespace: text;
+   version_number: record {
+                     nat;
+                     nat;
+                     nat;
+                   };
+ };
+type Wasm = 
+ record {
+   calculated_hash: blob;
+   canister_type_namespace: text;
+   chunkCount: nat;
+   chunks: vec blob;
+   created: nat;
+   deprecated: bool;
+   description: text;
+   hash: blob;
+   metadata: ICRC16Map__4;
+   previous: opt CanisterVersion;
+   repo: text;
+   version_number: record {
+                     nat;
+                     nat;
+                     nat;
+                   };
+ };
+type VerificationRequest = 
+ record {
+   commit_hash: blob;
+   metadata: ICRC16Map__3;
+   repo: text;
+   wasm_hash: blob;
+ };
+type VerificationOutcome = 
+ variant {
+   Rejected;
+   Verified;
+ };
+type Value = 
+ variant {
+   Array: vec Value;
+   Blob: blob;
+   Int: int;
+   Map: vec record {
+              text;
+              Value;
+            };
+   Nat: nat;
+   Text: text;
+ };
+type UploadResponse = 
+ record {
+   chunk_id: nat;
+   total_chunks: nat;
+ };
+type UploadRequest = 
+ record {
+   canister_type_namespace: text;
+   chunk_id: nat;
+   expected_chunk_hash: blob;
+   version_number: record {
+                     nat;
+                     nat;
+                     nat;
+                   };
+   wasm_chunk: blob;
+ };
+type UpdateWasmResult = 
+ variant {
+   Error: variant {
+            Generic: text;
+            NonDeprecatedWasmFound: blob;
+            Unauthorized;
+          };
+   Ok: nat;
+ };
+type UpdateWasmRequest = 
+ record {
+   canister_type_namespace: text;
+   description: text;
+   expected_chunks: vec blob;
+   expected_hash: blob;
+   metadata: ICRC16Map__4;
+   previous: opt CanisterVersion;
+   repo: text;
+   version_number: record {
+                     nat;
+                     nat;
+                     nat;
+                   };
+ };
+type TransferError = 
+ variant {
+   BadBurn: record {min_burn_amount: nat;};
+   BadFee: record {expected_fee: nat;};
+   CreatedInFuture: record {ledger_time: Timestamp;};
+   Duplicate: record {duplicate_of: nat;};
+   GenericError: record {
+                   error_code: nat;
+                   message: text;
+                 };
+   InsufficientFunds: record {balance: nat;};
+   TemporarilyUnavailable;
+   TooOld;
+ };
+type TransactionRange = 
+ record {
+   length: nat;
+   start: nat;
+ };
+type Tip = 
+ record {
+   hash_tree: blob;
+   last_block_hash: blob;
+   last_block_index: blob;
+ };
+type Timestamp = nat64;
+type Time__1 = int;
+type Time = nat;
+type SupportedStandard = 
+ record {
+   name: text;
+   url: text;
+ };
+type RunBountyResult__1 = 
+ record {
+   metadata: ICRC16__1;
+   result: variant {
+             Invalid;
+             Valid;
+           };
+   trx_id: opt nat;
+ };
+type RunBountyResult = 
+ record {
+   metadata: ICRC16;
+   result: variant {
+             Invalid;
+             Valid;
+           };
+   trx_id: opt nat;
+ };
+type Result_3 = 
+ variant {
+   err: text;
+   ok: nat;
+ };
+type Result_2 = 
+ variant {
+   err: text;
+   ok: Wasm;
+ };
+type Result_1 = 
+ variant {
+   err: text;
+   ok: bool;
+ };
+type Result = 
+ variant {
+   err: text;
+   ok;
+ };
+type ManageControllerResult = 
+ variant {
+   Error: variant {
+            Generic: text;
+            NotFound;
+            Unauthorized;
+          };
+   Ok: nat;
+ };
+type ManageControllerRequest = 
+ record {
+   canister_type_namespace: text;
+   controller: principal;
+   op: variant {
+         Add;
+         Remove;
+       };
+ };
+type ListBountiesFilter = 
+ variant {
+   claimed: bool;
+   claimed_by: Account;
+   created_after: nat;
+   created_before: nat;
+   metadata: ICRC16Map;
+   validation_canister: principal;
+ };
+type InitArgs = record {};
+type InitArgList = 
+ record {
+   expectedExecutionTime: Time;
+   initialTimers: vec record {
+                        ActionId;
+                        Action;
+                      };
+   lastActionIdReported: opt nat;
+   lastCycleReport: opt nat;
+   lastExecutionTime: Time;
+   maxExecutions: opt nat;
+   nextActionId: nat;
+   nextCycleActionId: opt nat;
+ };
+type ICRC16__4 = 
+ variant {
+   Array: vec ICRC16__4;
+   Blob: blob;
+   Bool: bool;
+   Bytes: vec nat8;
+   Class: vec ICRC16Property__4;
+   Float: float64;
+   Floats: vec float64;
+   Int: int;
+   Int16: int16;
+   Int32: int32;
+   Int64: int64;
+   Int8: int8;
+   Map: vec record {
+              text;
+              ICRC16__4;
+            };
+   Nat: nat;
+   Nat16: nat16;
+   Nat32: nat32;
+   Nat64: nat64;
+   Nat8: nat8;
+   Nats: vec nat;
+   Option: opt ICRC16__4;
+   Principal: principal;
+   Set: vec ICRC16__4;
+   Text: text;
+   ValueMap: vec record {
+                   ICRC16__4;
+                   ICRC16__4;
+                 };
+ };
+type ICRC16__3 = 
+ variant {
+   Array: vec ICRC16__3;
+   Blob: blob;
+   Bool: bool;
+   Bytes: vec nat8;
+   Class: vec ICRC16Property__3;
+   Float: float64;
+   Floats: vec float64;
+   Int: int;
+   Int16: int16;
+   Int32: int32;
+   Int64: int64;
+   Int8: int8;
+   Map: ICRC16Map__4;
+   Nat: nat;
+   Nat16: nat16;
+   Nat32: nat32;
+   Nat64: nat64;
+   Nat8: nat8;
+   Nats: vec nat;
+   Option: opt ICRC16__3;
+   Principal: principal;
+   Set: vec ICRC16__3;
+   Text: text;
+   ValueMap: vec record {
+                   ICRC16__3;
+                   ICRC16__3;
+                 };
+ };
+type ICRC16__2 = 
+ variant {
+   Array: vec ICRC16__2;
+   Blob: blob;
+   Bool: bool;
+   Bytes: vec nat8;
+   Class: vec ICRC16Property__2;
+   Float: float64;
+   Floats: vec float64;
+   Int: int;
+   Int16: int16;
+   Int32: int32;
+   Int64: int64;
+   Int8: int8;
+   Map: ICRC16Map__3;
+   Nat: nat;
+   Nat16: nat16;
+   Nat32: nat32;
+   Nat64: nat64;
+   Nat8: nat8;
+   Nats: vec nat;
+   Option: opt ICRC16__2;
+   Principal: principal;
+   Set: vec ICRC16__2;
+   Text: text;
+   ValueMap: vec record {
+                   ICRC16__2;
+                   ICRC16__2;
+                 };
+ };
+type ICRC16__1 = 
+ variant {
+   Array: vec ICRC16__1;
+   Blob: blob;
+   Bool: bool;
+   Bytes: vec nat8;
+   Class: vec ICRC16Property__1;
+   Float: float64;
+   Floats: vec float64;
+   Int: int;
+   Int16: int16;
+   Int32: int32;
+   Int64: int64;
+   Int8: int8;
+   Map: vec record {
+              text;
+              ICRC16__1;
+            };
+   Nat: nat;
+   Nat16: nat16;
+   Nat32: nat32;
+   Nat64: nat64;
+   Nat8: nat8;
+   Nats: vec nat;
+   Option: opt ICRC16__1;
+   Principal: principal;
+   Set: vec ICRC16__1;
+   Text: text;
+   ValueMap: vec record {
+                   ICRC16__1;
+                   ICRC16__1;
+                 };
+ };
+type ICRC16Property__4 = 
+ record {
+   immutable: bool;
+   name: text;
+   value: ICRC16__4;
+ };
+type ICRC16Property__3 = 
+ record {
+   immutable: bool;
+   name: text;
+   value: ICRC16__3;
+ };
+type ICRC16Property__2 = 
+ record {
+   immutable: bool;
+   name: text;
+   value: ICRC16__2;
+ };
+type ICRC16Property__1 = 
+ record {
+   immutable: bool;
+   name: text;
+   value: ICRC16__1;
+ };
+type ICRC16Property = 
+ record {
+   immutable: bool;
+   name: text;
+   value: ICRC16;
+ };
+type ICRC16Map__5 = 
+ vec record {
+       text;
+       ICRC16__4;
+     };
+type ICRC16Map__4 = 
+ vec record {
+       text;
+       ICRC16__3;
+     };
+type ICRC16Map__3 = 
+ vec record {
+       text;
+       ICRC16__2;
+     };
+type ICRC16Map__1 = 
+ vec record {
+       text;
+       ICRC16__1;
+     };
+type ICRC16Map = 
+ vec record {
+       text;
+       ICRC16;
+     };
+type ICRC16 = 
+ variant {
+   Array: vec ICRC16;
+   Blob: blob;
+   Bool: bool;
+   Bytes: vec nat8;
+   Class: vec ICRC16Property;
+   Float: float64;
+   Floats: vec float64;
+   Int: int;
+   Int16: int16;
+   Int32: int32;
+   Int64: int64;
+   Int8: int8;
+   Map: ICRC16Map;
+   Nat: nat;
+   Nat16: nat16;
+   Nat32: nat32;
+   Nat64: nat64;
+   Nat8: nat8;
+   Nats: vec nat;
+   Option: opt ICRC16;
+   Principal: principal;
+   Set: vec ICRC16;
+   Text: text;
+   ValueMap: vec record {
+                   ICRC16;
+                   ICRC16;
+                 };
+ };
+type ICRC118WasmRegistryCanister = 
+ service {
+   finalize_verification: (wasm_id: text, outcome: VerificationOutcome,
+    metadata: ICRC16Map__5) -> (Result_3);
+   get_attestations_for_wasm: (wasm_hash: blob) -> (vec AuditRecord) query;
+   get_canister_type_version: (req: GetCanisterTypeVersionRequest) ->
+    (Result_2) query;
+   get_tip: () -> (Tip) query;
+   hello: () -> (text);
+   icrc10_supported_standards: () -> (vec SupportedStandard) query;
+   icrc118_create_canister_type: (reqs: vec CreateCanisterType) ->
+    (vec CreateCanisterTypeResult);
+   icrc118_deprecate: (req: DeprecateRequest) -> (DeprecateResult);
+   icrc118_get_canister_types: (req: GetCanisterTypesRequest) ->
+    (vec CanisterType) query;
+   icrc118_get_upgrade_path: (req: GetUpgradePathRequest) ->
+    (vec CanisterVersion) query;
+   icrc118_get_wasm_chunk: (req: GetWasmChunkRequest) ->
+    (GetWasmChunkResponse) query;
+   icrc118_get_wasms: (request:
+    record {
+      filter: opt vec GetWasmsFilter;
+      prev: opt WasmVersionPointer;
+      take: opt nat;
+    }) -> (vec Wasm) query;
+   icrc118_manage_controller: (reqs: vec ManageControllerRequest) ->
+    (vec ManageControllerResult);
+   icrc118_update_wasm: (req: UpdateWasmRequest) -> (UpdateWasmResult);
+   icrc118_upload_wasm_chunk: (req: UploadRequest) -> (UploadResponse);
+   icrc126_file_attestation: (req: AttestationRequest) -> (AttestationResult);
+   icrc126_file_divergence: (req: DivergenceReportRequest) ->
+    (DivergenceResult);
+   icrc126_verification_request: (req: VerificationRequest) -> (nat);
+   icrc127_create_bounty: (req: CreateBountyRequest) -> (CreateBountyResult);
+   icrc127_get_bounty: (bounty_id: nat) -> (opt Bounty) query;
+   icrc127_list_bounties:
+    (record {
+       filter: opt vec ListBountiesFilter;
+       prev: opt nat;
+       take: opt nat;
+     }) -> (vec Bounty) query;
+   icrc127_metadata: () -> (ICRC16Map__1) query;
+   icrc127_submit_bounty: (req: BountySubmissionRequest) ->
+    (BountySubmissionResult);
+   icrc3_get_archives: (args: GetArchivesArgs) -> (GetArchivesResult) query;
+   icrc3_get_blocks: (args: GetBlocksArgs) -> (GetBlocksResult) query;
+   icrc3_get_tip_certificate: () -> (opt DataCertificate) query;
+   icrc3_supported_block_types: () -> (vec BlockType) query;
+   is_controller_of_type: (namespace: text, user: principal) -> (Result_1);
+   is_wasm_verified: (hash: blob) -> (bool) query;
+   set_auditor_credentials_canister_id: (canister_id: principal) -> (Result);
+   set_mcp_orchestrator: (canister_id: principal) -> (Result);
+ };
+type GetWasmsFilter = 
+ variant {
+   canister: principal;
+   canister_type_namespace: text;
+   controllers: vec principal;
+   hash: blob;
+   previous: CanisterVersion;
+   version_max: record {
+                  nat;
+                  opt nat;
+                  opt nat;
+                };
+   version_min: record {
+                  nat;
+                  opt nat;
+                  opt nat;
+                };
+   version_number: record {
+                     nat;
+                     nat;
+                     nat;
+                   };
+ };
+type GetWasmChunkResponse = 
+ variant {
+   Err: text;
+   Ok:
+    record {
+      canister_type_namespace: text;
+      chunk_id: nat;
+      expected_chunk_hash: blob;
+      expected_wasm_hash: blob;
+      version_number: record {
+                        nat;
+                        nat;
+                        nat;
+                      };
+      wasm_chunk: blob;
+    };
+ };
+type GetWasmChunkRequest = 
+ record {
+   canister_type_namespace: text;
+   chunk_id: nat;
+   hash: blob;
+   version_number: record {
+                     nat;
+                     nat;
+                     nat;
+                   };
+ };
+type GetUpgradePathRequest = 
+ record {
+   canister_type_namespace: text;
+   current_version: blob;
+   target_version: blob;
+ };
+type GetTransactionsResult = 
+ record {
+   archived_blocks: vec ArchivedTransactionResponse;
+   blocks: vec record {
+                 block: Value;
+                 id: nat;
+               };
+   log_length: nat;
+ };
+type GetTransactionsFn = func (vec TransactionRange) ->
+                          (GetTransactionsResult) query;
+type GetCanisterTypesRequest = 
+ record {
+   filter: vec GetCanisterTypesFilter;
+   prev: opt text;
+   take: opt nat;
+ };
+type GetCanisterTypesFilter = 
+ variant {
+   controller: principal;
+   namespace: text;
+ };
+type GetCanisterTypeVersionRequest = 
+ record {
+   canister_type_namespace: text;
+   version_number: record {
+                     nat;
+                     nat;
+                     nat;
+                   };
+ };
+type GetBlocksResult = 
+ record {
+   archived_blocks: vec ArchivedTransactionResponse;
+   blocks: vec record {
+                 block: Value;
+                 id: nat;
+               };
+   log_length: nat;
+ };
+type GetBlocksArgs = vec TransactionRange;
+type GetArchivesResultItem = 
+ record {
+   canister_id: principal;
+   end: nat;
+   start: nat;
+ };
+type GetArchivesResult = vec GetArchivesResultItem;
+type GetArchivesArgs = record {from: opt principal;};
+type DivergenceResult = 
+ variant {
+   Error: variant {
+            Generic: text;
+            NotFound;
+          };
+   Ok: nat;
+ };
+type DivergenceReportRequest = 
+ record {
+   divergence_report: text;
+   metadata: opt ICRC16Map__3;
+   wasm_id: text;
+ };
+type DivergenceRecord = 
+ record {
+   metadata: opt ICRC16Map__5;
+   report: text;
+   reporter: principal;
+   timestamp: Time__1;
+ };
+type DeprecateResult = 
+ variant {
+   Error: variant {
+            Generic: text;
+            NotFound;
+            Unauthorized;
+          };
+   Ok: nat;
+ };
+type DeprecateRequest = 
+ record {
+   canister_type_namespace: text;
+   deprecation_flag: opt bool;
+   hash: blob;
+   reason: opt text;
+   version_number: record {
+                     nat;
+                     nat;
+                     nat;
+                   };
+ };
+type DataCertificate = 
+ record {
+   certificate: blob;
+   hash_tree: blob;
+ };
+type CreateCanisterTypeResult = 
+ variant {
+   Error: variant {
+            Generic: text;
+            Unauthorized;
+          };
+   Ok: nat;
+ };
+type CreateCanisterType = 
+ record {
+   canister_type_name: text;
+   canister_type_namespace: text;
+   controllers: opt vec principal;
+   description: text;
+   forked_from: opt CanisterVersion;
+   metadata: ICRC16Map__4;
+   repo: text;
+ };
+type CreateBountyResult = 
+ variant {
+   Error: variant {
+            Generic: text;
+            InsufficientAllowance;
+          };
+   Ok: record {
+         bounty_id: nat;
+         trx_id: opt nat;
+       };
+ };
+type CreateBountyRequest = 
+ record {
+   bounty_id: opt nat;
+   bounty_metadata: ICRC16Map;
+   challenge_parameters: ICRC16;
+   start_date: opt nat;
+   timeout_date: nat;
+   validation_canister_id: principal;
+ };
+type ClaimRecord = 
+ record {
+   caller: principal;
+   claim_account: opt Account;
+   claim_id: nat;
+   claim_metadata: ICRC16Map__1;
+   result: opt RunBountyResult__1;
+   submission: ICRC16__1;
+   time_submitted: nat;
+ };
+type CanisterVersion = 
+ record {
+   calculated_hash: blob;
+   canister_type_namespace: text;
+   version_number: record {
+                     nat;
+                     nat;
+                     nat;
+                   };
+ };
+type CanisterType = 
+ record {
+   canister_type_name: text;
+   canister_type_namespace: text;
+   controllers: vec principal;
+   description: text;
+   forked_from: opt CanisterVersion;
+   metadata: ICRC16Map__4;
+   repo: text;
+   versions: vec CanisterVersion;
+ };
+type BountySubmissionResult = 
+ variant {
+   Error: variant {
+            Generic: text;
+            NoMatch;
+            PayoutFailed: TransferError;
+          };
+   Ok: record {
+         claim_id: nat;
+         result: opt RunBountyResult;
+       };
+ };
+type BountySubmissionRequest = 
+ record {
+   account: opt Account;
+   bounty_id: nat;
+   submission: ICRC16;
+ };
+type Bounty = 
+ record {
+   bounty_id: nat;
+   bounty_metadata: ICRC16Map__1;
+   challenge_parameters: ICRC16__1;
+   claimed: opt nat;
+   claimed_date: opt nat;
+   claims: vec ClaimRecord;
+   created: nat;
+   creator: principal;
+   payout_fee: nat;
+   timeout_date: opt nat;
+   token_amount: nat;
+   token_canister_id: principal;
+   validation_call_timeout: nat;
+   validation_canister_id: principal;
+ };
+type BlockType = 
+ record {
+   block_type: text;
+   url: text;
+ };
+type AuditRecord = 
+ variant {
+   Attestation: AttestationRecord;
+   Divergence: DivergenceRecord;
+ };
+type AttestationResult = 
+ variant {
+   Error: variant {
+            Generic: text;
+            NotFound;
+            Unauthorized;
+          };
+   Ok: nat;
+ };
+type AttestationRequest = 
+ record {
+   metadata: ICRC16Map__3;
+   wasm_id: text;
+ };
+type AttestationRecord = 
+ record {
+   audit_type: text;
+   auditor: principal;
+   metadata: ICRC16Map__5;
+   timestamp: Time__1;
+ };
+type ArchivedTransactionResponse = 
+ record {
+   args: vec TransactionRange;
+   callback: GetTransactionsFn;
+ };
+type ActionId = 
+ record {
+   id: nat;
+   time: Time;
+ };
+type Action = 
+ record {
+   aSync: opt nat;
+   actionType: text;
+   params: blob;
+   retries: nat;
+ };
+type Account = 
+ record {
+   owner: principal;
+   subaccount: opt blob;
+ };
+service : (args: opt
+                  record {
+                    icrc118wasmregistryArgs: opt InitArgs;
+                    ttArgs: opt InitArgList;
+                  }) -> ICRC118WasmRegistryCanister

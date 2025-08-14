@@ -31,8 +31,7 @@ import {
 } from '@/components/ui/select';
 import { Principal } from '@dfinity/principal';
 import { Label } from '@/components/ui/label';
-import { PublicResourceServer } from '@/api/grant.api';
-import { TokenInfo } from '@/api/payment.api';
+import { PublicResourceServer } from '@prometheus-protocol/ic-js';
 import { isDefined } from '@/lib/utils';
 
 const formSchema = z.object({

@@ -19,18 +19,29 @@ import type {
   UpdateWasmRequest,
 } from '@declarations/mcp_registry/mcp_registry.did.js';
 import {
+  idlFactory as orchestratorIdlFactory,
+  init as orchestratorInit,
+} from '@declarations/mcp_orchestrator/mcp_orchestrator.did.js';
+import type { _SERVICE as OrchestratorService } from '@declarations/mcp_orchestrator/mcp_orchestrator.did.js';
+import {
   idlFactory as ledgerIdlFactory,
   init as ledgerInit,
 } from '@declarations/icrc1_ledger/icrc1_ledger.did.js';
 import type { _SERVICE as LedgerService } from '@declarations/icrc1_ledger/icrc1_ledger.did.js';
 import { idlFactory as credentialIdlFactory } from '@declarations/auditor_credentials/auditor_credentials.did.js';
 import type { _SERVICE as CredentialService } from '@declarations/auditor_credentials/auditor_credentials.did.js';
+import { createHash } from 'node:crypto';
 
 // --- Wasm Paths ---
 const REGISTRY_WASM_PATH = path.resolve(
   __dirname,
   '../../../../',
   '.dfx/local/canisters/mcp_registry/mcp_registry.wasm',
+);
+const ORCHESTRATOR_WASM_PATH = path.resolve(
+  __dirname,
+  '../../../../',
+  '.dfx/local/canisters/mcp_orchestrator/mcp_orchestrator.wasm',
 );
 const LEDGER_WASM_PATH = path.resolve(
   __dirname,
@@ -42,10 +53,12 @@ const CREDENTIAL_WASM_PATH = path.resolve(
   '../../../../',
   '.dfx/local/canisters/auditor_credentials/auditor_credentials.wasm',
 );
+const DUMMY_UPGRADE_WASM_PATH = REGISTRY_WASM_PATH;
 
 // --- Identities ---
 const daoIdentity = createIdentity('dao-principal'); // Also the canister owner
 const developerIdentity = createIdentity('developer-principal');
+const operatorIdentity = createIdentity('operator-principal');
 const bountyCreatorIdentity = createIdentity('bounty-creator');
 const reproAuditorIdentity = createIdentity('repro-auditor');
 const securityAuditorIdentity = createIdentity('security-auditor');
@@ -54,9 +67,11 @@ const qualityAuditorIdentity = createIdentity('quality-auditor');
 describe('MCP Registry Full E2E Lifecycle', () => {
   let pic: PocketIc;
   let registryActor: Actor<RegistryService>;
+  let orchestratorActor: Actor<OrchestratorService>;
   let ledgerActor: Actor<LedgerService>;
   let registryCanisterId: Principal;
   let ledgerCanisterId: Principal;
+  let targetCanisterId: Principal;
 
   beforeAll(async () => {
     const url = inject('PIC_URL');
@@ -116,11 +131,36 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     registryActor = registryFixture.actor;
     registryCanisterId = registryFixture.canisterId;
 
+    // 3. Deploy Orchestrator with real dependency IDs
+    const orchestratorFixture = await pic.setupCanister<OrchestratorService>({
+      idlFactory: orchestratorIdlFactory,
+      wasm: ORCHESTRATOR_WASM_PATH,
+      sender: daoIdentity.getPrincipal(),
+      arg: IDL.encode(orchestratorInit({ IDL }), [[]]),
+    });
+    orchestratorActor = orchestratorFixture.actor;
+
+    // 2.b: Create the managed canister
+    const managedCanisterFixture = await pic.setupCanister<OrchestratorService>(
+      {
+        idlFactory: orchestratorIdlFactory,
+        wasm: DUMMY_UPGRADE_WASM_PATH,
+        sender: operatorIdentity.getPrincipal(),
+        arg: IDL.encode(orchestratorInit({ IDL }), [[]]),
+      },
+    );
+    targetCanisterId = managedCanisterFixture.canisterId;
+
     // 3. Setup Permissions and Funds
     registryActor.setIdentity(daoIdentity);
     await registryActor.set_auditor_credentials_canister_id(
       credentialFixture.canisterId,
     );
+    await registryActor.set_mcp_orchestrator(orchestratorFixture.canisterId);
+
+    orchestratorActor.setIdentity(daoIdentity);
+    await orchestratorActor.set_mcp_registry_id(registryFixture.canisterId);
+
     credentialFixture.actor.setIdentity(daoIdentity);
     await credentialFixture.actor.issue_credential(
       reproAuditorIdentity.getPrincipal(),
@@ -161,10 +201,12 @@ describe('MCP Registry Full E2E Lifecycle', () => {
   });
 
   it('should orchestrate the full developer-to-auditor-to-upgrade lifecycle', async () => {
-    const wasmHash = new Uint8Array([1, 2, 3, 4, 5]);
+    const wasmBytes = Buffer.from('mock wasm module bytes');
+    const wasmHash = createHash('sha256').update(wasmBytes).digest();
     const wasmId = Buffer.from(wasmHash).toString('hex');
     const bountyAmount = 100_000n;
     const appNamespace = 'com.prometheus.test-server';
+    const appVersion: [bigint, bigint, bigint] = [1n, 0n, 0n];
 
     // === PHASE 1: Developer creates a namespace for their application ===
     registryActor.setIdentity(developerIdentity);
@@ -247,9 +289,38 @@ describe('MCP Registry Full E2E Lifecycle', () => {
         }
       }
     }
+    // === PHASE 4.5: Verify the new public query for attestations ===
+    registryActor.setIdentity(developerIdentity); // Any identity can query
+
+    // The actor method now returns AttestationRecord[] directly.
+    const attestations =
+      await registryActor.get_attestations_for_wasm(wasmHash);
+
+    // Assert the number of attestations is correct
+    expect(attestations).toHaveLength(3);
+
+    // Assert the content of one of the attestations to be sure
+    const securityAttestation = attestations.find(
+      (att) =>
+        'Attestation' in att &&
+        att.Attestation.auditor.toText() ===
+          securityAuditorIdentity.getPrincipal().toText(),
+    );
+    expect(securityAttestation).toBeDefined();
+
+    // The test puts the audit type in the metadata, so let's check it
+    const auditTypeMeta =
+      'Attestation' in securityAttestation!
+        ? securityAttestation.Attestation.metadata.find(
+            (meta) => meta[0] === '126:audit_type',
+          )
+        : [];
+    expect(auditTypeMeta).toBeDefined();
+    // The value is a variant, so we check for the Text property
+    // @ts-ignore
+    expect(auditTypeMeta[1]).toEqual({ Text: 'security' });
 
     // === PHASE 5: DAO Finalization ===
-    console.log('PHASE 5: DAO finalizes the verification...');
     registryActor.setIdentity(daoIdentity);
     const finalizeResult = await registryActor.finalize_verification(
       wasmId,
@@ -259,20 +330,107 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     expect('ok' in finalizeResult).toBe(true);
 
     // === PHASE 6: Developer publishes the now-verified WASM ===
-    console.log('PHASE 6: Developer publishes the verified WASM...');
     registryActor.setIdentity(developerIdentity);
+
+    // Step 6.1: Declare the version and its expected hash.
     const updateRequest: UpdateWasmRequest = {
       canister_type_namespace: appNamespace,
-      version_number: [1n, 0n, 0n],
+      version_number: appVersion,
       description: 'Initial release with verified Wasm',
       repo: 'https://github.com/final-boss/app',
       metadata: [],
       expected_hash: wasmHash,
-      expected_chunks: [new Uint8Array([1])], // Dummy chunk hash
+      expected_chunks: [wasmHash], // For a single chunk, the chunk hash is the wasm hash.
       previous: [],
     };
     const updateResult = await registryActor.icrc118_update_wasm(updateRequest);
     expect('Ok' in updateResult).toBe(true);
+
+    // Step 6.2: Upload the actual WASM bytes with the expected chunk hash.
+    const uploadResult = await registryActor.icrc118_upload_wasm_chunk({
+      canister_type_namespace: appNamespace,
+      version_number: appVersion,
+      chunk_id: 0n,
+      wasm_chunk: wasmBytes, // Use the actual bytes
+      expected_chunk_hash: wasmHash,
+    });
+    expect(uploadResult.total_chunks).toBe(1n);
+
+    // Owner add operator identity as a controller
+    registryActor.setIdentity(developerIdentity);
+    const res = await registryActor.icrc118_manage_controller([
+      {
+        canister_type_namespace: appNamespace,
+        op: { Add: null },
+        controller: operatorIdentity.getPrincipal(),
+      },
+    ]);
+    expect('Ok' in res[0]).toBe(true);
+
+    // === PHASE 7: Operator UPGRADES a live canister ===
+    registryActor.setIdentity(operatorIdentity);
+    orchestratorActor.setIdentity(operatorIdentity);
+
+    // Operator registers the canister ID to the namespace
+    await orchestratorActor.register_canister(targetCanisterId, appNamespace);
+
+    const versionRecordResult = await registryActor.get_canister_type_version({
+      canister_type_namespace: appNamespace,
+      version_number: appVersion,
+    });
+    expect('ok' in versionRecordResult).toBe(true);
+    const resolvedHash =
+      'ok' in versionRecordResult
+        ? (versionRecordResult.ok as { hash: Uint8Array }).hash
+        : new Uint8Array();
+
+    const upgradeResult = await orchestratorActor.icrc120_upgrade_to([
+      {
+        canister_id: targetCanisterId,
+        hash: resolvedHash,
+        mode: {
+          upgrade: [
+            {
+              skip_pre_upgrade: [false],
+              wasm_memory_persistence: [{ keep: null }],
+            },
+          ],
+        },
+        args: [],
+        parameters: [],
+        restart: false,
+        snapshot: false,
+        stop: false,
+        timeout: 0n,
+      },
+    ]);
+    expect('Ok' in upgradeResult[0]).toBe(true);
+
+    // === PHASE 8: Operator polls for upgrade completion ===
+    orchestratorActor.setIdentity(operatorIdentity); // Ensure we are the operator
+
+    let finalStatus;
+    const maxRetries = 10;
+    let retries = 0;
+
+    while (retries < maxRetries) {
+      const status = await orchestratorActor.icrc120_upgrade_finished();
+
+      if ('InProgress' in status) {
+        // In PocketIC, we must advance time manually to allow the canister to work
+        await pic.advanceTime(200); // Advance time by 200ms
+        await pic.tick(); // Process the next round of inter-canister calls
+        retries++;
+      } else {
+        // Status is either Success or Failed, so we're done polling.
+        finalStatus = status;
+        break;
+      }
+    }
+
+    expect(finalStatus).toBeDefined();
+    expect('Success' in finalStatus!).toBe(true);
+
     console.log('E2E test completed successfully!');
   });
 });

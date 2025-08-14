@@ -1,11 +1,13 @@
 packages:
-  - packages/canisters/*
   - packages/apps/*
-  - packages/services/*
+  - packages/canisters/*
+  - packages/declarations
   - packages/libs/*
+  - packages/services/*
   - packages/tests/*
 
 onlyBuiltDependencies:
   - '@dfinity/pic'
   - '@tailwindcss/oxide'
+  - core-js
   - esbuild
