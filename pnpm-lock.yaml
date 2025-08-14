@@ -132,6 +132,9 @@ importers:
       '@hookform/resolvers':
         specifier: ^5.1.1
         version: 5.2.1(react-hook-form@7.62.0(react@19.1.1))
+      '@prometheus-protocol/declarations':
+        specifier: workspace:*
+        version: link:../../declarations
       '@prometheus-protocol/ic-js':
         specifier: 'workspace:'
         version: link:../../libs/ic-js
