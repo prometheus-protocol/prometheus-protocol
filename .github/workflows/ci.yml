@@ -97,6 +97,9 @@ jobs:
       - name: 8. Install Dependencies
         run: pnpm install
 
+      - name: 9. Build Apps
+        run: pnpm build
+
       - name: 10. Run Apps Tests
         run: pnpm test:apps
 
