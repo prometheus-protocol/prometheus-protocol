@@ -72,37 +72,6 @@ jobs:
         run: pnpm test:mo
         # This uses our package.json script to run `mops test` in all canister packages
 
-  # =================================================================
-  # Job 1.a: Run fast App unit tests first
-  # =================================================================
-  unit-tests:
-    name: App Unit Tests
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: 1. Check out repository (main repo only)
-        uses: actions/checkout@v4
-
-      - name: 5. Setup PNPM
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: 6. Setup Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'pnpm'
-
-      - name: 8. Install Dependencies
-        run: pnpm install
-
-      - name: 9. Build Apps
-        run: pnpm build
-
-      - name: 10. Run Apps Tests
-        run: pnpm test:apps
-
   picjs-tests:
     name: PicJS Unit Tests
     runs-on: ubuntu-latest
@@ -165,6 +134,9 @@ jobs:
       - name: 12. Run PicJS Tests
         run: pnpm test:canisters
 
+      - name: 12.b Run Apps Tests
+        run: pnpm test:apps
+
       - name: 13. Stop Local Replica
         if: always() # Ensure this runs even if tests fail
         run: dfx stop
@@ -175,7 +147,7 @@ jobs:
   e2e-tests:
     name: End-to-End Tests
     runs-on: ubuntu-latest
-    needs: [unit-tests, picjs-tests, motoko-tests] # Ensure this runs after unit tests
+    needs: [picjs-tests, motoko-tests] # Ensure this runs after unit tests
 
     steps:
       - name: 1. Check out repository (main repo only)
@@ -245,9 +217,9 @@ jobs:
   ci-status-check:
     name: CI Status Check
     if: always()
-    needs: [unit-tests, picjs-tests, e2e-tests, motoko-tests]
+    needs: [picjs-tests, e2e-tests, motoko-tests]
     runs-on: ubuntu-latest
     steps:
       - name: Check status of all jobs
-        if: ${{ needs.unit-tests.result != 'success' || needs.picjs-tests.result != 'success' || needs.e2e-tests.result != 'success' || needs.motoko-tests.result != 'success' }}
+        if: ${{ needs.picjs-tests.result != 'success' || needs.e2e-tests.result != 'success' || needs.motoko-tests.result != 'success' }}
         run: exit 1
