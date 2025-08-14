@@ -1,16 +1,6 @@
 import { Identity } from '@dfinity/agent';
-import { getAuthActor } from './actors';
-import { Principal } from '@dfinity/principal';
-
-export interface PublicResourceServer {
-  resource_server_id: string;
-  name: string;
-  logo_uri: string;
-  uris: string[];
-  scopes: [string, string][];
-  accepted_payment_canisters: Principal[];
-  service_principals: Principal[]; // List of trusted backend server identities.
-}
+import { getAuthActor } from '../actors.js';
+import { Auth } from '@prometheus-protocol/declarations';
 
 // --- API Functions for Grant Management ---
 
@@ -32,7 +22,7 @@ export const getMyGrants = async (identity: Identity): Promise<string[]> => {
 export const getPublicResourceServer = async (
   identity: Identity,
   resourceServerId: string,
-): Promise<PublicResourceServer> => {
+): Promise<Auth.PublicResourceServer> => {
   const authActor = getAuthActor(identity);
   const result = await authActor.get_public_resource_server(resourceServerId);
 

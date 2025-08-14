@@ -9,9 +9,9 @@ import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useSessionInfoQuery } from '@/hooks/useSessionInfo';
 import { AllowanceManager } from '@/components/connections/AllowanceManager';
-import { PublicResourceServer } from '@/api/grant.api';
 import { Principal } from '@dfinity/principal';
 import { useMemo } from 'react';
+import { Auth } from '@prometheus-protocol/declarations';
 
 export default function SetupPage() {
   const { state } = useLocation();
@@ -29,17 +29,18 @@ export default function SetupPage() {
   );
 
   // The consent_data from the session now contains all the info we need for the resource server.
-  const resourceServer: PublicResourceServer | undefined = state?.consent_data
-    ? {
-        resource_server_id: state.consent_data.resource_server_id,
-        name: state.consent_data.client_name, // Note the mapping from old field name
-        logo_uri: state.consent_data.logo_uri,
-        uris: [], // Not needed for this component
-        scopes: state.consent_data.scopes,
-        accepted_payment_canisters: acceptedPaymentCanisters,
-        service_principals: [spenderPrincipal!], // We get this from sessionInfo
-      }
-    : undefined;
+  const resourceServer: Auth.PublicResourceServer | undefined =
+    state?.consent_data
+      ? {
+          resource_server_id: state.consent_data.resource_server_id,
+          name: state.consent_data.client_name, // Note the mapping from old field name
+          logo_uri: state.consent_data.logo_uri,
+          uris: [], // Not needed for this component
+          scopes: state.consent_data.scopes,
+          accepted_payment_canisters: acceptedPaymentCanisters,
+          service_principals: [spenderPrincipal!], // We get this from sessionInfo
+        }
+      : undefined;
 
   const handleSuccess = () => {
     navigate(`/consent?session_id=${sessionId}`, { state });

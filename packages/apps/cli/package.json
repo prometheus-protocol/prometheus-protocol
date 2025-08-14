@@ -1,0 +1,39 @@
+{
+  "name": "@prometheus-protocol/cli",
+  "version": "0.1.0",
+  "description": "A CLI for publishing applications to the Prometheus App Store.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "cli": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "vitest",
+    "prepublishOnly": "pnpm build"
+  },
+  "dependencies": {
+    "@dfinity/agent": "^2.4.1",
+    "@dfinity/candid": "^2.4.1",
+    "@dfinity/identity": "^2.4.1",
+    "@dfinity/identity-secp256k1": "^2.4.1",
+    "@dfinity/ledger-icrc": "^2.9.1",
+    "@dfinity/principal": "^2.4.1",
+    "@dfinity/utils": "^2.13.2",
+    "@prometheus-protocol/declarations": "workspace:*",
+    "@prometheus-protocol/ic-js": "workspace:",
+    "commander": "^12.1.0",
+    "js-yaml": "^4.1.0",
+    "pem-file": "^1.0.1",
+    "prompts": "^2.4.2"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.12.12",
+    "@types/prompts": "^2.4.9",
+    "tsx": "^4.10.5",
+    "typescript": "^5.4.5",
+    "vitest": "^3.2.4"
+  }
+}

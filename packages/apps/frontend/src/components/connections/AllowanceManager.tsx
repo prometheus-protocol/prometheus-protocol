@@ -31,16 +31,15 @@ import {
 } from '@/components/ui/select';
 import { Principal } from '@dfinity/principal';
 import { Label } from '@/components/ui/label';
-import { PublicResourceServer } from '@/api/grant.api';
-import { TokenInfo } from '@/api/payment.api';
 import { isDefined } from '@/lib/utils';
+import { Auth } from '@prometheus-protocol/declarations';
 
 const formSchema = z.object({
   budget: z.number().min(0, { message: 'Allowance cannot be negative.' }),
 });
 
 interface AllowanceManagerProps {
-  resourceServer: PublicResourceServer;
+  resourceServer: Auth.PublicResourceServer;
   spenderPrincipal: Principal;
   onSuccess: () => void;
   submitButtonText: string;

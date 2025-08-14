@@ -1,32 +1,7 @@
 import { Identity } from '@dfinity/agent';
-import { getAuthActor } from './actors';
+import { getAuthActor } from '../actors.js';
 import { Principal } from '@dfinity/principal';
-
-// --- Type Definitions ---
-// It's good practice to define the expected return types.
-// These should match the types in your auth.did.js file.
-
-interface ScopeDetails {
-  id: string;
-  description: string;
-}
-
-interface ConsentData {
-  client_name: string;
-  logo_uri: string;
-  scopes: ScopeDetails[];
-}
-
-interface ConfirmLoginOk {
-  next_step: { setup: null } | { consent: null };
-  consent_data: ConsentData;
-  accepted_payment_canisters: Principal[];
-}
-
-interface SessionInfo {
-  client_name: string;
-  resource_server_principal: Principal;
-}
+import { Auth } from '@prometheus-protocol/declarations';
 
 // --- API Functions ---
 
@@ -36,7 +11,7 @@ interface SessionInfo {
 export const confirmLogin = async (
   identity: Identity,
   sessionId: string,
-): Promise<ConfirmLoginOk> => {
+): Promise<Auth.LoginConfirmation> => {
   const authActor = getAuthActor(identity);
   const result = await authActor.confirm_login(sessionId);
 
@@ -52,7 +27,7 @@ export const confirmLogin = async (
 export const getSessionInfo = async (
   identity: Identity,
   sessionId: string,
-): Promise<SessionInfo> => {
+): Promise<Auth.SessionInfo> => {
   const authActor = getAuthActor(identity);
   const result = await authActor.get_session_info(sessionId);
 

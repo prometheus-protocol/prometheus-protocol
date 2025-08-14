@@ -306,6 +306,35 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
   };
 
+  public shared query func get_attestations_for_wasm(wasm_hash : Blob) : async [ICRC126.AuditRecord] {
+    let wasm_id = Base16.encode(wasm_hash);
+    let state = icrc126().state;
+
+    // Look up the wasm_id in the `audits` map.
+    switch (Map.get(state.audits, Map.thash, wasm_id)) {
+      case (null) {
+        // No audits found for this wasm_id, return an empty array.
+        return [];
+      };
+      case (?audit_records) {
+        // We have audits, now filter for only the attestations.
+        var attestations : [ICRC126.AuditRecord] = [];
+        for (record in audit_records.vals()) {
+          switch (record) {
+            case (#Attestation(att_record)) {
+              // It's an attestation, add it to our results.
+              attestations := Array.append(attestations, [record]);
+            };
+            case (#Divergence(_)) {
+              // It's a divergence report, ignore it.
+            };
+          };
+        };
+        return attestations;
+      };
+    };
+  };
+
   private func has_attestation(wasm_id : Text, audit_type : Text) : Bool {
     // 1. Get the current state from the ICRC-126 library instance.
     let state = icrc126().state;
@@ -652,6 +681,41 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     );
 
     return #ok(trx_id);
+  };
+
+  // The request type for our new custom query.
+  public type GetCanisterTypeVersionRequest = {
+    canister_type_namespace : Text;
+    version_number : (Nat, Nat, Nat); // (major, minor, patch)
+  };
+
+  // This function resolves a specific version to its full record, including the WASM hash.
+  // It is not part of the ICRC-118 standard, but a helper for the orchestrator workflow.
+  public shared query func get_canister_type_version(req : GetCanisterTypeVersionRequest) : async Result.Result<Service.Wasm, Text> {
+    // We use the existing icrc118_get_wasms function with a precise filter
+    // to find the exact version record we're looking for.
+    let filter : [Service.GetWasmsFilter] = [
+      #canister_type_namespace(req.canister_type_namespace),
+      #version_number(req.version_number),
+    ];
+
+    // We request up to 2 records to detect if there's an unexpected duplicate.
+    let results = icrc118wasmregistry().icrc118_get_wasms({
+      filter = ?filter;
+      prev = null;
+      take = ?2;
+    });
+
+    if (results.size() == 1) {
+      // Found exactly one match, which is the expected outcome.
+      return #ok(results[0]);
+    } else if (results.size() == 0) {
+      // No match found.
+      return #err("Version not found for the given namespace.");
+    } else {
+      // This case should ideally never happen with a unique version number.
+      return #err("Internal consistency error: Multiple records found for the same version.");
+    };
   };
 
   //------------------- SAMPLE FUNCTION -------------------//

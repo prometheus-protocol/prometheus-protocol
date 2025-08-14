@@ -2,7 +2,7 @@ import {
   confirmLogin as apiConfirmLogin,
   completeAuthorize as apiCompleteAuthorize,
   denyConsent as apiDenyConsent,
-} from '@/api/auth.api';
+} from '@prometheus-protocol/ic-js';
 import { Identity } from '@dfinity/agent';
 import useMutation from './useMutation';
 

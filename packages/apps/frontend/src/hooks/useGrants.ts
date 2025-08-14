@@ -3,9 +3,9 @@ import { useInternetIdentity } from 'ic-use-internet-identity';
 import {
   getMyGrants,
   getPublicResourceServer,
-  PublicResourceServer,
   revokeGrant,
-} from '@/api/grant.api';
+} from '@prometheus-protocol/ic-js';
+import { Auth } from '@prometheus-protocol/declarations';
 
 /**
  * React Query hook to fetch the current user's list of granted resource server IDs.
@@ -31,7 +31,7 @@ export const usePublicResourceServerQuery = (
 ) => {
   const { identity } = useInternetIdentity();
 
-  return useQuery<PublicResourceServer>({
+  return useQuery<Auth.PublicResourceServer>({
     queryKey: ['resourceServer', resourceServerId],
     queryFn: async () => {
       if (!identity || !resourceServerId) {

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { getSessionInfo } from '@/api/auth.api';
+import { getSessionInfo } from '@prometheus-protocol/ic-js';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 
 export const useSessionInfoQuery = (sessionId: string | null) => {
