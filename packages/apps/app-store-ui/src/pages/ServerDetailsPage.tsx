@@ -16,7 +16,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { AllowanceManager } from '@/components/connections/AllowanceManager';
 import { toast } from 'sonner';
 
 export default function ConnectionDetailsPage() {

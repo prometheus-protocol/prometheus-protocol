@@ -8,7 +8,7 @@ interface ServerGridProps {
 
 export function ServerGrid({ title, servers }: ServerGridProps) {
   return (
-    <section className="py-20">
+    <section className="py-16">
       <h2 className="text-2xl font-bold tracking-tight mb-6 uppercase">
         {title}
       </h2>

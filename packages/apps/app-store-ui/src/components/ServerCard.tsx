@@ -17,7 +17,7 @@ export function ServerCard({ server }: ServerCardProps) {
   return (
     <Link
       to={`/server/${server.id}`}
-      className="flex items-center gap-4 p-2 rounded-3xl hover:bg-accent transition-colors group">
+      className="flex items-center gap-4 p-2 md:p-4 rounded-3xl hover:bg-accent transition-colors group">
       <img
         src={server.iconUrl}
         alt={`${server.name} icon`}

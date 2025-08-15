@@ -19,7 +19,7 @@ export function MainLayout() {
       {/* --- Main Content --- */}
       {/* The Outlet component from React Router will render the active page component here */}
       <main className="flex-1 px-6 sm:px-8 lg:px-16">
-        <div className="container py-12 mx-auto">
+        <div className="container py-16 mx-auto">
           <Outlet />
         </div>
       </main>

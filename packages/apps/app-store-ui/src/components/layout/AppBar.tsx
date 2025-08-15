@@ -4,7 +4,7 @@ import { SearchInput } from '../SearchInput';
 
 export function AppBar() {
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pt-0 sm:pt-4 px-6 sm:px-8 lg:px-8 relative shadow-[var(--shadow-header)]">
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pt-0 sm:pt-2 px-6 sm:px-8 lg:px-8 relative shadow-[var(--shadow-header)]">
       <div className="container flex h-20 md:h-26 items-center mx-auto">
         <div className="mr-4 flex">
           <Logo className="mr-6" />

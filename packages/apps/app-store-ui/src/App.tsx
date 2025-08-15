@@ -43,6 +43,8 @@ function App() {
 
               {/* The details page for a specific MCP server, accessible by a slug or ID */}
               <Route path="/server/:slug" element={<ServerDetailsPage />} />
+
+              <Route path="*" element={<NotFoundPage />} />
             </Route>
 
             {/* --- Protected Routes for Logged-in Developers --- */}
