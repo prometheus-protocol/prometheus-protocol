@@ -5,7 +5,7 @@
   "auth_server": {
     "ic": "bfggx-7yaaa-aaaai-q32gq-cai"
   },
-  "frontend": {
+  "auth_ui": {
     "ic": "bmfnl-jqaaa-aaaai-q32ha-cai"
   }
 }
