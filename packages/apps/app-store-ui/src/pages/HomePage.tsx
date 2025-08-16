@@ -1,7 +1,7 @@
 import { ServerGrid } from '@/components/ServerGrid';
 import { ValuePropBanner } from '@/components/ValuePropBanner';
 import { PromoBanner } from '@/components/PromoBanner';
-import { mockFeaturedServers, mockServers } from '@/lib/mock-data';
+import { featuredServers, mockServers } from '@/lib/mock-data';
 import { FeaturedCarousel } from '@/components/FeaturedCarousel';
 import { OfferBanner } from '@/components/OfferBanner';
 import { useInternetIdentity } from 'ic-use-internet-identity';
@@ -21,12 +21,12 @@ function HomePage() {
   return (
     <div className="w-full mx-auto">
       {/* This would be a personalized section, maybe shown only when logged in */}
-      <section className="mb-16">
+      <section className="my-16">
         <h1 className="font-header text-4xl font-bold tracking-tight mb-4 uppercase">
           Welcome {userName}
         </h1>
         {/* The three large featured cards from the design would go here */}
-        <FeaturedCarousel servers={mockFeaturedServers} />
+        <FeaturedCarousel servers={featuredServers} />
       </section>
 
       <ValuePropBanner />

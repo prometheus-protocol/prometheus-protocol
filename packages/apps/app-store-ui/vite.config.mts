@@ -90,7 +90,7 @@ export default defineConfig(({ mode }) => {
       include: ['@dfinity/agent', '@dfinity/candid', '@dfinity/principal'],
     },
     build: {
-      outDir: path.resolve(__dirname, '..', '..', '..', 'dist', 'frontend'),
+      outDir: path.resolve(__dirname, '..', '..', '..', 'dist', 'app_store_ui'),
       emptyOutDir: true,
     },
     define: {
