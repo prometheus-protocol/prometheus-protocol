@@ -19,7 +19,9 @@ export function SimilarApps({ currentServerId }: SimilarAppsProps) {
 
   return (
     <section>
-      <h2 className="text-2xl font-bold tracking-tight my-8">Similar apps</h2>
+      <h2 className="text-2xl font-bold tracking-tight mt-10 mb-5">
+        Similar apps
+      </h2>
       <div className="space-y-2">
         {similarApps.map((app) => (
           <Link

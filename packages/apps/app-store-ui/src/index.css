@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 @import 'tailwindcss';
 @import 'tw-animate-css';
@@ -126,6 +127,7 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
   }
   button,
   [role='button'],
@@ -134,10 +136,36 @@
   a {
     @apply cursor-pointer;
   }
+
+  /* For WebKit-based browsers (Chrome, Safari, Edge) */
+  ::-webkit-scrollbar {
+    width: 8px; /* Width of vertical scrollbar */
+    height: 8px; /* Height of horizontal scrollbar */
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--muted) / 0.2); /* Subtle track color */
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border)); /* The draggable handle */
+    border-radius: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary)); /* Your theme's yellow on hover */
+  }
+
+  /* For Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent; /* thumb color track color */
+  }
 }
 
 @theme {
   /* Define our custom theme values as CSS variables */
+  --font-sans: 'Inter', sans-serif;
   --font-heading: 'Space Grotesk', sans-serif;
   --shadow-header: 0px 0px 8px 0px hsla(45, 59%, 51%, 0.5);
 }
