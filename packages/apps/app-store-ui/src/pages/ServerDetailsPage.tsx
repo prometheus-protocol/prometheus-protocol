@@ -1,10 +1,9 @@
 import { useParams } from 'react-router-dom';
-import { featuredServers, Server } from '@/lib/mock-data'; // Assuming you have this
+import { allServers } from '@/lib/mock-data'; // Assuming you have this
 import NotFoundPage from './NotFoundPage';
 
 // We will create these components in the next steps
 import { ServerHeader } from '@/components/server-details/ServerHeader';
-import { MediaGallery } from '@/components/server-details/MediaGallery';
 import { SimilarApps } from '@/components/server-details/SimilarApps';
 import { ToolsAndResources } from '@/components/server-details/ToolsAndResources';
 import { DataSafetySection } from '@/components/server-details/DataSafetySection';
@@ -15,7 +14,7 @@ export default function ServerDetailsPage() {
   const { serverId } = useParams<{ serverId: string }>();
 
   // In a real app, you would fetch this data from an API
-  const server = featuredServers.find((s) => s.id === serverId);
+  const server = allServers.find((s) => s.id === serverId);
 
   if (!server) {
     return <NotFoundPage />;

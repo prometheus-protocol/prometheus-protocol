@@ -33,6 +33,24 @@ export interface Review {
   comment: string;
 }
 
+export interface Audit {
+  type: 'quality' | 'security' | 'build';
+  score: number;
+  certifiedBy: string;
+  certifiedOn: string;
+}
+
+export interface Certificate {
+  audits: Audit[];
+  overallScore: number;
+  repoUrl?: string;
+  hashes: {
+    wasm: string;
+    gitCommit: string;
+    canisterId: string;
+  };
+}
+
 /**
  * The comprehensive data structure for a single server.
  * This is used for the server details page.
@@ -41,6 +59,7 @@ export interface FeaturedServer {
   id: string;
   name: string;
   category: string;
+  publisher: string;
   iconUrl: string;
   tier: 'gold' | 'silver' | 'bronze';
   status: 'Now Available' | 'Coming Soon';
@@ -53,6 +72,8 @@ export interface FeaturedServer {
   tools: ServerTool[];
   dataSafety: DataSafety;
   reviews: Review[];
+  certificate?: Certificate;
+  isFeatured?: boolean; // Optional flag for homepage features
 }
 
 /**
@@ -75,6 +96,7 @@ export const allServers: FeaturedServer[] = [
   {
     id: 'pixipay',
     name: 'PixiPay: Split & Send',
+    publisher: 'Pixi Labs',
     category: 'Payments/Finance',
     iconUrl: '/icons/icon-001.png',
     tier: 'gold',
@@ -112,10 +134,36 @@ export const allServers: FeaturedServer[] = [
       ],
     },
     reviews: [],
+    certificate: {
+      overallScore: 93,
+      repoUrl: 'https://github.com/prometheus-protocol/pixipay',
+      audits: [
+        {
+          type: 'quality',
+          score: 90,
+          certifiedBy:
+            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+          certifiedOn: '08/22/2025',
+        },
+        {
+          type: 'build',
+          score: 95,
+          certifiedBy:
+            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+          certifiedOn: '08/22/2025',
+        },
+      ],
+      hashes: {
+        wasm: '77792c41dc3f10c2a2a4bac9ae385f16901b92c44f24f5c84711d07a3975a74c',
+        gitCommit: 'be75f04f04336fc1fbe48de5c2f012ac23111120',
+        canisterId: 'bmfnl-jqaaa-aaaai-q32ha-cai',
+      },
+    },
   },
   {
     id: 'vaultbox',
     name: 'VaultBox: Encrypted Locker',
+    publisher: 'SecureTech',
     category: 'Secure Storage',
     iconUrl: '/icons/icon-002.png',
     tier: 'gold',
@@ -153,10 +201,36 @@ export const allServers: FeaturedServer[] = [
       ],
     },
     reviews: [],
+    certificate: {
+      overallScore: 95,
+      repoUrl: 'https://github.com/prometheus-protocol/vaultbox',
+      audits: [
+        {
+          type: 'build',
+          score: 92,
+          certifiedBy:
+            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+          certifiedOn: '08/22/2025',
+        },
+        {
+          type: 'security',
+          score: 98,
+          certifiedBy:
+            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+          certifiedOn: '08/22/2025',
+        },
+      ],
+      hashes: {
+        wasm: '77792c41dc3f10c2a2a4bac9ae385f16901b92c44f24f5c84711d07a3975a74c',
+        gitCommit: 'be75f04f04336fc1fbe48de5c2f012ac23111120',
+        canisterId: 'bmfnl-jqaaa-aaaai-q32ha-cai',
+      },
+    },
   },
   {
     id: 'drift',
     name: 'Drift: Social Routes',
+    publisher: 'Drift Labs',
     category: 'Social Mobility',
     iconUrl: '/icons/icon-003.png',
     tier: 'gold',
@@ -187,10 +261,43 @@ export const allServers: FeaturedServer[] = [
       ],
     },
     reviews: [],
+    certificate: {
+      overallScore: 90,
+      repoUrl: 'https://github.com/prometheus-protocol/drift',
+      audits: [
+        {
+          type: 'quality',
+          score: 88,
+          certifiedBy:
+            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+          certifiedOn: '08/22/2025',
+        },
+        {
+          type: 'build',
+          score: 92,
+          certifiedBy:
+            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+          certifiedOn: '08/22/2025',
+        },
+        {
+          type: 'security',
+          score: 89,
+          certifiedBy:
+            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+          certifiedOn: '08/22/2025',
+        },
+      ],
+      hashes: {
+        wasm: '77792c41dc3f10c2a2a4bac9ae385f16901b92c44f24f5c84711d07a3975a74c',
+        gitCommit: 'be75f04f04336fc1fbe48de5c2f012ac23111120',
+        canisterId: 'bmfnl-jqaaa-aaaai-q32ha-cai',
+      },
+    },
   },
   {
     id: 'snapship',
     name: 'SnapShip: Marketplace',
+    publisher: 'SnapShip Inc.',
     category: 'Marketplace/Trading',
     iconUrl: '/icons/icon-004.png',
     tier: 'gold',
@@ -227,10 +334,43 @@ export const allServers: FeaturedServer[] = [
       ],
     },
     reviews: [],
+    certificate: {
+      overallScore: 92,
+      repoUrl: 'https://github.com/prometheus-protocol/snapship',
+      audits: [
+        {
+          type: 'quality',
+          score: 90,
+          certifiedBy:
+            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+          certifiedOn: '08/22/2025',
+        },
+        {
+          type: 'build',
+          score: 93,
+          certifiedBy:
+            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+          certifiedOn: '08/22/2025',
+        },
+        {
+          type: 'security',
+          score: 91,
+          certifiedBy:
+            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+          certifiedOn: '08/22/2025',
+        },
+      ],
+      hashes: {
+        wasm: '77792c41dc3f10c2a2a4bac9ae385f16901b92c44f24f5c84711d07a3975a74c',
+        gitCommit: 'be75f04f04336fc1fbe48de5c2f012ac23111120',
+        canisterId: 'bmfnl-jqaaa-aaaai-q32ha-cai',
+      },
+    },
   },
   {
     id: 'fuzzbot',
     name: 'Fuzzbot: Package Pal',
+    publisher: 'Fuzz Innovations',
     category: 'Smart Home/IoT',
     iconUrl: '/icons/icon-005.png',
     tier: 'gold',
@@ -260,10 +400,36 @@ export const allServers: FeaturedServer[] = [
       ],
     },
     reviews: [],
+    certificate: {
+      overallScore: 94,
+      repoUrl: 'https://github.com/prometheus-protocol/fuzzbot',
+      audits: [
+        {
+          type: 'quality',
+          score: 92,
+          certifiedBy:
+            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+          certifiedOn: '08/22/2025',
+        },
+        {
+          type: 'build',
+          score: 95,
+          certifiedBy:
+            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+          certifiedOn: '08/22/2025',
+        },
+      ],
+      hashes: {
+        wasm: '77792c41dc3f10c2a2a4bac9ae385f16901b92c44f24f5c84711d07a3975a74c',
+        gitCommit: 'be75f04f04336fc1fbe48de5c2f012ac23111120',
+        canisterId: 'bmfnl-jqaaa-aaaai-q32ha-cai',
+      },
+    },
   },
   {
     id: 'prompto',
     name: 'Prompto: Fast Forms',
+    publisher: 'Prompto AI',
     category: 'Business Utilities',
     iconUrl: '/icons/icon-006.png',
     tier: 'gold',
@@ -288,10 +454,29 @@ export const allServers: FeaturedServer[] = [
       points: [],
     },
     reviews: [],
+    certificate: {
+      overallScore: 91,
+      repoUrl: 'https://github.com/prometheus-protocol/prompto',
+      audits: [
+        {
+          type: 'quality',
+          score: 89,
+          certifiedBy:
+            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+          certifiedOn: '08/22/2025',
+        },
+      ],
+      hashes: {
+        wasm: '77792c41dc3f10c2a2a4bac9ae385f16901b92c44f24f5c84711d07a3975a74c',
+        gitCommit: 'be75f04f04336fc1fbe48de5c2f012ac23111120',
+        canisterId: 'bmfnl-jqaaa-aaaai-q32ha-cai',
+      },
+    },
   },
   {
     id: 'flowforge',
     name: 'FlowForge: Workflow Wizard',
+    publisher: 'FlowForge Inc.',
     category: 'Team Productivity',
     iconUrl: '/icons/icon-007.png',
     tier: 'gold',
@@ -320,6 +505,7 @@ export const allServers: FeaturedServer[] = [
   {
     id: 'atlasdrop',
     name: 'Atlas Drop: Secure Send',
+    publisher: 'Atlas Labs',
     category: 'Secure Delivery',
     iconUrl: '/icons/icon-008.png',
     tier: 'gold',
@@ -344,10 +530,36 @@ export const allServers: FeaturedServer[] = [
       points: [],
     },
     reviews: [],
+    certificate: {
+      overallScore: 96,
+      repoUrl: 'https://github.com/prometheus-protocol/vaultbox',
+      audits: [
+        {
+          type: 'quality',
+          score: 94,
+          certifiedBy:
+            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+          certifiedOn: '08/22/2025',
+        },
+        {
+          type: 'security',
+          score: 98,
+          certifiedBy:
+            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+          certifiedOn: '08/22/2025',
+        },
+      ],
+      hashes: {
+        wasm: '77792c41dc3f10c2a2a4bac9ae385f16901b92c44f24f5c84711d07a3975a74c',
+        gitCommit: 'be75f04f04336fc1fbe48de5c2f012ac23111120',
+        canisterId: 'bmfnl-jqaaa-aaaai-q32ha-cai',
+      },
+    },
   },
   {
     id: 'meta-manifest',
     name: 'MetaManifest: Chain Tracking',
+    publisher: 'MetaManifest Inc.',
     category: 'Supply Chain Tech',
     iconUrl: '/icons/icon-009.png',
     tier: 'gold',
@@ -389,10 +601,29 @@ export const allServers: FeaturedServer[] = [
       ],
     },
     reviews: [],
+    certificate: {
+      overallScore: 97,
+      repoUrl: 'https://github.com/prometheus-protocol/vaultbox',
+      audits: [
+        {
+          type: 'build',
+          score: 95,
+          certifiedBy:
+            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+          certifiedOn: '08/22/2025',
+        },
+      ],
+      hashes: {
+        wasm: '77792c41dc3f10c2a2a4bac9ae385f16901b92c44f24f5c84711d07a3975a74c',
+        gitCommit: 'be75f04f04336fc1fbe48de5c2f012ac23111120',
+        canisterId: 'bmfnl-jqaaa-aaaai-q32ha-cai',
+      },
+    },
   },
   {
     id: 'cargocrafter',
     name: 'Cargo Crafter: NFT Freight',
+    publisher: 'Cargo Crafter Ltd.',
     category: 'Web3 Logistics',
     iconUrl: '/icons/icon-010.png',
     tier: 'gold',
@@ -417,10 +648,36 @@ export const allServers: FeaturedServer[] = [
       points: [],
     },
     reviews: [],
+    certificate: {
+      overallScore: 95,
+      repoUrl: 'https://github.com/prometheus-protocol/cargocrafter',
+      audits: [
+        {
+          type: 'quality',
+          score: 93,
+          certifiedBy:
+            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+          certifiedOn: '08/22/2025',
+        },
+        {
+          type: 'build',
+          score: 96,
+          certifiedBy:
+            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+          certifiedOn: '08/22/2025',
+        },
+      ],
+      hashes: {
+        wasm: '77792c41dc3f10c2a2a4bac9ae385f16901b92c44f24f5c84711d07a3975a74c',
+        gitCommit: 'be75f04f04336fc1fbe48de5c2f012ac23111120',
+        canisterId: 'bmfnl-jqaaa-aaaai-q32ha-cai',
+      },
+    },
   },
   {
     id: 'fetchly',
     name: 'Fetchly: Instant Courier',
+    publisher: 'Fetchly Inc.',
     category: 'Express Services',
     iconUrl: '/icons/icon-011.png',
     tier: 'gold',
@@ -445,10 +702,36 @@ export const allServers: FeaturedServer[] = [
       points: [],
     },
     reviews: [],
+    certificate: {
+      overallScore: 72,
+      repoUrl: 'https://github.com/prometheus-protocol/fetchly',
+      audits: [
+        {
+          type: 'quality',
+          score: 90,
+          certifiedBy:
+            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+          certifiedOn: '08/22/2025',
+        },
+        {
+          type: 'build',
+          score: 64,
+          certifiedBy:
+            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+          certifiedOn: '08/22/2025',
+        },
+      ],
+      hashes: {
+        wasm: '77792c41dc3f10c2a2a4bac9ae385f16901b92c44f24f5c84711d07a3975a74c',
+        gitCommit: 'be75f04f04336fc1fbe48de5c2f012ac23111120',
+        canisterId: 'bmfnl-jqaaa-aaaai-q32ha-cai',
+      },
+    },
   },
   {
     id: 'routespark',
     name: 'RouteSpark: Smart Maps',
+    publisher: 'RouteSpark Inc.',
     category: 'Navigation/Mapping',
     iconUrl: '/icons/icon-012.png',
     tier: 'gold',
@@ -478,6 +761,7 @@ export const allServers: FeaturedServer[] = [
   {
     id: 'runway-p2p',
     name: 'Runway: P2P Delivery',
+    publisher: 'Runway Labs',
     category: 'Logistics Software',
     iconUrl: '/icons/icon-001.png',
     tier: 'gold',
@@ -531,7 +815,9 @@ export const allServers: FeaturedServer[] = [
  * A list of servers to be featured prominently, e.g., on the homepage.
  * Contains full server data.
  */
-export const featuredServers: FeaturedServer[] = allServers.slice(0, 6);
+export const homepageServers: FeaturedServer[] = allServers.filter(
+  (server) => server.isFeatured || !server.certificate,
+);
 
 /**
  * A simplified list of servers for use in sidebars, etc.

@@ -248,7 +248,7 @@ export function InstallDialog({
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="min-w-[760px] p-0 gap-0">
+        <DialogContent className="min-w-[80vw] p-0 gap-0">
           <InstallDialogContent server={server} />
         </DialogContent>
       </Dialog>

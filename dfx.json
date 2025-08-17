@@ -48,7 +48,11 @@
         "entrypoint": "packages/apps/app_store_ui/src/index.html"
       },
       "source": ["dist/app_store_ui/"],
-      "type": "assets"
+      "type": "assets",
+      "declarations": {
+        "output": "packages/declarations/src/generated/app_store_ui",
+        "node_compatibility": true
+      }
     },
     "auth_ui": {
       "dependencies": ["auth_server"],
@@ -56,7 +60,11 @@
         "entrypoint": "packages/apps/auth_ui/src/index.html"
       },
       "source": ["dist/auth_ui/"],
-      "type": "assets"
+      "type": "assets",
+      "declarations": {
+        "output": "packages/declarations/src/generated/auth_ui",
+        "node_compatibility": true
+      }
     },
     "internet_identity": {
       "type": "custom",
@@ -67,7 +75,11 @@
           "ic": "rdmx6-jaaaa-aaaaa-aaadq-cai"
         }
       },
-      "frontend": {}
+      "frontend": {},
+      "declarations": {
+        "output": "packages/declarations/src/generated/internet_identity",
+        "node_compatibility": true
+      }
     }
   },
   "defaults": {

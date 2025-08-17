@@ -13,6 +13,15 @@ import ServerDetailsPage from '@/pages/ServerDetailsPage'; // Details of one MCP
 import NotFoundPage from '@/pages/NotFoundPage';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { InternetIdentityProvider } from 'ic-use-internet-identity';
+import { ScrollToTop } from './components/ScrollToTop';
+import { CertificatePage } from './pages/CertificatePage';
+import { TermsOfServicePage } from './pages/TermsOfServicePage';
+import { PrivacyPolicyPage } from './pages/PrivacyPolicPage';
+import { AboutPage } from './pages/AboutPage';
+import { ForDevelopersPage } from './pages/ForDevelopersPage';
+import { ContactPage } from './pages/ContactPage';
+import { FaqPage } from './pages/FaqPage';
+import { CommunityPage } from './pages/CommunityPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,6 +43,7 @@ function App() {
     <InternetIdentityProvider>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
+          <ScrollToTop />
           <Routes>
             {/* --- Public Routes using the Main Layout --- */}
             {/* All public-facing pages will share a common layout (e.g., Header, Footer) */}
@@ -43,7 +53,21 @@ function App() {
 
               {/* The details page for a specific MCP server, accessible by a slug or ID */}
               <Route path="/server/:serverId" element={<ServerDetailsPage />} />
+              <Route
+                path="server/:serverId/certificate"
+                element={<CertificatePage />}
+              />
+              <Route path="about" element={<AboutPage />} />
+              <Route path="developers" element={<ForDevelopersPage />} />
 
+              {/* Resources */}
+              <Route path="contact" element={<ContactPage />} />
+              <Route path="faq" element={<FaqPage />} />
+              <Route path="community" element={<CommunityPage />} />
+
+              {/* Legal pages */}
+              <Route path="terms" element={<TermsOfServicePage />} />
+              <Route path="privacy" element={<PrivacyPolicyPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
 

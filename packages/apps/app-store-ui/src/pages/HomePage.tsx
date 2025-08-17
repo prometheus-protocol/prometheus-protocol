@@ -1,15 +1,15 @@
 import { ServerGrid } from '@/components/ServerGrid';
 import { ValuePropBanner } from '@/components/ValuePropBanner';
 import { PromoBanner } from '@/components/PromoBanner';
-import { featuredServers, mockServers } from '@/lib/mock-data';
+import { homepageServers, allServers } from '@/lib/mock-data';
 import { FeaturedCarousel } from '@/components/FeaturedCarousel';
 import { OfferBanner } from '@/components/OfferBanner';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import { truncatePrincipal } from '@/lib/utils';
 
 // In a real app, you'd fetch this data with React Query
-const editorsChoiceServers = mockServers.slice(0, 6);
-const trendingServers = mockServers.slice(6, 12);
+const editorsChoiceServers = allServers.slice(0, 6);
+const trendingServers = allServers.slice(6, 12);
 
 function HomePage() {
   const { identity } = useInternetIdentity();
@@ -22,11 +22,11 @@ function HomePage() {
     <div className="w-full mx-auto">
       {/* This would be a personalized section, maybe shown only when logged in */}
       <section className="my-16">
-        <h1 className="font-header text-4xl font-bold tracking-tight mb-4 uppercase">
+        <h1 className="font-header text-4xl font-bold tracking-tight mb-12 uppercase">
           Welcome {userName}
         </h1>
         {/* The three large featured cards from the design would go here */}
-        <FeaturedCarousel servers={featuredServers} />
+        <FeaturedCarousel servers={homepageServers} />
       </section>
 
       <ValuePropBanner />

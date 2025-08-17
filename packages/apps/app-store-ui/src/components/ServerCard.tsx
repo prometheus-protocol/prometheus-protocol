@@ -1,19 +1,16 @@
 import { Link } from 'react-router-dom';
-import { Award } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Server } from '@/lib/mock-data';
+import { FeaturedServer } from '@/lib/mock-data';
+import { getTierInfo } from '@/lib/get-tier-info';
 
 interface ServerCardProps {
-  server: Server;
+  server: FeaturedServer;
 }
 
-const tierStyles = {
-  gold: 'text-yellow-400',
-  silver: 'text-gray-400',
-  bronze: 'text-orange-400',
-};
-
 export function ServerCard({ server }: ServerCardProps) {
+  const tierInfo = getTierInfo(server);
+
   return (
     <Link
       to={`/server/${server.id}`}
@@ -26,9 +23,12 @@ export function ServerCard({ server }: ServerCardProps) {
       <div className="flex-1">
         <h3 className="font-semibold group-hover:underline">{server.name}</h3>
         <p className="text-sm text-muted-foreground">{server.category}</p>
-        <div className="flex items-center mt-1">
-          <Award className={cn('w-4 h-4', tierStyles[server.tier])} />
-        </div>
+
+        {tierInfo && (
+          <div className="flex items-center mt-1">
+            <tierInfo.Icon className={cn('w-4 h-4', tierInfo.textColorClass)} />
+          </div>
+        )}
       </div>
     </Link>
   );

@@ -24,13 +24,25 @@ export function ToolsAndResources({ tools }: ToolsAndResourcesProps) {
             <AccordionItem
               key={index}
               value={`item-${index}`}
-              className="border border-border rounded-lg px-4 last:border-b">
-              <AccordionTrigger className="text-left hover:no-underline">
+              className="
+                border border-border rounded-lg px-4 last:border-b 
+                transition-colors data-[state=open]:border-primary
+              ">
+              <AccordionTrigger className="group text-left hover:no-underline">
                 <div className="flex-1 flex justify-between items-center pr-4">
-                  <span className="font-mono font-semibold">{tool.name}</span>
-                  <span className="text-xs text-muted-foreground font-mono">
-                    {tool.cost}
+                  <span className="font-mono font-semibold group-data-[state=open]:text-primary">
+                    {tool.name}
                   </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-foreground font-mono">
+                      {tool.cost}
+                    </span>
+                    <img
+                      src="/images/pmp-token.webp"
+                      alt="Expand"
+                      className="h-4 inline-block"
+                    />
+                  </div>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="pt-2 pb-4">

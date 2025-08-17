@@ -4,6 +4,8 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+@plugin '@tailwindcss/typography';
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -168,4 +170,20 @@
   --font-sans: 'Inter', sans-serif;
   --font-heading: 'Space Grotesk', sans-serif;
   --shadow-header: 0px 0px 8px 0px hsla(45, 59%, 51%, 0.5);
+
+  @keyframes flip-and-pause {
+    /* The coin is stationary for the first 80% of the animation duration */
+    0%,
+    60% {
+      transform: rotateY(0deg);
+    }
+    /* The flip happens rapidly in the last 20% of the duration */
+    100% {
+      transform: rotateY(360deg);
+    }
+  }
+
+  /* Define the animation using a CSS custom property */
+  /* Total duration is 3s. The flip itself takes 1s (20% of 3s) */
+  --animate-flip-pause: 3s flip-and-pause ease-in-out infinite;
 }

@@ -1,9 +1,9 @@
-import { Server } from '@/lib/mock-data';
+import { FeaturedServer } from '@/lib/mock-data';
 import { ServerCard } from './ServerCard';
 
 interface ServerGridProps {
   title: string;
-  servers: Server[];
+  servers: FeaturedServer[];
 }
 
 export function ServerGrid({ title, servers }: ServerGridProps) {

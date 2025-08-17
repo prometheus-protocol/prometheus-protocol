@@ -22,7 +22,7 @@ export function AppBar() {
       <div
         className="
           absolute bottom-0 left-0 w-full h-px 
-          bg-yellow-400/50
+          bg-primary
         "
       />
     </header>

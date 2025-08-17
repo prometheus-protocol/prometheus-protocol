@@ -3,6 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { FeaturedServer } from '@/lib/mock-data';
+import { PromoBadge } from './ui/promo-badge';
 
 interface FeaturedServerCardProps {
   server: FeaturedServer;
@@ -11,7 +12,7 @@ interface FeaturedServerCardProps {
 export function FeaturedServerCard({ server }: FeaturedServerCardProps) {
   return (
     <Link to={`/server/${server.id}`} className="block group">
-      <Card className="overflow-hidden border-transparent transition-all">
+      <Card className="overflow-hidden border-transparent transition-all p-0">
         <CardContent className="p-0">
           <div className="relative overflow-hidden rounded-3xl">
             <img
@@ -23,13 +24,9 @@ export function FeaturedServerCard({ server }: FeaturedServerCardProps) {
                 group-hover:scale-105
               "
             />
-            <Badge
-              variant={
-                server.status === 'Now Available' ? 'default' : 'secondary'
-              }
-              className="absolute top-0 left-0 p-2 rounded-bl-none rounded-tl-3xl rounded-tr-none rounded-br-3xl bg-primary text-neutral-800 font-bold">
+            <PromoBadge className="md:py-2 md:px-4 md:text-xs">
               {server.status}
-            </Badge>
+            </PromoBadge>
           </div>
           <div className="py-4 flex items-start gap-3 bg-card">
             <img

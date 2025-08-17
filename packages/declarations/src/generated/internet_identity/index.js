@@ -38,5 +38,3 @@ export const createActor = (canisterId, options = {}) => {
     ...options.actorOptions,
   });
 };
-
-export const internet_identity = canisterId ? createActor(canisterId) : undefined;

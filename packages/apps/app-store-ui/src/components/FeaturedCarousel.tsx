@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/carousel';
 import { FeaturedServer } from '@/lib/mock-data';
 import { FeaturedServerCard } from './FeaturedServerCard';
+import Autoplay from 'embla-carousel-autoplay';
 
 interface FeaturedCarouselProps {
   servers: FeaturedServer[];
@@ -19,6 +20,11 @@ export function FeaturedCarousel({ servers }: FeaturedCarouselProps) {
         align: 'start',
         loop: true,
       }}
+      plugins={[
+        Autoplay({
+          delay: 2000,
+        }),
+      ]}
       className="w-full">
       <CarouselContent className="-ml-12">
         {servers.map((server) => (
