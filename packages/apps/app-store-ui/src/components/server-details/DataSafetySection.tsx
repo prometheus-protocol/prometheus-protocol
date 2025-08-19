@@ -25,8 +25,8 @@ export function DataSafetySection({ safetyInfo }: DataSafetySectionProps) {
           ))}
         </ul>
         <p className="text-sm text-muted-foreground pt-2">
-          MetaManifest is designed with privacy by default—giving you full
-          control, visibility, and peace of mind.
+          Prometheus Protocol is designed with privacy by default—giving you
+          full control, visibility, and peace of mind.
         </p>
       </div>
     </section>

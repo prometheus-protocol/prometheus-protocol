@@ -30,11 +30,11 @@ const clientSetups = [
       </>,
     ],
     filename: '~/.cursor/mcp.json',
-    code: (serverName: string, serverId: string) => `{
+    code: (serverName: string, serverUrl: string) => `{
   "mcpServers": {
     "${serverName}": {
       "type": "streamable-http",
-      "url": "https://mcp.prometheus.io/servers/${serverId}"
+      "url": "${serverUrl}"
     }
   }
 }`,
@@ -63,11 +63,11 @@ const clientSetups = [
       </>,
     ],
     filename: '.vscode/mcp.json',
-    code: (serverName: string, serverId: string) => `{
+    code: (serverName: string, serverUrl: string) => `{
   "servers": {
     "${serverName}": {
       "type": "http",
-      "url": "https://mcp.prometheus.io/servers/${serverId}"
+      "url": "${serverUrl}"
     }
   }
 }`,
@@ -91,11 +91,11 @@ const clientSetups = [
       </>,
     ],
     filename: 'claude_desktop_config.json',
-    code: (serverName: string, serverId: string) => `{
+    code: (serverName: string, serverUrl: string) => `{
   "mcpServers": {
     "${serverName}": {
       "command": "npx",
-      "args": ["mcp-remote", "https://mcp.prometheus.io/servers/${serverId}"]
+      "args": ["mcp-remote", "${serverUrl}"]
     }
   }
 }`,
@@ -106,8 +106,8 @@ const clientSetups = [
     icon: 'anthropic.png',
     instructionsTitle: 'Run the following command:',
     filename: '',
-    code: (serverName: string, serverId: string) =>
-      `claude mcp add -t http ${serverName} https://mcp.prometheus.io/servers/${serverId}`,
+    code: (serverName: string, serverUrl: string) =>
+      `claude mcp add -t http ${serverName} ${serverUrl}`,
   },
   {
     id: 'windsurf',
@@ -128,10 +128,10 @@ const clientSetups = [
       </>,
     ],
     filename: '~/.codeium/windsurf/mcp_config.json',
-    code: (serverName: string, serverId: string) => `{
+    code: (serverName: string, serverUrl: string) => `{
   "mcpServers": {
     "${serverName}": {
-      "serverUrl": "https://mcp.prometheus.io/servers/${serverId}"
+      "serverUrl": "${serverUrl}"
     }
   }
 }`,
@@ -151,11 +151,11 @@ const clientSetups = [
       </>,
     ],
     filename: '~/.gemini/settings.json',
-    code: (serverName: string, serverId: string) => `{
+    code: (serverName: string, serverUrl: string) => `{
   //other settings...
   "mcpServers": {
     "${serverName}": {
-      "httpUrl": "https://mcp.prometheus.io/servers/${serverId}"
+      "httpUrl": "${serverUrl}"
     }
   }
 }`,
@@ -223,7 +223,7 @@ function InstallDialogContent({ server }: { server: FeaturedServer }) {
           )}
 
           <CodeBlock
-            code={activeSetup.code(configKey, server.id)}
+            code={activeSetup.code(configKey, server.serverUrl)}
             filename={activeSetup.filename}
           />
         </div>

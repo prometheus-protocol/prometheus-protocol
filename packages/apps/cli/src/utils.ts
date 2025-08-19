@@ -5,6 +5,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import pemfile from 'pem-file';
+import {
+  ICRC16,
+  ICRC16Map,
+} from '@prometheus-protocol/declarations/mcp_registry/mcp_registry.did.js';
 
 /**
  * Creates an identity from the raw string content of a plaintext PEM file.
@@ -69,4 +73,35 @@ export function loadDfxIdentity(identityName: string): Identity {
 
   const pemContent = fs.readFileSync(pemPath, 'utf-8');
   return identityFromPemContent(pemContent);
+}
+
+/**
+ * A generic helper to serialize a JavaScript object into the ICRC-16 Map format.
+ * This function serializes ALL keys from the input object.
+ * @param data The JavaScript object to serialize.
+ */
+export function serializeToIcrc16Map(data: Record<string, any>): ICRC16Map {
+  const metadata: ICRC16Map = [];
+
+  for (const [key, value] of Object.entries(data)) {
+    let icrcValue: ICRC16;
+
+    // Convert JS types to ICRC-16 Value variants
+    if (typeof value === 'string') {
+      icrcValue = { Text: value };
+    } else if (typeof value === 'number') {
+      icrcValue = { Nat: BigInt(value) };
+    } else if (typeof value === 'boolean') {
+      icrcValue = { Bool: value };
+    } else if (value === null || value === undefined) {
+      continue; // Skip null/undefined values
+    } else {
+      // For arrays or nested objects, robustly serialize them as a JSON string.
+      icrcValue = { Text: JSON.stringify(value) };
+    }
+
+    metadata.push([key, icrcValue]);
+  }
+
+  return metadata;
 }

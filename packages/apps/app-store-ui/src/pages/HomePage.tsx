@@ -8,8 +8,19 @@ import { useInternetIdentity } from 'ic-use-internet-identity';
 import { truncatePrincipal } from '@/lib/utils';
 
 // In a real app, you'd fetch this data with React Query
-const editorsChoiceServers = allServers.slice(0, 6);
-const trendingServers = allServers.slice(6, 12);
+const getSample = (amount: number) => {
+  // Get random sample of servers
+  if (amount > allServers.length) {
+    throw new Error('Requested amount exceeds available servers');
+  }
+  // Shuffle the array and take the first 'amount' items
+  const shuffled = allServers.sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, amount);
+};
+
+const editorsChoiceServers = getSample(6);
+const trendingServers = getSample(6);
+const topPicksServers = getSample(6);
 
 function HomePage() {
   const { identity } = useInternetIdentity();
@@ -32,12 +43,12 @@ function HomePage() {
       <ValuePropBanner />
 
       {/* In a real app, this list would be personalized */}
-      <ServerGrid title="Top Picks For You" servers={editorsChoiceServers} />
+      <ServerGrid title="Top Picks For You" servers={topPicksServers} />
 
       <PromoBanner
         imageUrl="/images/wchl-banner-1920.webp"
         altText="World Computer Hacker League 2025"
-        linkTo="/events/wchl25"
+        linkTo="https://dorahacks.io/org/3634"
       />
 
       <ServerGrid title="Trending" servers={trendingServers} />

@@ -22,6 +22,7 @@ import { ForDevelopersPage } from './pages/ForDevelopersPage';
 import { ContactPage } from './pages/ContactPage';
 import { FaqPage } from './pages/FaqPage';
 import { CommunityPage } from './pages/CommunityPage';
+import { ProtocolPage } from './pages/ProtocolPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -59,6 +60,7 @@ function App() {
               />
               <Route path="about" element={<AboutPage />} />
               <Route path="developers" element={<ForDevelopersPage />} />
+              <Route path="protocol" element={<ProtocolPage />} />
 
               {/* Resources */}
               <Route path="contact" element={<ContactPage />} />

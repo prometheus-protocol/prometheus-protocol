@@ -214,6 +214,7 @@ export interface ICRC118WasmRegistryCanister {
     [Uint8Array | number[]],
     Array<AuditRecord>
   >,
+  'get_bounties_for_wasm' : ActorMethod<[Uint8Array | number[]], Array<Bounty>>,
   'get_canister_type_version' : ActorMethod<
     [GetCanisterTypeVersionRequest],
     Result_2
@@ -290,7 +291,6 @@ export interface ICRC118WasmRegistryCanister {
   'is_controller_of_type' : ActorMethod<[string, Principal], Result_1>,
   'is_wasm_verified' : ActorMethod<[Uint8Array | number[]], boolean>,
   'set_auditor_credentials_canister_id' : ActorMethod<[Principal], Result>,
-  'set_mcp_orchestrator' : ActorMethod<[Principal], Result>,
 }
 export type ICRC16 = { 'Int' : bigint } |
   { 'Map' : ICRC16Map } |

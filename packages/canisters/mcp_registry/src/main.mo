@@ -289,16 +289,19 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     switch (final_status) {
       case (null) {
         // Not yet finalized.
+        Debug.print("[DEBUG] No finalization record found for wasm_id: \"" # wasm_id # "\"");
         return false;
       };
       case (?record) {
         switch (record.outcome) {
           case (#Verified) {
             // Explicitly verified!
+            Debug.print("[DEBUG] Wasm ID \"" # wasm_id # "\" is verified.");
             return true;
           };
           case (#Rejected) {
             // Explicitly rejected.
+            Debug.print("[DEBUG] Wasm ID \"" # wasm_id # "\" is rejected.");
             return false;
           };
         };
@@ -310,10 +313,13 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     let wasm_id = Base16.encode(wasm_hash);
     let state = icrc126().state;
 
+    Debug.print("[DEBUG] get_attestations_for_wasm querying for wasm_id: \"" # wasm_id # "\"");
+
     // Look up the wasm_id in the `audits` map.
     switch (Map.get(state.audits, Map.thash, wasm_id)) {
       case (null) {
         // No audits found for this wasm_id, return an empty array.
+        Debug.print("[DEBUG] No audits found for wasm_id: \"" # wasm_id # "\"");
         return [];
       };
       case (?audit_records) {
@@ -333,6 +339,48 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
         return attestations;
       };
     };
+  };
+
+  public shared query func get_bounties_for_wasm(wasm_hash : Blob) : async [ICRC127.Bounty] {
+    let wasm_id = Base16.encode(wasm_hash);
+    let state = icrc127().state;
+    var matching_bounties : [ICRC127.Bounty] = [];
+
+    // We must iterate through all bounties because the wasm_hash is not the key.
+    for (bounty in BTree.toValueArray(state.bounties).vals()) {
+      // The challenge parameters are an ICRC-16 value. We expect it to be a Map.
+      switch (bounty.challenge_parameters) {
+        case (#Map(params_map)) {
+          // Iterate through the key-value pairs in the parameters map.
+          label findWasmHashKey for ((key, value) in params_map.vals()) {
+            // We are looking for the specific key "wasm_hash".
+            if (key == "wasm_hash") {
+              // We found the key. Now we check if the value is a Blob.
+              switch (value) {
+                case (#Blob(bounty_wasm_hash)) {
+                  // It's a blob. Encode it to Base16 for comparison.
+                  let bounty_wasm_id = Base16.encode(bounty_wasm_hash);
+                  if (bounty_wasm_id == wasm_id) {
+                    // It's a match! Add this bounty to our results.
+                    matching_bounties := Array.append(matching_bounties, [bounty]);
+                  };
+                };
+                case (_) {
+                  // The value for "wasm_hash" was not a Blob, so we ignore it.
+                };
+              };
+              // We can break the inner loop since we've found and checked the wasm_hash key.
+              break findWasmHashKey;
+            };
+          };
+        };
+        case (_) {
+          // The challenge_parameters were not a Map, so we ignore this bounty.
+        };
+      };
+    };
+
+    return matching_bounties;
   };
 
   private func has_attestation(wasm_id : Text, audit_type : Text) : Bool {
@@ -578,34 +626,12 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
 
   // --- MCP Orchestrator InterCanister Endpoints ---
   // Used by the MCP Orchestrator to validate user requests.
-
-  stable var _mcp_orchestrator : ?Principal = null;
-
   private func _is_owner(caller : Principal) : Bool {
     Principal.equal(_owner, caller);
   };
 
-  // The setter now returns a Result for cleaner error handling.
-  public shared (msg) func set_mcp_orchestrator(canister_id : Principal) : async Result.Result<(), Text> {
-    if (not _is_owner(msg.caller)) {
-      return #err("Caller is not the owner of the registry");
-    };
-    _mcp_orchestrator := ?canister_id;
-    return #ok();
-  };
-
   // HOOK 1: Check controller. Now returns a Result instead of trapping.
   public shared (msg) func is_controller_of_type(namespace : Text, user : Principal) : async Result.Result<Bool, Text> {
-    // Security Gate: Check if the caller is the registered orchestrator.
-    switch (_mcp_orchestrator) {
-      case (null) { return #err("MCP Orchestrator ID has not been set") };
-      case (?id) {
-        if (not Principal.equal(id, msg.caller)) {
-          return #err("Caller is not the registered MCP Orchestrator");
-        };
-      };
-    };
-
     // Get the current state from the ICRC-118 module.
     let state = icrc118wasmregistry().state;
 

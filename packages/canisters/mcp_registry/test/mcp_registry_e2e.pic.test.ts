@@ -156,7 +156,6 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     await registryActor.set_auditor_credentials_canister_id(
       credentialFixture.canisterId,
     );
-    await registryActor.set_mcp_orchestrator(orchestratorFixture.canisterId);
 
     orchestratorActor.setIdentity(daoIdentity);
     await orchestratorActor.set_mcp_registry_id(registryFixture.canisterId);
@@ -260,6 +259,11 @@ describe('MCP Registry Full E2E Lifecycle', () => {
         throw new Error(`Bounty creation failed for ${auditType}`);
       bountyIds[auditType] = createResult.Ok.bounty_id;
     }
+
+    // Check that the bounties were created successfully
+    const bounties = await registryActor.get_bounties_for_wasm(wasmHash);
+    console.log(`Found ${bounties.length} bounties for the WASM hash.`);
+    expect(bounties).toHaveLength(auditTypes.length);
 
     // === PHASE 4: Auditors complete audits and claim bounties ===
     const auditors = [

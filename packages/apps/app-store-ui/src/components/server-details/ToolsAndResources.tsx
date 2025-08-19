@@ -46,13 +46,7 @@ export function ToolsAndResources({ tools }: ToolsAndResourcesProps) {
                 </div>
               </AccordionTrigger>
               <AccordionContent className="pt-2 pb-4">
-                <p className="text-muted-foreground mb-4">{tool.description}</p>
-                <div className="bg-background/50 border border-border/50 rounded-md p-3">
-                  <h4 className="font-semibold text-sm mb-1">Parameters</h4>
-                  <p className="text-xs text-muted-foreground">
-                    {tool.parameters}
-                  </p>
-                </div>
+                <p className="text-muted-foreground">{tool.description}</p>
               </AccordionContent>
             </AccordionItem>
           ))}

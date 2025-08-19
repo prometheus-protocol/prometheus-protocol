@@ -1,4 +1,5 @@
 import { ContentPageLayout } from '@/components/layout/ContentPageLayout';
+import { DISCORD_LINK } from '@/lib/const';
 import ReactMarkdown from 'react-markdown';
 import { Link } from 'react-router-dom';
 
@@ -13,7 +14,7 @@ We're building a transparent and community-driven ecosystem, and we'd love to he
 
 It's the heart of the Prometheus community, where you can connect with other developers, get help with your server submission, and participate in the conversation about the future of the protocol.
 
--   **[Join our Discord Server](https://discord.gg/TbqgYERjYw)**
+-   **[Join our Discord Server](${DISCORD_LINK})**
 
 ## Official Inquiries
 

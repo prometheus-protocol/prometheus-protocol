@@ -1,4 +1,5 @@
 import { ContentPageLayout } from '@/components/layout/ContentPageLayout';
+import { DISCORD_LINK, GITHUB_LINK } from '@/lib/const';
 import ReactMarkdown from 'react-markdown';
 import { Link } from 'react-router-dom';
 
@@ -17,12 +18,9 @@ But this creates a new frontier of digital risk. How can an agent—or its owner
 
 ### Our Solution: A Verification Protocol for AI Infrastructure
 
-Prometheus Protocol is the solution: a decentralized discovery and verification layer built specifically for **MCP servers**. We provide the tools and standards to bring clarity and confidence to the AI agent ecosystem.
+Prometheus Protocol is a fully transparent, trustless "app store" for AI infrastructure. Unlike traditional systems that rely on a central company for approval, our protocol uses a transparent, on-chain process governed by cryptographic proofs and economic incentives.
 
--   **Verifiable Audits for MCP Servers:** We facilitate rigorous, transparent, and standardized audits of MCP server code. Our process checks for security vulnerabilities, data integrity, code quality, and adherence to protocol standards.
--   **On-Chain Certificates:** When a server passes an audit, it receives a "Certificate" that is recorded immutably on the blockchain. This acts as a verifiable, tamper-proof seal of quality that any agent or user can inspect before making a connection.
--   **A Curated Discovery Registry:** Our platform allows users and their AI agents to safely explore and connect to servers, filtering by their certification tier. This empowers the entire ecosystem to make informed decisions based on verifiable data.
-
+Before a new version of an MCP server can be published, it must pass a series of mandatory, community-driven audits. This lifecycle is composed of several powerful, open ICRC standards, ensuring the entire process is auditable by anyone.
 ### Governed by the Community
 
 Prometheus Protocol is not a traditional company; it is a public good, governed by the **Prometheus DAO**. The direction, rules, and future of the protocol are decided by its community members through a transparent, on-chain governance process.
@@ -35,7 +33,7 @@ Whether you're building the next great AI agent or providing the infrastructure 
 
 -   **For Agent Builders & Users:** [Explore our registry of certified MCP servers](/). Find reliable, secure infrastructure for your AI agents and make safer, more informed connections.
 -   **For Server Developers:** [Learn how to submit your MCP server for certification](/developers). Showcase the quality of your AI infrastructure and earn the trust of the entire agent ecosystem.
---   **For Everyone:** Become a part of the conversation. Join our community on [Discord](https://discord.gg/TbqgYERjYw) and follow our progress on [GitHub](https://github.com/prometheus-protocol).
+--   **For Everyone:** Become a part of the conversation. Join our community on [Discord](${DISCORD_LINK}) and follow our progress on [GitHub](${GITHUB_LINK}).
 
 Together, we can build a safer, more transparent foundation for decentralized AI.
 `;

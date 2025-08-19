@@ -420,6 +420,7 @@ type ICRC118WasmRegistryCanister =
    finalize_verification: (wasm_id: text, outcome: VerificationOutcome,
     metadata: ICRC16Map__5) -> (Result_3);
    get_attestations_for_wasm: (wasm_hash: blob) -> (vec AuditRecord) query;
+   get_bounties_for_wasm: (wasm_hash: blob) -> (vec Bounty) query;
    get_canister_type_version: (req: GetCanisterTypeVersionRequest) ->
     (Result_2) query;
    get_tip: () -> (Tip) query;
@@ -466,7 +467,6 @@ type ICRC118WasmRegistryCanister =
    is_controller_of_type: (namespace: text, user: principal) -> (Result_1);
    is_wasm_verified: (hash: blob) -> (bool) query;
    set_auditor_credentials_canister_id: (canister_id: principal) -> (Result);
-   set_mcp_orchestrator: (canister_id: principal) -> (Result);
  };
 type GetWasmsFilter = 
  variant {

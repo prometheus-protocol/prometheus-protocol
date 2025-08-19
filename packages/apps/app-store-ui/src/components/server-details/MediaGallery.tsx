@@ -19,7 +19,7 @@ export function MediaGallery({ images, appName }: MediaGalleryProps) {
         <img
           src={featureImage}
           alt={`Screenshot of ${appName}`}
-          className="aspect-video w-full object-cover transition-transform duration-300 ease-in-out hover:scale-105"
+          className="aspect-[16/10] w-full object-cover transition-transform duration-300 ease-in-out hover:scale-105"
         />
       </div>
       {/* You could map over the rest of the images here to create thumbnails */}

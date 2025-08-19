@@ -22,7 +22,7 @@ export function FeaturedCarousel({ servers }: FeaturedCarouselProps) {
       }}
       plugins={[
         Autoplay({
-          delay: 2000,
+          delay: 3000,
         }),
       ]}
       className="w-full">

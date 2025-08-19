@@ -12,6 +12,12 @@ import { registerRemoveControllerCommand } from './commands/remove-controller.js
 import { registerListVersionsCommand } from './commands/list-versions.js';
 import { registerListControllersCommand } from './commands/list-controllers.js';
 import { registerDeprecateCommand } from './commands/deprecate.js';
+import { registerCreateBountyCommand } from './commands/create-bounty.js';
+import { registerAttestGenerateCommand } from './commands/attest-generate.js';
+import { registerAttestSubmitCommand } from './commands/attest-submit.js';
+import { registerClaimBountyCommand } from './commands/claim-bounty.js';
+import { registerDaoGenerateBallotCommand } from './commands/dao-generate-ballot.js';
+import { registerDaoFinalizeCommand } from './commands/dao-finalize.js';
 
 const program = new Command();
 
@@ -33,6 +39,12 @@ registerRemoveControllerCommand(program);
 registerListVersionsCommand(program);
 registerDeprecateCommand(program);
 registerListControllersCommand(program);
+registerCreateBountyCommand(program);
+registerAttestGenerateCommand(program);
+registerAttestSubmitCommand(program);
+registerClaimBountyCommand(program);
+registerDaoGenerateBallotCommand(program);
+registerDaoFinalizeCommand(program);
 
 // Exporting for testing purposes
 export { program };

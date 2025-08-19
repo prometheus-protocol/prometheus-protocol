@@ -19,6 +19,7 @@ import Map "mo:map/Map";
 import { phash } "mo:map/Map";
 import Debug "mo:base/Debug";
 import Error "mo:base/Error";
+import Iter "mo:base/Iter";
 
 import McpRegistry "McpRegistry";
 
@@ -166,6 +167,7 @@ shared (deployer) actor class ICRC120Canister<system>(
       canisterId : Principal;
     }
   ) : async* Bool {
+    Debug.print("Checking if canister can be installed: " # Principal.toText(canisterId));
     switch (_mcp_registry_id) {
       case (null) {
         Debug.print("Cannot install canister: MCP Registry ID is not set.");
@@ -176,7 +178,10 @@ shared (deployer) actor class ICRC120Canister<system>(
           case (?namespace) {
             let registry : McpRegistry.Service = actor (Principal.toText(registryId));
             let verified_check = await registry.is_wasm_verified(args.wasm_module_hash);
-            if (not verified_check) { return false };
+            if (not verified_check) {
+              Debug.print("Cannot install canister: Wasm module is not verified.");
+              return false;
+            };
             return true;
           };
           case (_) {
@@ -420,6 +425,18 @@ shared (deployer) actor class ICRC120Canister<system>(
         };
       };
     };
+  };
+
+  // Get canisters for a given namespace
+  public query func get_canisters(namespace : Text) : async [Principal] {
+    let canisters = Map.filter(
+      managed_canisters,
+      phash,
+      func(key : Principal, value : Text) : Bool {
+        value == namespace;
+      },
+    );
+    return Iter.toArray(Map.keys(canisters));
   };
 
   //------------------- Test FUNCTION -------------------//

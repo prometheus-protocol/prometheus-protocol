@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { FeaturedServer } from '@/lib/mock-data';
 import { PromoBadge } from './ui/promo-badge';
 
@@ -10,6 +9,8 @@ interface FeaturedServerCardProps {
 }
 
 export function FeaturedServerCard({ server }: FeaturedServerCardProps) {
+  const status = server.certificate ? 'Now Available' : 'Coming Soon';
+
   return (
     <Link to={`/server/${server.id}`} className="block group">
       <Card className="overflow-hidden border-transparent transition-all p-0">
@@ -19,13 +20,13 @@ export function FeaturedServerCard({ server }: FeaturedServerCardProps) {
               src={server.bannerUrl}
               alt={`${server.name} banner`}
               className="
-                aspect-[16/9] w-full object-cover
+                aspect-[16/10] w-full object-cover
                 transition-transform duration-500 ease-in-out
                 group-hover:scale-105
               "
             />
             <PromoBadge className="md:py-2 md:px-4 md:text-xs">
-              {server.status}
+              {status}
             </PromoBadge>
           </div>
           <div className="py-4 flex items-start gap-3 bg-card">
@@ -38,8 +39,8 @@ export function FeaturedServerCard({ server }: FeaturedServerCardProps) {
               <h3 className="font-semibold truncate">{server.name}</h3>
               <p className="text-sm text-muted-foreground">{server.category}</p>
             </div>
-            <Button variant="outline" size="sm">
-              {server.status === 'Now Available' ? 'Install' : 'Details'}
+            <Button variant="secondary" size="sm">
+              {status === 'Now Available' ? 'Install' : 'Details'}
             </Button>
           </div>
         </CardContent>

@@ -1,4 +1,5 @@
 import { ContentPageLayout } from '@/components/layout/ContentPageLayout';
+import { DISCORD_LINK } from '@/lib/const';
 import ReactMarkdown from 'react-markdown';
 import { Link } from 'react-router-dom';
 
@@ -16,29 +17,42 @@ Getting your MCP server certified by the Prometheus DAO is more than just a secu
 -   **Receive a Rigorous Third-Party Audit:** Our standardized audit process provides you with a comprehensive review of your code, identifying potential vulnerabilities and areas for improvement. It's a valuable security health check for your project.
 -   **Strengthen the Ecosystem:** By participating, you contribute to a safer, more transparent, and more reliable foundation for decentralized AI, benefiting everyone.
 
-## How It Works: The Path to Certification
+## How It Works: The App Store Lifecycle
 
-Our process is designed to be transparent and straightforward.
+Our system is a transparent, on-chain process serving several key roles. Here’s how you fit in.
 
-### 1. Prepare Your Server
-Ensure your server is stable, well-documented, and has a publicly accessible source code repository (e.g., on GitHub). Review our audit standards to understand the criteria we evaluate.
-> **[Read the full Audit Standards & Preparation Guide](/docs/audit-standards)**
+### 1. The Developer Flow
 
-### 2. Submit for Audit
-Use our platform to submit your server for certification. You will need to provide your repository URL, the specific commit hash you want audited, and any relevant documentation.
-> **[Go to the Submission Portal](/submit)**
+**Your Goal:** To securely publish a new, trusted version of your application.
 
-### 3. The Community Audit
-Once submitted, your server enters the audit queue. A certified auditor from the community will be assigned to conduct a thorough review based on our public standards. The process is tracked transparently.
+1.  **Register Namespace:** First, you register a unique "namespace" for your application (e.g., \`com.my-company.my-cool-app\`). This is a one-time setup using \`icrc118_create_canister_type\`.
+2.  **Request Verification:** To release a new version, you submit its WASM hash and source code repository for verification using \`icrc126_verification_request\`. **Crucially, the WASM is not yet published.** This creates a public record that a new version is seeking approval.
+3.  **Publish WASM:** After the WASM has passed all required audits and been finalized by the DAO, you can successfully publish it with \`icrc118_update_wasm\`. The protocol will only permit this final step if the WASM is verified.
 
-### 4. Receive Your Certificate
-Upon successful completion of the audit, your server is awarded a Certificate with a corresponding score. This Certificate is published on-chain and your server is listed in our official registry with its new, trusted status.
+### 2. The Auditor Flow (Bounty Hunter)
+
+**Your Goal:** To use your expertise to audit software and earn rewards.
+
+1.  **Discover Bounties:** Query the registry's \`icrc127_list_bounties\` endpoint to find open bounties for audits you are qualified to perform.
+2.  **Perform Audit:** Conduct your analysis off-chain, examining the source code and build process.
+3.  **File Attestation:** Submit your findings as a cryptographic "attestation" to the registry using \`icrc126_file_attestation\`. This is your on-chain proof of work.
+4.  **Claim Bounty:** Submit a claim for the bounty with \`icrc127_submit_bounty\`. The protocol automatically validates your attestation and pays out the reward instantly.
+
+### 3. The DAO / Sponsor Flow
+
+**Your Goal:** To ensure the health of the ecosystem by funding audits and governing the final approval.
+
+1.  **Issue Credentials:** The DAO vets and issues credentials to trusted auditors.
+2.  **Create Bounties:** To incentivize audits, the DAO (or any sponsor) creates and funds bounties for required audits (e.g., Reproducible Build, Security) using \`icrc127_create_bounty\`.
+3.  **Finalize Verification:** After all required attestations are filed, the DAO gives its final seal of approval by calling \`finalize_verification\`. This is the ultimate gate that marks a WASM as officially "Verified" and ready for publication.
+
+> **For a complete, end-to-end technical walkthrough, [see the full protocol lifecycle](/protocol).**
 
 ## Ready to Get Started?
 
 Join the growing ecosystem of trusted AI infrastructure. Take the first step by reviewing our documentation or submitting your server today.
 
--   **Questions?** **[Join our Discord](https://discord.gg/TbqgYERjYw)** and connect with the community.
+-   **Questions?** **[Join our Discord](${DISCORD_LINK})** and connect with the community.
 `;
 
 export function ForDevelopersPage() {

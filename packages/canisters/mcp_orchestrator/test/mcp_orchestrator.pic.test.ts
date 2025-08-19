@@ -90,7 +90,6 @@ describe('MCP Orchestrator Canister (Baseline Tests)', () => {
     registryActor.setIdentity(daoIdentity);
     orchestratorActor.setIdentity(daoIdentity);
 
-    await registryActor.set_mcp_orchestrator(env.orchestratorCanisterId);
     await registryActor.icrc118_create_canister_type([
       {
         canister_type_namespace: baselineNamespace,
@@ -161,7 +160,6 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
 
     const secureNamespace = 'com.prometheus.secure-server';
     registryActor.setIdentity(daoIdentity);
-    await registryActor.set_mcp_orchestrator(env.orchestratorCanisterId);
 
     orchestratorActor.setIdentity(daoIdentity);
     await orchestratorActor.set_mcp_registry_id(env.registryCanisterId);
