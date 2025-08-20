@@ -8,6 +8,7 @@ import {
   Github,
   Info,
   FileCode,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   Accordion,
@@ -24,6 +25,7 @@ import {
   useGetVerificationStatus,
 } from '@/hooks/useAppStore';
 import { useMemo } from 'react';
+import { Button } from '@/components/ui/button';
 
 const backgroundSvg = `url('/images/certificate.svg')`;
 
@@ -63,19 +65,75 @@ const getAuditDisplayInfo = (auditType: string) => {
   }
 };
 
+// --- NEW High-Fidelity Skeleton Component ---
+const CertificatePageSkeleton = () => (
+  <div
+    className="container mx-auto pt-8 mb-24 relative animate-pulse"
+    style={{
+      backgroundImage: backgroundSvg,
+      backgroundRepeat: 'no-repeat',
+      backgroundPosition: 'center 70px',
+      backgroundSize: 'clamp(320px, 60vw, 400px)',
+    }}>
+    <div className="h-4 w-1/3 bg-muted rounded mb-8" /> {/* Breadcrumbs */}
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-32">
+      <div className="lg:col-span-2 space-y-12">
+        <div className="h-10 w-3/4 bg-muted rounded" /> {/* Title */}
+        <div className="h-32 bg-muted/50 rounded-lg" /> {/* Summary Card */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="h-20 bg-muted/50 rounded-lg" />
+          <div className="h-20 bg-muted/50 rounded-lg" />
+          <div className="h-20 bg-muted/50 rounded-lg" />
+          <div className="h-20 bg-muted/50 rounded-lg" />
+        </div>
+        <div className="h-40 bg-muted/50 rounded-lg" /> {/* Hashes */}
+      </div>
+    </div>
+  </div>
+);
+
+// --- NEW User-Friendly Error Component ---
+const CertificatePageError = ({ onRetry }: { onRetry: () => void }) => (
+  <div className="container mx-auto py-8 flex flex-col items-center justify-center text-center min-h-[60vh]">
+    <AlertTriangle className="w-16 h-16 text-destructive/50 mb-6" />
+    <h2 className="text-2xl font-bold">Failed to Load Certificate</h2>
+    <p className="mt-2 text-muted-foreground max-w-md">
+      There was a problem retrieving the verification details for this app.
+      Please try again.
+    </p>
+    <div className="mt-6 flex gap-4">
+      <Button onClick={onRetry}>Try Again</Button>
+      <Button variant="outline" asChild>
+        <Link to="/">Return to Home</Link>
+      </Button>
+    </div>
+  </div>
+);
+
 export function CertificatePage() {
   const { serverId } = useParams<{ serverId: string }>();
 
-  const { data: appDetails, isLoading: isAppDetailsLoading } =
-    useGetAppDetails(serverId);
-  const { data: verificationStatus, isLoading: isVerificationLoading } =
-    useGetVerificationStatus(serverId);
+  const {
+    data: appDetails,
+    isLoading: isAppDetailsLoading,
+    isError: isAppDetailsError,
+    refetch: refetchAppDetails,
+  } = useGetAppDetails(serverId);
+
+  const {
+    data: verificationStatus,
+    isLoading: isVerificationLoading,
+    isError: isVerificationError,
+    refetch: refetchVerificationStatus,
+  } = useGetVerificationStatus(serverId);
 
   const isLoading = isAppDetailsLoading || isVerificationLoading;
+  const isError = isAppDetailsError || isVerificationError;
 
-  if (isLoading) {
-    return <div>Loading certificate...</div>; // Or a skeleton component
-  }
+  const handleRetry = () => {
+    refetchAppDetails();
+    refetchVerificationStatus();
+  };
 
   // This memo correctly extracts version-specific proof data from the attestations.
   const extractedData = useMemo(() => {
@@ -93,6 +151,14 @@ export function CertificatePage() {
       repoUrl: buildPayload.repo_url || null,
     };
   }, [verificationStatus]);
+
+  if (isLoading) {
+    return <CertificatePageSkeleton />;
+  }
+
+  if (isError) {
+    return <CertificatePageError onRetry={handleRetry} />;
+  }
 
   if (!appDetails || !verificationStatus) {
     return <NotFoundPage />;

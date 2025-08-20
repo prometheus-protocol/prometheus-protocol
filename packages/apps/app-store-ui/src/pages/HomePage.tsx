@@ -8,17 +8,17 @@ import { useInternetIdentity } from 'ic-use-internet-identity';
 import { truncatePrincipal } from '@/lib/utils';
 import { useGetAppStoreListings } from '@/hooks/useAppStore';
 import { AppStoreListing } from '@prometheus-protocol/ic-js'; // Import the type for clarity
-
-// A simple loading component placeholder
-const HomePageSkeleton = () => <div>Loading App Store...</div>;
-// A simple error component placeholder
-const HomePageError = () => (
-  <div>Error loading App Store. Please try again later.</div>
-);
+import { HomePageSkeleton } from '@/components/HomePageSkeleton';
+import { HomePageError } from '@/components/HomePageError';
 
 function HomePage() {
   // 1. Fetch the live data from our React Query hook
-  const { data: allServers, isLoading, isError } = useGetAppStoreListings();
+  const {
+    data: allServers,
+    isLoading,
+    isError,
+    refetch,
+  } = useGetAppStoreListings();
   const { identity } = useInternetIdentity();
   const userName = identity
     ? truncatePrincipal(identity.getPrincipal().toText())
@@ -53,7 +53,7 @@ function HomePage() {
 
     // Editor's Choice: A random sample of high-quality (Gold or Silver) apps.
     const highQualityApps = allServers.filter(
-      (app) => app.securityTier === 'Gold',
+      (app) => app.securityTier === 'Gold' || app.securityTier === 'Silver',
     );
     const editorsChoice = getSample(highQualityApps, 6);
 
@@ -70,7 +70,7 @@ function HomePage() {
   }
 
   if (isError) {
-    return <HomePageError />;
+    return <HomePageError onRetry={refetch} />;
   }
 
   return (
