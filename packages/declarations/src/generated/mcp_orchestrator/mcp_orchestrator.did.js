@@ -255,6 +255,7 @@ export const idlFactory = ({ IDL }) => {
   const BlockType = IDL.Record({ 'url' : IDL.Text, 'block_type' : IDL.Text });
   const Result = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   const ICRC120Canister = IDL.Service({
+    'get_canisters' : IDL.Func([IDL.Text], [IDL.Vec(IDL.Principal)], ['query']),
     'get_tip' : IDL.Func([], [Tip], ['query']),
     'hello' : IDL.Func([], [IDL.Text], []),
     'icrc120_clean_snapshot' : IDL.Func(

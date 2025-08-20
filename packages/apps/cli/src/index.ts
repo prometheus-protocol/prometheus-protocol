@@ -18,6 +18,7 @@ import { registerAttestSubmitCommand } from './commands/attest-submit.js';
 import { registerClaimBountyCommand } from './commands/claim-bounty.js';
 import { registerDaoGenerateBallotCommand } from './commands/dao-generate-ballot.js';
 import { registerDaoFinalizeCommand } from './commands/dao-finalize.js';
+import { registerDiscoverCommand } from './commands/discover.js';
 
 const program = new Command();
 
@@ -45,6 +46,7 @@ registerAttestSubmitCommand(program);
 registerClaimBountyCommand(program);
 registerDaoGenerateBallotCommand(program);
 registerDaoFinalizeCommand(program);
+registerDiscoverCommand(program);
 
 // Exporting for testing purposes
 export { program };

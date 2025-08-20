@@ -7,6 +7,8 @@ import {
   PackageCheckIcon,
   ShieldCheck,
   Github,
+  Info,
+  FileCode,
 } from 'lucide-react';
 import {
   Accordion,
@@ -18,130 +20,189 @@ import NotFoundPage from './NotFoundPage';
 import { cn, truncatePrincipal } from '@/lib/utils';
 import { CertificateSummaryCard } from '@/components/CertificateSummaryCard';
 import { getTierInfo } from '@/lib/get-tier-info';
+import {
+  useGetAppDetails,
+  useGetVerificationStatus,
+} from '@/hooks/useAppStore';
+import { useMemo } from 'react';
 
 const backgroundSvg = `url('/images/certificate.svg')`;
 
-// Helper to get the right icon for each audit type
-const auditIcons = {
-  security: <ShieldCheck className="h-8 w-8 text-primary" />,
-  quality: <Zap className="h-8 w-8 text-primary" />,
-  build: <PackageCheckIcon className="h-8 w-8 text-primary" />,
+// Helper to get display info for each audit type
+const getAuditDisplayInfo = (auditType: string) => {
+  switch (auditType) {
+    case 'security_v1':
+      return {
+        name: 'Security Audit',
+        icon: <ShieldCheck className="h-8 w-8 text-primary" />,
+      };
+    case 'build_reproducibility_v1':
+      return {
+        name: 'Build Reproducibility',
+        icon: <PackageCheckIcon className="h-8 w-8 text-primary" />,
+      };
+    case 'tools_v1':
+      return {
+        name: 'Tools & Resources',
+        icon: <Zap className="h-8 w-8 text-primary" />,
+      };
+    case 'app_info_v1':
+      return {
+        name: 'Application Information',
+        icon: <Info className="h-8 w-8 text-primary" />,
+      };
+    case 'data_safety_v1':
+      return {
+        name: 'Data Safety',
+        icon: <Award className="h-8 w-8 text-primary" />,
+      };
+    default:
+      return {
+        name: auditType,
+        icon: <FileCode className="h-8 w-8 text-primary" />,
+      };
+  }
 };
 
 export function CertificatePage() {
   const { serverId } = useParams<{ serverId: string }>();
-  const server = allServers.find((s) => s.id === serverId);
 
-  if (!server || !server.certificate) {
+  const { data: appDetails, isLoading: isAppDetailsLoading } =
+    useGetAppDetails(serverId);
+  const { data: verificationStatus, isLoading: isVerificationLoading } =
+    useGetVerificationStatus(serverId);
+
+  const isLoading = isAppDetailsLoading || isVerificationLoading;
+
+  if (isLoading) {
+    return <div>Loading certificate...</div>; // Or a skeleton component
+  }
+
+  // This memo correctly extracts version-specific proof data from the attestations.
+  const extractedData = useMemo(() => {
+    if (!verificationStatus?.attestations) return {};
+
+    // Find the payload from the specific attestation that contains the build proof.
+    const buildPayload =
+      verificationStatus.attestations.find(
+        (a) => a.audit_type === 'build_reproducibility_v1',
+      )?.payload || {};
+
+    return {
+      gitCommit: buildPayload.git_commit || null,
+      canisterId: buildPayload.canister_id || null,
+      repoUrl: buildPayload.repo_url || null,
+    };
+  }, [verificationStatus]);
+
+  if (!appDetails || !verificationStatus) {
     return <NotFoundPage />;
   }
 
-  const { certificate } = server;
-  const tierInfo = getTierInfo({ certificate } as FeaturedServer);
+  const tierInfo = getTierInfo(appDetails.securityTier);
 
   return (
     <div
-      className="container mx-auto py-8 relative"
+      className="container mx-auto pt-8 mb-24 relative"
       style={{
         backgroundImage: backgroundSvg,
         backgroundRepeat: 'no-repeat',
         backgroundPosition: 'center 70px',
         backgroundSize: 'clamp(320px, 60vw, 400px)',
       }}>
-      {/* Header with breadcrumbs */}
-      {/* Breadcrumbs */}
       <nav className="text-sm text-muted-foreground mb-8">
         <Link to="/" className="hover:underline">
           Home
         </Link>
         <span className="mx-2">/</span>
         <Link to={`/server/${serverId}`} className="hover:underline">
-          {server.name.split(':')[0]}
+          {appDetails.name}
         </Link>
         <span className="mx-2">/</span>
         <span>Certificate</span>
       </nav>
 
-      {/* Main Content Area */}
       <div className="relative overflow-hidden">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-32">
-          {/* Left Column: Details */}
           <div className="lg:col-span-2">
             <h1 className="text-4xl font-bold tracking-tight flex items-center gap-3 mb-12">
-              {server.name}
-              <BadgeCheck className="h-8 w-8 text-primary" />
+              {appDetails.name}
+              {verificationStatus.isVerified && (
+                <BadgeCheck className="h-8 w-8 text-primary" />
+              )}
             </h1>
 
-            <CertificateSummaryCard certificate={server.certificate} />
+            <CertificateSummaryCard
+              appDetails={appDetails}
+              verificationStatus={verificationStatus}
+            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-10 mb-12">
+              {verificationStatus.attestations.map((att, index) => {
+                const displayInfo = getAuditDisplayInfo(att.audit_type);
+                const certifiedOn = new Date(
+                  Number(att.timestamp / 1_000_000n),
+                ).toLocaleDateString();
 
-            {/* Audits List */}
-            <div className="space-y-8 mb-12">
-              {certificate.audits.map((audit, index) => (
-                <div key={index} className="flex items-center gap-6">
-                  {/* Icon */}
-                  {auditIcons[audit.type as keyof typeof auditIcons]}
+                // Each item in the grid is a self-contained block.
+                return (
+                  <div key={index} className="flex items-start gap-4">
+                    {/* Icon (using items-start alignment now) */}
+                    <div className="flex-shrink-0 mt-1">{displayInfo.icon}</div>
 
-                  {/* Details & Score */}
-                  <div className="flex-grow">
-                    {/* Top line with type and score */}
-                    <div className="flex justify-between items-baseline mb-1">
+                    {/* Details */}
+                    <div className="flex-grow">
                       <p className="text-lg font-semibold capitalize">
-                        {audit.type.replace('-', ' ')}
+                        {displayInfo.name}
                       </p>
-                      <p className="text-2xl font-bold text-primary">
-                        {audit.score}
-                        <span className="text-sm font-normal text-muted-foreground">
-                          /100
+                      <p className="text-sm font-mono text-muted-foreground">
+                        Certified by:{' '}
+                        <span className="text-foreground">
+                          {truncatePrincipal(att.auditor.toText())}
                         </span>
                       </p>
+                      <p className="text-sm font-mono text-muted-foreground">
+                        Certified on:{' '}
+                        <span className="text-foreground">{certifiedOn}</span>
+                      </p>
                     </div>
-
-                    {/* Certification Details */}
-                    <p className="text-sm font-mono text-muted-foreground">
-                      Certified by:{' '}
-                      <span className="text-foreground">
-                        {truncatePrincipal(audit.certifiedBy)}
-                      </span>
-                    </p>
-                    <p className="text-sm font-mono text-muted-foreground">
-                      Certified on:{' '}
-                      <span className="text-foreground">
-                        {audit.certifiedOn}
-                      </span>
-                    </p>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
-            {/* Hashes */}
             <div className="space-y-2 mb-12 font-mono text-md">
+              {extractedData.canisterId && (
+                <p>
+                  Canister ID:{' '}
+                  <span className="text-muted-foreground break-words">
+                    {extractedData.canisterId}
+                  </span>
+                </p>
+              )}
               <p>
                 Wasm Hash:{' '}
                 <span className="text-muted-foreground break-words">
-                  {certificate.hashes.wasm}
+                  {serverId}
                 </span>
               </p>
-              <p>
-                Git Commit:{' '}
-                <span className="text-muted-foreground break-words">
-                  {certificate.hashes.gitCommit}
-                </span>
-              </p>
-              <p>
-                Canister ID:{' '}
-                <span className="text-muted-foreground break-words">
-                  {certificate.hashes.canisterId}
-                </span>
-              </p>
-              <a
-                href={`${certificate.repoUrl}/commit/${certificate.hashes.gitCommit}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-md bg-muted px-3 py-2 mt-4 text-sm font-semibold text-foreground transition-colors hover:bg-muted/80">
-                <Github className="h-4 w-4" />
-                View Commit on GitHub
-              </a>
+              {extractedData.gitCommit && (
+                <p>
+                  Git Commit:{' '}
+                  <span className="text-muted-foreground break-words">
+                    {extractedData.gitCommit}
+                  </span>
+                </p>
+              )}
+              {extractedData.repoUrl && extractedData.gitCommit && (
+                <a
+                  href={`${extractedData.repoUrl}/commit/${extractedData.gitCommit}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-md bg-muted px-3 py-2 mt-4 text-sm font-semibold text-foreground transition-colors hover:bg-muted/80">
+                  <Github className="h-4 w-4" />
+                  View Commit on GitHub
+                </a>
+              )}
             </div>
           </div>
 

@@ -5,7 +5,7 @@ import D "mo:base/Debug";
 
 import Nat "mo:base/Nat";
 import Principal "mo:base/Principal";
-
+import Base16 "mo:base16/Base16";
 import ClassPlus "mo:class-plus";
 import TT "mo:timer-tool";
 import ICRC10 "mo:icrc10-mo";
@@ -177,7 +177,8 @@ shared (deployer) actor class ICRC120Canister<system>(
         switch (Map.get(managed_canisters, phash, canisterId)) {
           case (?namespace) {
             let registry : McpRegistry.Service = actor (Principal.toText(registryId));
-            let verified_check = await registry.is_wasm_verified(args.wasm_module_hash);
+            let wasm_id = Base16.encode(args.wasm_module_hash);
+            let verified_check = await registry.is_wasm_verified(wasm_id);
             if (not verified_check) {
               Debug.print("Cannot install canister: Wasm module is not verified.");
               return false;

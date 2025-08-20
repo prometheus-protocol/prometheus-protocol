@@ -1,21 +1,23 @@
 import { Link } from 'react-router-dom';
-import { ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { FeaturedServer } from '@/lib/mock-data';
 import { getTierInfo } from '@/lib/get-tier-info';
+import { AppStoreListing } from '@prometheus-protocol/ic-js';
+import { ImageWithFallback } from '@/components/ui/image-with-fallback'; // Import the fallback component
 
 interface ServerCardProps {
-  server: FeaturedServer;
+  server: AppStoreListing;
 }
 
 export function ServerCard({ server }: ServerCardProps) {
-  const tierInfo = getTierInfo(server);
+  const tierInfo = getTierInfo(server.securityTier);
 
+  // The component is now much simpler, as you intended.
   return (
     <Link
-      to={`/server/${server.id}`}
+      to={`/server/${server.id}`} // Using the correct `server.id` property.
       className="flex items-center gap-4 p-2 md:p-3 rounded-3xl hover:bg-accent transition-colors group">
-      <img
+      {/* Replace the <img> tag with our robust component */}
+      <ImageWithFallback
         src={server.iconUrl}
         alt={`${server.name} icon`}
         className="w-16 h-16 rounded-xl object-cover"

@@ -210,6 +210,7 @@ type ICRC16 =
  };
 type ICRC120Canister = 
  service {
+   get_canisters: (namespace: text) -> (vec principal) query;
    get_tip: () -> (Tip) query;
    hello: () -> (text);
    icrc120_clean_snapshot: (requests: vec CleanSnapshotRequest) ->

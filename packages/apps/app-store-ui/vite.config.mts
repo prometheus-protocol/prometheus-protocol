@@ -78,10 +78,6 @@ export default defineConfig(({ mode }) => {
         { find: 'process', replacement: 'process/browser' },
 
         { find: '@', replacement: path.resolve(__dirname, 'src') },
-        {
-          find: '@declarations',
-          replacement: path.resolve(__dirname, '..', '..', 'declarations'),
-        },
       ],
 
       dedupe: ['@dfinity/agent', '@dfinity/candid', '@dfinity/principal'],

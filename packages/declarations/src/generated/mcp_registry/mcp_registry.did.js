@@ -67,22 +67,43 @@ export const idlFactory = ({ IDL }) => {
   );
   const ICRC16Map__5 = IDL.Vec(IDL.Tuple(IDL.Text, ICRC16__4));
   const Result_3 = IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text });
+  const AppListingFilter = IDL.Variant({
+    'publisher' : IDL.Text,
+    'name' : IDL.Text,
+    'namespace' : IDL.Text,
+  });
+  const AppListingRequest = IDL.Record({
+    'prev' : IDL.Opt(IDL.Text),
+    'take' : IDL.Opt(IDL.Nat),
+    'filter' : IDL.Opt(IDL.Vec(AppListingFilter)),
+  });
+  const SecurityTier = IDL.Variant({
+    'Gold' : IDL.Null,
+    'Bronze' : IDL.Null,
+    'Unranked' : IDL.Null,
+    'Silver' : IDL.Null,
+  });
+  const AppListing = IDL.Record({
+    'id' : IDL.Text,
+    'banner_url' : IDL.Text,
+    'publisher' : IDL.Text,
+    'name' : IDL.Text,
+    'description' : IDL.Text,
+    'icon_url' : IDL.Text,
+    'security_tier' : SecurityTier,
+    'category' : IDL.Text,
+    'namespace' : IDL.Text,
+  });
+  const AppListingResponse = IDL.Variant({
+    'ok' : IDL.Vec(AppListing),
+    'err' : IDL.Text,
+  });
   const Time__1 = IDL.Int;
   const AttestationRecord = IDL.Record({
     'audit_type' : IDL.Text,
     'metadata' : ICRC16Map__5,
     'auditor' : IDL.Principal,
     'timestamp' : Time__1,
-  });
-  const DivergenceRecord = IDL.Record({
-    'report' : IDL.Text,
-    'metadata' : IDL.Opt(ICRC16Map__5),
-    'timestamp' : Time__1,
-    'reporter' : IDL.Principal,
-  });
-  const AuditRecord = IDL.Variant({
-    'Attestation' : AttestationRecord,
-    'Divergence' : DivergenceRecord,
   });
   const ICRC16Property__1 = IDL.Record({
     'value' : ICRC16__1,
@@ -550,13 +571,18 @@ export const idlFactory = ({ IDL }) => {
         [Result_3],
         [],
       ),
+    'get_app_listings' : IDL.Func(
+        [AppListingRequest],
+        [AppListingResponse],
+        ['query'],
+      ),
     'get_attestations_for_wasm' : IDL.Func(
-        [IDL.Vec(IDL.Nat8)],
-        [IDL.Vec(AuditRecord)],
+        [IDL.Text],
+        [IDL.Vec(AttestationRecord)],
         ['query'],
       ),
     'get_bounties_for_wasm' : IDL.Func(
-        [IDL.Vec(IDL.Nat8)],
+        [IDL.Text],
         [IDL.Vec(Bounty)],
         ['query'],
       ),
@@ -682,7 +708,7 @@ export const idlFactory = ({ IDL }) => {
         [Result_1],
         [],
       ),
-    'is_wasm_verified' : IDL.Func([IDL.Vec(IDL.Nat8)], [IDL.Bool], ['query']),
+    'is_wasm_verified' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'set_auditor_credentials_canister_id' : IDL.Func(
         [IDL.Principal],
         [Result],

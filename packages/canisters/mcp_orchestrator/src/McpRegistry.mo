@@ -15,6 +15,6 @@ module {
     is_controller_of_type : (namespace : Text, user : Principal) -> async Result.Result<Bool, Text>;
 
     // Checks if a Wasm has been officially verified by the DAO.
-    is_wasm_verified : (hash : Blob) -> async Bool;
+    is_wasm_verified : (wasm_id : Text) -> async Bool;
   };
 };

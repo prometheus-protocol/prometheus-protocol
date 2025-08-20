@@ -27,6 +27,7 @@ import Base16 "mo:base16/Base16";
 import ICRC2 "mo:icrc2-types";
 import Map "mo:map/Map";
 
+import AppStore "AppStore";
 import AuditorCredentials "AuditorCredentials";
 
 import ICRC118WasmRegistry "../../../../libs/icrc118/src";
@@ -282,8 +283,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   // The new stable variable to store the final word on each wasm_id.
   stable var finalization_log = BTree.init<Text, FinalizationRecord>(null);
 
-  public shared query func is_wasm_verified(hash : Blob) : async Bool {
-    let wasm_id = Base16.encode(hash);
+  public shared query func is_wasm_verified(wasm_id : Text) : async Bool {
     let final_status = BTree.get(finalization_log, Text.compare, wasm_id);
 
     switch (final_status) {
@@ -309,40 +309,77 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
   };
 
-  public shared query func get_attestations_for_wasm(wasm_hash : Blob) : async [ICRC126.AuditRecord] {
-    let wasm_id = Base16.encode(wasm_hash);
-    let state = icrc126().state;
+  private func _get_attestations_for_wasm(wasm_id : Text) : [ICRC126.AttestationRecord] {
 
-    Debug.print("[DEBUG] get_attestations_for_wasm querying for wasm_id: \"" # wasm_id # "\"");
+    // --- Step 1: Find the timestamp of the last finalization for this WASM ID ---
+    let last_finalization_record = BTree.get(finalization_log, Text.compare, wasm_id);
 
-    // Look up the wasm_id in the `audits` map.
-    switch (Map.get(state.audits, Map.thash, wasm_id)) {
+    let finalization_ts = switch (last_finalization_record) {
       case (null) {
-        // No audits found for this wasm_id, return an empty array.
+        // This WASM has never been finalized. According to the logic, no attestations
+        // are "official" yet. Return an empty array.
+        Debug.print("[DEBUG] No finalization record found for wasm_id: \"" # wasm_id # "\"");
+        return [];
+      };
+      case (?record) {
+        // We found a finalization record, use its timestamp as our cutoff.
+        record.timestamp;
+      };
+    };
+
+    // --- Step 2: Get all audit records for the WASM ID ---
+    let state = icrc126().state;
+    let all_audit_records = switch (Map.get(state.audits, Map.thash, wasm_id)) {
+      case (null) {
         Debug.print("[DEBUG] No audits found for wasm_id: \"" # wasm_id # "\"");
         return [];
       };
-      case (?audit_records) {
-        // We have audits, now filter for only the attestations.
-        var attestations : [ICRC126.AuditRecord] = [];
-        for (record in audit_records.vals()) {
-          switch (record) {
-            case (#Attestation(att_record)) {
-              // It's an attestation, add it to our results.
-              attestations := Array.append(attestations, [record]);
-            };
-            case (#Divergence(_)) {
-              // It's a divergence report, ignore it.
-            };
+      case (?records) { records };
+    };
+
+    // --- Step 3: Filter for attestations created *before or at* the finalization time ---
+    var valid_attestations = Buffer.Buffer<ICRC126.AttestationRecord>(0);
+    for (record in all_audit_records.vals()) {
+      switch (record) {
+        case (#Attestation(att_record)) {
+          // The core filtering logic: only include attestations "stamped" by the finalization.
+          if (att_record.timestamp <= finalization_ts) {
+            valid_attestations.add(att_record);
           };
         };
-        return attestations;
+        case (#Divergence(_)) { /* Ignore */ };
       };
     };
+
+    // --- Step 4: From the valid attestations, find the single most recent for each type ---
+    // We use a mutable map to track the latest attestation we've seen for each audit_type.
+    var latest_by_type = Map.new<Text, ICRC126.AttestationRecord>();
+
+    for (att in valid_attestations.vals()) {
+      let existing = Map.get(latest_by_type, Map.thash, att.audit_type);
+      switch (existing) {
+        case (null) {
+          // This is the first time we've seen this audit_type, so it's the latest by default.
+          Map.set(latest_by_type, Map.thash, att.audit_type, att);
+        };
+        case (?prev_att) {
+          // We've seen this type before. If the current one is newer, it replaces the old one.
+          if (att.timestamp > prev_att.timestamp) {
+            Map.set(latest_by_type, Map.thash, att.audit_type, att);
+          };
+        };
+      };
+    };
+
+    // The values of the map now represent the definitive, "official" set of attestations.
+    return Iter.toArray(Map.vals(latest_by_type));
   };
 
-  public shared query func get_bounties_for_wasm(wasm_hash : Blob) : async [ICRC127.Bounty] {
-    let wasm_id = Base16.encode(wasm_hash);
+  public shared query func get_attestations_for_wasm(wasm_id : Text) : async [ICRC126.AttestationRecord] {
+    _get_attestations_for_wasm(wasm_id);
+  };
+
+  public shared query func get_bounties_for_wasm(wasm_id : Text) : async [ICRC127.Bounty] {
     let state = icrc127().state;
     var matching_bounties : [ICRC127.Bounty] = [];
 
@@ -679,11 +716,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       return #err("Caller is not the owner");
     };
 
-    // 2. Check if already finalized.
-    if (BTree.get(finalization_log, Text.compare, wasm_id) != null) {
-      return #err("This wasm_id has already been finalized.");
-    };
-
     // 3. Create and store the finalization record.
     let record : FinalizationRecord = {
       outcome = outcome;
@@ -744,10 +776,137 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
   };
 
+  public query func get_app_listings(req : AppStore.AppListingRequest) : async AppStore.AppListingResponse {
+    // 1. Handle optional arguments, mirroring the reference implementation.
+    let filters = switch (req.filter) { case null []; case (?fs) fs };
+    let take = switch (req.take) { case null 20; case (?n) Nat.min(n, 100) }; // Default 20, max 100.
+    let prev = req.prev;
+
+    // 2. Fetch ALL canister types. This is the base dataset.
+    let all_canister_types = icrc118wasmregistry().icrc118_get_canister_types({
+      filter = [];
+      prev = null;
+      take = null;
+    });
+
+    // 3. Pre-process and "join" data into a complete list of potential listings.
+    //    This is done in memory before filtering and pagination.
+    var all_listings = Buffer.Buffer<AppStore.AppListing>(all_canister_types.size());
+    for (canister_type in all_canister_types.vals()) {
+      // a. Find the latest version for this canister type.
+      if (canister_type.versions.size() > 0) {
+        // Start with the first version as the potential latest.
+        var latest_version = canister_type.versions[0];
+
+        // If there are more versions, iterate from the second element (index 1) to the end.
+        if (canister_type.versions.size() > 1) {
+          // Use Iter.range to create an iterator of indices from 1 to size-1.
+          for (i in Iter.range(1, canister_type.versions.size() - 1)) {
+            if (ICRC118WasmRegistry.canisterVersionCompare(canister_type.versions[i], latest_version) == #greater) {
+              latest_version := canister_type.versions[i];
+            };
+          };
+        };
+
+        // b. Get all attestations for that latest version's hash.
+        let wasm_id = Base16.encode(latest_version.calculated_hash);
+        let attestations_for_wasm = _get_attestations_for_wasm(wasm_id);
+
+        // c. Find the specific 'app_info_v1' attestation.
+
+        // Search backward to find the newest app_info_v1 attestation?
+        let app_info_attestation = Array.find<ICRC126.AttestationRecord>(
+          attestations_for_wasm,
+          func(att) {
+            att.audit_type == "app_info_v1";
+          },
+        );
+
+        // d. If found, construct and add the AppListing record.
+        switch (app_info_attestation) {
+          case (?att) {
+            var completed_audits : [Text] = [];
+            for (a in attestations_for_wasm.vals()) {
+              completed_audits := Array.append(completed_audits, [a.audit_type]);
+            };
+
+            // Calculate the tier using our new helper function.
+            let tier = AppStore.calculate_security_tier(completed_audits);
+
+            all_listings.add({
+              id = wasm_id;
+              namespace = canister_type.canister_type_namespace;
+              name = AppStore.getICRC16Text(att.metadata, "name");
+              description = AppStore.getICRC16Text(att.metadata, "description");
+              category = AppStore.getICRC16Text(att.metadata, "category");
+              publisher = AppStore.getICRC16Text(att.metadata, "publisher");
+              icon_url = AppStore.getICRC16Text(att.metadata, "icon_url");
+              banner_url = AppStore.getICRC16Text(att.metadata, "banner_url");
+              security_tier = tier;
+            });
+          };
+          case (null) {}; // Skip types that don't have an app_info attestation.
+        };
+      };
+    };
+
+    // --- 3. REVISED FILTERING LOGIC ---
+    // This function now correctly handles an array of filter variants.
+    // An AppListing must match ALL filters in the array to be included.
+    func matchesAllFilters(listing : AppStore.AppListing, filters : [AppStore.AppListingFilter]) : Bool {
+      if (filters.size() == 0) return true;
+
+      // Iterate through each filter variant provided in the request.
+      label filterLoop for (f in filters.vals()) {
+        switch (f) {
+          case (#namespace(nsFilter)) {
+            if (listing.namespace != nsFilter) return false;
+          };
+          case (#publisher(pubFilter)) {
+            if (listing.publisher != pubFilter) return false;
+          };
+          case (#name(nameFilter)) {
+            if (listing.name != nameFilter) return false;
+          };
+        };
+      };
+      // If the listing survived all filters, it's a match.
+      return true;
+    };
+
+    // 5. Apply pagination and filtering to the in-memory list.
+    var started = prev == null;
+    var count : Nat = 0;
+    let out = Buffer.Buffer<AppStore.AppListing>(take);
+
+    label main for (listing in all_listings.vals()) {
+      if (not started) {
+        switch prev {
+          case null {}; // Should be handled by `started` initialization.
+          case (?p) {
+            // We skip all items until we find the one matching `prev`.
+            // The next item after `prev` will be the first one included.
+            if (listing.namespace == p) { started := true };
+            continue main;
+          };
+        };
+      };
+
+      // `started` is now true.
+      if (matchesAllFilters(listing, filters)) {
+        out.add(listing);
+        count += 1;
+        if (count >= take) break main;
+      };
+    };
+
+    return #ok(Buffer.toArray(out));
+  };
+
   //------------------- SAMPLE FUNCTION -------------------//
 
   public shared func hello() : async Text {
     "world!";
-  }
+  };
 
 };

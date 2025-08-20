@@ -6,11 +6,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Drawer, DrawerContent } from '@/components/ui/drawer';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CodeBlock } from '@/components/ui/code-block';
-import { FeaturedServer } from '@/lib/mock-data';
-import { useMediaQuery } from '@/hooks/use-media-query';
-import { Button } from '../ui/button';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { AppStoreDetails } from '@prometheus-protocol/ic-js';
 
 const clientSetups = [
   {
@@ -164,7 +163,7 @@ const clientSetups = [
 
 // --- 2. THE REFACTORED CONTENT COMPONENT ---
 
-function InstallDialogContent({ server }: { server: FeaturedServer }) {
+function InstallDialogContent({ server }: { server: AppStoreDetails }) {
   const [activeClientId, setActiveClientId] = React.useState(
     clientSetups[0].id,
   );
@@ -233,7 +232,7 @@ function InstallDialogContent({ server }: { server: FeaturedServer }) {
 }
 
 export interface InstallDialogProps {
-  server: FeaturedServer;
+  server: AppStoreDetails;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }

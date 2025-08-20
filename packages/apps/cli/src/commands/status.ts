@@ -3,14 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import yaml from 'js-yaml';
-// --- 1. Assume the API function now returns the final status object ---
 import {
   getCanisterWasmHash,
   getVerificationStatus,
   getVersions,
 } from '@prometheus-protocol/ic-js';
 import { loadDfxIdentity } from '../utils.js';
-import { Bounty } from '@prometheus-protocol/declarations/mcp_registry/mcp_registry.did.js';
 import { execSync } from 'node:child_process';
 import { Principal } from '@dfinity/principal';
 
@@ -67,14 +65,14 @@ export function registerStatusCommand(program: Command) {
           .createHash('sha256')
           .update(wasmBuffer)
           .digest();
-        console.log(
-          `   Computed WASM Hash: ${Buffer.from(wasmHash).toString('hex')}`,
-        );
+
+        const wasmId = Buffer.from(wasmHash).toString('hex');
+        console.log(`   Computed WASM Hash: ${wasmId}`);
 
         const identityName = execSync('dfx identity whoami').toString().trim();
         console.log(`   🔑 Using current dfx identity: '${identityName}'`);
         const identity = loadDfxIdentity(identityName);
-        const status = await getVerificationStatus(identity, wasmHash);
+        const status = await getVerificationStatus(wasmId);
 
         if (!status) {
           console.log('\n--- Verification Status ---');
@@ -86,38 +84,31 @@ export function registerStatusCommand(program: Command) {
           return;
         }
 
+        // --- Verification Status Display (Updated) ---
         console.log('\n--- Verification Status ---');
         console.log(
           `   Verified by DAO: ${status.isVerified ? '✅ Yes' : '❌ No'}`,
         );
 
-        // --- 2. Display the ICRC-127 Tokenized Bounties ---
+        // --- Tokenized Bounties Display (Fully Refactored) ---
         console.log(
           `\n   Found ${status.bounties.length} tokenized bounty(s):`,
         );
         if (status.bounties.length > 0) {
-          status.bounties.forEach((bounty: Bounty, i) => {
-            const challengeParams =
-              'Map' in bounty.challenge_parameters
-                ? (bounty.challenge_parameters.Map ?? [])
-                : [];
-            const auditTypeEntry = challengeParams.find(
-              ([key]) => key === 'audit_type',
-            );
-            const auditTypeValue = auditTypeEntry?.[1];
-            const auditType =
-              auditTypeValue && 'Text' in auditTypeValue
-                ? auditTypeValue.Text
-                : 'Unknown';
-            const bountyStatus =
-              bounty.claimed.length > 0 ? '✅ Claimed' : '🟢 Open';
+          // The type `ProcessedBounty` is now inferred correctly.
+          status.bounties.forEach((bounty, i) => {
+            // Logic is now simple property access, no more parsing!
+            const auditType = bounty.metadata?.audit_type || 'Unknown';
+            const bountyStatus = bounty.claimedTimestamp
+              ? '✅ Claimed'
+              : '🟢 Open';
 
-            console.log(`     💰 [${i + 1}] Bounty ID: ${bounty.bounty_id}`);
+            console.log(`     💰 [${i + 1}] Bounty ID: ${bounty.id}`);
             console.log(
-              `         Reward: ${bounty.token_amount.toLocaleString()} tokens`,
+              `         Reward: ${bounty.tokenAmount.toLocaleString()} tokens`,
             );
             console.log(
-              `         Token Canister: ${bounty.token_canister_id.toText()}`,
+              `         Token Canister: ${bounty.tokenCanisterId.toText()}`,
             );
             console.log(`         For Audit Type: ${auditType}`);
             console.log(`         Status: ${bountyStatus}`);
@@ -127,9 +118,10 @@ export function registerStatusCommand(program: Command) {
           console.log('     (None posted for this WASM hash.)');
         }
 
-        // --- 3. Display the Attestations (Auditor Responses) ---
+        // --- Attestations Display (Refactored for clarity) ---
         console.log(`\n   Found ${status.attestations.length} attestation(s):`);
         if (status.attestations.length > 0) {
+          // The type `ProcessedAttestation` is now inferred correctly.
           status.attestations.forEach((att, i) => {
             console.log(`     🛡️ [${i + 1}] Auditor: ${att.auditor.toText()}`);
             console.log(`         Type: ${att.audit_type}`);

@@ -1,9 +1,9 @@
 import { Badge } from '@/components/ui/badge';
-import { FeaturedServer } from '@/lib/mock-data';
+import { AppStoreDetails } from '@prometheus-protocol/ic-js';
 import { Info } from 'lucide-react';
 
 interface AboutSectionProps {
-  server: FeaturedServer;
+  server: AppStoreDetails;
 }
 
 export function AboutSection({ server }: AboutSectionProps) {

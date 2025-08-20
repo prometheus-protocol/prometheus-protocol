@@ -2,8 +2,11 @@ import type { Command } from 'commander';
 import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'js-yaml';
-import { fileAttestation } from '@prometheus-protocol/ic-js';
-import { loadDfxIdentity, serializeToIcrc16Map } from '../utils.js';
+import {
+  fileAttestation,
+  serializeToIcrc16Map,
+} from '@prometheus-protocol/ic-js';
+import { loadDfxIdentity } from '../utils.js';
 import { execSync } from 'node:child_process';
 
 export function registerAttestSubmitCommand(program: Command) {

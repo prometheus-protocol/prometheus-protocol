@@ -6,9 +6,27 @@ import crypto from 'node:crypto';
 
 // We add the new `data_safety_v1` template to our collection.
 const TEMPLATES: Record<string, Record<string, any>> = {
+  app_info_v1: {
+    '126:audit_type': 'app_info_v1',
+    name: "Your App's Display Name",
+    publisher: 'Your Company or Developer Name',
+    category: 'App Store Category (e.g., Productivity, Games)',
+    icon_url: '/path/to/your/icon.png',
+    banner_url: '/path/to/your/banner.png',
+    gallery_images: ['/path/to/screenshot1.png', '/path/to/screenshot2.png'],
+    description:
+      "A detailed, paragraph-long description of what your app does and who it's for.",
+    key_features: [
+      'Feature 1: Describe a key capability',
+      'Feature 2: Another cool thing it does',
+      'Feature 3: A third selling point',
+    ],
+    why_this_app:
+      'A short, compelling reason why users should choose your app over others.',
+    tags: ['Keyword1', 'Keyword2', 'SearchTerm'],
+  },
   security_v1: {
     '126:audit_type': 'security_v1',
-    score: 0, // A numerical score from 1-100
     summary: 'A one-sentence summary of the findings.',
     issues_found: [
       {
@@ -21,11 +39,13 @@ const TEMPLATES: Record<string, Record<string, any>> = {
     '126:audit_type': 'build_reproducibility_v1',
     // The auditor MUST declare the outcome. This is the most important field.
     status: 'success | failure',
+    git_commit: 'The exact commit hash used for the build.',
+    repo_url: 'The URL of the repository used for the build.',
+    canister_id: 'The canister ID of the deployed version.',
     failure_reason: 'If status is "failure", provide a brief explanation here.',
   },
   data_safety_v1: {
     '126:audit_type': 'data_safety_v1',
-    score: 0, // A numerical score from 1-100
     overall_description:
       "A high-level, one-sentence summary of the app's data handling practices.",
     data_points: [

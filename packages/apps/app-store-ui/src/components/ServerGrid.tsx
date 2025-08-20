@@ -1,9 +1,9 @@
-import { FeaturedServer } from '@/lib/mock-data';
 import { ServerCard } from './ServerCard';
+import { AppStoreListing } from '@prometheus-protocol/ic-js';
 
 interface ServerGridProps {
   title: string;
-  servers: FeaturedServer[];
+  servers: AppStoreListing[];
 }
 
 export function ServerGrid({ title, servers }: ServerGridProps) {

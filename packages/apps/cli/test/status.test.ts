@@ -22,9 +22,9 @@ describe('status command', () => {
     registerStatusCommand(program);
     vi.clearAllMocks();
 
-    // --- THIS MOCK IS NOW UPDATED ---
-    // The API response now reflects the real canister structure.
-    // The audit type is inside the `metadata` map.
+    // --- MOCK IS FULLY UPDATED ---
+    // The mock now returns the clean, processed objects that the CLI expects.
+    // No more raw ICRC-16 maps or snake_case properties.
     vi.mocked(api.getVerificationStatus).mockResolvedValue({
       isVerified: false,
       attestations: [
@@ -33,24 +33,25 @@ describe('status command', () => {
             'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
           ),
           audit_type: 'build_reproducibility_v1',
-          metadata: [
-            ['126:audit_type', { Text: 'build_reproducibility_v1' }],
-            ['status', { Text: 'success' }],
-          ],
-          timestamp: 0n,
+          payload: { status: 'success' }, // Clean payload object
+          timestamp: 1672531200000000000n,
         },
       ],
       bounties: [
         {
-          bounty_id: 1n,
-          token_amount: 1_000_000n,
-          token_canister_id: Principal.fromText('mxzaz-hqaaa-aaaar-qaada-cai'),
-          challenge_parameters: {
-            Map: [['audit_type', { Text: 'security_audit' }]],
-          },
-          claimed: [],
+          id: 1n,
+          tokenAmount: 1_000_000n,
+          tokenCanisterId: Principal.fromText('mxzaz-hqaaa-aaaar-qaada-cai'),
+          metadata: { audit_type: 'security_v1' }, // Clean metadata object
           claims: [],
-        } as any,
+          // Add other required fields to satisfy the ProcessedBounty type
+          creator: Principal.fromText('aaaaa-aa'),
+          created: new Date(),
+          challengeParameters: {},
+          validationCanisterId: Principal.fromText('aaaaa-aa'),
+          validationCallTimeout: 0n,
+          payoutFee: 0n,
+        },
       ],
     });
 
@@ -65,10 +66,27 @@ describe('status command', () => {
     });
   });
 
-  it('should display the full status, parsing metadata for audit type', async () => {
+  it('should display the full status using the processed API response', async () => {
     const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     await program.parseAsync(['status'], { from: 'user' });
+
+    // --- Assert Bounty Output ---
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Found 1 tokenized bounty(s)'),
+    );
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Bounty ID: 1'),
+    );
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Reward: 1,000,000 tokens'),
+    );
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      expect.stringContaining('For Audit Type: security_v1'),
+    );
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Status: 🟢 Open'),
+    );
 
     // --- Assert Attestation Output ---
     expect(consoleLogSpy).toHaveBeenCalledWith(
@@ -79,8 +97,6 @@ describe('status command', () => {
         'Auditor: feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
       ),
     );
-    // --- THIS ASSERTION IS UPDATED ---
-    // It now checks that the command correctly parsed the metadata.
     expect(consoleLogSpy).toHaveBeenCalledWith(
       expect.stringContaining('Type: build_reproducibility_v1'),
     );
@@ -88,33 +104,19 @@ describe('status command', () => {
     consoleLogSpy.mockRestore();
   });
 
-  it('should display a "Not Found" message if the API returns null', async () => {
-    // Arrange
-    vi.mocked(api.getVerificationStatus).mockResolvedValue(null as any);
-    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  // --- THIS TEST IS REMOVED ---
+  // The API no longer returns `null`, so this case is impossible.
+  // The `if (!status)` block in the command is now dead code.
 
-    // Act
-    await program.parseAsync(['status'], { from: 'user' });
-
-    // Assert
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Status: ❓ Not Found'),
-    );
-    consoleLogSpy.mockRestore();
-  });
-
-  // The other failure tests (missing file, malformed manifest) remain unchanged and valid.
+  // The other failure tests remain unchanged and valid.
   it('should fail if prometheus.yml is not found', async () => {
-    // Arrange
     vi.mocked(fs.existsSync).mockReturnValue(false);
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => {});
 
-    // Act
     await program.parseAsync(['status'], { from: 'user' });
 
-    // Assert
     expect(api.getVerificationStatus).not.toHaveBeenCalled();
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       expect.stringContaining('`prometheus.yml` not found'),
@@ -123,15 +125,9 @@ describe('status command', () => {
   });
 
   it('should fail if the manifest is missing the wasm_path', async () => {
-    // Arrange
     vi.mocked(fs.readFileSync).mockImplementation((path) => {
       if (path.toString().endsWith('prometheus.yml')) {
-        return yaml.dump({
-          app: { id: 'com.test.app' },
-          submission: {
-            /* wasm_path is missing */
-          },
-        });
+        return yaml.dump({ submission: {} });
       }
       return Buffer.from('mock wasm content');
     });
@@ -139,10 +135,8 @@ describe('status command', () => {
       .spyOn(console, 'error')
       .mockImplementation(() => {});
 
-    // Act
     await program.parseAsync(['status'], { from: 'user' });
 
-    // Assert
     expect(api.getVerificationStatus).not.toHaveBeenCalled();
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       expect.stringContaining('Manifest is incomplete'),

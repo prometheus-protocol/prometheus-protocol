@@ -2,8 +2,11 @@ import type { Command } from 'commander';
 import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'js-yaml';
-import { finalizeVerification } from '@prometheus-protocol/ic-js';
-import { loadDfxIdentity, serializeToIcrc16Map } from '../utils.js';
+import {
+  finalizeVerification,
+  serializeToIcrc16Map,
+} from '@prometheus-protocol/ic-js';
+import { loadDfxIdentity } from '../utils.js';
 import { execSync } from 'node:child_process';
 import { VerificationOutcome } from '@prometheus-protocol/declarations/mcp_registry/mcp_registry.did.js';
 

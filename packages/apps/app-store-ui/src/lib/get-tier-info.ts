@@ -1,9 +1,10 @@
-import { FeaturedServer } from './mock-data';
+import { AppStoreDetails } from '@prometheus-protocol/ic-js';
 import { ShieldCheck, ShieldQuestion, ShieldOff } from 'lucide-react';
 
-export interface TierInfo {
+// The interface no longer has `overallScore` or `checklist`.
+// It's purely for UI display based on a final tier.
+export interface TierUiInfo {
   name: string;
-  overallScore?: number;
   description: string;
   textColorClass: string;
   borderColorClass: string;
@@ -11,67 +12,59 @@ export interface TierInfo {
   mascotText: string;
 }
 
-export const getTierInfo = (server: FeaturedServer): TierInfo => {
-  const score = server.certificate?.overallScore;
-
-  if (score === undefined || score === null) {
-    return {
-      name: 'Community Tier',
-      overallScore: 0,
-      description: 'This app has not been audited by Prometheus Protocol.',
-      textColorClass: 'text-muted-foreground',
-      borderColorClass: 'border-border',
-      Icon: ShieldQuestion,
-      mascotText:
-        "Just a heads-up! This one's from the community and hasn't been audited by us yet.",
-    };
-  }
-
-  if (score >= 90) {
+export const getTierInfo = (
+  tier: AppStoreDetails['securityTier'],
+): TierUiInfo => {
+  if (tier === 'Gold') {
     return {
       name: 'Gold Verified',
-      overallScore: score,
-      description: 'Outstanding security audit score!',
+      description: 'Passed all available audits, including security.',
       textColorClass: 'text-primary',
       borderColorClass: 'border-primary/50',
       Icon: ShieldCheck,
       mascotText:
-        'Top-tier! This app passed our most rigorous security checks with flying colors.',
+        'Top-tier! This app passed our most rigorous security checks.',
     };
   }
-  if (score >= 75) {
+  if (tier === 'Silver') {
     return {
       name: 'Silver Verified',
-      overallScore: score,
-      description: 'Solid security and performance.',
+      description: 'Has a reproducible build and verified tools.',
       textColorClass: 'text-slate-400',
       borderColorClass: 'border-slate-400/50',
       Icon: ShieldCheck,
-      mascotText:
-        'A solid and trustworthy choice. This app passed all our key checks with good marks.',
+      mascotText: 'A solid and trustworthy choice that passed our key checks.',
     };
   }
-  if (score >= 60) {
+  if (tier === 'Bronze') {
     return {
       name: 'Bronze Verified',
-      overallScore: score,
-      description: 'Meets all essential security criteria.',
+      description: 'Has a reproducible build and verified app info.',
       textColorClass: 'text-amber-600',
       borderColorClass: 'border-amber-600/50',
       Icon: ShieldCheck,
+      mascotText: 'This app meets the essential safety standards.',
+    };
+  }
+  if (tier === 'Unranked') {
+    return {
+      name: 'Community Tier',
+      description: 'Provides app info but has not been fully audited.',
+      textColorClass: 'text-muted-foreground',
+      borderColorClass: 'border-border',
+      Icon: ShieldQuestion,
       mascotText:
-        "This app meets all the essential safety standards. You're good to go!",
+        "This one's from the community and hasn't been audited by us yet.",
     };
   }
 
+  // Default fallback for any unexpected state.
   return {
-    name: 'Verification Failed',
-    overallScore: score,
-    description: 'This app did not meet the minimum audit score.',
+    name: 'Unverified',
+    description: 'This app has not been submitted for verification.',
     textColorClass: 'text-destructive',
     borderColorClass: 'border-destructive/50',
     Icon: ShieldOff,
-    mascotText:
-      "Looks like this one didn't pass the audit. It's best to wait for a new version.",
+    mascotText: "Looks like this one hasn't been submitted for an audit yet.",
   };
 };

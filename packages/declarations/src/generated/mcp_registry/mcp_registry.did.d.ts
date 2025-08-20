@@ -13,6 +13,27 @@ export interface Action {
   'retries' : bigint,
 }
 export interface ActionId { 'id' : bigint, 'time' : Time }
+export interface AppListing {
+  'id' : string,
+  'banner_url' : string,
+  'publisher' : string,
+  'name' : string,
+  'description' : string,
+  'icon_url' : string,
+  'security_tier' : SecurityTier,
+  'category' : string,
+  'namespace' : string,
+}
+export type AppListingFilter = { 'publisher' : string } |
+  { 'name' : string } |
+  { 'namespace' : string };
+export interface AppListingRequest {
+  'prev' : [] | [string],
+  'take' : [] | [bigint],
+  'filter' : [] | [Array<AppListingFilter>],
+}
+export type AppListingResponse = { 'ok' : Array<AppListing> } |
+  { 'err' : string };
 export interface ArchivedTransactionResponse {
   'args' : Array<TransactionRange>,
   'callback' : GetTransactionsFn,
@@ -33,8 +54,6 @@ export type AttestationResult = { 'Ok' : bigint } |
       { 'Generic' : string } |
       { 'Unauthorized' : null }
   };
-export type AuditRecord = { 'Attestation' : AttestationRecord } |
-  { 'Divergence' : DivergenceRecord };
 export interface BlockType { 'url' : string, 'block_type' : string }
 export interface Bounty {
   'claims' : Array<ClaimRecord>,
@@ -129,12 +148,6 @@ export type DeprecateResult = { 'Ok' : bigint } |
       { 'Generic' : string } |
       { 'Unauthorized' : null }
   };
-export interface DivergenceRecord {
-  'report' : string,
-  'metadata' : [] | [ICRC16Map__5],
-  'timestamp' : Time__1,
-  'reporter' : Principal,
-}
 export interface DivergenceReportRequest {
   'metadata' : [] | [ICRC16Map__3],
   'wasm_id' : string,
@@ -210,11 +223,9 @@ export interface ICRC118WasmRegistryCanister {
     [string, VerificationOutcome, ICRC16Map__5],
     Result_3
   >,
-  'get_attestations_for_wasm' : ActorMethod<
-    [Uint8Array | number[]],
-    Array<AuditRecord>
-  >,
-  'get_bounties_for_wasm' : ActorMethod<[Uint8Array | number[]], Array<Bounty>>,
+  'get_app_listings' : ActorMethod<[AppListingRequest], AppListingResponse>,
+  'get_attestations_for_wasm' : ActorMethod<[string], Array<AttestationRecord>>,
+  'get_bounties_for_wasm' : ActorMethod<[string], Array<Bounty>>,
   'get_canister_type_version' : ActorMethod<
     [GetCanisterTypeVersionRequest],
     Result_2
@@ -289,7 +300,7 @@ export interface ICRC118WasmRegistryCanister {
   'icrc3_get_tip_certificate' : ActorMethod<[], [] | [DataCertificate]>,
   'icrc3_supported_block_types' : ActorMethod<[], Array<BlockType>>,
   'is_controller_of_type' : ActorMethod<[string, Principal], Result_1>,
-  'is_wasm_verified' : ActorMethod<[Uint8Array | number[]], boolean>,
+  'is_wasm_verified' : ActorMethod<[string], boolean>,
   'set_auditor_credentials_canister_id' : ActorMethod<[Principal], Result>,
 }
 export type ICRC16 = { 'Int' : bigint } |
@@ -491,6 +502,10 @@ export interface RunBountyResult__1 {
   'metadata' : ICRC16__1,
   'trx_id' : [] | [bigint],
 }
+export type SecurityTier = { 'Gold' : null } |
+  { 'Bronze' : null } |
+  { 'Unranked' : null } |
+  { 'Silver' : null };
 export interface SupportedStandard { 'url' : string, 'name' : string }
 export type Time = bigint;
 export type Time__1 = bigint;

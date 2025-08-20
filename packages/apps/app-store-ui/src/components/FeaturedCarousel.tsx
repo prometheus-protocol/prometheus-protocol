@@ -5,12 +5,12 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from '@/components/ui/carousel';
-import { FeaturedServer } from '@/lib/mock-data';
 import { FeaturedServerCard } from './FeaturedServerCard';
 import Autoplay from 'embla-carousel-autoplay';
+import { AppStoreListing } from '@prometheus-protocol/ic-js';
 
 interface FeaturedCarouselProps {
-  servers: FeaturedServer[];
+  servers: AppStoreListing[];
 }
 
 export function FeaturedCarousel({ servers }: FeaturedCarouselProps) {

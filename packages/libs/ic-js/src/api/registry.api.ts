@@ -3,63 +3,113 @@ import { getOrchestratorActor, getRegistryActor } from '../actors.js';
 import { Registry } from '@prometheus-protocol/declarations';
 import { Principal } from '@dfinity/principal';
 import {
+  AppListing,
+  CanisterType,
+  GetCanisterTypesRequest,
   ICRC16Map,
   VerificationOutcome,
 } from '@prometheus-protocol/declarations/mcp_registry/mcp_registry.did.js';
+import { calculateSecurityTier, nsToDate } from '../utils.js';
+import { fromNullable } from '@dfinity/utils';
+import { deserializeFromIcrc16Map, deserializeIcrc16Value } from '../icrc16.js';
 
+// 1. Define a new, clean interface for a processed attestation.
+// The raw `metadata` is replaced with a simple `payload` object.
+export interface ProcessedAttestation {
+  audit_type: string;
+  timestamp: bigint;
+  auditor: Principal;
+  payload: Record<string, any>; // The deserialized metadata
+}
+
+// This is our new, clean, UI-friendly interface for a bounty.
+export interface ProcessedBounty {
+  id: bigint;
+  creator: Principal;
+  created: Date; // Converted from bigint
+  tokenAmount: bigint;
+  tokenCanisterId: Principal;
+  metadata: Record<string, any>; // Deserialized
+  challengeParameters: Record<string, any>; // Deserialized
+  validationCanisterId: Principal;
+  validationCallTimeout: bigint;
+  payoutFee: bigint;
+  claims: any[]; // Assuming ClaimRecord is not yet typed
+  claimedTimestamp?: bigint; // Unwrapped from Opt
+  claimedDate?: Date; // Unwrapped and converted
+  timeoutDate?: Date; // Unwrapped and converted
+}
+
+// Update the VerificationStatus interface to use our new clean type.
 export interface VerificationStatus {
   isVerified: boolean;
-  attestations: Registry.AttestationRecord[];
-}
-
-// --- Define the Type Guard ---
-/**
- * A TypeScript type guard that checks if an AuditRecord is an Attestation.
- * @param record The AuditRecord to check.
- * @returns True if the record is an Attestation, false otherwise.
- */
-function isAttestation(
-  record: Registry.AuditRecord,
-): record is { Attestation: Registry.AttestationRecord } {
-  return 'Attestation' in record;
-}
-
-// --- Define the public API types ---
-export interface VerificationStatus {
-  isVerified: boolean;
-  attestations: Registry.AttestationRecord[];
-  bounties: Registry.Bounty[];
+  attestations: ProcessedAttestation[];
+  bounties: ProcessedBounty[];
 }
 
 /**
- * Fetches the verification status for a given WASM hash.
- * @returns An object containing the final verification status and a list of attestations.
+ * Fetches and PROCESSES the verification status for a given WASM hash.
+ * @returns An object containing the final verification status and a list of
+ *          fully deserialized attestations.
  */
 export const getVerificationStatus = async (
-  identity: Identity,
-  wasm_hash: Uint8Array,
+  wasmId: string, // Lowercase hex string ID of the WASM
 ): Promise<VerificationStatus> => {
-  const registryActor = getRegistryActor(identity);
+  const registryActor = getRegistryActor();
 
-  // We can make these calls in parallel for efficiency
-  const [isVerified, auditRecords, bounties] = await Promise.all([
-    registryActor.is_wasm_verified(wasm_hash),
-    registryActor.get_attestations_for_wasm(wasm_hash),
-    registryActor.get_bounties_for_wasm(wasm_hash),
-  ]);
+  const [isVerifiedResult, attestationsResult, bountiesResult] =
+    await Promise.all([
+      registryActor.is_wasm_verified(wasmId),
+      registryActor.get_attestations_for_wasm(wasmId),
+      registryActor.get_bounties_for_wasm(wasmId),
+    ]);
 
-  // Use the type guard in the filter. This is clean and reusable.
-  const filteredAttestations = auditRecords
-    .filter(isAttestation)
-    .map(
-      (record: { Attestation: Registry.AttestationRecord }) =>
-        record.Attestation,
-    ); // Now we can safely access .Attestation
+  // 3. Process the attestations right here, in the API layer.
+  const processedAttestations: ProcessedAttestation[] = attestationsResult.map(
+    (att): ProcessedAttestation => ({
+      audit_type: att.audit_type,
+      timestamp: att.timestamp,
+      auditor: att.auditor,
+      // The deserialization happens here!
+      payload: deserializeFromIcrc16Map(att.metadata),
+    }),
+  );
+
+  const processedBounties: ProcessedBounty[] = bountiesResult.map(
+    (bounty): ProcessedBounty => {
+      const claimedDateNs = fromNullable(bounty.claimed_date);
+      const timeoutDateNs = fromNullable(bounty.timeout_date);
+
+      return {
+        // Map snake_case to camelCase and transform data
+        id: bounty.bounty_id,
+        creator: bounty.creator,
+        created: nsToDate(bounty.created),
+        tokenAmount: bounty.token_amount,
+        tokenCanisterId: bounty.token_canister_id,
+        validationCanisterId: bounty.validation_canister_id,
+        validationCallTimeout: bounty.validation_call_timeout,
+        payoutFee: bounty.payout_fee,
+        claims: bounty.claims, // Pass through for now
+
+        // Deserialize ICRC-16 maps
+        metadata: deserializeFromIcrc16Map(bounty.bounty_metadata),
+        challengeParameters: deserializeIcrc16Value(
+          bounty.challenge_parameters,
+        ),
+
+        // Unwrap optional values
+        claimedTimestamp: fromNullable(bounty.claimed),
+        claimedDate: claimedDateNs ? nsToDate(claimedDateNs) : undefined,
+        timeoutDate: timeoutDateNs ? nsToDate(timeoutDateNs) : undefined,
+      };
+    },
+  );
 
   return {
-    isVerified,
-    attestations: filteredAttestations,
-    bounties,
+    isVerified: isVerifiedResult,
+    attestations: processedAttestations,
+    bounties: processedBounties,
   };
 };
 
@@ -560,28 +610,6 @@ export const createCanisterType = async (
   return 'created';
 };
 
-// /**
-//  * Uses the management canister to get the live module hash of any canister.
-//  * @param canisterId The Principal of the canister to check.
-//  * @returns The WASM hash as a Uint8Array, or null if not found.
-//  */
-// export const getCanisterWasmHash = async (
-//   identity: Identity,
-//   canisterId: Principal,
-// ): Promise<Uint8Array | undefined> => {
-//   const system = getSystemActor(identity);
-//   const status = await system.canister_info({
-//     canister_id: canisterId,
-//     num_requested_changes: [],
-//   });
-//   const moduleHash = fromNullable(status.module_hash);
-//   return moduleHash === undefined
-//     ? undefined
-//     : moduleHash instanceof Uint8Array
-//       ? moduleHash
-//       : new Uint8Array(moduleHash);
-// };
-
 /**
  * Uses the agent's `readState` method to get the live module hash of any canister.
  * This is the correct method for external clients, as used by dfx.
@@ -661,5 +689,272 @@ export const getCanisterWasmHash = async (
       `   ⚠️  Warning: Could not read state for canister ${canisterId.toText()}. It may not exist or the network may be busy.`,
     );
     return null;
+  }
+};
+
+/**
+ * Fetches a filtered and paginated list of canister types from the registry.
+ * This is the low-level wrapper for the `get_canister_types` canister method.
+ * @param identity The identity to use for the call (can be anonymous).
+ * @param request The filter and pagination options for the query.
+ */
+export const getCanisterTypes = async (
+  identity: Identity,
+  request: GetCanisterTypesRequest,
+): Promise<CanisterType[]> => {
+  const registryActor = getRegistryActor(identity);
+  try {
+    const result = await registryActor.icrc118_get_canister_types(request);
+    return result || [];
+  } catch (error) {
+    console.error(`Error fetching canister types:`, error);
+    return [];
+  }
+};
+
+export interface ServerTool {
+  name: string;
+  description: string;
+  cost: string;
+  tokenSymbol: string;
+}
+
+export interface DataSafetyPoint {
+  title: string;
+  description: string;
+}
+
+export interface ServerSecurityIssue {
+  severity: string;
+  description: string;
+}
+
+export interface AppStoreDetails {
+  id: string;
+  name: string;
+  publisher: string;
+  serverUrl: string;
+  category: string;
+  securityTier: SecurityTier;
+  iconUrl: string;
+  bannerUrl: string;
+  galleryImages: string[];
+  description: string;
+  keyFeatures: string[];
+  whyThisApp: string;
+  tags: string[];
+  tools: ServerTool[];
+  dataSafety: {
+    description: string;
+    points: DataSafetyPoint[];
+  };
+  security: {
+    summary: string;
+    issuesFound: ServerSecurityIssue[];
+  };
+  reviews: any[]; // To be implemented later
+}
+
+/**
+ * The server url is the url of the canister, with the app_info.path appended.
+ * We should handle local development and mainnet URLs.
+ */
+function buildServerUrl(canisterId: Principal, path: string): string {
+  const isLocal = process.env.DFX_NETWORK !== 'ic';
+  const baseUrl = isLocal
+    ? `http://localhost:4943/?canisterId=${canisterId.toText()}`
+    : `https://${canisterId.toText()}.icp0.io`;
+
+  // Create a URL object from the base URL to safely manipulate its parts.
+  const url = new URL(baseUrl);
+
+  // Set the pathname. This is the key fix.
+  // It correctly preserves the existing query string for the local environment
+  // and adds the path for the mainnet environment.
+  url.pathname = path;
+
+  return url.toString();
+}
+
+/**
+ * Fetches and assembles all on-chain data for a specific WASM hash.
+ * This is the primary function for the App Details page.
+ * @param wasmId The lowercase hex string ID of the WASM.
+ */
+export const getAppDetailsByHash = async (
+  wasmId: string,
+): Promise<AppStoreDetails> => {
+  // Initialize a complete, type-safe default object.
+  const details: AppStoreDetails = {
+    id: wasmId,
+    name: '',
+    publisher: '',
+    serverUrl: '',
+    category: '',
+    securityTier: 'Unranked', // Default to 'Unranked' if not set
+    iconUrl: '',
+    bannerUrl: '',
+    galleryImages: [],
+    description: '',
+    keyFeatures: [],
+    whyThisApp: '',
+    tags: [],
+    tools: [],
+    dataSafety: {
+      description: '',
+      points: [],
+    },
+    security: {
+      summary: '',
+      issuesFound: [],
+    },
+    reviews: [],
+  };
+
+  const registryActor = getRegistryActor();
+
+  try {
+    // 1. Fetch attestations and correctly handle the Result variant.
+    const attestationsResult =
+      await registryActor.get_attestations_for_wasm(wasmId);
+
+    const attestations = attestationsResult;
+
+    // 2. Loop through attestations and explicitly map data.
+    const completedAuditTypes: string[] = [];
+    for (const attestation of attestations) {
+      completedAuditTypes.push(attestation.audit_type);
+      const payload = deserializeFromIcrc16Map(attestation.metadata);
+
+      switch (attestation.audit_type) {
+        case 'app_info_v1':
+          const serverUrl = buildServerUrl(
+            Principal.fromText(payload.canister_id),
+            payload.mcp_path || '',
+          );
+          // Explicitly assign each property with a safe fallback.
+          details.name = payload.name || '';
+          details.publisher = payload.publisher || '';
+          details.serverUrl = serverUrl;
+          details.category = payload.category || '';
+          details.iconUrl = payload.icon_url || '';
+          details.bannerUrl = payload.banner_url || '';
+          details.galleryImages = payload.gallery_images || [];
+          details.description = payload.description || '';
+          details.keyFeatures = payload.key_features || [];
+          details.whyThisApp = payload.why_this_app || '';
+          details.tags = payload.tags || [];
+          break;
+
+        case 'security_v1':
+          details.security.summary = payload.summary || '';
+          if (payload.issues_found && Array.isArray(payload.issues_found)) {
+            details.security.issuesFound = payload.issues_found;
+          }
+          break;
+
+        case 'tools_v1': // Assuming the type is 'tools_v1' from the CLI template
+          if (payload.tools && Array.isArray(payload.tools)) {
+            details.tools = payload.tools;
+          }
+          break;
+
+        case 'data_safety_v1':
+          // This was already good, but we'll ensure it's consistent.
+          details.dataSafety = {
+            description: payload.overall_description || '', // Match template key
+            points: payload.data_points || [], // Match template key
+          };
+          break;
+
+        case 'build_reproducibility_v1':
+          if (payload.status) {
+            details.dataSafety.points.push({
+              title: 'Build Reproducibility',
+              description:
+                payload.status === 'success'
+                  ? 'This app has reproducible builds.'
+                  : 'This app does not have reproducible builds.',
+            });
+          }
+          break;
+      }
+    }
+    // 3. Set the security tier based on completed audit types.
+    details.securityTier = calculateSecurityTier(completedAuditTypes);
+  } catch (e) {
+    console.error('Failed to parse attestation payload:', e);
+  }
+
+  return details;
+};
+
+export type SecurityTier = 'Gold' | 'Silver' | 'Bronze' | 'Unranked';
+
+// Define the structure for the app cards on the discovery page
+export interface AppStoreListing {
+  id: string; // This is the hex string of the WASM hash
+  namespace: string;
+  name: string;
+  description: string;
+  category: string; // e.g., "DeFi", "Social", etc.
+  securityTier: SecurityTier;
+  publisher: string;
+  iconUrl: string;
+  bannerUrl: string;
+}
+
+function unwrapSecurityTier(
+  tierVariant: AppListing['security_tier'],
+): SecurityTier {
+  if ('Gold' in tierVariant) return 'Gold';
+  if ('Silver' in tierVariant) return 'Silver';
+  if ('Bronze' in tierVariant) return 'Bronze';
+  return 'Unranked';
+}
+
+/**
+ * Fetches the fully assembled list of apps for the discovery page directly
+ * from the canister's `get_app_listings` method.
+ */
+export const getAppStoreListings = async (): Promise<AppStoreListing[]> => {
+  // 1. Get the actor using the established pattern.
+  const registryActor = getRegistryActor();
+
+  try {
+    // 2. Call the new, powerful canister method with an empty request to get all listings.
+    const result = await registryActor.get_app_listings({
+      filter: [],
+      prev: [],
+      take: [],
+    });
+
+    // 3. Handle the canister's Result<T, E> response.
+    if ('err' in result) {
+      console.error('Failed to fetch app listings from canister:', result.err);
+      return []; // Return empty array on canister-level error
+    }
+
+    const canisterListings: AppListing[] = result.ok || [];
+
+    // 4. Map the canister's snake_case response to our camelCase TypeScript interface.
+    // This keeps the UI layer clean and consistent.
+    return canisterListings.map(
+      (item): AppStoreListing => ({
+        id: item.id,
+        namespace: item.namespace,
+        name: item.name,
+        description: item.description,
+        publisher: item.publisher,
+        iconUrl: item.icon_url, // Mapping snake_case to camelCase
+        bannerUrl: item.banner_url, // Mapping snake_case to camelCase
+        category: item.category,
+        securityTier: unwrapSecurityTier(item.security_tier),
+      }),
+    );
+  } catch (error) {
+    console.error(`Error calling get_app_listings:`, error);
+    // Return an empty array on network/agent-level failure so the UI doesn't break.
+    return [];
   }
 };

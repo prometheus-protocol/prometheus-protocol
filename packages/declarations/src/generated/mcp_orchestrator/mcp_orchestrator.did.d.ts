@@ -75,6 +75,7 @@ export interface GetTransactionsResult {
   'archived_blocks' : Array<ArchivedTransactionResponse>,
 }
 export interface ICRC120Canister {
+  'get_canisters' : ActorMethod<[string], Array<Principal>>,
   'get_tip' : ActorMethod<[], Tip>,
   'hello' : ActorMethod<[], string>,
   'icrc120_clean_snapshot' : ActorMethod<

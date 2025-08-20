@@ -25,7 +25,7 @@ describe('upgrade command', () => {
 
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue(
-      yaml.dump({ namespace: 'com.test.app' }),
+      yaml.dump({ app: { id: 'com.test.app' } }),
     );
   });
 
