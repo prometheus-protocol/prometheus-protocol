@@ -1,5 +1,4 @@
 import { useParams, Link } from 'react-router-dom';
-import { allServers, FeaturedServer } from '@/lib/mock-data';
 import {
   BadgeCheck,
   Zap,

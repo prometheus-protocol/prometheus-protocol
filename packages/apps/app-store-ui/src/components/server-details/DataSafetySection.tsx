@@ -1,6 +1,5 @@
 import { Lock } from 'lucide-react';
 
-// Define a type for safetyInfo if it's not in mock-data
 interface SafetyInfo {
   description: string;
   points: { title: string; description: string }[];
