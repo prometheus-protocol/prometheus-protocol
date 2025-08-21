@@ -1,10 +1,10 @@
-# Prometheus Protocol
+<img width="940" height="200" alt="prometheus-banner" src="https://github.com/user-attachments/assets/0e0cc899-def2-42dc-a365-a34512f280ba" />
 
-A decentralized software supply chain for AI agents on the Internet Computer.
+# **The Trust Layer for the AI Economy**
 
-<img width="1536" alt="Prometheus Protocol Banner" src="images/banner-professional.png" />
+### Our mission is to enable a new generation of decentralized applications by providing the open-source, on-chain foundation for **verifiable trust, secure identity, and near-zero fee payments.**
 
-## Overview
+---
 
 Prometheus Protocol is a complete, on-chain system for publishing, verifying, and deploying software in a trustless environment. It provides a decentralized app store for **Model Context Protocol (MCP)** servers, enabling AI agents to securely discover and use community-verified tools.
 

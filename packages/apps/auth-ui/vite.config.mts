@@ -13,18 +13,19 @@ console.log(`[VITE CONFIG] DFX_NETWORK is: ${process.env.DFX_NETWORK}`);
 
 const network = process.env.DFX_NETWORK || 'local';
 
-// --- Canister ID Loading Logic (Unchanged) ---
-function initCanisterEnv() {
-  const network = process.env.DFX_NETWORK || 'local';
-  const canisterIdsPath = path.resolve(
-    __dirname,
-    '..',
-    '..',
-    '..',
-    '.dfx',
-    network,
-    'canister_ids.json',
-  );
+function getCanisterIds() {
+  const canisterIdsPath =
+    network === 'local'
+      ? path.resolve(
+          __dirname,
+          '..',
+          '..',
+          '..',
+          '.dfx',
+          network,
+          'canister_ids.json',
+        )
+      : path.resolve(__dirname, '..', '..', '..', 'canister_ids.json');
 
   if (!fs.existsSync(canisterIdsPath)) {
     console.error(
@@ -49,13 +50,13 @@ function initCanisterEnv() {
 
 // --- Main Vite Config ---
 export default defineConfig(({ mode }) => {
-  const canisterEnvVariables = initCanisterEnv();
+  const canisterEnvVariables = getCanisterIds();
   const isDevelopment = mode !== 'production';
 
   const internetIdentityUrl =
     network === 'local'
       ? `http://${canisterEnvVariables['CANISTER_ID_INTERNET_IDENTITY']}.localhost:4943/`
-      : `https://identity.ic0.app`;
+      : `https://id.ai`;
 
   return {
     publicDir: 'assets',
@@ -81,6 +82,18 @@ export default defineConfig(({ mode }) => {
         {
           find: '@declarations',
           replacement: path.resolve(__dirname, '..', '..', 'declarations'),
+        },
+
+        {
+          find: '@prometheus-protocol/ic-js',
+          replacement: path.resolve(
+            __dirname,
+            '..', // up from auth-ui/
+            '..', // up from apps/
+            'libs', // into libs/
+            'ic-js', // into ic-js/
+            'src', // into src/
+          ),
         },
       ],
 

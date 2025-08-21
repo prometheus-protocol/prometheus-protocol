@@ -39,28 +39,13 @@ const createActor = <T>(
   });
 };
 
-// --- STEP 2: Create a helper to get canister IDs from a reliable source ---
-// This is much better than relying on dfx's process.env injection.
-const getCanisterId = (name: string): string => {
-  const canisterId =
-    process.env[`PROMETHEUS_CANISTER_ID_${name.toUpperCase()}`] ??
-    process.env[`CANISTER_ID_${name.toUpperCase()}`]; // Support dfx's default for local dev
-
-  if (!canisterId) {
-    throw new Error(
-      `Cannot find canister ID for '${name}'. Please set the 'CANISTER_ID_${name.toUpperCase()}' environment variable.`,
-    );
-  }
-  return canisterId;
-};
-
 // --- STEP 3: Re-implement your actor getters to use the new system ---
 // This is now clean, explicit, and fully controlled by you.
 
 export const getRegistryActor = (identity?: Identity) => {
   return createActor<Registry._SERVICE>(
     Registry.idlFactory,
-    getCanisterId('mcp_registry'),
+    process.env.CANISTER_ID_MCP_REGISTRY!,
     identity,
   );
 };
@@ -68,7 +53,7 @@ export const getRegistryActor = (identity?: Identity) => {
 export const getOrchestratorActor = (identity?: Identity) => {
   return createActor<Orchestrator._SERVICE>(
     Orchestrator.idlFactory,
-    getCanisterId('mcp_orchestrator'),
+    process.env.CANISTER_ID_MCP_ORCHESTRATOR!,
     identity,
   );
 };
@@ -76,7 +61,7 @@ export const getOrchestratorActor = (identity?: Identity) => {
 export const getAuthActor = (identity?: Identity) => {
   return createActor<Auth._SERVICE>(
     Auth.idlFactory,
-    getCanisterId('auth_server'),
+    process.env.CANISTER_ID_AUTH_SERVER!,
     identity,
   );
 };
@@ -92,7 +77,7 @@ export const getIcrcActor = (canisterId: Principal, identity?: Identity) => {
 export const getCredentialsActor = (identity?: Identity) => {
   return createActor<Credentials._SERVICE>(
     Credentials.idlFactory,
-    getCanisterId('auditor_credentials'),
+    process.env.CANISTER_ID_AUDITOR_CREDENTIALS!,
     identity,
   );
 };
