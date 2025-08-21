@@ -1,3 +1,5 @@
+![Prometheus Protocol Banner](./images/prometheus-banner.png)
+
 Our mission is to enable a new generation of decentralized applications by providing the open-source, on-chain foundation for verifiable trust, secure identity, and near-zero fee payments.
 
 ## How Might We (HMW)
