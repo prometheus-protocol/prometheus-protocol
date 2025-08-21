@@ -26,16 +26,17 @@
 1.  [Problem](#problem)
 2.  [Solution Overview](#solution-overview)
 3.  [Core Features](#core-features)
-4.  [Technologies Used](#technologies-used)
-5.  [System Architecture](#system-architecture)
-6.  [Demo Links & Resources](#demo-links--resources)
-7.  [Project Setup](#project-setup)
-8.  [Deploying to ICP Mainnet](#deploying-to-icp-mainnet)
-9.  [Project Structure](#project-structure)
-10. [Roadmap](#roadmap)
-11. [Community & Contribution](#community--contribution)
-12. [Deployment Team](#deployment-team)
-13. [License](#license)
+4.  [Monetization & Sustainability](#monetization--sustainability)
+5.  [Technologies & ICP Features Used](#technologies--icp-features-used)
+6.  [System Architecture](#system-architecture)
+7.  [Demo Links & Resources](#demo-links--resources)
+8.  [Project Setup](#project-setup)
+9.  [Testing](#testing)
+10. [Deploying to ICP Mainnet](#deploying-to-icp-mainnet)
+11. [Challenges & Learnings](#challenges--learnings)
+12. [Roadmap & Future Work](#roadmap--future-work)
+13. [Deployment Team](#deployment-team)
+14. [License](#license)
 
 ---
 
@@ -65,15 +66,25 @@ As autonomous AI agents proliferate, they rely on a decentralized network of spe
 
 ---
 
-## Technologies Used
+## Monetization & Sustainability
+
+Our protocol is designed as a self-sustaining economic flywheel for the entire AI ecosystem on ICP.
+
+1.  **Enabling Monetization (The Foundation):** Our OAuth 2.1 server provides the essential tools for any developer to monetize their AI services with on-chain micropayments.
+2.  **Driving Discovery & Trust (The Marketplace):** The App Store is the public marketplace where users and agents discover these monetized servers. The Prometheus Certificate acts as a powerful signal of quality and security, reducing friction and encouraging user adoption. **Trust is the lubricant for economic activity.**
+3.  **Protocol Sustainability (The DAO Treasury):** The long-term sustainability of the protocol will be managed by the Prometheus DAO. In the future, the DAO can vote to introduce a micro-fee on transactions processed by the economic layer. These funds would flow directly to the DAO treasury to fund ongoing development, security audits, and ecosystem grants, ensuring Prometheus remains a well-maintained public good.
+
+---
+
+## Technologies & ICP Features Used
 
 - **Protocol:** Internet Computer Protocol (ICP), Model Context Protocol (MCP)
 - **Canisters:** Motoko
 - **Standards:** ICRC-1/2 (Tokens), ICRC-118 (Versioning), ICRC-120 (Orchestration), ICRC-126 (Attestation), ICRC-127 (Bounties)
-- **Identity:** Internet Identity V2, On-Chain OAuth 2.1 with PKCE, Dynamic Client Registration
-- **IC Features:** t-ECDSA, Certified Responses, Timers
+- **Identity:** Internet Identity, On-Chain OAuth 2.1 with PKCE, Dynamic Client Registration
+- **Advanced IC Features:** **t-ECDSA** (for JWT signing in the Auth Server), **Certified Responses** (for secure data delivery), **Timers** (for managing bounty expirations).
 - **Frontend:** React, TypeScript, Vite
-- **Testing:** PicJS: `test:canisters`, Vitest: `test:mo`
+- **Testing:** `picjs` (powered by PocketIC), Vitest
 
 ---
 
@@ -81,12 +92,7 @@ As autonomous AI agents proliferate, they rely on a decentralized network of spe
 
 The protocol is a vertically integrated stack where each layer builds upon the last, ensuring a secure and seamless flow from user identity to service execution.
 
-### Protocol Architecture
-
 ![Protocol Architecture](design/images/protocol-architecture.png)
-
-### Canister Architecture
-
 ![Canister Architecture](design/images/canister-architecture.png)
 
 ---
@@ -136,6 +142,21 @@ The protocol is a vertically integrated stack where each layer builds upon the l
 
 ---
 
+## Testing
+
+The project includes a comprehensive test suite to ensure reliability and correctness, hitting a key bonus criterion for the hackathon.
+
+- **E2E & Integration Tests (`picjs`):** We use `picjs`, a powerful testing library powered by **PocketIC**, to run end-to-end tests that simulate real-world interactions between all canisters in a deterministic local environment.
+  ```bash
+  pnpm test:canisters
+  ```
+- **Unit Tests (Motoko):** Core business logic within individual canisters is verified with `mo:test`.
+  ```bash
+  mops test
+  ```
+
+---
+
 ## Deploying to ICP Mainnet
 
 1.  **Log in with your mainnet identity:**
@@ -159,23 +180,17 @@ The protocol is a vertically integrated stack where each layer builds upon the l
 
 ---
 
-## Project Structure
+## Challenges & Learnings
 
-```
-/design            # UX Research, UI Mockups, and Design System
-/packages
-  /apps            # User-facing applications
-    /cli           # The Prometheus CLI (`prom-cli`)
-    /frontend      # The App Store web UI (React)
-  /canisters       # Motoko source for all on-chain services
-  /libs            # Shared libraries and SDKs
-    /ic-js         # TypeScript SDK for web/off-chain integration
-/scripts           # Utility and deployment scripts
-```
+Building a full-stack, on-chain trust layer presented several unique challenges:
+
+1.  **On-Chain OAuth 2.1 Security:** Implementing a secure OAuth server on a public blockchain required a novel approach. We leveraged mandatory PKCE, certified responses, and a unique `request_id` system to protect against code interception and malicious boundary nodes, ensuring that secret access tokens are never publicly exposed.
+2.  **ICRC Standard Composability:** Integrating five different ICRC standards (1, 2, 118, 120, 126, 127) into a cohesive system was a significant architectural challenge. It required careful state management and inter-canister communication patterns to ensure data consistency and atomicity where needed.
+3.  **CLI Tooling & Build Process:** Creating a professional CLI with a unified developer experience required solving complex build issues, particularly managing ESM/CJS module compatibility between our shared libraries and the final executable, which we solved using `esbuild`'s `define` and `external` features.
 
 ---
 
-## Roadmap
+## Roadmap & Future Work
 
 Our journey is structured in ambitious phases, building from a solid foundation towards a vibrant, trusted ecosystem.
 
