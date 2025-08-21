@@ -8,10 +8,6 @@
   <i>If you find this project useful, please star it ✨</i>
 </p>
 
-<p align="center">
-  <a href="https://github.com/prometheus-protocol/prometheus-protocol/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue.svg"/></a><a href="https://www.npmjs.com/package/@prometheus-protocol/cli"><img alt="NPM Version" src="https://img.shields.io/npm/v/@prometheus-protocol/cli.svg"/></a><a href="https://github.com/prometheus-protocol/prometheus-protocol/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/prometheus-protocol/prometheus-protocol/actions/workflows/ci.yml/badge.svg" /></a><a href="https://discord.gg/TbqgYERjYw"><img alt="Join our Discord" src="https://dcbadge.limes.pink/api/server/https://discord.gg/TbqgYERjYw?style=flat"/></a><a href="https://github.com/prometheus-protocol/prometheus-protocol"><img alt="Version" src="https://img.shields.io/github/package-json/v/prometheus-protocol/prometheus-protocol"/></a>
-</p>
-
 ---
 
 <h2 align="center">Prometheus Protocol Monorepo</h2>
@@ -21,6 +17,24 @@
 
 <p align="center">
   <b>Please note that this project is under active development. APIs might change before version 1 is released.</b>
+</p>
+
+<p align="center">
+  <a href="https://github.com/prometheus-protocol/prometheus-protocol/blob/main/LICENSE">
+    <img alt="License" src="https://img.shields.io/badge/license-MIT-blue.svg"/>
+  </a>&nbsp;
+  <a href="https://www.npmjs.com/package/@prometheus-protocol/cli">
+    <img alt="NPM Version" src="https://img.shields.io/npm/v/@prometheus-protocol/cli.svg"/>
+  </a>&nbsp;
+  <a href="https://github.com/prometheus-protocol/prometheus-protocol/actions/workflows/tests.yml">
+    <img alt="Tests" src="https://github.com/prometheus-protocol/prometheus-protocol/actions/workflows/ci.yml/badge.svg" />
+  </a>&nbsp;
+  <a href="https://discord.gg/TbqgYERjYw">
+    <img alt="Join our Discord" src="https://dcbadge.limes.pink/api/server/https://discord.gg/TbqgYERjYw?style=flat"/>
+  </a>&nbsp;
+  <a href="https://github.com/prometheus-protocol/prometheus-protocol">
+    <img alt="Version" src="https://img.shields.io/github/package-json/v/prometheus-protocol/prometheus-protocol"/>
+  </a>
 </p>
 
 ## Table of Contents
