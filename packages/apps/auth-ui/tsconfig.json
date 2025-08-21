@@ -3,7 +3,9 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@prometheus-protocol/ic-js": ["../../libs/ic-js/src"],
+      "@prometheus-protocol/ic-js/*": ["../../libs/ic-js/src/*"]
     }
   },
   "include": ["src"]
