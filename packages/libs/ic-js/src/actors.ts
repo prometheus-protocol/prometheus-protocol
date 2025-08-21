@@ -7,6 +7,7 @@ import {
   Credentials,
   Auth,
 } from '@prometheus-protocol/declarations';
+import { getCanisterId } from './config';
 
 // --- STEP 1: Create a generic, robust Actor Factory ---
 // This single function replaces ALL the dfx-generated `createActor` helpers.
@@ -45,7 +46,7 @@ const createActor = <T>(
 export const getRegistryActor = (identity?: Identity) => {
   return createActor<Registry._SERVICE>(
     Registry.idlFactory,
-    process.env.CANISTER_ID_MCP_REGISTRY!,
+    getCanisterId('MCP_REGISTRY'),
     identity,
   );
 };
@@ -53,7 +54,7 @@ export const getRegistryActor = (identity?: Identity) => {
 export const getOrchestratorActor = (identity?: Identity) => {
   return createActor<Orchestrator._SERVICE>(
     Orchestrator.idlFactory,
-    process.env.CANISTER_ID_MCP_ORCHESTRATOR!,
+    getCanisterId('MCP_ORCHESTRATOR'),
     identity,
   );
 };
@@ -61,7 +62,7 @@ export const getOrchestratorActor = (identity?: Identity) => {
 export const getAuthActor = (identity?: Identity) => {
   return createActor<Auth._SERVICE>(
     Auth.idlFactory,
-    process.env.CANISTER_ID_AUTH_SERVER!,
+    getCanisterId('AUTH_SERVER'),
     identity,
   );
 };
@@ -77,7 +78,7 @@ export const getIcrcActor = (canisterId: Principal, identity?: Identity) => {
 export const getCredentialsActor = (identity?: Identity) => {
   return createActor<Credentials._SERVICE>(
     Credentials.idlFactory,
-    process.env.CANISTER_ID_AUDITOR_CREDENTIALS!,
+    getCanisterId('AUDITOR_CREDENTIALS'),
     identity,
   );
 };
