@@ -10,7 +10,6 @@ import { registerSubmitCommand } from '../src/commands/submit.js';
 // Mock all external dependencies
 vi.mock('node:child_process');
 vi.mock('node:fs');
-vi.mock('@prometheus-protocol/ic-js');
 vi.mock('../src/utils.js');
 
 describe('submit command', () => {
@@ -34,18 +33,9 @@ describe('submit command', () => {
     // Reset all mocks to a clean state
     vi.clearAllMocks();
 
-    // 1. Import the *actual* implementation of the utils module.
-    const actualUtils = await vi.importActual<typeof utils>('../src/utils.js');
-
-    // 2. Provide mock implementations for each function in the mocked module.
-    //    For `serializeToIcrc16Map`, we use the REAL implementation.
-    //    For `loadDfxIdentity`, we use a mock.
-    vi.mocked(utils.serializeToIcrc16Map).mockImplementation(
-      actualUtils.serializeToIcrc16Map,
-    );
-
     // Provide default successful implementations for all mocks
-    vi.mocked(api.submitVerificationRequest).mockResolvedValue(123n);
+    vi.spyOn(api, 'submitVerificationRequest').mockResolvedValue(123n);
+
     vi.mocked(utils.loadDfxIdentity).mockReturnValue({} as any);
     vi.mocked(execSync).mockImplementation((command: string) => {
       if (command === 'dfx identity whoami')
@@ -70,7 +60,7 @@ describe('submit command', () => {
 
   it('should read the manifest, serialize metadata, and call the API with correct arguments', async () => {
     // Act
-    await program.parseAsync(['node', 'cli', 'submit']);
+    await program.parseAsync(['submit'], { from: 'user' });
 
     // Assert
     expect(api.submitVerificationRequest).toHaveBeenCalledOnce();
@@ -92,7 +82,7 @@ describe('submit command', () => {
     expect(metadataMap.get('publisher')).toEqual({ Text: 'Test Devs' });
     // Check that the array is correctly JSON stringified
     expect(metadataMap.get('key_features')).toEqual({
-      Text: JSON.stringify(['Feature A', 'Feature B']),
+      Array: [{ Text: 'Feature A' }, { Text: 'Feature B' }],
     });
 
     // 3. Assert that technical fields are NOT included in the metadata map
