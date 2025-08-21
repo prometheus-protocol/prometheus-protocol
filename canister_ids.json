@@ -1,11 +1,23 @@
 {
-  "icrc1_ledger": {
-    "ic": "dy3i7-mqaaa-aaaai-q32ja-cai"
+  "app_store_ui": {
+    "ic": "gyeil-qyaaa-aaaai-q32uq-cai"
+  },
+  "auditor_credentials": {
+    "ic": "eq6xo-cyaaa-aaaai-q32yq-cai"
   },
   "auth_server": {
     "ic": "bfggx-7yaaa-aaaai-q32gq-cai"
   },
-  "frontend": {
+  "auth_ui": {
     "ic": "bmfnl-jqaaa-aaaai-q32ha-cai"
+  },
+  "icrc1_ledger": {
+    "ic": "dy3i7-mqaaa-aaaai-q32ja-cai"
+  },
+  "mcp_orchestrator": {
+    "ic": "ez54s-uqaaa-aaaai-q32za-cai"
+  },
+  "mcp_registry": {
+    "ic": "grhdx-gqaaa-aaaai-q32va-cai"
   }
 }

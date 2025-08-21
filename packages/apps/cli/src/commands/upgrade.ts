@@ -9,6 +9,12 @@ import {
 } from '@prometheus-protocol/ic-js';
 import { loadDfxIdentity } from '../utils.js';
 
+interface Manifest {
+  app: {
+    id: string;
+  };
+}
+
 export function registerUpgradeCommand(program: Command) {
   program
     .command('upgrade')
@@ -52,9 +58,9 @@ export function registerUpgradeCommand(program: Command) {
       );
 
       try {
-        const manifest = yaml.load(fs.readFileSync(configPath, 'utf-8')) as {
-          namespace: string;
-        };
+        const manifest = yaml.load(
+          fs.readFileSync(configPath, 'utf-8'),
+        ) as Manifest;
         const identity = loadDfxIdentity(
           execSync('dfx identity whoami').toString().trim(),
         );
@@ -62,10 +68,10 @@ export function registerUpgradeCommand(program: Command) {
 
         // Step 1: Resolve version to WASM hash via the registry
         console.log(
-          `   [1/2] 🔎 Resolving version ${version} to a WASM hash for namespace ${manifest.namespace}...`,
+          `   [1/2] 🔎 Resolving version ${version} to a WASM hash for namespace ${manifest.app.id}...`,
         );
         const wasm_hash = await getWasmHashForVersion(identity, {
-          namespace: manifest.namespace,
+          namespace: manifest.app.id,
           version: version,
         });
         console.log(

@@ -1,4 +1,4 @@
-# Prometheus CLI
+# Prometheus CLI (`@prometheus-protocol/cli`)
 
 A command-line interface for interacting with the Prometheus Protocol, a decentralized software supply chain for the Internet Computer.
 
@@ -9,7 +9,8 @@ This tool allows developers to publish, version, and manage secure, auditable so
 Before using the CLI, it's important to understand a few key concepts:
 
 - **Namespace:** A unique, reverse-domain-style identifier for your application type (e.g., `com.my-company.my-app`). All versions of your application will live under this namespace.
-- **Verification:** The process of submitting your canister's WASM for auditing. This involves off-chain processes like security audits and build verification. The CLI helps you initiate and check the status of this process.
+- **App Metadata vs. Version Data:** The `prometheus.yml` file contains two types of information. The `app` section holds mutable "marketing" metadata (like descriptions and icons) that you can change anytime. The `submission` section holds immutable data (like a git commit hash) that is locked to a specific audit.
+- **Verification:** The process of submitting your canister's WASM for auditing. The CLI helps you initiate this process, which is then carried out by off-chain auditors who file on-chain attestations.
 - **Developer vs. Operator:** The CLI is designed around two distinct roles:
   - **The Developer:** The person or team who writes the code, submits it for verification, and publishes new versions to the registry.
   - **The Operator:** The person, team, or DAO who runs a live instance of a canister and needs to upgrade it to a new version published by the developer.
@@ -30,7 +31,7 @@ npm install -g @prometheus-protocol/cli
 
 ## The Developer Journey: Publishing Your Application
 
-This workflow takes your local WASM file and makes it a trusted, published version in the registry.
+This workflow takes your local code and makes it a trusted, published version in the registry, with a corresponding public-facing app page.
 
 ### Step 1: Initialize Your Project
 
@@ -40,19 +41,25 @@ In your project's root directory, run the `init` command. This creates a `promet
 @prometheus-protocol/cli init
 ```
 
-You will be prompted for your application's namespace, name, and the path to its compiled WASM file.
+You will be prompted for your application's namespace, name, description, and repository URL. This file is the single source of configuration for all other CLI commands.
 
-### Step 2: Submit for Verification
+---
 
-Once your WASM is ready for audit, submit it to the verification process.
+### The Verification & Publishing Flow (For a New Version)
+
+This is the core flow for getting your code audited and released.
+
+#### Step 2a: Submit for Verification
+
+Once your code is ready for audit, fill in the `git_commit` and `wasm_path` in the `submission` section of your `prometheus.yml`, then run `submit`.
 
 ```bash
 @prometheus-protocol/cli submit
 ```
 
-This command reads your `prometheus.yml`, finds your WASM file, calculates its hash, and submits it to the registry to begin the audit process.
+This command reads your manifest, calculates your WASM hash, and submits it to the registry to begin the audit process.
 
-### Step 3: Check Verification Status
+#### Step 2b: Check Verification Status
 
 You can check on the progress of the audit at any time.
 
@@ -60,17 +67,35 @@ You can check on the progress of the audit at any time.
 @prometheus-protocol/cli status
 ```
 
-### Step 4: Publish the Verified Version
+#### Step 2c: Publish the Verified Version
 
-After the off-chain audit process is complete and your WASM is marked as verified, you can officially publish it.
+After the off-chain audit process is complete and your WASM is marked as verified, you can officially publish it with a semantic version.
 
 ```bash
 @prometheus-protocol/cli publish --version 1.0.0
 ```
 
-This creates a new version record (e.g., `v1.0.0`) in the registry, links it to the verified WASM hash, and uploads the WASM bytecode.
+This creates a new version record (e.g., `v1.0.0`) in the registry, links it to the verified WASM hash, and makes it available for operators to upgrade to.
 
-### Step 5: Manage Permissions
+---
+
+### Managing Your App's Metadata (Marketing Info)
+
+This flow is for managing your application's public-facing page in the app store.
+
+#### Step 2d: Update Your App's Metadata
+
+You can update your app's name, description, icon URLs, etc., at any time. Simply edit the `app` section of your `prometheus.yml` file and run the `update-metadata` command.
+
+```bash
+@prometheus-protocol/cli update-metadata
+```
+
+This pushes your local marketing metadata to the on-chain metadata canister, updating your app's page without requiring a new code audit.
+
+---
+
+### Step 3: Manage Permissions
 
 To allow an operator to upgrade their canisters to your new version, you must grant them permission.
 
@@ -130,15 +155,16 @@ This will poll the orchestrator and report whether the last upgrade you initiate
 
 | Command             | Description                                                   | Key Options                                    |
 | :------------------ | :------------------------------------------------------------ | :--------------------------------------------- |
-| `init`              | Creates a `prometheus.yml` manifest in the current directory. |                                                |
-| `submit`            | Submits the local WASM for verification.                      |                                                |
-| `status`            | Checks the verification status of the local WASM.             |                                                |
-| `publish`           | Publishes a new, verified version to the registry.            | `-v, --version <version>`                      |
 | `add-controller`    | Grants upgrade permission to a principal.                     | `-p, --principal <id>`                         |
-| `remove-controller` | Revokes upgrade permission from a principal.                  | `-p, --principal <id>`                         |
+| `deprecate`         | Marks a specific version as deprecated (or not).              | `-n <ns>`, `-v <ver>`, `-r <reason>`, `--undo` |
+| `init`              | Creates a `prometheus.yml` manifest in the current directory. |                                                |
 | `list-controllers`  | Lists all principals authorized to upgrade for a namespace.   | `-n, --namespace <ns>`                         |
 | `list-versions`     | Lists all published versions for a namespace.                 | `-n, --namespace <ns>`                         |
-| `deprecate`         | Marks a specific version as deprecated (or not).              | `-n <ns>`, `-v <ver>`, `-r <reason>`, `--undo` |
+| `publish`           | Publishes a new, verified version to the registry.            | `-v, --version <version>`                      |
 | `register`          | Links a live canister to a namespace for future upgrades.     | `-c, --canister <id>`, `-n <ns>`               |
+| `remove-controller` | Revokes upgrade permission from a principal.                  | `-p, --principal <id>`                         |
+| `status`            | Checks the verification status of the local WASM.             |                                                |
+| `submit`            | Submits the local WASM for verification.                      |                                                |
+| `update-metadata`   | Updates the app's marketing metadata from the manifest.       |                                                |
 | `upgrade`           | Upgrades a live canister to a published version.              | `-c <id>`, `-v <ver>`, `--mode`, `--arg`       |
 | `upgrade-status`    | Polls for the status of the last initiated upgrade.           |                                                |

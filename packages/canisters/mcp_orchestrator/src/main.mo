@@ -5,7 +5,7 @@ import D "mo:base/Debug";
 
 import Nat "mo:base/Nat";
 import Principal "mo:base/Principal";
-
+import Base16 "mo:base16/Base16";
 import ClassPlus "mo:class-plus";
 import TT "mo:timer-tool";
 import ICRC10 "mo:icrc10-mo";
@@ -19,6 +19,7 @@ import Map "mo:map/Map";
 import { phash } "mo:map/Map";
 import Debug "mo:base/Debug";
 import Error "mo:base/Error";
+import Iter "mo:base/Iter";
 
 import McpRegistry "McpRegistry";
 
@@ -166,6 +167,7 @@ shared (deployer) actor class ICRC120Canister<system>(
       canisterId : Principal;
     }
   ) : async* Bool {
+    Debug.print("Checking if canister can be installed: " # Principal.toText(canisterId));
     switch (_mcp_registry_id) {
       case (null) {
         Debug.print("Cannot install canister: MCP Registry ID is not set.");
@@ -175,8 +177,12 @@ shared (deployer) actor class ICRC120Canister<system>(
         switch (Map.get(managed_canisters, phash, canisterId)) {
           case (?namespace) {
             let registry : McpRegistry.Service = actor (Principal.toText(registryId));
-            let verified_check = await registry.is_wasm_verified(args.wasm_module_hash);
-            if (not verified_check) { return false };
+            let wasm_id = Base16.encode(args.wasm_module_hash);
+            let verified_check = await registry.is_wasm_verified(wasm_id);
+            if (not verified_check) {
+              Debug.print("Cannot install canister: Wasm module is not verified.");
+              return false;
+            };
             return true;
           };
           case (_) {
@@ -420,6 +426,18 @@ shared (deployer) actor class ICRC120Canister<system>(
         };
       };
     };
+  };
+
+  // Get canisters for a given namespace
+  public query func get_canisters(namespace : Text) : async [Principal] {
+    let canisters = Map.filter(
+      managed_canisters,
+      phash,
+      func(key : Principal, value : Text) : Bool {
+        value == namespace;
+      },
+    );
+    return Iter.toArray(Map.keys(canisters));
   };
 
   //------------------- Test FUNCTION -------------------//

@@ -32,13 +32,39 @@
         "node_compatibility": true
       }
     },
-    "frontend": {
-      "dependencies": ["auth_server"],
-      "frontend": {
-        "entrypoint": "packages/apps/frontend/src/index.html"
+    "icrc1_ledger": {
+      "type": "custom",
+      "candid": "https://github.com/dfinity/ic/releases/download/ledger-suite-icrc-2025-06-19/ledger.did",
+      "wasm": "https://github.com/dfinity/ic/releases/download/ledger-suite-icrc-2025-06-19/ic-icrc1-ledger.wasm.gz",
+      "init_arg": "(variant { Init = record { token_symbol = \"PMP\"; token_name = \"Prometheus Protocol Token\"; minting_account = record { owner = principal \"amcyq-57mpp-32zru-iuv42-nthar-zphnv-s7shv-fmpn6-c3aep-dqsaw-7ae\" }; transfer_fee = 1_000; initial_balances = vec { record { record { owner = principal \"feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae\"; }; 100_000_000_000 } }; archive_options = record { num_blocks_to_archive = 1000; trigger_threshold = 2000; controller_id = principal \"amcyq-57mpp-32zru-iuv42-nthar-zphnv-s7shv-fmpn6-c3aep-dqsaw-7ae\" }; metadata = vec {}; feature_flags = opt record { icrc2 = true }; } })",
+      "declarations": {
+        "output": "packages/declarations/src/generated/icrc1_ledger",
+        "node_compatibility": true
+      }
+    },
+    "app_store_ui": {
+      "dependencies": ["mcp_registry"],
+      "app_store_ui": {
+        "entrypoint": "packages/apps/app_store_ui/src/index.html"
       },
-      "source": ["dist/frontend/"],
-      "type": "assets"
+      "source": ["dist/app_store_ui/"],
+      "type": "assets",
+      "declarations": {
+        "output": "packages/declarations/src/generated/app_store_ui",
+        "node_compatibility": true
+      }
+    },
+    "auth_ui": {
+      "dependencies": ["auth_server"],
+      "auth_ui": {
+        "entrypoint": "packages/apps/auth_ui/src/index.html"
+      },
+      "source": ["dist/auth_ui/"],
+      "type": "assets",
+      "declarations": {
+        "output": "packages/declarations/src/generated/auth_ui",
+        "node_compatibility": true
+      }
     },
     "internet_identity": {
       "type": "custom",
@@ -49,15 +75,9 @@
           "ic": "rdmx6-jaaaa-aaaaa-aaadq-cai"
         }
       },
-      "frontend": {}
-    },
-    "icrc1_ledger": {
-      "type": "custom",
-      "candid": "https://github.com/dfinity/ic/releases/download/ledger-suite-icrc-2025-06-19/ledger.did",
-      "wasm": "https://github.com/dfinity/ic/releases/download/ledger-suite-icrc-2025-06-19/ic-icrc1-ledger.wasm.gz",
-      "init_arg": "(variant { Init = record { token_symbol = \"PMP\"; token_name = \"Prometheus Protocol Token\"; minting_account = record { owner = principal \"amcyq-57mpp-32zru-iuv42-nthar-zphnv-s7shv-fmpn6-c3aep-dqsaw-7ae\" }; transfer_fee = 1_000; initial_balances = vec {}; archive_options = record { num_blocks_to_archive = 1000; trigger_threshold = 2000; controller_id = principal \"amcyq-57mpp-32zru-iuv42-nthar-zphnv-s7shv-fmpn6-c3aep-dqsaw-7ae\" }; metadata = vec {}; feature_flags = opt record { icrc2 = true }; } })",
+      "frontend": {},
       "declarations": {
-        "output": "packages/declarations/src/generated/icrc1_ledger",
+        "output": "packages/declarations/src/generated/internet_identity",
         "node_compatibility": true
       }
     }

@@ -1,0 +1,16 @@
+# Prometheus Attestation Manifest for Audit Type: build_reproducibility_v1
+#
+# Target WASM Hash: 8e73873aea2d23e065adf42edf783eea020cead246c270cc8162e14fa65c8a20
+#
+# Please fill in all the placeholder values below.
+# When you are ready, submit this file using the command:
+#   prom-cli attest:submit --file ./build_reproducibility_v1_attestation.yml
+
+wasm_hash: 8e73873aea2d23e065adf42edf783eea020cead246c270cc8162e14fa65c8a20
+metadata:
+  126:audit_type: build_reproducibility_v1
+  status: success
+  git_commit: be75f04f04336fc1fbe48de5c2f012ac23111120
+  repo_url: https://github.com/prometheus-protocol/typescript-sdk/tree/main/examples/mcp-pmp-faucet
+  canister_id: bmfnl-jqaaa-aaaai-q32ha-cai
+  failure_reason: If status is "failure", provide a brief explanation here.

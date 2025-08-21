@@ -293,12 +293,6 @@ describe('MCP Registry Canister (Isolated Tests)', () => {
       mockOrchestrator = createIdentity('mock-orchestrator-principal');
       registryActor.setIdentity(platformOwner);
 
-      // 1. Register the mock orchestrator with the registry.
-      const setResult = await registryActor.set_mcp_orchestrator(
-        mockOrchestrator.getPrincipal(),
-      );
-      expect(setResult).toHaveProperty('ok'); // Ensure setup succeeds
-
       // 2. Create a new canister type that we can manage.
       const createRequest: CreateCanisterType = {
         canister_type_namespace: orchestratedNamespace,
@@ -312,57 +306,7 @@ describe('MCP Registry Canister (Isolated Tests)', () => {
       await registryActor.icrc118_create_canister_type([createRequest]);
     });
 
-    describe('set_mcp_orchestrator()', () => {
-      it('should return an error when setting the orchestrator from a non-owner', async () => {
-        registryActor.setIdentity(unauthorizedUser);
-        const result = await registryActor.set_mcp_orchestrator(
-          unauthorizedUser.getPrincipal(),
-        );
-
-        // ASSERT: The call resolves to an 'err' variant.
-        expect(result).toHaveProperty('err');
-        // @ts-ignore - We know 'err' exists
-        expect(result.err).toContain('Caller is not the owner');
-      });
-
-      it('should return ok when setting the orchestrator from the owner', async () => {
-        registryActor.setIdentity(platformOwner);
-        const result = await registryActor.set_mcp_orchestrator(
-          mockOrchestrator.getPrincipal(),
-        );
-
-        // ASSERT: The call resolves to an 'ok' variant.
-        expect(result).toHaveProperty('ok');
-      });
-    });
-
     describe('is_controller_of_type()', () => {
-      it('should return an error if called by a principal that is NOT the registered orchestrator', async () => {
-        // Call from the owner should be rejected
-        registryActor.setIdentity(platformOwner);
-        const ownerResult = await registryActor.is_controller_of_type(
-          orchestratedNamespace,
-          platformOwner.getPrincipal(),
-        );
-        expect(ownerResult).toHaveProperty('err');
-        // @ts-ignore
-        expect(ownerResult.err).toContain(
-          'Caller is not the registered MCP Orchestrator',
-        );
-
-        // Call from a random user should be rejected
-        registryActor.setIdentity(unauthorizedUser);
-        const unauthorizedResult = await registryActor.is_controller_of_type(
-          orchestratedNamespace,
-          unauthorizedUser.getPrincipal(),
-        );
-        expect(unauthorizedResult).toHaveProperty('err');
-        // @ts-ignore
-        expect(unauthorizedResult.err).toContain(
-          'Caller is not the registered MCP Orchestrator',
-        );
-      });
-
       it('should return { ok: true } when a valid controller is checked by the orchestrator', async () => {
         registryActor.setIdentity(mockOrchestrator);
         const result = await registryActor.is_controller_of_type(

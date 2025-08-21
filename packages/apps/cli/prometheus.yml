@@ -1,0 +1,44 @@
+# Prometheus Application Manifest
+# This file defines a complete, auditable package for a single version of your app.
+
+# -----------------------------------------------------------------
+# App Namespace
+# -----------------------------------------------------------------
+# This is the permanent, unique identifier for your application.
+app:
+  id: com.pp.app
+
+# -----------------------------------------------------------------
+# Version Submission Package
+# -----------------------------------------------------------------
+# This section contains all data for a specific version. This entire package
+# will be submitted for review and locked to the audit of this version.
+#
+# The 'canister_id' field should point to your official, developer-endorsed
+# instance of this version. It will be featured on the app store.
+#
+# The 'mcp_path' defaults to '/mcp'. Change this only if you need to support
+# a legacy ('/sse') or custom server endpoint path.
+#
+# Your Final Action Items:
+# 1. Fill in the 'git_commit' with the exact commit hash you want audited.
+# 2. Update the 'wasm_path' to point to your compiled canister WASM file.
+submission:
+  name: Awesome
+  description: Awesome
+  publisher: pp
+  category: Utilities
+  repo_url: https://github.com
+  canister_id: uxrrr-q7777-77774-qaaaq-cai
+  mcp_path: /mcp
+  why_this_app: its awesome
+  key_features:
+    - awesome
+  tags:
+    - awesome
+  visuals:
+    icon_url: ''
+    banner_url: ''
+    gallery_images: []
+  git_commit: 'd68b79644c139c6b252eb04b41a52791b7fbb540'
+  wasm_path: ../../../.dfx/local/canisters/auditor_credentials/auditor_credentials.wasm

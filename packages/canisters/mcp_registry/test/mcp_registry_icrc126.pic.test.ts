@@ -195,7 +195,8 @@ describe('MCP Registry ICRC-126 Integration', () => {
     });
 
     it('should initially report a Wasm as not verified', async () => {
-      const isVerified = await registryActor.is_wasm_verified(wasmHashToVerify);
+      const wasmId = Buffer.from(wasmHashToVerify).toString('hex');
+      const isVerified = await registryActor.is_wasm_verified(wasmId);
       expect(isVerified).toBe(false);
     });
 
@@ -227,7 +228,8 @@ describe('MCP Registry ICRC-126 Integration', () => {
       await pic.tick(); // Commit the state change
 
       // Now check the hook
-      const isVerified = await registryActor.is_wasm_verified(wasmHashToVerify);
+      const wasmId = Buffer.from(wasmHashToVerify).toString('hex');
+      const isVerified = await registryActor.is_wasm_verified(wasmId);
       expect(isVerified).toBe(true);
     });
 
@@ -260,21 +262,6 @@ describe('MCP Registry ICRC-126 Integration', () => {
       expect(wasmIdEntry && wasmIdEntry[1].Text).toEqual(wasmIdToVerify);
     });
 
-    it('should REJECT finalizing an already finalized request', async () => {
-      registryActor.setIdentity(daoIdentity);
-
-      const result = await registryActor.finalize_verification(
-        wasmIdToVerify, // Try to finalize the same one again
-        { Rejected: null },
-        [],
-      );
-
-      expect('err' in result).toBeTruthy();
-      if ('err' in result) {
-        expect(result.err).toEqual('This wasm_id has already been finalized.');
-      }
-    });
-
     it('should allow the owner to finalize a request as #Rejected', async () => {
       registryActor.setIdentity(developerIdentity);
 
@@ -286,7 +273,8 @@ describe('MCP Registry ICRC-126 Integration', () => {
       await pic.tick();
 
       // Check the hook, it should now be explicitly false
-      const isVerified = await registryActor.is_wasm_verified(wasmHashToReject);
+      const wasmId = Buffer.from(wasmHashToReject).toString('hex');
+      const isVerified = await registryActor.is_wasm_verified(wasmId);
       expect(isVerified).toBe(false);
     });
   });

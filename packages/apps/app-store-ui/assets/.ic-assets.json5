@@ -1,0 +1,30 @@
+[
+  {
+    match: 'index.html',
+    cache: {
+      control: 'no-cache',
+    },
+    ignore: false,
+  },
+  {
+    match: '.well-known/**/*',
+    cache: {
+      control: 'no-cache',
+    },
+    ignore: false,
+  },
+  {
+    match: '**/*.{png,jpg,jpeg,svg,webp,gif,ico,woff,woff2}',
+    cache: {
+      max_age: 2592000, // 30 days in seconds
+    },
+    ignore: false,
+  },
+  {
+    match: '**/*',
+    cache: {
+      max_age: 86400, // 1 day in seconds
+    },
+    ignore: false,
+  },
+]

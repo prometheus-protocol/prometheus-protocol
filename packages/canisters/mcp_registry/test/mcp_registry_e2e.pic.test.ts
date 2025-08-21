@@ -156,7 +156,6 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     await registryActor.set_auditor_credentials_canister_id(
       credentialFixture.canisterId,
     );
-    await registryActor.set_mcp_orchestrator(orchestratorFixture.canisterId);
 
     orchestratorActor.setIdentity(daoIdentity);
     await orchestratorActor.set_mcp_registry_id(registryFixture.canisterId);
@@ -261,6 +260,11 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       bountyIds[auditType] = createResult.Ok.bounty_id;
     }
 
+    // Check that the bounties were created successfully
+    const bounties = await registryActor.get_bounties_for_wasm(wasmId);
+    console.log(`Found ${bounties.length} bounties for the WASM ID.`);
+    expect(bounties).toHaveLength(auditTypes.length);
+
     // === PHASE 4: Auditors complete audits and claim bounties ===
     const auditors = [
       { identity: reproAuditorIdentity, type: 'build' },
@@ -289,38 +293,8 @@ describe('MCP Registry Full E2E Lifecycle', () => {
         }
       }
     }
-    // === PHASE 4.5: Verify the new public query for attestations ===
-    registryActor.setIdentity(developerIdentity); // Any identity can query
 
-    // The actor method now returns AttestationRecord[] directly.
-    const attestations =
-      await registryActor.get_attestations_for_wasm(wasmHash);
-
-    // Assert the number of attestations is correct
-    expect(attestations).toHaveLength(3);
-
-    // Assert the content of one of the attestations to be sure
-    const securityAttestation = attestations.find(
-      (att) =>
-        'Attestation' in att &&
-        att.Attestation.auditor.toText() ===
-          securityAuditorIdentity.getPrincipal().toText(),
-    );
-    expect(securityAttestation).toBeDefined();
-
-    // The test puts the audit type in the metadata, so let's check it
-    const auditTypeMeta =
-      'Attestation' in securityAttestation!
-        ? securityAttestation.Attestation.metadata.find(
-            (meta) => meta[0] === '126:audit_type',
-          )
-        : [];
-    expect(auditTypeMeta).toBeDefined();
-    // The value is a variant, so we check for the Text property
-    // @ts-ignore
-    expect(auditTypeMeta[1]).toEqual({ Text: 'security' });
-
-    // === PHASE 5: DAO Finalization ===
+    // === PHASE 4.1: DAO Finalization ===
     registryActor.setIdentity(daoIdentity);
     const finalizeResult = await registryActor.finalize_verification(
       wasmId,
@@ -328,6 +302,34 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       [],
     );
     expect('ok' in finalizeResult).toBe(true);
+
+    // === PHASE 4.5: Verify the new public query for attestations ===
+    // Attestations are not public until the verification is finalized.
+    registryActor.setIdentity(developerIdentity); // Any identity can query
+
+    // The actor method now returns AttestationRecord[] directly.
+    const attestations = await registryActor.get_attestations_for_wasm(wasmId);
+
+    // Assert the number of attestations is correct
+    expect(attestations).toHaveLength(3);
+
+    // Assert the content of one of the attestations to be sure
+    const securityAttestation = attestations.find(
+      (att) =>
+        att.auditor.toText() ===
+        securityAuditorIdentity.getPrincipal().toText(),
+    );
+    expect(securityAttestation).toBeDefined();
+
+    // The test puts the audit type in the metadata, so let's check it
+    const auditTypeMeta =
+      securityAttestation?.metadata.find(
+        (meta) => meta[0] === '126:audit_type',
+      ) || [];
+    expect(auditTypeMeta).toBeDefined();
+    // The value is a variant, so we check for the Text property
+    // @ts-ignore
+    expect(auditTypeMeta[1]).toEqual({ Text: 'security' });
 
     // === PHASE 6: Developer publishes the now-verified WASM ===
     registryActor.setIdentity(developerIdentity);

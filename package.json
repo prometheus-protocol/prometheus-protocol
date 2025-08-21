@@ -17,7 +17,6 @@
   "scripts": {
     "dev": "DFX_NETWORK=local pnpm --filter @prometheus-protocol/frontend dev",
     "build": "pnpm --filter \"./packages/**\" build",
-    "prebuild": "dfx generate",
     "deploy": "dfx deploy",
     "test:apps": "pnpm --filter \"./packages/apps/*\" test",
     "test:mo": "pnpm --filter \"./packages/canisters/*\" test:mo",

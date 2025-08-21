@@ -48,7 +48,7 @@ const getCanisterId = (name: string): string => {
 
   if (!canisterId) {
     throw new Error(
-      `Cannot find canister ID for '${name}'. Please set the 'PROMETHEUS_CANISTER_ID_${name.toUpperCase()}' environment variable.`,
+      `Cannot find canister ID for '${name}'. Please set the 'CANISTER_ID_${name.toUpperCase()}' environment variable.`,
     );
   }
   return canisterId;

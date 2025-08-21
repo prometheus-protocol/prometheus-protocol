@@ -128,6 +128,9 @@ jobs:
       - name: 10. Start Local Replica
         run: dfx start --background --clean
 
+      - name: 10b. Build Packages
+        run: pnpm build
+
       - name: 11. Deploy All Canisters
         run: dfx deploy
 

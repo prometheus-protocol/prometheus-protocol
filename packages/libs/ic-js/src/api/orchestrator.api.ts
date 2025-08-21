@@ -58,9 +58,9 @@ export const requestUpgrade = async (
   const result = await orchestratorActor.icrc120_upgrade_to([request]);
   const upgradeResult = result[0];
 
-  if ('err' in upgradeResult) {
+  if ('Err' in upgradeResult) {
     throw new Error(
-      `Upgrade request failed: ${JSON.stringify(upgradeResult.err)}`,
+      `Upgrade request failed: ${JSON.stringify(upgradeResult.Err)}`,
     );
   }
 };

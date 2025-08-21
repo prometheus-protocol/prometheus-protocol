@@ -67,6 +67,37 @@ export const idlFactory = ({ IDL }) => {
   );
   const ICRC16Map__5 = IDL.Vec(IDL.Tuple(IDL.Text, ICRC16__4));
   const Result_3 = IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text });
+  const AppListingFilter = IDL.Variant({
+    'publisher' : IDL.Text,
+    'name' : IDL.Text,
+    'namespace' : IDL.Text,
+  });
+  const AppListingRequest = IDL.Record({
+    'prev' : IDL.Opt(IDL.Text),
+    'take' : IDL.Opt(IDL.Nat),
+    'filter' : IDL.Opt(IDL.Vec(AppListingFilter)),
+  });
+  const SecurityTier = IDL.Variant({
+    'Gold' : IDL.Null,
+    'Bronze' : IDL.Null,
+    'Unranked' : IDL.Null,
+    'Silver' : IDL.Null,
+  });
+  const AppListing = IDL.Record({
+    'id' : IDL.Text,
+    'banner_url' : IDL.Text,
+    'publisher' : IDL.Text,
+    'name' : IDL.Text,
+    'description' : IDL.Text,
+    'icon_url' : IDL.Text,
+    'security_tier' : SecurityTier,
+    'category' : IDL.Text,
+    'namespace' : IDL.Text,
+  });
+  const AppListingResponse = IDL.Variant({
+    'ok' : IDL.Vec(AppListing),
+    'err' : IDL.Text,
+  });
   const Time__1 = IDL.Int;
   const AttestationRecord = IDL.Record({
     'audit_type' : IDL.Text,
@@ -74,15 +105,73 @@ export const idlFactory = ({ IDL }) => {
     'auditor' : IDL.Principal,
     'timestamp' : Time__1,
   });
-  const DivergenceRecord = IDL.Record({
-    'report' : IDL.Text,
-    'metadata' : IDL.Opt(ICRC16Map__5),
-    'timestamp' : Time__1,
-    'reporter' : IDL.Principal,
+  const ICRC16Property__1 = IDL.Record({
+    'value' : ICRC16__1,
+    'name' : IDL.Text,
+    'immutable' : IDL.Bool,
   });
-  const AuditRecord = IDL.Variant({
-    'Attestation' : AttestationRecord,
-    'Divergence' : DivergenceRecord,
+  ICRC16__1.fill(
+    IDL.Variant({
+      'Int' : IDL.Int,
+      'Map' : IDL.Vec(IDL.Tuple(IDL.Text, ICRC16__1)),
+      'Nat' : IDL.Nat,
+      'Set' : IDL.Vec(ICRC16__1),
+      'Nat16' : IDL.Nat16,
+      'Nat32' : IDL.Nat32,
+      'Nat64' : IDL.Nat64,
+      'Blob' : IDL.Vec(IDL.Nat8),
+      'Bool' : IDL.Bool,
+      'Int8' : IDL.Int8,
+      'Nat8' : IDL.Nat8,
+      'Nats' : IDL.Vec(IDL.Nat),
+      'Text' : IDL.Text,
+      'Bytes' : IDL.Vec(IDL.Nat8),
+      'Int16' : IDL.Int16,
+      'Int32' : IDL.Int32,
+      'Int64' : IDL.Int64,
+      'Option' : IDL.Opt(ICRC16__1),
+      'Floats' : IDL.Vec(IDL.Float64),
+      'Float' : IDL.Float64,
+      'Principal' : IDL.Principal,
+      'Array' : IDL.Vec(ICRC16__1),
+      'ValueMap' : IDL.Vec(IDL.Tuple(ICRC16__1, ICRC16__1)),
+      'Class' : IDL.Vec(ICRC16Property__1),
+    })
+  );
+  const RunBountyResult__1 = IDL.Record({
+    'result' : IDL.Variant({ 'Invalid' : IDL.Null, 'Valid' : IDL.Null }),
+    'metadata' : ICRC16__1,
+    'trx_id' : IDL.Opt(IDL.Nat),
+  });
+  const Account = IDL.Record({
+    'owner' : IDL.Principal,
+    'subaccount' : IDL.Opt(IDL.Vec(IDL.Nat8)),
+  });
+  const ICRC16Map__1 = IDL.Vec(IDL.Tuple(IDL.Text, ICRC16__1));
+  const ClaimRecord = IDL.Record({
+    'result' : IDL.Opt(RunBountyResult__1),
+    'claim_account' : IDL.Opt(Account),
+    'time_submitted' : IDL.Nat,
+    'claim_id' : IDL.Nat,
+    'caller' : IDL.Principal,
+    'claim_metadata' : ICRC16Map__1,
+    'submission' : ICRC16__1,
+  });
+  const Bounty = IDL.Record({
+    'claims' : IDL.Vec(ClaimRecord),
+    'created' : IDL.Nat,
+    'creator' : IDL.Principal,
+    'token_amount' : IDL.Nat,
+    'bounty_metadata' : ICRC16Map__1,
+    'claimed' : IDL.Opt(IDL.Nat),
+    'token_canister_id' : IDL.Principal,
+    'challenge_parameters' : ICRC16__1,
+    'validation_call_timeout' : IDL.Nat,
+    'bounty_id' : IDL.Nat,
+    'validation_canister_id' : IDL.Principal,
+    'claimed_date' : IDL.Opt(IDL.Nat),
+    'timeout_date' : IDL.Opt(IDL.Nat),
+    'payout_fee' : IDL.Nat,
   });
   const GetCanisterTypeVersionRequest = IDL.Record({
     'canister_type_namespace' : IDL.Text,
@@ -383,74 +472,6 @@ export const idlFactory = ({ IDL }) => {
       'Generic' : IDL.Text,
     }),
   });
-  const ICRC16Property__1 = IDL.Record({
-    'value' : ICRC16__1,
-    'name' : IDL.Text,
-    'immutable' : IDL.Bool,
-  });
-  ICRC16__1.fill(
-    IDL.Variant({
-      'Int' : IDL.Int,
-      'Map' : IDL.Vec(IDL.Tuple(IDL.Text, ICRC16__1)),
-      'Nat' : IDL.Nat,
-      'Set' : IDL.Vec(ICRC16__1),
-      'Nat16' : IDL.Nat16,
-      'Nat32' : IDL.Nat32,
-      'Nat64' : IDL.Nat64,
-      'Blob' : IDL.Vec(IDL.Nat8),
-      'Bool' : IDL.Bool,
-      'Int8' : IDL.Int8,
-      'Nat8' : IDL.Nat8,
-      'Nats' : IDL.Vec(IDL.Nat),
-      'Text' : IDL.Text,
-      'Bytes' : IDL.Vec(IDL.Nat8),
-      'Int16' : IDL.Int16,
-      'Int32' : IDL.Int32,
-      'Int64' : IDL.Int64,
-      'Option' : IDL.Opt(ICRC16__1),
-      'Floats' : IDL.Vec(IDL.Float64),
-      'Float' : IDL.Float64,
-      'Principal' : IDL.Principal,
-      'Array' : IDL.Vec(ICRC16__1),
-      'ValueMap' : IDL.Vec(IDL.Tuple(ICRC16__1, ICRC16__1)),
-      'Class' : IDL.Vec(ICRC16Property__1),
-    })
-  );
-  const RunBountyResult__1 = IDL.Record({
-    'result' : IDL.Variant({ 'Invalid' : IDL.Null, 'Valid' : IDL.Null }),
-    'metadata' : ICRC16__1,
-    'trx_id' : IDL.Opt(IDL.Nat),
-  });
-  const Account = IDL.Record({
-    'owner' : IDL.Principal,
-    'subaccount' : IDL.Opt(IDL.Vec(IDL.Nat8)),
-  });
-  const ICRC16Map__1 = IDL.Vec(IDL.Tuple(IDL.Text, ICRC16__1));
-  const ClaimRecord = IDL.Record({
-    'result' : IDL.Opt(RunBountyResult__1),
-    'claim_account' : IDL.Opt(Account),
-    'time_submitted' : IDL.Nat,
-    'claim_id' : IDL.Nat,
-    'caller' : IDL.Principal,
-    'claim_metadata' : ICRC16Map__1,
-    'submission' : ICRC16__1,
-  });
-  const Bounty = IDL.Record({
-    'claims' : IDL.Vec(ClaimRecord),
-    'created' : IDL.Nat,
-    'creator' : IDL.Principal,
-    'token_amount' : IDL.Nat,
-    'bounty_metadata' : ICRC16Map__1,
-    'claimed' : IDL.Opt(IDL.Nat),
-    'token_canister_id' : IDL.Principal,
-    'challenge_parameters' : ICRC16__1,
-    'validation_call_timeout' : IDL.Nat,
-    'bounty_id' : IDL.Nat,
-    'validation_canister_id' : IDL.Principal,
-    'claimed_date' : IDL.Opt(IDL.Nat),
-    'timeout_date' : IDL.Opt(IDL.Nat),
-    'payout_fee' : IDL.Nat,
-  });
   const ListBountiesFilter = IDL.Variant({
     'claimed_by' : Account,
     'validation_canister' : IDL.Principal,
@@ -550,9 +571,19 @@ export const idlFactory = ({ IDL }) => {
         [Result_3],
         [],
       ),
+    'get_app_listings' : IDL.Func(
+        [AppListingRequest],
+        [AppListingResponse],
+        ['query'],
+      ),
     'get_attestations_for_wasm' : IDL.Func(
-        [IDL.Vec(IDL.Nat8)],
-        [IDL.Vec(AuditRecord)],
+        [IDL.Text],
+        [IDL.Vec(AttestationRecord)],
+        ['query'],
+      ),
+    'get_bounties_for_wasm' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(Bounty)],
         ['query'],
       ),
     'get_canister_type_version' : IDL.Func(
@@ -677,13 +708,12 @@ export const idlFactory = ({ IDL }) => {
         [Result_1],
         [],
       ),
-    'is_wasm_verified' : IDL.Func([IDL.Vec(IDL.Nat8)], [IDL.Bool], ['query']),
+    'is_wasm_verified' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'set_auditor_credentials_canister_id' : IDL.Func(
         [IDL.Principal],
         [Result],
         [],
       ),
-    'set_mcp_orchestrator' : IDL.Func([IDL.Principal], [Result], []),
   });
   return ICRC118WasmRegistryCanister;
 };
