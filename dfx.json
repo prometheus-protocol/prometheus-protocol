@@ -43,6 +43,7 @@
       }
     },
     "app_store_ui": {
+      "dependencies": ["mcp_registry"],
       "app_store_ui": {
         "entrypoint": "packages/apps/app_store_ui/src/index.html"
       },
