@@ -9,20 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/prometheus-protocol/prometheus-protocol/blob/main/LICENSE">
-    <img alt="License" src="https://img.shields.io/badge/license-MIT-blue.svg"/>
-  </a>
-  <a href="https://www.npmjs.com/package/@prometheus-protocol/cli">
-    <img alt="NPM Version" src="https://img.shields.io/npm/v/@prometheus-protocol/cli.svg"/>
-  </a>
-  <a href="https://github.com/prometheus-protocol/prometheus-protocol/actions/workflows/tests.yml">
-    <img alt="Tests" src="https://github.com/prometheus-protocol/prometheus-protocol/actions/workflows/ci.yml/badge.svg" />
-  </a>
-  <a href="https://discord.gg/TbqgYERjYw">
-    <!-- TODO: Replace with your actual Discord invite link -->
-    <img alt="Join our Discord" src="https://dcbadge.limes.pink/api/server/https://discord.gg/TbqgYERjYw?style=flat"/>
-  </a>
-  <img alt="Version" src="https://img.shields.io/github/package-json/v/prometheus-protocol/prometheus-protocol"/>
+  <a href="https://github.com/prometheus-protocol/prometheus-protocol/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue.svg"/></a><a href="https://www.npmjs.com/package/@prometheus-protocol/cli"><img alt="NPM Version" src="https://img.shields.io/npm/v/@prometheus-protocol/cli.svg"/></a><a href="https://github.com/prometheus-protocol/prometheus-protocol/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/prometheus-protocol/prometheus-protocol/actions/workflows/ci.yml/badge.svg" /></a><a href="https://discord.gg/TbqgYERjYw"><img alt="Join our Discord" src="https://dcbadge.limes.pink/api/server/https://discord.gg/TbqgYERjYw?style=flat"/></a><a href="https://github.com/prometheus-protocol/prometheus-protocol"><img alt="Version" src="https://img.shields.io/github/package-json/v/prometheus-protocol/prometheus-protocol"/></a>
 </p>
 
 ---
@@ -70,13 +57,13 @@ As autonomous AI agents proliferate, they rely on a decentralized network of spe
 
 ## Core Features
 
-| Feature | Description               |
-| ------- | ------------------------- | --------------------------------------------------------------------- |
-| 🛡️      | Secure On-Chain OAuth 2.1 | Production-grade identity and authorization for any service.          |
-| 🔎      | Verifiable App Store      | Certified discovery, audit trails, and cryptographic code provenance. |
-| 💸      | ICRC-2 Allowance Payments | Direct, programmable, and low-fee token payments for M2M commerce.    |
-| 🤖      | Agent-Ready APIs          | Built from the ground up for both humans and autonomous agents.       |
-| 🏆      | Open-Source SDKs          | Motoko & TypeScript SDKs for rapid integration and development.       |
+|     | Feature                   | Description                                                           |
+| :-: | ------------------------- | --------------------------------------------------------------------- |
+| 🛡️  | Secure On-Chain OAuth 2.1 | Production-grade identity and authorization for any service.          |
+| 🔎  | Verifiable App Store      | Certified discovery, audit trails, and cryptographic code provenance. |
+| 💸  | ICRC-2 Allowance Payments | Direct, programmable, and low-fee token payments for M2M commerce.    |
+| 🤖  | Agent-Ready APIs          | Built from the ground up for both humans and autonomous agents.       |
+| 🏆  | Open-Source SDKs          | Motoko & TypeScript SDKs for rapid integration and development.       |
 
 ---
 
