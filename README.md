@@ -21,22 +21,27 @@
 
 <p align="center"><a href="https://github.com/prometheus-protocol/prometheus-protocol/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue.svg"/></a>&nbsp;<a href="https://www.npmjs.com/package/@prometheus-protocol/cli"><img alt="NPM Version" src="https://img.shields.io/npm/v/@prometheus-protocol/cli.svg"/></a>&nbsp;<a href="https://github.com/prometheus-protocol/prometheus-protocol/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/prometheus-protocol/prometheus-protocol/actions/workflows/ci.yml/badge.svg" /></a>&nbsp;<a href="https://discord.gg/TbqgYERjYw"><img alt="Join our Discord" src="https://dcbadge.limes.pink/api/server/https://discord.gg/TbqgYERjYw?style=flat"/></a>&nbsp;<a href="https://github.com/prometheus-protocol/prometheus-protocol"><img alt="Version" src="https://img.shields.io/github/package-json/v/prometheus-protocol/prometheus-protocol"/></a></p>
 
+## Project Summary
+
+Prometheus Protocol is the open-source trust layer for the decentralized AI economy on the Internet Computer. We provide a seamless, on-chain experience for **identity, verifiable trust, and programmable payments**—empowering users, agents, and developers to participate in an open, secure machine-to-machine economy. Our full-stack solution includes a verifiable App Store, an on-chain OAuth 2.1 identity provider, and a complete developer toolchain with a CLI and SDKs.
+
 ## Table of Contents
 
 1.  [Problem](#problem)
 2.  [Solution Overview](#solution-overview)
-3.  [Core Features](#core-features)
-4.  [Monetization & Sustainability](#monetization--sustainability)
-5.  [Technologies & ICP Features Used](#technologies--icp-features-used)
-6.  [System Architecture](#system-architecture)
-7.  [Demo Links & Resources](#demo-links--resources)
-8.  [Project Setup](#project-setup)
-9.  [Testing](#testing)
-10. [Deploying to ICP Mainnet](#deploying-to-icp-mainnet)
-11. [Challenges & Learnings](#challenges--learnings)
-12. [Roadmap & Future Work](#roadmap--future-work)
-13. [Deployment Team](#deployment-team)
-14. [License](#license)
+3.  [Hackathon Submission Highlights](#hackathon-submission-highlights)
+4.  [Core Features](#core-features)
+5.  [Monetization & Sustainability](#monetization--sustainability)
+6.  [Technologies & ICP Features Used](#technologies--icp-features-used)
+7.  [System Architecture](#system-architecture)
+8.  [Demo Links & Resources](#demo-links--resources)
+9.  [Project Setup](#project-setup)
+10. [Testing](#testing)
+11. [Deploying to ICP Mainnet](#deploying-to-icp-mainnet)
+12. [Challenges & Learnings](#challenges--learnings)
+13. [Roadmap & Future Work](#roadmap--future-work)
+14. [Deployment Team](#deployment-team)
+15. [License](#license)
 
 ---
 
@@ -48,9 +53,24 @@ As autonomous AI agents proliferate, they rely on a decentralized network of spe
 
 ## Solution Overview
 
-**Prometheus Protocol** is the open-source trust layer for the decentralized AI economy on the Internet Computer. We provide a seamless, on-chain experience for **identity, verifiable trust, and programmable payments**—empowering users, agents, and developers to participate in an open, secure machine-to-machine economy.
+**Prometheus Protocol** provides the solution by creating a transparent, on-chain "app store" for AI infrastructure, governed by cryptographic proofs, economic incentives, and a decentralized community.
 
-[![Watch the Pitch Deck Video](https://i.ytimg.com/vi/4YvL-2Jt0I0/hqdefault.jpg)](https://www.youtube.com/watch?v=4YvL-2Jt0I0)
+[![Watch our Pitch & Demo Video](https://i.ytimg.com/vi/4YvL-2Jt0I0/hqdefault.jpg)](https://www.youtube.com/watch?v=4YvL-2Jt0I0)
+
+---
+
+## Hackathon Submission Highlights
+
+For the WCHL25 National Round, our team focused on building the complete **Trust Layer** to complement our existing economic foundation. This represents a massive leap forward, delivering a full-stack, end-to-end solution for a secure software supply chain.
+
+**Key features built and delivered during this round include:**
+
+- **The Verifiable App Store Backend:** A fully on-chain registry for MCP servers, architected on open ICRC standards (118, 120, 126, 127). It manages versions, cryptographic proofs, and audit attestations, all governed by a DAO.
+- **The Prometheus CLI (`prom-cli`):** A purpose-built command-line interface that serves both sides of the ecosystem:
+  - **For Developers:** `prom-cli submit` allows developers to publish their MCP servers and submit new versions for verification.
+  - **For Auditors:** `prom-cli status` and `attest` commands enable auditors to discover open bounties, review code, and file on-chain cryptographic attestations.
+- **The App Store Frontend:** A user-facing web application for the discovery and inspection of MCP servers. Users can browse the registry and dive deep into any server's on-chain **Prometheus Certificate** to see the underlying audit proofs.
+- **Full Integration of ICRC Standards:** We composed five different ICRC standards into a single, cohesive system, demonstrating the power of the IC's open protocols.
 
 ---
 
@@ -100,7 +120,7 @@ The protocol is a vertically integrated stack where each layer builds upon the l
 ## Demo Links & Resources
 
 - **Live App Store:** [Discover and inspect verified services](https://gyeil-qyaaa-aaaai-q32uq-cai.icp0.io/)
-- **Video Pitch Deck:** [Watch our Vision & Architecture Overview](https://www.youtube.com/watch?v=4YvL-2Jt0I0)
+- **Video Pitch & Demo:** [Watch our Vision, Architecture Overview, and Code Walkthrough](https://www.youtube.com/watch?v=4YvL-2Jt0I0)
 - **Design Document:** [View our UX/UI Research & Design System](design/README.md)
 - **OAuth 2.1 Dashboard:** [Manage clients and grants for the payment protocol](https://bmfnl-jqaaa-aaaai-q32ha-cai.icp0.io/)
 
@@ -182,7 +202,7 @@ The project includes a comprehensive test suite to ensure reliability and correc
 
 ## Challenges & Learnings
 
-Building a full-stack, on-chain trust layer presented several unique challenges:
+Building a full-stack, on-chain trust layer presented several unique challenges during the hackathon:
 
 1.  **On-Chain OAuth 2.1 Security:** Implementing a secure OAuth server on a public blockchain required a novel approach. We leveraged mandatory PKCE, certified responses, and a unique `request_id` system to protect against code interception and malicious boundary nodes, ensuring that secret access tokens are never publicly exposed.
 2.  **ICRC Standard Composability:** Integrating five different ICRC standards (1, 2, 118, 120, 126, 127) into a cohesive system was a significant architectural challenge. It required careful state management and inter-canister communication patterns to ensure data consistency and atomicity where needed.
