@@ -7,18 +7,22 @@ import { Toaster } from './components/ui/sonner';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import ConnectionsPage from './pages/ConnectionsPage';
 import ConnectionDetailsPage from './pages/ConnectionDetailsPage';
+import { configure as configureIcJs } from '@prometheus-protocol/ic-js';
 
-console.log('process.env:', process.env);
-console.log('process.env.DFX_NETWORK:', process.env.DFX_NETWORK);
-console.log(
-  'process.env.CANISTER_ID_MCP_REGISTRY:',
-  process.env.CANISTER_ID_MCP_REGISTRY,
-);
-console.log(
-  'process.env.CANISTER_ID_AUTH_SERVER:',
-  process.env.CANISTER_ID_AUTH_SERVER,
-);
-console.log('process.env.II_URL:', process.env.II_URL);
+// --- CONFIGURE THE SHARED PACKAGE ---
+// This object is created at BUILD TIME. Vite replaces each `process.env`
+// access with a static string.
+const canisterIds = {
+  MCP_REGISTRY: process.env.CANISTER_ID_MCP_REGISTRY!,
+  MCP_ORCHESTRATOR: process.env.CANISTER_ID_MCP_ORCHESTRATOR!,
+  AUTH_SERVER: process.env.CANISTER_ID_AUTH_SERVER!,
+  AUDITOR_CREDENTIALS: process.env.CANISTER_ID_AUDITOR_CREDENTIALS!,
+  // ... add all other canister IDs your app needs
+};
+
+// Pass the static, build-time configuration to the shared library.
+configureIcJs({ canisterIds });
+// ------------------------------------
 
 function App() {
   return (

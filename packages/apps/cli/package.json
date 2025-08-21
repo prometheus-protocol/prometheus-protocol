@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "description": "A CLI for publishing applications to the Prometheus App Store.",
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist/cli.js",
   "bin": {
-    "cli": "./dist/index.js"
+    "cli": "./dist/cli.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "node build.mjs",
     "dev": "tsx src/index.ts",
     "test": "vitest",
     "prepublishOnly": "pnpm build"
@@ -32,6 +32,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.12.12",
     "@types/prompts": "^2.4.9",
+    "esbuild": "^0.25.9",
     "tsx": "^4.10.5",
     "typescript": "^5.4.5",
     "vitest": "^3.2.4"

@@ -24,6 +24,23 @@ import { FaqPage } from './pages/FaqPage';
 import { CommunityPage } from './pages/CommunityPage';
 import { ProtocolPage } from './pages/ProtocolPage';
 
+import { configure as configureIcJs } from '@prometheus-protocol/ic-js';
+
+// --- CONFIGURE THE SHARED PACKAGE ---
+// This object is created at BUILD TIME. Vite replaces each `process.env`
+// access with a static string.
+const canisterIds = {
+  MCP_REGISTRY: process.env.CANISTER_ID_MCP_REGISTRY!,
+  MCP_ORCHESTRATOR: process.env.CANISTER_ID_MCP_ORCHESTRATOR!,
+  AUTH_SERVER: process.env.CANISTER_ID_AUTH_SERVER!,
+  AUDITOR_CREDENTIALS: process.env.CANISTER_ID_AUDITOR_CREDENTIALS!,
+  // ... add all other canister IDs your app needs
+};
+
+// Pass the static, build-time configuration to the shared library.
+configureIcJs({ canisterIds });
+// ------------------------------------
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
