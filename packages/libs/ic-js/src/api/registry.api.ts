@@ -13,6 +13,8 @@ import { calculateSecurityTier, nsToDate } from '../utils.js';
 import { fromNullable } from '@dfinity/utils';
 import { deserializeFromIcrc16Map, deserializeIcrc16Value } from '../icrc16.js';
 
+export type { Registry };
+
 // 1. Define a new, clean interface for a processed attestation.
 // The raw `metadata` is replaced with a simple `payload` object.
 export interface ProcessedAttestation {
@@ -828,6 +830,10 @@ export const getAppDetailsByHash = async (
 
       switch (attestation.audit_type) {
         case 'app_info_v1':
+          console.log(
+            `Processing attestation of type ${attestation.audit_type}:`,
+            payload,
+          );
           const serverUrl = buildServerUrl(
             Principal.fromText(payload.canister_id),
             payload.mcp_path || '',

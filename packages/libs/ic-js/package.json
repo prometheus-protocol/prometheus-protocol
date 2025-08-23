@@ -5,6 +5,7 @@
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
   "scripts": {
+    "test": "vitest",
     "build": "tsc"
   },
   "dependencies": {
@@ -20,7 +21,8 @@
     "@dfinity/utils": "^2.13.2",
     "@prometheus-protocol/declarations": "workspace:*",
     "cross-fetch": "^4.1.0",
-    "jose": "^6.0.12"
+    "jose": "^6.0.12",
+    "pem-file": "^1.0.1"
   },
   "devDependencies": {
     "@types/node": "^24.0.15",

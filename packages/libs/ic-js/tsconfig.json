@@ -7,5 +7,5 @@
     "noEmit": false, // We want this library to be buildable
     "declaration": true // We want to generate .d.ts files
   },
-  "include": ["src"]
+  "include": ["global.d.ts", "src"]
 }

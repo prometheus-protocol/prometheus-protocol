@@ -134,45 +134,44 @@ module HttpRequestParser {
     };
 
     var domain = Option.get(Utils.decodeURIComponent(raw_domain), raw_domain);
-    var url = Option.get(Utils.decodeURIComponent(raw_url), raw_url);
+
+    // --- START FIX ---
+
+    // 1. Work with the RAW, ENCODED URL string. Do NOT decode it yet.
+    var url_in_progress = raw_url;
+
+    // 2. Handle the anchor first, as it's at the very end.
+    let p = Iter.toArray(Text.tokens(url_in_progress, #char('#')));
+    public let anchor = if (p.size() > 1) {
+      url_in_progress := p[0];
+      p[1];
+    } else { "" };
+
+    // 3. Split the remaining raw string into path and query parts.
+    // This is now safe because there is only one '?' in the main structure.
+    let re = Iter.toArray(Text.tokens(url_in_progress, #char('?')));
+
+    // 4. The first part is the ENCODED path. The second is the ENCODED query string.
+    let (encoded_path, encoded_query_string) = switch (re.size()) {
+      case 0 { ("", "") };
+      case 1 { (re[0], "") };
+      case _ { (re[0], re[1]) };
+    };
+
+    // 5. Pass the still-encoded query string to SearchParams.
+    // The SearchParams class will be responsible for decoding the individual parts.
+    public let queryObj : SearchParams = SearchParams(encoded_query_string);
+
+    // 6. NOW, it is safe to decode the path.
+    var url = Option.get(Utils.decodeURIComponent(encoded_path), encoded_path);
+
+    // --- END FIX ---
 
     public let original = if (Text.startsWith(url, #text("http")) or not Text.startsWith(url, #char('/'))) {
       url;
     } else {
       domain # url;
     };
-
-    let p = Iter.toArray(Text.tokens(url, #char('#')));
-
-    public let anchor = if (p.size() > 1) {
-      url := p[0];
-      p[1];
-    } else if (p.size() == 1) {
-      url := p[0];
-      "";
-    } else {
-      "";
-    };
-
-    let re = Iter.toArray(Text.tokens(url, #char('?')));
-
-    let queryString : Text = switch (re.size()) {
-      case (0) {
-        "";
-      };
-      case (1) {
-        url := re[0];
-        "";
-      };
-
-      case (_) {
-        url := re[0];
-        re[1];
-      };
-
-    };
-
-    public let queryObj : SearchParams = SearchParams(queryString);
 
     public let protocol = if (Text.startsWith(url, #text("http://"))) {
       "http";
