@@ -131,14 +131,14 @@ jobs:
       - name: 10b. Build Packages
         run: pnpm build
 
+      - name: 12.b Run Apps Tests
+        run: pnpm test:apps
+
       - name: 11. Deploy All Canisters
         run: dfx deploy
 
       - name: 12. Run PicJS Tests
         run: pnpm test:canisters
-
-      - name: 12.b Run Apps Tests
-        run: pnpm test:apps
 
       - name: 12.c Run Libs Tests
         run: pnpm test:libs
