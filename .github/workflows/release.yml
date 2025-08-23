@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write # to push new commits and tags
+      issues: write # to comment on released issues
+      pull-requests: write # to comment on released pull requests
+      packages: write # to publish packages to npm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Fetch all history for all branches and tags for semantic-release
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          # Set up .npmrc to publish to the public registry
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        # Use `npm ci` for faster, more reliable installs in CI
+        run: npm ci
+
+      - name: Build all packages
+        # Assumes you have a root build script that builds all workspaces
+        run: pnpm build
+
+      - name: Run Semantic Release for Monorepo
+        env:
+          # The GITHUB_TOKEN is automatically provided by GitHub Actions
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The NPM_TOKEN needs to be set in your repository secrets
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npx semantic-release-monorepo

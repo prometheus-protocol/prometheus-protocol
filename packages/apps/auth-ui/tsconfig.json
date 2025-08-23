@@ -8,5 +8,5 @@
       "@prometheus-protocol/ic-js/*": ["../../libs/ic-js/src/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "../../../types"]
 }

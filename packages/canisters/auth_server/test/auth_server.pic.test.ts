@@ -529,6 +529,65 @@ describe('Auth Server Canister (Isolated Tests)', () => {
     });
   });
 
+  describe('Resource URI with Query Parameters', () => {
+    it('should succeed when the resource URI contains a query parameter', async () => {
+      // ARRANGE
+
+      // 1. Define a resource URI that includes a query parameter, mimicking local dev.
+      const resourceUriWithQuery =
+        'http://127.0.0.1:4943/?canisterId=x4hhs-wh777-77774-qaaka-cai';
+
+      // 2. Register a new resource server specifically for this test case.
+      authActor.setIdentity(developerIdentity);
+      const rsResult = await authActor.register_resource_server({
+        name: 'Local Dev Test Server',
+        logo_uri: '',
+        uris: [resourceUriWithQuery],
+        initial_service_principal: Principal.fromText('aaaaa-aa'),
+        scopes: [['openid', '...']],
+        accepted_payment_canisters: [],
+      });
+      if ('err' in rsResult) {
+        throw new Error(
+          `Test setup failed to register RS with query: ${rsResult.err}`,
+        );
+      }
+
+      // 3. Prepare the authorization request.
+      const pkce = await generatePkce();
+
+      // CRITICAL: The `resource` parameter's value must be URL-encoded to be safely
+      // transmitted as part of the parent URL's query string. This is the correct
+      // client behavior.
+      const encodedResource = encodeURIComponent(resourceUriWithQuery);
+
+      const authUrl = `/authorize?response_type=code&client_id=${clientId}&redirect_uri=https%3A%2F%2Fjwt.io&scope=openid&code_challenge=${pkce.challenge}&code_challenge_method=S256&resource=${encodedResource}`;
+
+      const authRequest: HttpRequest = {
+        method: 'GET',
+        url: authUrl,
+        headers: [['Host', authCanisterId.toText()]],
+        body: new Uint8Array(),
+      };
+
+      // ACT: Make the /authorize request.
+      // This is the call that is currently failing.
+      authActor.setPrincipal(Principal.anonymous());
+      const authResponse = await authActor.http_request_update(authRequest);
+
+      // ASSERT: A successful validation should result in a 302 redirect to the login page.
+      // If we get a 400, it means the resource URI validation failed.
+      expect(authResponse.status_code).toBe(302);
+
+      const locationHeader =
+        authResponse.headers.find(
+          (h) => h[0].toLowerCase() === 'location',
+        )?.[1] ?? '';
+      expect(locationHeader).toBeDefined();
+      expect(locationHeader).toContain('/login'); // Or whatever your login path is
+    });
+  });
+
   describe('Refresh Token Grant', () => {
     // Helper to perform a full login flow and return the first set of tokens
     const getInitialTokens = async () => {

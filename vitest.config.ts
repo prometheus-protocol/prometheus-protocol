@@ -64,6 +64,31 @@ export default defineConfig({
           },
         },
       },
+      {
+        // --- Project 3: Unit tests ---
+        test: {
+          name: 'unit-tests',
+          include: ['packages/libs/**/test/**/*.test.ts'],
+
+          server: {
+            deps: {
+              // This external dependency setting will apply to all projects.
+              external: [/^@dfinity\//],
+            },
+          },
+        },
+        resolve: {
+          alias: {
+            '@declarations': path.resolve(
+              __dirname,
+              'packages',
+              'declarations',
+              'src',
+              'generated',
+            ),
+          },
+        },
+      },
     ],
   },
 });

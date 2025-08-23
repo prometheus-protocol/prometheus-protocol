@@ -19,6 +19,7 @@
     "build": "pnpm --filter \"./packages/**\" build",
     "deploy": "dfx deploy",
     "test:apps": "pnpm --filter \"./packages/apps/*\" test",
+    "test:libs": "pnpm --filter \"./packages/libs/*\" test",
     "test:mo": "pnpm --filter \"./packages/canisters/*\" test:mo",
     "test:canisters": "vitest --project canister-tests",
     "test:e2e": "vitest --project e2e-tests",
@@ -32,9 +33,15 @@
     "@dfinity/pic": "^0.13.1",
     "@dfinity/principal": "^2.4.1",
     "@dfinity/utils": "^2.13.2",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/github": "^11.0.4",
+    "@semantic-release/npm": "^12.0.2",
+    "@semantic-release/release-notes-generator": "^14.0.3",
     "cross-fetch": "^4.1.0",
     "jose": "^6.0.12",
     "prettier": "^3.6.2",
+    "semantic-release": "^24.2.7",
+    "semantic-release-monorepo": "^8.0.2",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   }
