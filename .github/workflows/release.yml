@@ -23,16 +23,20 @@ jobs:
           # Fetch all history for all branches and tags for semantic-release
           fetch-depth: 0
 
-      - name: Setup Node.js
+      - name: Setup PNPM
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          # Set up .npmrc to publish to the public registry
-          registry-url: 'https://registry.npmjs.org'
+          node-version: 20
+          cache: 'pnpm'
 
       - name: Install dependencies
         # Use `npm ci` for faster, more reliable installs in CI
-        run: npm ci
+        run: pnpm install
 
       - name: Build all packages
         # Assumes you have a root build script that builds all workspaces
