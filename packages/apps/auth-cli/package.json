@@ -3,7 +3,6 @@
   "version": "0.0.0-development",
   "description": "A CLI for managing authentication in the Prometheus ecosystem.",
   "type": "module",
-  "main": "./dist/cli.js",
   "bin": {
     "auth-cli": "./dist/cli.js"
   },

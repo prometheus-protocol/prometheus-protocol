@@ -3,7 +3,6 @@
   "version": "0.0.0-development",
   "description": "A CLI for publishing applications to the Prometheus App Store.",
   "type": "module",
-  "main": "./dist/cli.js",
   "bin": {
     "app-store-cli": "./dist/cli.js"
   },
