@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "type": "module",
   "types": "./dist/src/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "test": "vitest",
     "build": "tsc"
