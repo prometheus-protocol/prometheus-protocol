@@ -8,6 +8,15 @@
     "test": "vitest",
     "build": "tsc"
   },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "node": {
+        "import": "./dist/index.js"
+      },
+      "import": "./dist/index.js"
+    }
+  },
   "dependencies": {
     "@dfinity/agent": "^2.4.1",
     "@dfinity/auth-client": "^2.4.1",
