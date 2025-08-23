@@ -5,8 +5,7 @@
     "jsx": "react-jsx", // Keep for compatibility, can be removed if no JSX is ever used
     "outDir": "dist",
     "noEmit": false, // We want this library to be buildable
-    "declaration": true, // We want to generate .d.ts files
-    "rootDir": "src"
+    "declaration": true // We want to generate .d.ts files
   },
   "include": ["src", "../../../types"]
 }
