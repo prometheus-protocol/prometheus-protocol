@@ -1,11 +1,8 @@
 import type { Command } from 'commander';
 
 // --- 1. Import from your clean service layer and identity helpers ---
-import {
-  listMyResourceServers,
-  loadDfxIdentity,
-  getCurrentIdentityName,
-} from '@prometheus-protocol/ic-js';
+import { listMyResourceServers } from '@prometheus-protocol/ic-js';
+import { getCurrentIdentityName, loadDfxIdentity } from '../identity.node.js';
 
 export function registerListCommand(program: Command) {
   program

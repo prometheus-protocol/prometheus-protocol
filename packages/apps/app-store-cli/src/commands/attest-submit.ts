@@ -4,10 +4,9 @@ import path from 'node:path';
 import yaml from 'js-yaml';
 import {
   fileAttestation,
-  getCurrentIdentityName,
-  loadDfxIdentity,
   serializeToIcrc16Map,
 } from '@prometheus-protocol/ic-js';
+import { getCurrentIdentityName, loadDfxIdentity } from '../identity.node.js';
 
 export function registerAttestSubmitCommand(program: Command) {
   program

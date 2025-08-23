@@ -2,11 +2,8 @@ import type { Command } from 'commander';
 import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'js-yaml';
-import {
-  addController,
-  getCurrentIdentityName,
-  loadDfxIdentity,
-} from '@prometheus-protocol/ic-js';
+import { addController } from '@prometheus-protocol/ic-js';
+import { getCurrentIdentityName, loadDfxIdentity } from '../identity.node.js';
 
 export function registerAddControllerCommand(program: Command) {
   program

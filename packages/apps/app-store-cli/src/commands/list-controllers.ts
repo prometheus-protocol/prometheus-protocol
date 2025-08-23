@@ -1,9 +1,6 @@
 import type { Command } from 'commander';
-import {
-  getControllers,
-  getCurrentIdentityName,
-  loadDfxIdentity,
-} from '@prometheus-protocol/ic-js';
+import { getControllers } from '@prometheus-protocol/ic-js';
+import { getCurrentIdentityName, loadDfxIdentity } from '../identity.node.js';
 
 export function registerListControllersCommand(program: Command) {
   program

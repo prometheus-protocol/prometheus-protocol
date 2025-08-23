@@ -4,12 +4,11 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import yaml from 'js-yaml';
 import {
-  getCurrentIdentityName,
-  loadDfxIdentity,
   updateWasm,
   uploadWasmChunk,
   VersionTuple,
 } from '@prometheus-protocol/ic-js';
+import { getCurrentIdentityName, loadDfxIdentity } from '../identity.node.js';
 
 // The IC has a 2MB message limit. We chunk at 1.9MB to be safe.
 const CHUNK_SIZE = 1.9 * 1024 * 1024;

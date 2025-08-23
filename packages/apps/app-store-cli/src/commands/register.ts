@@ -1,9 +1,6 @@
 import type { Command } from 'commander';
-import {
-  getCurrentIdentityName,
-  loadDfxIdentity,
-  registerCanister,
-} from '@prometheus-protocol/ic-js';
+import { registerCanister } from '@prometheus-protocol/ic-js';
+import { getCurrentIdentityName, loadDfxIdentity } from '../identity.node.js';
 
 export function registerRegisterCommand(program: Command) {
   program

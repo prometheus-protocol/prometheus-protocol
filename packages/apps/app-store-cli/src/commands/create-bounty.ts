@@ -4,13 +4,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import yaml from 'js-yaml';
 import prompts from 'prompts';
-import {
-  createBounty,
-  approveAllowance,
-  loadDfxIdentity,
-  getCurrentIdentityName, // Import the approval function
-} from '@prometheus-protocol/ic-js';
+import { createBounty, approveAllowance } from '@prometheus-protocol/ic-js';
 import { Principal } from '@dfinity/principal';
+import { getCurrentIdentityName, loadDfxIdentity } from '../identity.node.js';
 
 interface Manifest {
   submission: {

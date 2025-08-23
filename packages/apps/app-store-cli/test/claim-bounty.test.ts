@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import yaml from 'js-yaml';
 import * as api from '@prometheus-protocol/ic-js';
+import * as identityApi from '../src/identity.node.js';
 import { Command } from 'commander';
 import { registerClaimBountyCommand } from '../src/commands/claim-bounty.js';
 import { Principal } from '@dfinity/principal';
@@ -10,6 +11,7 @@ import { Principal } from '@dfinity/principal';
 vi.mock('node:fs');
 vi.mock('node:child_process');
 vi.mock('@prometheus-protocol/ic-js');
+vi.mock('../src/identity.node.js');
 
 describe('claim-bounty command', () => {
   let program: Command;
@@ -24,10 +26,12 @@ describe('claim-bounty command', () => {
 
     // Set up default "happy path" mocks for all dependencies
     vi.mocked(api.claimBounty).mockResolvedValue(123n); // Return a mock claim ID
-    vi.mocked(api.loadDfxIdentity).mockReturnValue({
+    vi.mocked(identityApi.loadDfxIdentity).mockReturnValue({
       getPrincipal: () => Principal.fromText('aaaaa-aa'),
     } as any);
-    vi.mocked(api.getCurrentIdentityName).mockReturnValue('test-auditor');
+    vi.mocked(identityApi.getCurrentIdentityName).mockReturnValue(
+      'test-auditor',
+    );
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation((path) => {
       if (path.toString().endsWith('prometheus.yml')) {

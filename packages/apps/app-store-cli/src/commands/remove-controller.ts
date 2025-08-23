@@ -2,11 +2,8 @@ import type { Command } from 'commander';
 import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'js-yaml';
-import {
-  getCurrentIdentityName,
-  loadDfxIdentity,
-  removeController,
-} from '@prometheus-protocol/ic-js';
+import { removeController } from '@prometheus-protocol/ic-js';
+import { getCurrentIdentityName, loadDfxIdentity } from '../identity.node.js';
 
 export function registerRemoveControllerCommand(program: Command) {
   program

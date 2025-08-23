@@ -140,6 +140,9 @@ jobs:
       - name: 12.b Run Apps Tests
         run: pnpm test:apps
 
+      - name: 12.c Run Libs Tests
+        run: pnpm test:libs
+
       - name: 13. Stop Local Replica
         if: always() # Ensure this runs even if tests fail
         run: dfx stop

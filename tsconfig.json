@@ -21,7 +21,8 @@
     "packages/**/*.d.ts",
     "test/**/*.ts",
     "test/**/*.d.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "types/**/*.d.ts"
   ],
   "exclude": ["node_modules", "dist", ".dfx"]
 }

@@ -2,8 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Command } from 'commander';
 import { registerUpgradeStatusCommand } from '../src/commands/upgrade-status.js';
 import * as api from '@prometheus-protocol/ic-js';
+import * as identityApi from '../src/identity.node.js';
 
 vi.mock('@prometheus-protocol/ic-js');
+vi.mock('../src/identity.node.js');
 
 describe('upgrade-status command', () => {
   let program: Command;
@@ -14,7 +16,7 @@ describe('upgrade-status command', () => {
     vi.clearAllMocks();
     vi.useFakeTimers(); // Use fake timers to control setTimeout
 
-    vi.mocked(api.loadDfxIdentity).mockReturnValue({} as any);
+    vi.mocked(identityApi.loadDfxIdentity).mockReturnValue({} as any);
   });
 
   afterEach(() => {

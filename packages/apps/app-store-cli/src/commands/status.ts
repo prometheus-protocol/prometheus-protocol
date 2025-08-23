@@ -5,12 +5,11 @@ import crypto from 'node:crypto';
 import yaml from 'js-yaml';
 import {
   getCanisterWasmHash,
-  getCurrentIdentityName,
   getVerificationStatus,
   getVersions,
-  loadDfxIdentity,
 } from '@prometheus-protocol/ic-js';
 import { Principal } from '@dfinity/principal';
+import { getCurrentIdentityName, loadDfxIdentity } from '../identity.node.js';
 
 interface Manifest {
   app: {

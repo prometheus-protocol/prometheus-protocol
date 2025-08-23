@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import yaml from 'js-yaml';
 import * as api from '@prometheus-protocol/ic-js';
+import * as identityApi from '../src/identity.node.js';
 import { Principal } from '@dfinity/principal';
 import { Command } from 'commander';
 import { registerStatusCommand } from '../src/commands/status.js';
@@ -10,6 +11,7 @@ import { registerStatusCommand } from '../src/commands/status.js';
 vi.mock('node:fs');
 vi.mock('node:child_process');
 vi.mock('@prometheus-protocol/ic-js');
+vi.mock('../src/identity.node.js');
 
 describe('status command', () => {
   let program: Command;
@@ -52,8 +54,8 @@ describe('status command', () => {
       ],
     });
 
-    vi.mocked(api.loadDfxIdentity).mockReturnValue({} as any);
-    vi.mocked(api.getCurrentIdentityName).mockReturnValue('test-user');
+    vi.mocked(identityApi.loadDfxIdentity).mockReturnValue({} as any);
+    vi.mocked(identityApi.getCurrentIdentityName).mockReturnValue('test-user');
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation((path) => {
       if (path.toString().endsWith('prometheus.yml')) {

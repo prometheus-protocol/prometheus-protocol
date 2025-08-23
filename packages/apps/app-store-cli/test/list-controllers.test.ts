@@ -2,8 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Command } from 'commander';
 import { registerListControllersCommand } from '../src/commands/list-controllers.js';
 import * as api from '@prometheus-protocol/ic-js';
+import * as identityApi from '../src/identity.node.js';
 
 vi.mock('@prometheus-protocol/ic-js');
+vi.mock('../src/identity.node.js');
 
 describe('list-controllers command', () => {
   let program: Command;
@@ -19,7 +21,7 @@ describe('list-controllers command', () => {
     vi.clearAllMocks();
 
     vi.mocked(api.getControllers).mockResolvedValue(mockControllers);
-    vi.mocked(api.loadDfxIdentity).mockReturnValue({} as any);
+    vi.mocked(identityApi.loadDfxIdentity).mockReturnValue({} as any);
   });
 
   it('should call the API and display the list of controllers', async () => {

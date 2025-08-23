@@ -1,9 +1,6 @@
 import type { Command } from 'commander';
-import {
-  getCurrentIdentityName,
-  getVersions,
-  loadDfxIdentity,
-} from '@prometheus-protocol/ic-js';
+import { getVersions } from '@prometheus-protocol/ic-js';
+import { getCurrentIdentityName, loadDfxIdentity } from '../identity.node.js';
 
 export function registerListVersionsCommand(program: Command) {
   program

@@ -2,11 +2,22 @@
   "name": "@prometheus-protocol/ic-js",
   "version": "0.1.0",
   "type": "module",
-  "main": "dist/src/index.js",
-  "types": "dist/src/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
     "test": "vitest",
     "build": "tsc"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./identity.node": {
+      "import": "./dist/identity.node.js",
+      "types": "./dist/identity.node.d.ts"
+    },
+    "./package.json": "./package.json"
   },
   "dependencies": {
     "@dfinity/agent": "^2.4.1",

@@ -5,10 +5,12 @@ import prompts from 'prompts';
 // --- 1. Import the command and the mocked library ---
 import { registerRegisterCommand } from '../src/commands/register.js';
 import * as api from '@prometheus-protocol/ic-js';
+import * as identityApi from '../src/identity.node.js';
 
 // --- 2. Mock the external dependencies ---
 vi.mock('prompts');
 vi.mock('@prometheus-protocol/ic-js');
+vi.mock('../src/identity.node.js');
 
 describe('register command', () => {
   let program: Command;
@@ -27,8 +29,8 @@ describe('register command', () => {
     vi.clearAllMocks();
 
     // --- 4. Set up default mock implementations ---
-    vi.mocked(api.getCurrentIdentityName).mockReturnValue('default');
-    vi.mocked(api.loadDfxIdentity).mockReturnValue(mockIdentity);
+    vi.mocked(identityApi.getCurrentIdentityName).mockReturnValue('default');
+    vi.mocked(identityApi.loadDfxIdentity).mockReturnValue(mockIdentity);
     vi.mocked(api.registerResourceServer).mockResolvedValue(
       mockSuccessResponse as any,
     );

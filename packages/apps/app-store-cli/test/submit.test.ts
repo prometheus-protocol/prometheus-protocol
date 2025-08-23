@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import yaml from 'js-yaml';
 import * as api from '@prometheus-protocol/ic-js';
+import * as identityApi from '../src/identity.node.js';
 import { Command } from 'commander';
 import { registerSubmitCommand } from '../src/commands/submit.js';
 
@@ -9,6 +10,7 @@ import { registerSubmitCommand } from '../src/commands/submit.js';
 vi.mock('node:child_process');
 vi.mock('node:fs');
 vi.mock('@prometheus-protocol/ic-js');
+vi.mock('../src/identity.node.js');
 
 describe('submit command', () => {
   let program: Command;
@@ -31,8 +33,8 @@ describe('submit command', () => {
     // Reset all mocks to a clean state
     vi.clearAllMocks();
 
-    vi.mocked(api.getCurrentIdentityName).mockReturnValue('test-user');
-    vi.mocked(api.loadDfxIdentity).mockReturnValue({} as any);
+    vi.mocked(identityApi.getCurrentIdentityName).mockReturnValue('test-user');
+    vi.mocked(identityApi.loadDfxIdentity).mockReturnValue({} as any);
     vi.mocked(api.submitVerificationRequest).mockResolvedValue(123n);
     vi.mocked(api.serializeToIcrc16Map).mockImplementation((obj) => {
       // Simple mock that converts an object to a Map with ICRC-16-like values

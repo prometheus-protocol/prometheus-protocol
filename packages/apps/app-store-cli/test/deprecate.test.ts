@@ -2,8 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Command } from 'commander';
 import { registerDeprecateCommand } from '../src/commands/deprecate.js';
 import * as api from '@prometheus-protocol/ic-js';
+import * as identityApi from '../src/identity.node.js';
 
 vi.mock('@prometheus-protocol/ic-js');
+vi.mock('../src/identity.node.js');
 
 describe('deprecate command', () => {
   let program: Command;
@@ -18,7 +20,7 @@ describe('deprecate command', () => {
 
     // Mock the API call, we don't need to test the internal hash lookup here
     vi.mocked(api.setDeprecationStatus).mockResolvedValue(undefined);
-    vi.mocked(api.loadDfxIdentity).mockReturnValue({} as any);
+    vi.mocked(identityApi.loadDfxIdentity).mockReturnValue({} as any);
   });
 
   it('should call the API to deprecate a version with a reason', async () => {

@@ -3,11 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import prompts from 'prompts';
 import yaml from 'js-yaml';
-import {
-  createCanisterType,
-  getCurrentIdentityName,
-  loadDfxIdentity,
-} from '@prometheus-protocol/ic-js';
+import { createCanisterType } from '@prometheus-protocol/ic-js';
+import { getCurrentIdentityName, loadDfxIdentity } from '../identity.node.js';
 
 export function registerInitCommand(program: Command) {
   program

@@ -5,6 +5,7 @@ import yaml from 'js-yaml';
 import { Command } from 'commander';
 import { registerInitCommand } from '../src/commands/init.js';
 import * as api from '@prometheus-protocol/ic-js';
+import * as identityApi from '../src/identity.node.js';
 import { Principal } from '@dfinity/principal';
 
 // --- Mock all external dependencies ---
@@ -12,6 +13,7 @@ vi.mock('node:fs');
 vi.mock('prompts');
 vi.mock('node:child_process');
 vi.mock('@prometheus-protocol/ic-js');
+vi.mock('../src/identity.node.js');
 
 describe('init command', () => {
   let program: Command;
@@ -41,10 +43,10 @@ describe('init command', () => {
     vi.mocked(prompts).mockResolvedValue(MOCK_USER_INPUT);
     vi.mocked(fs.existsSync).mockReturnValue(false); // Assume file doesn't exist
     vi.mocked(api.createCanisterType).mockResolvedValue('created'); // Default to 'created' status
-    vi.mocked(api.loadDfxIdentity).mockReturnValue({
+    vi.mocked(identityApi.loadDfxIdentity).mockReturnValue({
       getPrincipal: () => Principal.fromText('aaaaa-aa'),
     } as any);
-    vi.mocked(api.getCurrentIdentityName).mockReturnValue('test-user');
+    vi.mocked(identityApi.getCurrentIdentityName).mockReturnValue('test-user');
   });
 
   it('should create a complete manifest and register a new canister type', async () => {

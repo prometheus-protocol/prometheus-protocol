@@ -6,10 +6,9 @@ import { Principal } from '@dfinity/principal';
 import {
   listMyResourceServers,
   updateResourceServer,
-  loadDfxIdentity,
-  getCurrentIdentityName,
   Auth,
 } from '@prometheus-protocol/ic-js';
+import { getCurrentIdentityName, loadDfxIdentity } from '../identity.node.js';
 
 export function registerUpdateCommand(program: Command) {
   program

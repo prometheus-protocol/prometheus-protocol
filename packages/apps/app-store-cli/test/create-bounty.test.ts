@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import yaml from 'js-yaml';
 import prompts from 'prompts';
 import * as api from '@prometheus-protocol/ic-js';
+import * as identityApi from '../src/identity.node.js';
 import { Command } from 'commander';
 import { registerCreateBountyCommand } from '../src/commands/create-bounty.js';
 
@@ -10,6 +11,7 @@ import { registerCreateBountyCommand } from '../src/commands/create-bounty.js';
 vi.mock('node:fs');
 vi.mock('prompts');
 vi.mock('@prometheus-protocol/ic-js');
+vi.mock('../src/identity.node.js');
 
 describe('create-bounty command', () => {
   let program: Command;
@@ -28,7 +30,7 @@ describe('create-bounty command', () => {
     vi.mocked(prompts).mockResolvedValue({ confirmed: true });
     vi.mocked(api.approveAllowance).mockResolvedValue(0n);
     vi.mocked(api.createBounty).mockResolvedValue(1n); // Return bounty ID 1
-    vi.mocked(api.loadDfxIdentity).mockReturnValue({} as any);
+    vi.mocked(identityApi.loadDfxIdentity).mockReturnValue({} as any);
 
     // Mock filesystem to provide the manifest and wasm
     vi.mocked(fs.existsSync).mockReturnValue(true);

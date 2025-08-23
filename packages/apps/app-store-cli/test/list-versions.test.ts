@@ -2,8 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Command } from 'commander';
 import { registerListVersionsCommand } from '../src/commands/list-versions.js';
 import * as api from '@prometheus-protocol/ic-js';
+import * as identityApi from '../src/identity.node.js';
 
 vi.mock('@prometheus-protocol/ic-js');
+vi.mock('../src/identity.node.js');
 
 describe('list-versions command', () => {
   let program: Command;
@@ -31,7 +33,7 @@ describe('list-versions command', () => {
     vi.clearAllMocks();
 
     vi.mocked(api.getVersions).mockResolvedValue(mockVersions);
-    vi.mocked(api.loadDfxIdentity).mockReturnValue({} as any);
+    vi.mocked(identityApi.loadDfxIdentity).mockReturnValue({} as any);
   });
 
   it('should call the API and display the results in a table', async () => {

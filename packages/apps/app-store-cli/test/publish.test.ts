@@ -5,11 +5,13 @@ import crypto from 'node:crypto';
 import { Command } from 'commander';
 import { registerPublishCommand } from '../src/commands/publish.js';
 import * as api from '@prometheus-protocol/ic-js';
+import * as identityApi from '../src/identity.node.js';
 
 // Mock all external dependencies
 vi.mock('node:fs');
 vi.mock('node:child_process');
 vi.mock('@prometheus-protocol/ic-js');
+vi.mock('../src/identity.node.js');
 
 // The CHUNK_SIZE from the command file, needed for testing the chunking logic
 const CHUNK_SIZE = 1.9 * 1024 * 1024;
@@ -24,8 +26,8 @@ describe('publish command', () => {
 
     vi.mocked(api.updateWasm).mockResolvedValue(undefined);
     vi.mocked(api.uploadWasmChunk).mockResolvedValue(undefined);
-    vi.mocked(api.loadDfxIdentity).mockReturnValue({} as any);
-    vi.mocked(api.getCurrentIdentityName).mockReturnValue('test-user');
+    vi.mocked(identityApi.loadDfxIdentity).mockReturnValue({} as any);
+    vi.mocked(identityApi.getCurrentIdentityName).mockReturnValue('test-user');
     vi.mocked(fs.existsSync).mockReturnValue(true);
 
     // Default mock for a small WASM file

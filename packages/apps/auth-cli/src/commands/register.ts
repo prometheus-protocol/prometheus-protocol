@@ -3,12 +3,8 @@ import prompts from 'prompts';
 import { Principal } from '@dfinity/principal';
 
 // --- Import from your clean service layer and identity helpers ---
-import {
-  registerResourceServer,
-  loadDfxIdentity,
-  getCurrentIdentityName,
-  Auth,
-} from '@prometheus-protocol/ic-js';
+import { registerResourceServer, Auth } from '@prometheus-protocol/ic-js';
+import { getCurrentIdentityName, loadDfxIdentity } from '../identity.node.js';
 
 export function registerRegisterCommand(program: Command) {
   program

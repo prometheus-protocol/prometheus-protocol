@@ -4,9 +4,11 @@ import yaml from 'js-yaml';
 import { Command } from 'commander';
 import { registerUpgradeCommand } from '../src/commands/upgrade.js';
 import * as api from '@prometheus-protocol/ic-js';
+import * as identityApi from '../src/identity.node.js';
 
 vi.mock('node:fs');
 vi.mock('@prometheus-protocol/ic-js');
+vi.mock('../src/identity.node.js');
 
 describe('upgrade command', () => {
   let program: Command;
@@ -19,7 +21,7 @@ describe('upgrade command', () => {
 
     vi.mocked(api.getWasmHashForVersion).mockResolvedValue(mockWasmHash);
     vi.mocked(api.requestUpgrade).mockResolvedValue(undefined);
-    vi.mocked(api.loadDfxIdentity).mockReturnValue({} as any);
+    vi.mocked(identityApi.loadDfxIdentity).mockReturnValue({} as any);
 
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue(

@@ -2,8 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Command } from 'commander';
 import { registerRegisterCommand } from '../src/commands/register.js';
 import * as api from '@prometheus-protocol/ic-js';
+import * as identityApi from '../src/identity.node.js';
 
 vi.mock('@prometheus-protocol/ic-js');
+vi.mock('../src/identity.node.js');
 
 describe('register command', () => {
   let program: Command;
@@ -16,7 +18,7 @@ describe('register command', () => {
     vi.clearAllMocks();
 
     vi.mocked(api.registerCanister).mockResolvedValue(undefined);
-    vi.mocked(api.loadDfxIdentity).mockReturnValue({} as any);
+    vi.mocked(identityApi.loadDfxIdentity).mockReturnValue({} as any);
   });
 
   it('should call the API with the correct canister ID and namespace', async () => {

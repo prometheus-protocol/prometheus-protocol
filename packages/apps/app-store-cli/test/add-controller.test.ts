@@ -4,9 +4,11 @@ import yaml from 'js-yaml';
 import { Command } from 'commander';
 import { registerAddControllerCommand } from '../src/commands/add-controller.js';
 import * as api from '@prometheus-protocol/ic-js';
+import * as identityApi from '../src/identity.node.js';
 
 vi.mock('node:fs');
 vi.mock('@prometheus-protocol/ic-js');
+vi.mock('../src/identity.node.js');
 
 describe('add-controller command', () => {
   let program: Command;
@@ -18,7 +20,7 @@ describe('add-controller command', () => {
     vi.clearAllMocks();
 
     vi.mocked(api.addController).mockResolvedValue(undefined);
-    vi.mocked(api.loadDfxIdentity).mockReturnValue({} as any);
+    vi.mocked(identityApi.loadDfxIdentity).mockReturnValue({} as any);
 
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue(

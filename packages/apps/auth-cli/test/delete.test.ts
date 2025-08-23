@@ -5,12 +5,15 @@ import prompts from 'prompts';
 // --- 1. Import the command and the mocked library ---
 import { registerDeleteCommand } from '../src/commands/delete.js';
 import * as api from '@prometheus-protocol/ic-js';
+import * as identityApi from '../src/identity.node.js';
 
 // --- 2. Mock the external dependencies ---
 // Mock the prompts library to prevent it from actually asking for user input.
 vi.mock('prompts');
+
 // Mock our entire service layer.
 vi.mock('@prometheus-protocol/ic-js');
+vi.mock('../src/identity.node.js');
 
 describe('delete command', () => {
   let program: Command;
@@ -37,7 +40,7 @@ describe('delete command', () => {
     vi.clearAllMocks();
 
     // --- 4. Set up default mock implementations ---
-    vi.mocked(api.loadDfxIdentity).mockReturnValue(mockIdentity);
+    vi.mocked(identityApi.loadDfxIdentity).mockReturnValue(mockIdentity);
     vi.mocked(api.listMyResourceServers).mockResolvedValue(mockServers as any);
     vi.mocked(api.deleteResourceServer).mockResolvedValue({ ok: 'Deleted' });
   });

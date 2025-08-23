@@ -5,9 +5,8 @@ import yaml from 'js-yaml';
 import {
   requestUpgrade,
   getWasmHashForVersion,
-  loadDfxIdentity,
-  getCurrentIdentityName,
 } from '@prometheus-protocol/ic-js';
+import { getCurrentIdentityName, loadDfxIdentity } from '../identity.node.js';
 
 interface Manifest {
   app: {

@@ -4,11 +4,10 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import yaml from 'js-yaml';
 import {
-  getCurrentIdentityName,
-  loadDfxIdentity,
   serializeToIcrc16Map,
   submitVerificationRequest,
 } from '@prometheus-protocol/ic-js';
+import { getCurrentIdentityName, loadDfxIdentity } from '../identity.node.js';
 
 // --- 1. Updated interface to match the final YAML structure ---
 interface Manifest {
