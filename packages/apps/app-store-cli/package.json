@@ -28,6 +28,7 @@
     "@prometheus-protocol/ic-js": "workspace:",
     "commander": "^12.1.0",
     "js-yaml": "^4.1.0",
+    "pem-file": "^1.0.1",
     "prompts": "^2.4.2"
   },
   "devDependencies": {
