@@ -48,4 +48,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # The NPM_TOKEN needs to be set in your repository secrets
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npx semantic-release-monorepo
+        run: pnpm semantic-release-monorepo
