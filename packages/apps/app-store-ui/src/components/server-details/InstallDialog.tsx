@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -173,9 +174,10 @@ function InstallDialogContent({ server }: { server: AppStoreDetails }) {
   return (
     <>
       <DialogHeader className="text-left p-6">
-        <DialogTitle className="text-xl">
-          {configKey} MCP Setup Instructions
-        </DialogTitle>
+        <DialogTitle className="text-xl">MCP Setup Instructions</DialogTitle>
+        <DialogDescription>
+          Follow the instructions below to set up the {server.name} server.
+        </DialogDescription>
       </DialogHeader>
 
       <Tabs

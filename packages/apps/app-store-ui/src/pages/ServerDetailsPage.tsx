@@ -159,7 +159,11 @@ export default function ServerDetailsPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => setDialogState('install')}>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                setDialogState('install');
+              }}>
               I Understand, Proceed
             </AlertDialogAction>
           </AlertDialogFooter>

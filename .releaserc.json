@@ -9,11 +9,6 @@
         "npmPublish": true
       }
     ],
-    [
-      "@semantic-release/github",
-      {
-        "assets": [{ "path": "dist.zip", "label": "Distribution" }]
-      }
-    ]
+    ["@semantic-release/github"]
   ]
 }
