@@ -7,7 +7,7 @@ import {
   Credentials,
   Auth,
 } from '@prometheus-protocol/declarations';
-import { getCanisterId } from './config.js';
+import { getCanisterId, getHost } from './config.js';
 
 /**
  * A generic function to create an actor for any canister.
@@ -21,16 +21,14 @@ const createActor = <T>(
   canisterId: string,
   identity?: Identity,
 ): T => {
+  const host = getHost();
   const agent = new HttpAgent({
-    host:
-      process.env.DFX_NETWORK === 'ic'
-        ? 'https://icp-api.io'
-        : 'http://127.0.0.1:4943',
+    host,
     identity,
   });
 
   // Only fetch the root key for local development
-  if (process.env.DFX_NETWORK !== 'ic') {
+  if (host.includes('localhost') || host.includes('127.0.0.1')) {
     agent.fetchRootKey().catch((err) => {
       console.warn(
         'Unable to fetch root key. Check to ensure that your local replica is running',
