@@ -67,7 +67,7 @@ function loadLocalCanisterIds() {
     const canisterIdsJson = JSON.parse(
       fs.readFileSync(canisterIdsPath, 'utf-8'),
     );
-    // --- FIX 2: Return short names, not long names ---
+    // --- Return short names, not long names ---
     return Object.entries(canisterIdsJson).reduce(
       (acc: Record<string, string>, [name, ids]) => {
         // The key should be 'AUTH_SERVER', not 'CANISTER_ID_AUTH_SERVER'

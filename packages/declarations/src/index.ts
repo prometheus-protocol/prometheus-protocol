@@ -4,5 +4,7 @@ import * as Registry from './generated/mcp_registry/mcp_registry.did.js';
 import * as Orchestrator from './generated/mcp_orchestrator/mcp_orchestrator.did.js';
 import * as Ledger from './generated/icrc1_ledger/icrc1_ledger.did.js';
 
-// --- Create a generic, robust Actor Factory ---
+/**
+ * A generic function to create an actor for any canister.
+ */
 export { Registry, Orchestrator, Ledger, Credentials, Auth };
