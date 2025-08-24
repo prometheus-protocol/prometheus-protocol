@@ -89,6 +89,10 @@ export const getIcrcActor = (canisterId: Principal, identity?: Identity) => {
   );
 };
 
+/**
+ * @param identity Optional identity to use for the actor
+ * @returns
+ */
 export const getCredentialsActor = (identity?: Identity) => {
   return createActor<Credentials._SERVICE>(
     Credentials.idlFactory,
