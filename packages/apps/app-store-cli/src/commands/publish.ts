@@ -72,7 +72,7 @@ export function registerPublishCommand(program: Command) {
           return;
         }
 
-        // --- 1. PREPARE ALL DATA BEFORE ANY API CALLS ---
+        // --- PREPARE ALL DATA BEFORE ANY API CALLS ---
         console.log('   🔬 Analyzing WASM and preparing for upload...');
         const wasmBuffer = fs.readFileSync(wasmPath);
 

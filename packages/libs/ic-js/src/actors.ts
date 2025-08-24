@@ -7,7 +7,7 @@ import {
   Credentials,
   Auth,
 } from '@prometheus-protocol/declarations';
-import { getCanisterId } from './config';
+import { getCanisterId } from './config.js';
 
 // --- Create a generic, robust Actor Factory ---
 // This single function replaces ALL the dfx-generated `createActor` helpers.

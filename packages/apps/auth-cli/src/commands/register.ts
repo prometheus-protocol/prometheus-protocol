@@ -48,7 +48,7 @@ export function registerRegisterCommand(program: Command) {
           },
         ]);
 
-        // --- 3. Get and Validate Canister ID ---
+        // --- Get and Validate Canister ID ---
         let canisterId: string;
         let servicePrincipal: Principal;
         while (true) {
