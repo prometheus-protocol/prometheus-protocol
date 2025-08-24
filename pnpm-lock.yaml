@@ -93,7 +93,7 @@ importers:
         specifier: workspace:*
         version: link:../../declarations
       '@prometheus-protocol/ic-js':
-        specifier: 'workspace:'
+        specifier: workspace:*
         version: link:../../libs/ic-js
       commander:
         specifier: ^12.1.0
@@ -160,7 +160,7 @@ importers:
         specifier: workspace:*
         version: link:../../declarations
       '@prometheus-protocol/ic-js':
-        specifier: 'workspace:'
+        specifier: workspace:*
         version: link:../../libs/ic-js
       '@radix-ui/react-accordion':
         specifier: ^1.2.12
@@ -314,7 +314,7 @@ importers:
         specifier: workspace:*
         version: link:../../declarations
       '@prometheus-protocol/ic-js':
-        specifier: 'workspace:'
+        specifier: workspace:*
         version: link:../../libs/ic-js
       commander:
         specifier: ^12.1.0
@@ -381,7 +381,7 @@ importers:
         specifier: workspace:*
         version: link:../../declarations
       '@prometheus-protocol/ic-js':
-        specifier: 'workspace:'
+        specifier: workspace:*
         version: link:../../libs/ic-js
       '@radix-ui/react-alert-dialog':
         specifier: ^1.1.14
