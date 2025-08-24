@@ -20,8 +20,10 @@ const canisterIds = {
   // ... add all other canister IDs your app needs
 };
 
+const network = process.env.DFX_NETWORK || 'local'; // 'ic' for mainnet, 'local' for local dev
+const host = network === 'ic' ? 'https://icp-api.io' : 'http://127.0.0.1:4943';
 // Pass the static, build-time configuration to the shared library.
-configureIcJs({ canisterIds });
+configureIcJs({ canisterIds, host });
 // ------------------------------------
 
 function App() {

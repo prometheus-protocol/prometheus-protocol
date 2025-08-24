@@ -2,8 +2,11 @@ interface CanisterConfig {
   [canisterName: string]: string; // e.g., { AUTH_SERVER: "aaaa-..." }
 }
 
+const MAINNET_URL = 'https://icp-api.io';
+
 // Internal state for the package. Not exported.
 let _canisterIds: CanisterConfig = {};
+let _host = MAINNET_URL;
 let _isConfigured = false;
 
 /**
@@ -13,6 +16,7 @@ let _isConfigured = false;
  */
 export function configure(config: {
   canisterIds: CanisterConfig;
+  host?: string;
   verbose?: boolean;
 }): void {
   if (_isConfigured) {
@@ -21,6 +25,7 @@ export function configure(config: {
     return;
   }
   _canisterIds = config.canisterIds;
+  _host = config.host || MAINNET_URL;
   _isConfigured = true;
   if (config.verbose)
     console.log('[ic-js] Configured with canister IDs:', _canisterIds);
@@ -52,4 +57,11 @@ export const getCanisterId = (name: string): string => {
   }
 
   return canisterId;
+};
+
+/**
+ * Get the host URL for the current network.
+ */
+export const getHost = (): string => {
+  return _host;
 };

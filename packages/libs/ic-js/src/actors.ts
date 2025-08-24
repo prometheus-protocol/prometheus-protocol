@@ -7,25 +7,28 @@ import {
   Credentials,
   Auth,
 } from '@prometheus-protocol/declarations';
-import { getCanisterId } from './config.js';
+import { getCanisterId, getHost } from './config.js';
 
-// --- Create a generic, robust Actor Factory ---
-// This single function replaces ALL the dfx-generated `createActor` helpers.
+/**
+ * A generic function to create an actor for any canister.
+ * @param idlFactory The IDL factory for the canister
+ * @param canisterId The canister ID to connect to
+ * @param identity Optional identity to use for the actor
+ * @returns An actor instance for the specified canister
+ */
 const createActor = <T>(
   idlFactory: any,
   canisterId: string,
   identity?: Identity,
 ): T => {
+  const host = getHost();
   const agent = new HttpAgent({
-    host:
-      process.env.DFX_NETWORK === 'ic'
-        ? 'https://icp-api.io'
-        : 'http://127.0.0.1:4943',
+    host,
     identity,
   });
 
   // Only fetch the root key for local development
-  if (process.env.DFX_NETWORK !== 'ic') {
+  if (host.includes('localhost') || host.includes('127.0.0.1')) {
     agent.fetchRootKey().catch((err) => {
       console.warn(
         'Unable to fetch root key. Check to ensure that your local replica is running',

@@ -25,6 +25,8 @@ import { registerDaoGenerateBallotCommand } from './commands/dao-generate-ballot
 import { registerDaoFinalizeCommand } from './commands/dao-finalize.js';
 import { registerDiscoverCommand } from './commands/discover.js';
 
+import packageJson from '../package.json' with { type: 'json' };
+
 import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,7 +36,7 @@ const program = new Command();
 program
   .name('app-store-cli')
   .description('A CLI for publishing applications to the Prometheus App Store.')
-  .version('0.1.1')
+  .version(packageJson.version)
   .option(
     '-n, --network <network>',
     "The network to use ('ic' or 'local')",
@@ -91,7 +93,7 @@ program.hook('preAction', (thisCommand) => {
   let canisterIds;
 
   if (network === 'ic') {
-    console.log('[CLI] Using baked-in production canister IDs.');
+    console.log('[CLI] Using production canister IDs.');
     canisterIds = __PROD_CANISTER_IDS__;
 
     if (!canisterIds || Object.keys(canisterIds).length === 0) {
@@ -111,7 +113,11 @@ program.hook('preAction', (thisCommand) => {
   }
 
   // Configure the shared library with the chosen set of IDs
-  configureIcJs({ canisterIds, verbose });
+  const host =
+    network === 'ic' ? 'https://icp-api.io' : 'http://127.0.0.1:4943';
+
+  console.log(`[CLI] Host: ${host}`);
+  configureIcJs({ canisterIds, host, verbose });
 });
 
 // Register all commands
@@ -135,10 +141,5 @@ registerDaoGenerateBallotCommand(program);
 registerDaoFinalizeCommand(program);
 registerDiscoverCommand(program);
 
-// Exporting for testing purposes
-export { program };
-
-// Only parse arguments if the file is being executed directly
-if (process.argv[1].endsWith('cli.js')) {
-  program.parse(process.argv);
-}
+// Parse the command line arguments
+await program.parseAsync(process.argv);
