@@ -19,7 +19,7 @@ export function registerRegisterCommand(program: Command) {
           `\n📝 Registering a new canister using identity: ${identityName}`,
         );
 
-        // --- 2. Gather Canister Details ---
+        // --- Gather Canister Details ---
         const details = await prompts([
           {
             type: 'text',

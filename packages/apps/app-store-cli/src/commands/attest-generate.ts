@@ -69,7 +69,7 @@ const TEMPLATES: Record<string, Record<string, any>> = {
       {
         name: 'example_tool_name',
         cost: '0.00', // Use a string to preserve decimal precision
-        token: 'TOKEN_SYMBOL', // e.g., ICP, ckUSDT
+        token: 'TOKEN_SYMBOL', // e.g., ICP, PMP, ckUSDT
         description:
           'A clear, human-readable description of what this tool does and when the cost is incurred.',
       },
