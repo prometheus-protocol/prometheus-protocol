@@ -12,7 +12,7 @@ export function registerRegisterCommand(program: Command) {
     .description('Register a new IC canister as a resource server.')
     .action(async () => {
       try {
-        // --- 1. Load Identity ---
+        // --- Load Identity ---
         const identityName = getCurrentIdentityName();
         const identity = loadDfxIdentity(identityName);
         console.log(
