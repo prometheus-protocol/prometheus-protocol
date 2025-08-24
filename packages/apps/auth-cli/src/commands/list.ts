@@ -10,18 +10,18 @@ export function registerListCommand(program: Command) {
     .description('List all resource servers registered by your identity.')
     .action(async () => {
       try {
-        // --- 2. The command layer is responsible for loading the identity ---
+        // --- The command layer is responsible for loading the identity ---
         const identityName = getCurrentIdentityName();
         const identity = loadDfxIdentity(identityName);
 
         console.log(`Using identity: ${identityName}`);
         console.log('Fetching your registered resource servers...');
 
-        // --- 3. Call the clean service function ---
+        // --- Call the clean service function ---
         // The service layer handles the actor creation and throws on error.
         const servers = await listMyResourceServers(identity);
 
-        // --- 4. The presentation logic remains in the command layer ---
+        // --- The presentation logic remains in the command layer ---
         if (servers.length === 0) {
           console.log('You have no resource servers registered.');
           return;
@@ -37,7 +37,7 @@ export function registerListCommand(program: Command) {
           })),
         );
       } catch (error) {
-        // --- 5. Add robust error handling ---
+        // --- Add robust error handling ---
         console.error(`\n❌ An error occurred: ${(error as Error).message}`);
       }
     });

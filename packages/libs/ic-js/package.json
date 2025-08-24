@@ -1,6 +1,6 @@
 {
   "name": "@prometheus-protocol/ic-js",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "type": "module",
   "types": "./dist/src/index.d.ts",
   "publishConfig": {

@@ -9,7 +9,7 @@ import {
 } from '@prometheus-protocol/declarations';
 import { getCanisterId } from './config';
 
-// --- STEP 1: Create a generic, robust Actor Factory ---
+// --- Create a generic, robust Actor Factory ---
 // This single function replaces ALL the dfx-generated `createActor` helpers.
 const createActor = <T>(
   idlFactory: any,
@@ -40,7 +40,7 @@ const createActor = <T>(
   });
 };
 
-// --- STEP 3: Re-implement your actor getters to use the new system ---
+// --- Re-implement your actor getters to use the new system ---
 // This is now clean, explicit, and fully controlled by you.
 
 export const getRegistryActor = (identity?: Identity) => {

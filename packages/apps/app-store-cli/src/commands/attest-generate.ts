@@ -96,7 +96,7 @@ export function registerAttestGenerateCommand(program: Command) {
     // --- The --wasm-hash option has been REMOVED ---
     .action((options) => {
       try {
-        // --- NEW LOGIC: Automatically find and hash the WASM ---
+        // --- Automatically find and hash the WASM ---
         const prometheusPath = path.join(process.cwd(), 'prometheus.yml');
         if (!fs.existsSync(prometheusPath)) {
           console.error(
