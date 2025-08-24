@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Command } from 'commander';
 import prompts from 'prompts';
 
-// --- 1. Import the command and the mocked library ---
+// --- Import the command and the mocked library ---
 import { registerDeleteCommand } from '../src/commands/delete.js';
 import * as api from '@prometheus-protocol/ic-js';
 import * as identityApi from '../src/identity.node.js';

@@ -26,6 +26,7 @@
     "format": "prettier --write ."
   },
   "devDependencies": {
+    "@anolilab/semantic-release-pnpm": "^2.0.3",
     "@dfinity/agent": "^2.4.1",
     "@dfinity/candid": "^2.4.1",
     "@dfinity/ic-management": "^6.2.1",

@@ -40,9 +40,9 @@ const createActor = <T>(
   });
 };
 
-// --- Re-implement your actor getters to use the new system ---
-// This is now clean, explicit, and fully controlled by you.
-
+/**
+ * These functions create actors for each canister, using the generic factory above.
+ */
 export const getRegistryActor = (identity?: Identity) => {
   return createActor<Registry._SERVICE>(
     Registry.idlFactory,
