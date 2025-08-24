@@ -76,6 +76,11 @@ export const getAuthActor = (identity?: Identity) => {
   );
 };
 
+/**
+ * @param canisterId The canister ID of the Ledger canister to connect to
+ * @param identity Optional identity to use for the actor
+ * @returns
+ */
 export const getIcrcActor = (canisterId: Principal, identity?: Identity) => {
   return createActor<Ledger._SERVICE>(
     Ledger.idlFactory,

@@ -3,8 +3,8 @@
   "plugins": [
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
-    ["@semantic-release/npm", false],
     "@anolilab/semantic-release-pnpm",
     "@semantic-release/github"
-  ]
+  ],
+  "extends": "semantic-release-monorepo"
 }
