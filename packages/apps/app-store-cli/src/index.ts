@@ -134,11 +134,3 @@ registerClaimBountyCommand(program);
 registerDaoGenerateBallotCommand(program);
 registerDaoFinalizeCommand(program);
 registerDiscoverCommand(program);
-
-// Exporting for testing purposes
-export { program };
-
-// Only parse arguments if the file is being executed directly
-if (process.argv[1].endsWith('cli.js')) {
-  program.parse(process.argv);
-}

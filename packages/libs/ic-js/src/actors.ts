@@ -9,8 +9,13 @@ import {
 } from '@prometheus-protocol/declarations';
 import { getCanisterId } from './config.js';
 
-// --- Create a generic, robust Actor Factory ---
-// This single function replaces ALL the dfx-generated `createActor` helpers.
+/**
+ * A generic function to create an actor for any canister.
+ * @param idlFactory The IDL factory for the canister
+ * @param canisterId The canister ID to connect to
+ * @param identity Optional identity to use for the actor
+ * @returns An actor instance for the specified canister
+ */
 const createActor = <T>(
   idlFactory: any,
   canisterId: string,
