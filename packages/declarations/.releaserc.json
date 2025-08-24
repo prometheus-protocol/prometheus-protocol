@@ -5,6 +5,5 @@
     "@semantic-release/release-notes-generator",
     "@anolilab/semantic-release-pnpm",
     "@semantic-release/github"
-  ],
-  "extends": "semantic-release-monorepo"
+  ]
 }
