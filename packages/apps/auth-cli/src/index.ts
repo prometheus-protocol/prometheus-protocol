@@ -22,6 +22,7 @@ async function main() {
   registerUpdateCommand(program);
   registerDeleteCommand(program);
 
+  // Parse the command line arguments
   await program.parseAsync(process.argv);
 }
 

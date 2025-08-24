@@ -24,7 +24,7 @@
     "@dfinity/principal": "^2.4.1",
     "@dfinity/utils": "^2.13.2",
     "@prometheus-protocol/declarations": "workspace:*",
-    "@prometheus-protocol/ic-js": "workspace:",
+    "@prometheus-protocol/ic-js": "workspace:*",
     "commander": "^12.1.0",
     "js-yaml": "^4.1.0",
     "pem-file": "^1.0.1",

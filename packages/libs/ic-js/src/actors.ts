@@ -51,6 +51,11 @@ export const getRegistryActor = (identity?: Identity) => {
   );
 };
 
+/**
+ *
+ * @param identity Optional identity to use for the actor
+ * @returns
+ */
 export const getOrchestratorActor = (identity?: Identity) => {
   return createActor<Orchestrator._SERVICE>(
     Orchestrator.idlFactory,

@@ -93,7 +93,6 @@ export function registerAttestGenerateCommand(program: Command) {
       '--type <string>',
       'The type of audit to generate a template for (e.g., "security_v1").',
     )
-    // --- The --wasm-hash option has been REMOVED ---
     .action((options) => {
       try {
         // --- Automatically find and hash the WASM ---
