@@ -66,7 +66,7 @@ export function registerRegisterCommand(program: Command) {
           }
         }
 
-        // --- 4. Determine URL (Local vs. Production) ---
+        // --- Determine URL (Local vs. Production) ---
         const { isLocalDev } = await prompts({
           type: 'confirm',
           name: 'isLocalDev',

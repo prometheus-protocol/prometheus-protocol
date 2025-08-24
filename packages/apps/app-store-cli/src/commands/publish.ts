@@ -109,7 +109,7 @@ export function registerPublishCommand(program: Command) {
         const currentIdentityName = getCurrentIdentityName();
         const identity = loadDfxIdentity(currentIdentityName);
 
-        // --- 2. PHASE 1: REGISTER THE WASM ---
+        // --- PHASE 1: REGISTER THE WASM ---
         try {
           console.log(
             '\n   📞 Registering new WASM version with the canister...',
