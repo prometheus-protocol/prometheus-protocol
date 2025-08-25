@@ -91,6 +91,14 @@ export function registerStatusCommand(program: Command) {
         console.log(
           `   Verified by DAO: ${status.isVerified ? '✅ Yes' : '❌ No'}`,
         );
+
+        if (status.verificationRequest) {
+          console.log(`   Repo URL:        ${status.verificationRequest.repo}`);
+          console.log(
+            `   Commit Hash:     ${status.verificationRequest.commit_hash}`,
+          );
+        }
+
         // ... (The detailed bounty and attestation display logic remains the same and is excellent)
         console.log(
           `\n   Found ${status.bounties.length} tokenized bounty(s):`,

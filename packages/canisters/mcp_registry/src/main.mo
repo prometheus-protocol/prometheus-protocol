@@ -1092,6 +1092,24 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     return Buffer.toArray(out);
   };
 
+  /**
+   * @notice Fetches the original verification request metadata for a given WASM ID.
+   * @param wasm_id The hex-encoded SHA-256 hash of the WASM.
+   * @return The optional `VerificationRequest` record, which contains the repo URL and commit hash.
+   *         Returns `null` if no request is found for the given ID.
+   */
+  public shared query func get_verification_request(wasm_id : Text) : async ?ICRC126Service.VerificationRequest {
+    // 1. Access the `requests` map from the ICRC-126 library's state.
+    let all_requests = icrc126().state.requests;
+
+    // 2. Perform a direct lookup using the wasm_id as the key.
+    //    This is highly efficient as it's a hash map lookup.
+    let result = Map.get(all_requests, Map.thash, wasm_id);
+
+    // 3. Return the result. `Map.get` returns an optional, which matches our function's return type.
+    return result;
+  };
+
   //------------------- SAMPLE FUNCTION -------------------//
 
   public shared func hello() : async Text {

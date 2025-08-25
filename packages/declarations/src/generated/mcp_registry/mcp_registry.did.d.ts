@@ -243,6 +243,10 @@ export interface ICRC118WasmRegistryCanister {
     Result_2
   >,
   'get_tip' : ActorMethod<[], Tip>,
+  'get_verification_request' : ActorMethod<
+    [string],
+    [] | [VerificationRequest]
+  >,
   'hello' : ActorMethod<[], string>,
   'icrc10_supported_standards' : ActorMethod<[], Array<SupportedStandard>>,
   'icrc118_create_canister_type' : ActorMethod<

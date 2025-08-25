@@ -445,6 +445,12 @@ type ICRC118WasmRegistryCanister =
    get_canister_type_version: (req: GetCanisterTypeVersionRequest) ->
     (Result_2) query;
    get_tip: () -> (Tip) query;
+   /// * @notice Fetches the original verification request metadata for a given WASM ID.
+   ///    * @param wasm_id The hex-encoded SHA-256 hash of the WASM.
+   ///    * @return The optional `VerificationRequest` record, which contains the repo URL and commit hash.
+   ///    *         Returns `null` if no request is found for the given ID.
+   get_verification_request: (wasm_id: text) ->
+    (opt VerificationRequest) query;
    hello: () -> (text);
    icrc10_supported_standards: () -> (vec SupportedStandard) query;
    icrc118_create_canister_type: (reqs: vec CreateCanisterType) ->
