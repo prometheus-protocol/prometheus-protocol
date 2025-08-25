@@ -1,170 +1,140 @@
-# Prometheus CLI (`@prometheus-protocol/cli`)
+# Prometheus App Store CLI
 
-A command-line interface for interacting with the Prometheus Protocol, a decentralized software supply chain for the Internet Computer.
-
-This tool allows developers to publish, version, and manage secure, auditable software, and enables operators to safely upgrade their running canisters to trusted new versions.
-
-## Core Concepts
-
-Before using the CLI, it's important to understand a few key concepts:
-
-- **Namespace:** A unique, reverse-domain-style identifier for your application type (e.g., `com.my-company.my-app`). All versions of your application will live under this namespace.
-- **App Metadata vs. Version Data:** The `prometheus.yml` file contains two types of information. The `app` section holds mutable "marketing" metadata (like descriptions and icons) that you can change anytime. The `submission` section holds immutable data (like a git commit hash) that is locked to a specific audit.
-- **Verification:** The process of submitting your canister's WASM for auditing. The CLI helps you initiate this process, which is then carried out by off-chain auditors who file on-chain attestations.
-- **Developer vs. Operator:** The CLI is designed around two distinct roles:
-  - **The Developer:** The person or team who writes the code, submits it for verification, and publishes new versions to the registry.
-  - **The Operator:** The person, team, or DAO who runs a live instance of a canister and needs to upgrade it to a new version published by the developer.
-- **Publish vs. Upgrade:** These are two separate and critical actions:
-  - `publish` is done by a **Developer** to make a new version _available_ in the registry.
-  - `upgrade` is done by an **Operator** to apply a published version to their _live canister_.
+The official command-line interface for the Prometheus Protocol. This tool provides a complete suite of commands for developers, auditors, and DAO members to manage the full lifecycle of a decentralized application.
 
 ## Prerequisites
 
-1.  **Node.js and npm:** You must have Node.js (v18 or higher) and npm installed.
-2.  **Internet Computer SDK:** You need `dfx` installed and a `dfx` identity created. You can check your current identity with `dfx identity whoami`.
+- [Node.js](https://nodejs.org/) (v18 or higher)
+- [DFX SDK](https://internetcomputer.org/docs/current/developer-docs/setup/install/) (for identity management)
 
-## Installation
+## Installation & Usage
 
-```bash
-npm install -g @prometheus-protocol/cli
-```
+The CLI is designed for two primary use cases:
 
-## The Developer Journey: Publishing Your Application
-
-This workflow takes your local code and makes it a trusted, published version in the registry, with a corresponding public-facing app page.
-
-### Step 1: Initialize Your Project
-
-In your project's root directory, run the `init` command. This creates a `prometheus.yml` file that describes your application.
+**1. For Developers (Inside a Project):**
+The CLI is included as a `devDependency` in projects created with `create-motoko-mcp-server`. You will interact with it via `npm run` scripts defined in your `package.json`:
 
 ```bash
-@prometheus-protocol/cli init
+# Example from within your app project
+npm run app-store -- <command> [options]
 ```
 
-You will be prompted for your application's namespace, name, description, and repository URL. This file is the single source of configuration for all other CLI commands.
+_Note the required `--` to pass arguments to the script._
+
+**2. For Auditors & DAO Members (Standalone):**
+External users should use `npx` with the full, scoped package name to ensure they are always running the latest version.
+
+```bash
+# Example for an auditor or DAO member
+npx @prometheus-protocol/app-store-cli <command> [options]
+```
+
+For frequent use, you can install it globally:
+
+```bash
+npm install -g @prometheus-protocol/app-store-cli
+```
+
+## Core Concepts
+
+The CLI is organized around the three primary roles within the Prometheus Protocol ecosystem:
+
+- **🧑‍💻 Developers:** Build applications, submit them for verification, and publish new versions.
+- **🕵️ Auditors:** Discover bounties, perform security and quality audits, and submit attestations.
+- **🏛️ DAO Members:** Review completed audits and provide the final on-chain verification for a submission.
+
+## Commands
+
+All commands can be run with the `--help` flag for more details (e.g., `npx @prometheus-protocol/app-store-cli bounty --help`).
 
 ---
 
-### The Verification & Publishing Flow (For a New Version)
+### **🧑‍💻 Developer Commands**
 
-This is the core flow for getting your code audited and released.
+Commands for managing the application lifecycle from within your project.
 
-#### Step 2a: Submit for Verification
-
-Once your code is ready for audit, fill in the `git_commit` and `wasm_path` in the `submission` section of your `prometheus.yml`, then run `submit`.
-
-```bash
-@prometheus-protocol/cli submit
-```
-
-This command reads your manifest, calculates your WASM hash, and submits it to the registry to begin the audit process.
-
-#### Step 2b: Check Verification Status
-
-You can check on the progress of the audit at any time.
-
-```bash
-@prometheus-protocol/cli status
-```
-
-#### Step 2c: Publish the Verified Version
-
-After the off-chain audit process is complete and your WASM is marked as verified, you can officially publish it with a semantic version.
-
-```bash
-@prometheus-protocol/cli publish --version 1.0.0
-```
-
-This creates a new version record (e.g., `v1.0.0`) in the registry, links it to the verified WASM hash, and makes it available for operators to upgrade to.
+- `npm run app-store init`
+  - Initializes a new **`prometheus.yml`** configuration file in the current directory.
+- `npm run app-store submit`
+  - Submits your WASM hash and metadata for verification based on your config.
+- `npm run app-store status`
+  - Checks the current verification status of your application.
+- `npm run app-store -- publish`
+  - Publishes a new, DAO-verified version of your application to the App Store.
 
 ---
 
-### Managing Your App's Metadata (Marketing Info)
+### **🕵️ Auditor & Bounty Commands**
 
-This flow is for managing your application's public-facing page in the app store.
+Commands for discovering, auditing, and claiming rewards.
 
-#### Step 2d: Update Your App's Metadata
-
-You can update your app's name, description, icon URLs, etc., at any time. Simply edit the `app` section of your `prometheus.yml` file and run the `update-metadata` command.
-
-```bash
-@prometheus-protocol/cli update-metadata
-```
-
-This pushes your local marketing metadata to the on-chain metadata canister, updating your app's page without requiring a new code audit.
+- `npx @prometheus-protocol/app-store-cli bounty list`
+  - Lists all available bounties on the network, with powerful filtering options.
+- `npx @prometheus-protocol/app-store-cli bounty create`
+  - Creates a new bounty to incentivize a specific audit for a WASM.
+- `npx @prometheus-protocol/app-store-cli bounty claim`
+  - Claims a bounty after a corresponding attestation has been filed.
+- `npx @prometheus-protocol/app-store-cli attest generate`
+  - Generates a template JSON file for a specific audit type.
+- `npx @prometheus-protocol/app-store-cli attest submit`
+  - Submits a completed attestation file to the network.
 
 ---
 
-### Step 3: Manage Permissions
+### **🏛️ DAO Commands**
 
-To allow an operator to upgrade their canisters to your new version, you must grant them permission.
+Commands for governance and final verification.
 
-```bash
-# Grant permission
-@prometheus-protocol/cli add-controller --principal <operator-principal-id>
+- `npx @prometheus-protocol/app-store-cli dao list`
+  - Lists all WASM submissions that have new, unreviewed attestations.
+- `npx @prometheus-protocol/app-store-cli dao generate-ballot`
+  - Generates a template file for a DAO member to formalize their vote.
+- `npx @prometheus-protocol/app-store-cli dao finalize`
+  - Submits a completed decision ballot file to finalize a submission.
 
-# Revoke permission later if needed
-@prometheus-protocol/cli remove-controller --principal <operator-principal-id>
-```
+---
 
-## The Operator Journey: Upgrading a Live Canister
+## 📖 End-to-End Workflow Example
 
-This workflow is for managing a live canister and upgrading it to a new, trusted version from the registry.
+This example shows the complete journey, using the correct invocation for each role.
 
-### Step 1: Register Your Canister (One-Time Setup)
+#### 1. Developer Submits for Audit (from their project)
 
-Before you can upgrade a canister, you must register it with the Prometheus orchestrator, linking it to the namespace of the application it runs. You only need to do this once per canister.
+- `npm run app-store init`
+- `npm run app-store submit`
+- `npm run app-store status`
 
-```bash
-@prometheus-protocol/cli register --canister <your-canister-id> --namespace com.my-company.my-app
-```
+#### 2. Sponsor Creates a Bounty (standalone)
 
-**Note:** This will only succeed if the developer has already added your principal as a controller for that namespace.
+- `npx @prometheus-protocol/app-store-cli bounty create --wasm-id <wasm_id> --type app_info_v1 --amount 1000000`
 
-### Step 2: Discover Available Versions
+#### 3. Auditor Discovers and Completes the Audit (standalone)
 
-To see what versions are available to upgrade to, use `list-versions`.
+- Discover work: `npx @prometheus-protocol/app-store-cli bounty list`
+- Generate template: `npx @prometheus-protocol/app-store-cli attest generate --type app_info_v1`
+- Submit work: `npx @prometheus-protocol/app-store-cli attest submit --file attestation.json`
+- Get paid: `npx @prometheus-protocol/app-store-cli bounty claim --bounty-id <bounty_id>`
 
-```bash
-@prometheus-protocol/cli list-versions --namespace com.my-company.my-app
-```
+#### 4. DAO Reviews and Finalizes (standalone)
 
-This will show you a table of all published versions, their descriptions, and whether they have been marked as deprecated.
+- Discover pending work: `npx @prometheus-protocol/app-store-cli dao list`
+- Generate a decision ballot: `npx @prometheus-protocol/app-store-cli dao generate-ballot --wasm-id <wasm_id>`
+- **Edit the generated `ballot.json`** to set the outcome to `Verified` or `Rejected`.
+- Submit the completed ballot: `npx @prometheus-protocol/app-store-cli dao finalize --file ballot.json`
 
-### Step 3: Perform the Upgrade
+#### 5. Developer Publishes the Verified Version (from their project)
 
-Once you've chosen a version, run the `upgrade` command.
+- Check for DAO approval: `npm run app-store status`
+- Publish the new version: `npm run app-store -- publish --app-version "0.1.0"`
 
-```bash
-@prometheus-protocol/cli upgrade --canister <your-canister-id> --version 1.0.1
-```
+#### 6. End User Installs the App
 
-This command will securely fetch the WASM hash for `v1.0.1` from the registry and instruct the orchestrator to perform the upgrade on your canister.
+- The user can now find the verified application in the App Store, inspect its audit certificate, and install it with confidence.
 
-### Step 4: Check the Upgrade Status
+## Contributing
 
-An upgrade is a process. To confirm if it completed successfully, use the `upgrade-status` command.
+Contributions are welcome! Please open an issue or submit a pull request.
 
-```bash
-@prometheus-protocol/cli upgrade-status
-```
+## License
 
-This will poll the orchestrator and report whether the last upgrade you initiated was successful, failed, or is still in progress.
-
-## Full Command Reference
-
-| Command             | Description                                                   | Key Options                                    |
-| :------------------ | :------------------------------------------------------------ | :--------------------------------------------- |
-| `add-controller`    | Grants upgrade permission to a principal.                     | `-p, --principal <id>`                         |
-| `deprecate`         | Marks a specific version as deprecated (or not).              | `-n <ns>`, `-v <ver>`, `-r <reason>`, `--undo` |
-| `init`              | Creates a `prometheus.yml` manifest in the current directory. |                                                |
-| `list-controllers`  | Lists all principals authorized to upgrade for a namespace.   | `-n, --namespace <ns>`                         |
-| `list-versions`     | Lists all published versions for a namespace.                 | `-n, --namespace <ns>`                         |
-| `publish`           | Publishes a new, verified version to the registry.            | `-v, --version <version>`                      |
-| `register`          | Links a live canister to a namespace for future upgrades.     | `-c, --canister <id>`, `-n <ns>`               |
-| `remove-controller` | Revokes upgrade permission from a principal.                  | `-p, --principal <id>`                         |
-| `status`            | Checks the verification status of the local WASM.             |                                                |
-| `submit`            | Submits the local WASM for verification.                      |                                                |
-| `update-metadata`   | Updates the app's marketing metadata from the manifest.       |                                                |
-| `upgrade`           | Upgrades a live canister to a published version.              | `-c <id>`, `-v <ver>`, `--mode`, `--arg`       |
-| `upgrade-status`    | Polls for the status of the last initiated upgrade.           |                                                |
+This project is licensed under the MIT License.

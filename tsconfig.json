@@ -22,7 +22,8 @@
     "test/**/*.ts",
     "test/**/*.d.ts",
     "vitest.config.ts",
-    "types/**/*.d.ts"
+    "types/**/*.d.ts",
+    "packages/apps/app-store-cli/test/bounty"
   ],
   "exclude": ["node_modules", "dist", ".dfx"]
 }

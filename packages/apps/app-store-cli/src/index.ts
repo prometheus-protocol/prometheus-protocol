@@ -5,29 +5,22 @@ import fs from 'fs';
 import { configure as configureIcJs } from '@prometheus-protocol/ic-js';
 
 import { Command } from 'commander';
-import { registerInitCommand } from './commands/init.js';
-import { registerSubmitCommand } from './commands/submit.js';
-import { registerStatusCommand } from './commands/status.js';
-import { registerPublishCommand } from './commands/publish.js';
-import { registerRegisterCommand } from './commands/register.js';
-import { registerUpgradeCommand } from './commands/upgrade.js';
-import { registerUpgradeStatusCommand } from './commands/upgrade-status.js';
-import { registerAddControllerCommand } from './commands/add-controller.js';
-import { registerRemoveControllerCommand } from './commands/remove-controller.js';
-import { registerListVersionsCommand } from './commands/list-versions.js';
-import { registerListControllersCommand } from './commands/list-controllers.js';
-import { registerDeprecateCommand } from './commands/deprecate.js';
-import { registerCreateBountyCommand } from './commands/create-bounty.js';
-import { registerAttestGenerateCommand } from './commands/attest-generate.js';
-import { registerAttestSubmitCommand } from './commands/attest-submit.js';
-import { registerClaimBountyCommand } from './commands/claim-bounty.js';
-import { registerDaoGenerateBallotCommand } from './commands/dao-generate-ballot.js';
-import { registerDaoFinalizeCommand } from './commands/dao-finalize.js';
+
+import { registerInitCommand } from './commands/init.command.js';
+import { registerSubmitCommand } from './commands/submit.command.js';
+import { registerStatusCommand } from './commands/status.command.js';
+import { registerPublishCommand } from './commands/publish.command.js';
 import { registerDiscoverCommand } from './commands/discover.js';
+import { registerBountyCommands } from './commands/bounty/bounty.commands.js';
+import { registerAttestCommands } from './commands/attest/attest.commands.js';
+import { registerDaoCommands } from './commands/dao/dao.commands.js';
 
 import packageJson from '../package.json' with { type: 'json' };
 
 import { fileURLToPath } from 'url';
+import { registerCanisterCommands } from './commands/canister/canister.commands.js';
+import { registerControllerCommands } from './commands/controller/controller.commands.js';
+import { registerVersionCommands } from './commands/version/version.commands.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -120,26 +113,27 @@ program.hook('preAction', (thisCommand) => {
   configureIcJs({ canisterIds, host, verbose });
 });
 
-// Register all commands
+// --- Register all commands in a logical, user-friendly order ---
+
+// 1. Primary Developer Workflow (The most common entry point)
 registerInitCommand(program);
 registerSubmitCommand(program);
 registerStatusCommand(program);
 registerPublishCommand(program);
-registerRegisterCommand(program);
-registerUpgradeCommand(program);
-registerUpgradeStatusCommand(program);
-registerAddControllerCommand(program);
-registerRemoveControllerCommand(program);
-registerListVersionsCommand(program);
-registerDeprecateCommand(program);
-registerListControllersCommand(program);
-registerCreateBountyCommand(program);
-registerAttestGenerateCommand(program);
-registerAttestSubmitCommand(program);
-registerClaimBountyCommand(program);
-registerDaoGenerateBallotCommand(program);
-registerDaoFinalizeCommand(program);
 registerDiscoverCommand(program);
+
+// 2. Auditor & Bounty Commands (The second major workflow)
+registerBountyCommands(program);
+registerAttestCommands(program);
+
+// 3. DAO Commands (The third major workflow)
+registerDaoCommands(program);
+
+// 4. Advanced Management Commands (Less frequent, administrative tasks)
+// It's good practice to group these related commands together.
+registerCanisterCommands(program); // Assuming you create a parent for register, upgrade, status
+registerControllerCommands(program); // Assuming you create a parent for add, remove, list
+registerVersionCommands(program); // Assuming you create a parent for list, deprecate
 
 // Parse the command line arguments
 await program.parseAsync(process.argv);

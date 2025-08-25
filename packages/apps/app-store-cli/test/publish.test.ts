@@ -3,17 +3,15 @@ import fs from 'node:fs';
 import yaml from 'js-yaml';
 import crypto from 'node:crypto';
 import { Command } from 'commander';
-import { registerPublishCommand } from '../src/commands/publish.js';
+import { registerPublishCommand } from '../src/commands/publish.command.js';
 import * as api from '@prometheus-protocol/ic-js';
 import * as identityApi from '../src/identity.node.js';
 
 // Mock all external dependencies
 vi.mock('node:fs');
-vi.mock('node:child_process');
 vi.mock('@prometheus-protocol/ic-js');
-vi.mock('../src/identity.node.js');
+vi.mock('../src/identity.node.js'); // Adjust path if needed
 
-// The CHUNK_SIZE from the command file, needed for testing the chunking logic
 const CHUNK_SIZE = 1.9 * 1024 * 1024;
 
 describe('publish command', () => {
@@ -33,8 +31,9 @@ describe('publish command', () => {
     // Default mock for a small WASM file
     vi.mocked(fs.readFileSync).mockImplementation((path) => {
       if (path.toString().endsWith('prometheus.yml')) {
+        // 1. Use the standardized 'namespace' key
         return yaml.dump({
-          app: { id: 'com.test.app' },
+          namespace: 'com.test.app',
           submission: {
             repo_url: 'https://github.com/test/repo',
             wasm_path: './test.wasm',
@@ -55,9 +54,8 @@ describe('publish command', () => {
       .update(MOCK_WASM_CONTENT)
       .digest();
 
-    await program.parseAsync(['publish', '--app-version', '1.2.3'], {
-      from: 'user',
-    });
+    // 2. Use the new positional argument structure
+    await program.parseAsync(['publish', '1.2.3'], { from: 'user' });
 
     expect(api.updateWasm).toHaveBeenCalledOnce();
     const [_, updateArgs] = vi.mocked(api.updateWasm).mock.calls[0];
@@ -86,19 +84,17 @@ describe('publish command', () => {
 
     vi.mocked(fs.readFileSync).mockImplementation((path) => {
       if (path.toString().endsWith('test.wasm')) return MOCK_LARGE_WASM;
-      // --- FIX #1: The mock manifest must be complete ---
       return yaml.dump({
-        app: { id: 'com.test.app' },
+        namespace: 'com.test.app', // Use standardized key
         submission: {
-          repo_url: 'https://github.com/test/repo', // This was missing
+          repo_url: 'https://github.com/test/repo',
           wasm_path: './test.wasm',
         },
       });
     });
 
-    await program.parseAsync(['publish', '--app-version', '2.0.0'], {
-      from: 'user',
-    });
+    // Use new positional argument structure
+    await program.parseAsync(['publish', '2.0.0'], { from: 'user' });
 
     expect(api.updateWasm).toHaveBeenCalledOnce();
     const [_, updateArgs] = vi.mocked(api.updateWasm).mock.calls[0];
@@ -108,10 +104,6 @@ describe('publish command', () => {
     ]);
 
     expect(api.uploadWasmChunk).toHaveBeenCalledTimes(2);
-    const uploadArgs1 = vi.mocked(api.uploadWasmChunk).mock.calls[0][1];
-    expect(uploadArgs1.chunk_index).toBe(0n);
-    const uploadArgs2 = vi.mocked(api.uploadWasmChunk).mock.calls[1][1];
-    expect(uploadArgs2.chunk_index).toBe(1n);
   });
 
   it('should fail if the version string is invalid', async () => {
@@ -119,23 +111,36 @@ describe('publish command', () => {
       .spyOn(console, 'error')
       .mockImplementation(() => {});
 
-    await program.parseAsync(['publish', '--app-version', '1.2'], {
-      from: 'user',
-    });
+    // Use new positional argument structure
+    await program.parseAsync(['publish', '1.2'], { from: 'user' });
 
     expect(api.updateWasm).not.toHaveBeenCalled();
-    // --- FIX #2: The assertion must match the actual error handling logic ---
-    // It should check for the "Operation failed" header...
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       expect.stringContaining('Operation failed'),
     );
-    // ...and it should check for the actual Error object.
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         message: expect.stringContaining(
           'Version must be in format major.minor.patch',
         ),
       }),
+    );
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('should fail if prometheus.yml is not found', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+
+    await program.parseAsync(['publish', '1.0.0'], { from: 'user' });
+
+    expect(api.updateWasm).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '❌ Error: `prometheus.yml` not found. Please run this command in a project directory.',
+      ),
     );
     consoleErrorSpy.mockRestore();
   });

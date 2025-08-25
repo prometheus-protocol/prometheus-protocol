@@ -265,6 +265,41 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     console.log(`Found ${bounties.length} bounties for the WASM ID.`);
     expect(bounties).toHaveLength(auditTypes.length);
 
+    // === PHASE 3.5: Auditor discovers bounties using the new generic list endpoint ===
+    console.log('Auditor is discovering bounties...');
+    registryActor.setIdentity(reproAuditorIdentity); // Any auditor can discover
+
+    // Test 1: Filter for a specific, open audit type
+    const openSecurityBountyResult = await registryActor.list_bounties({
+      filter: [[{ audit_type: 'security' }]],
+      take: [10n],
+      prev: [],
+    });
+
+    console.log('Open security bounty result:', openSecurityBountyResult);
+
+    expect('ok' in openSecurityBountyResult).toBe(true);
+    if ('ok' in openSecurityBountyResult) {
+      const listedBounties = openSecurityBountyResult.ok;
+      expect(listedBounties).toHaveLength(1);
+      // Verify the correct bounty was returned
+      expect(listedBounties[0].bounty_id).toBe(bountyIds['security']);
+    }
+
+    // Test 2: Filter for all 'Open' bounties
+    // Test 2: Filter for all 'Open' bounties
+    const allOpenBountiesResult = await registryActor.list_bounties({
+      // This is the corrected filter for 'Open' status
+      filter: [[{ status: { Open: null } }]],
+      take: [10n],
+      prev: [],
+    });
+
+    expect('ok' in allOpenBountiesResult).toBe(true);
+    if ('ok' in allOpenBountiesResult) {
+      expect(allOpenBountiesResult.ok).toHaveLength(3);
+    }
+
     // === PHASE 4: Auditors complete audits and claim bounties ===
     const auditors = [
       { identity: reproAuditorIdentity, type: 'build' },
@@ -294,6 +329,26 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       }
     }
 
+    // === PHASE 4.0: DAO discovers the submission is ready for review ===
+    console.log('DAO is checking for pending submissions...');
+    registryActor.setIdentity(daoIdentity);
+
+    const pendingSubmissions = await registryActor.list_pending_submissions({
+      take: [10n],
+      prev: [],
+    });
+
+    // Assert that our submission is now in the queue
+    expect(pendingSubmissions).toHaveLength(1);
+    const submission = pendingSubmissions[0];
+    expect(submission.wasm_id).toBe(wasmId);
+
+    // Assert that it correctly lists all the new attestations
+    expect(submission.attestation_types).toHaveLength(3);
+    expect(submission.attestation_types).toContain('build');
+    expect(submission.attestation_types).toContain('security');
+    expect(submission.attestation_types).toContain('quality');
+
     // === PHASE 4.1: DAO Finalization ===
     registryActor.setIdentity(daoIdentity);
     const finalizeResult = await registryActor.finalize_verification(
@@ -303,6 +358,20 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     );
     expect('ok' in finalizeResult).toBe(true);
 
+    // === PHASE 4.2: DAO verifies the submission is no longer pending ===
+    console.log(
+      'DAO is verifying the submission has been removed from the queue...',
+    );
+    registryActor.setIdentity(daoIdentity);
+
+    const submissionsAfterFinalization =
+      await registryActor.list_pending_submissions({
+        take: [10n],
+        prev: [],
+      });
+
+    // Assert that the queue is now empty
+    expect(submissionsAfterFinalization).toHaveLength(0);
     // === PHASE 4.5: Verify the new public query for attestations ===
     // Attestations are not public until the verification is finalized.
     registryActor.setIdentity(developerIdentity); // Any identity can query

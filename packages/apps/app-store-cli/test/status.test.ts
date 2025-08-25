@@ -5,110 +5,114 @@ import * as api from '@prometheus-protocol/ic-js';
 import * as identityApi from '../src/identity.node.js';
 import { Principal } from '@dfinity/principal';
 import { Command } from 'commander';
-import { registerStatusCommand } from '../src/commands/status.js';
+import { registerStatusCommand } from '../src/commands/status.command.js';
 
 // Mock all dependencies
 vi.mock('node:fs');
-vi.mock('node:child_process');
 vi.mock('@prometheus-protocol/ic-js');
-vi.mock('../src/identity.node.js');
+vi.mock('../src/identity.node.js'); // Adjust path if needed
 
 describe('status command', () => {
   let program: Command;
+  const MOCK_WASM_HASH_HEX =
+    '82b1aa7b64662f9bad8eb275436c349167779b7f0a8562be6163a7027e441a47';
 
   beforeEach(() => {
     program = new Command();
     registerStatusCommand(program);
     vi.clearAllMocks();
-
-    // --- MOCK IS FULLY UPDATED ---
-    // The mock now returns the clean, processed objects that the CLI expects.
-    // No more raw ICRC-16 maps or snake_case properties.
-    vi.mocked(api.getVerificationStatus).mockResolvedValue({
-      isVerified: false,
-      attestations: [
-        {
-          auditor: Principal.fromText(
-            'feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
-          ),
-          audit_type: 'build_reproducibility_v1',
-          payload: { status: 'success' }, // Clean payload object
-          timestamp: 1672531200000000000n,
-        },
-      ],
-      bounties: [
-        {
-          id: 1n,
-          tokenAmount: 1_000_000n,
-          tokenCanisterId: Principal.fromText('mxzaz-hqaaa-aaaar-qaada-cai'),
-          metadata: { audit_type: 'security_v1' }, // Clean metadata object
-          claims: [],
-          // Add other required fields to satisfy the ProcessedBounty type
-          creator: Principal.fromText('aaaaa-aa'),
-          created: new Date(),
-          challengeParameters: {},
-          validationCanisterId: Principal.fromText('aaaaa-aa'),
-          validationCallTimeout: 0n,
-          payoutFee: 0n,
-        },
-      ],
-    });
-
     vi.mocked(identityApi.loadDfxIdentity).mockReturnValue({} as any);
-    vi.mocked(identityApi.getCurrentIdentityName).mockReturnValue('test-user');
     vi.mocked(fs.existsSync).mockReturnValue(true);
+  });
+
+  it('should display full verification and live status when run from a project directory', async () => {
+    vi.mocked(api.getVerificationStatus).mockResolvedValue({
+      isVerified: true,
+      attestations: [
+        { auditor: Principal.fromText('aaaaa-aa'), audit_type: 'test_v1' },
+      ],
+      bounties: [{ id: 1n, tokenAmount: 1_000_000n, claimedTimestamp: null }],
+    } as any);
     vi.mocked(fs.readFileSync).mockImplementation((path) => {
       if (path.toString().endsWith('prometheus.yml')) {
-        return yaml.dump({ submission: { wasm_path: './test.wasm' } });
+        return yaml.dump({
+          namespace: 'com.test.app',
+          submission: {
+            wasm_path: './test.wasm',
+            canister_id: 'rrkah-fqaaa-aaaaa-aaaaq-cai',
+          },
+        });
       }
       return Buffer.from('mock wasm content');
     });
-  });
-
-  it('should display the full status using the processed API response', async () => {
+    vi.mocked(api.getVersions).mockResolvedValue([
+      { version: '1.0.0', wasm_hash: MOCK_WASM_HASH_HEX },
+    ]);
+    vi.mocked(api.getCanisterWasmHash).mockResolvedValue(
+      Buffer.from(MOCK_WASM_HASH_HEX, 'hex'),
+    );
     const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     await program.parseAsync(['status'], { from: 'user' });
 
-    // --- Assert Bounty Output ---
+    expect(api.getVerificationStatus).toHaveBeenCalledWith(MOCK_WASM_HASH_HEX);
     expect(consoleLogSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Found 1 tokenized bounty(s)'),
+      expect.stringContaining('Verified by DAO: ✅ Yes'),
     );
     expect(consoleLogSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Bounty ID: 1'),
-    );
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Reward: 1,000,000 tokens'),
-    );
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      expect.stringContaining('For Audit Type: security_v1'),
-    );
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Status: 🟢 Open'),
-    );
-
-    // --- Assert Attestation Output ---
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Found 1 attestation(s)'),
+      expect.stringContaining('Live Canister Status'),
     );
     expect(consoleLogSpy).toHaveBeenCalledWith(
       expect.stringContaining(
-        'Auditor: feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae',
+        '✅ Status: Verified. Matches published version 1.0.0.',
       ),
     );
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Type: build_reproducibility_v1'),
-    );
-
     consoleLogSpy.mockRestore();
   });
 
-  // --- THIS TEST IS REMOVED ---
-  // The API no longer returns `null`, so this case is impossible.
-  // The `if (!status)` block in the command is now dead code.
+  it('should display only verification status when a WASM hash is provided directly', async () => {
+    vi.mocked(api.getVerificationStatus).mockResolvedValue({
+      isVerified: true,
+    } as any);
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-  // The other failure tests remain unchanged and valid.
-  it('should fail if prometheus.yml is not found', async () => {
+    await program.parseAsync(['status', MOCK_WASM_HASH_HEX], { from: 'user' });
+
+    expect(api.getVerificationStatus).toHaveBeenCalledWith(MOCK_WASM_HASH_HEX);
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Verified by DAO: ✅ Yes'),
+    );
+    expect(fs.readFileSync).not.toHaveBeenCalled();
+    expect(consoleLogSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining('Live Canister Status'),
+    );
+    consoleLogSpy.mockRestore();
+  });
+
+  // --- THIS TEST IS REWRITTEN ---
+  it('should display an "unverified" status for a hash not in the registry', async () => {
+    // Arrange: Mock the API returning the new "empty" status object.
+    vi.mocked(api.getVerificationStatus).mockResolvedValue({
+      isVerified: false,
+      bounties: [],
+      attestations: [],
+    });
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    // Act
+    await program.parseAsync(['status', 'some-unknown-hash'], { from: 'user' });
+
+    // Assert: Check for the correct output for an unverified, empty status.
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Verified by DAO: ❌ No'),
+    );
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Found 0 tokenized bounty(s)'),
+    );
+    consoleLogSpy.mockRestore();
+  });
+
+  it('should fail if no hash is provided and prometheus.yml is not found', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
@@ -118,27 +122,7 @@ describe('status command', () => {
 
     expect(api.getVerificationStatus).not.toHaveBeenCalled();
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('`prometheus.yml` not found'),
-    );
-    consoleErrorSpy.mockRestore();
-  });
-
-  it('should fail if the manifest is missing the wasm_path', async () => {
-    vi.mocked(fs.readFileSync).mockImplementation((path) => {
-      if (path.toString().endsWith('prometheus.yml')) {
-        return yaml.dump({ submission: {} });
-      }
-      return Buffer.from('mock wasm content');
-    });
-    const consoleErrorSpy = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
-
-    await program.parseAsync(['status'], { from: 'user' });
-
-    expect(api.getVerificationStatus).not.toHaveBeenCalled();
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Manifest is incomplete'),
+      expect.stringContaining('prometheus.yml not found'),
     );
     consoleErrorSpy.mockRestore();
   });

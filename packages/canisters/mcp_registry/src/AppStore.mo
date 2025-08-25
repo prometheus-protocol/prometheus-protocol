@@ -69,6 +69,15 @@ module {
     };
   };
 
+  // Add this new helper function. It's designed specifically for filtering.
+  public func getICRC16TextOptional(map : ICRC126.ICRC16Map, key : Text) : ?Text {
+    switch (getICRC16Field(map, key)) {
+      case (null) { return null }; // Not found, return null
+      case (?(#Text(t))) { return ?t }; // Found and is Text, return the optional value
+      case (_) { return null }; // Found but is wrong type, return null
+    };
+  };
+
   // Helper function to determine the security tier based on a list of completed audits.
   public func calculate_security_tier(completed_audits : [Text]) : SecurityTier {
     // Helper to check if a specific audit is present.
