@@ -46,7 +46,7 @@ describe('dao list command', () => {
     // Check the content passed to the table to ensure it's formatted correctly
     const tableData = consoleTableSpy.mock.calls[0][0];
     expect(tableData[0]).toEqual({
-      'WASM ID (first 12 chars)': 'a1b2c3d4e5f6',
+      'WASM ID': 'a1b2c3d4e5f6a1b2c3d4e5f6',
       'Repo URL': 'https://github.com/test/repo',
       'Commit Hash (hex)': 'deadbeef',
       'Completed Audits': 'security_v1, build_reproducibility_v1',

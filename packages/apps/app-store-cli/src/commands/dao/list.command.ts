@@ -35,7 +35,7 @@ export function registerDaoListCommand(program: Command) {
 
         // 3. Format the raw data into a human-readable table.
         const formattedSubmissions = submissions.map((sub) => ({
-          'WASM ID (first 12 chars)': sub.wasm_id.substring(0, 12),
+          'WASM ID': sub.wasm_id,
           'Repo URL': sub.repo_url,
           // Convert the commit hash from a byte array to a readable hex string.
           'Commit Hash (hex)': Buffer.from(sub.commit_hash).toString('hex'),
