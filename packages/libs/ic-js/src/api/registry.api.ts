@@ -4,13 +4,16 @@ import { Registry } from '@prometheus-protocol/declarations';
 import { Principal } from '@dfinity/principal';
 import {
   AppListing,
+  BountyListingRequest,
+  BountyStatus,
   CanisterType,
   GetCanisterTypesRequest,
   ICRC16Map,
+  PendingSubmission,
   VerificationOutcome,
 } from '@prometheus-protocol/declarations/mcp_registry/mcp_registry.did.js';
 import { calculateSecurityTier, nsToDate } from '../utils.js';
-import { fromNullable } from '@dfinity/utils';
+import { fromNullable, toNullable } from '@dfinity/utils';
 import { deserializeFromIcrc16Map, deserializeIcrc16Value } from '../icrc16.js';
 
 export type { Registry };
@@ -961,6 +964,149 @@ export const getAppStoreListings = async (): Promise<AppStoreListing[]> => {
   } catch (error) {
     console.error(`Error calling get_app_listings:`, error);
     // Return an empty array on network/agent-level failure so the UI doesn't break.
+    return [];
+  }
+};
+
+// 1. Define the new, more powerful filter types that match the canister.
+// Using a discriminated union in TypeScript is the perfect way to model this.
+type BountyStatusInput = 'Open' | 'Claimed';
+export type BountyFilterInput =
+  | { status: BountyStatusInput }
+  | { audit_type: string }
+  | { creator: Principal };
+
+export interface ListBountiesRequestInput {
+  filter?: BountyFilterInput[];
+  take?: bigint;
+  prev?: bigint;
+}
+
+/**
+ * Request parameters for the new list_bounties canister endpoint.
+ */
+export interface ListBountiesRequest {
+  filter?: BountyFilterInput[];
+  take?: bigint;
+  prev?: bigint; // The bounty_id of the last item from the previous page
+}
+
+/**
+ * Fetches a paginated and filtered list of all bounties from the registry.
+ * This function processes the raw canister data into a clean, developer-friendly format.
+ * @param identity The identity to use for the call (can be anonymous).
+ * @param request The filter and pagination options for the query.
+ */
+export const listBounties = async (
+  identity: Identity,
+  request: ListBountiesRequest,
+): Promise<ProcessedBounty[]> => {
+  const registryActor = getRegistryActor(identity);
+  try {
+    // 2. Transform the user-friendly request object into the format Candid expects.
+    const requestFilters =
+      request.filter?.map((f) => {
+        if ('status' in f) {
+          // We explicitly create the correct object shape in each branch.
+          // The compiler can now correctly infer the type.
+          let statusVariant;
+          if (f.status === 'Open') {
+            statusVariant = { Open: null };
+          } else {
+            // It must be 'Claimed'
+            statusVariant = { Claimed: null };
+          }
+          return { status: statusVariant };
+        }
+        if ('audit_type' in f) {
+          return { audit_type: f.audit_type };
+        }
+        if ('creator' in f) {
+          return { creator: f.creator };
+        }
+        throw new Error(`Invalid filter provided: ${JSON.stringify(f)}`);
+      }) || [];
+
+    const candidRequest: BountyListingRequest = {
+      filter: toNullable(requestFilters),
+      take: toNullable(request.take),
+      prev: toNullable(request.prev),
+    };
+
+    // 3. Call the new canister endpoint.
+    const result = await registryActor.list_bounties(candidRequest);
+
+    // 4. Handle the Result<> type returned by the canister.
+    if ('err' in result) {
+      // If the canister returns an error, throw it to be caught by the catch block.
+      throw new Error(`Canister returned an error: ${result.err}`);
+    }
+    const rawBounties = result.ok;
+
+    // 5. The processing logic remains the same, but now operates on the successful result.
+    return rawBounties.map((bounty): ProcessedBounty => {
+      const claimedDateNs = fromNullable(bounty.claimed_date);
+      const timeoutDateNs = fromNullable(bounty.timeout_date);
+
+      return {
+        id: bounty.bounty_id,
+        creator: bounty.creator,
+        created: nsToDate(bounty.created),
+        tokenAmount: bounty.token_amount,
+        tokenCanisterId: bounty.token_canister_id,
+        validationCanisterId: bounty.validation_canister_id,
+        validationCallTimeout: bounty.validation_call_timeout,
+        payoutFee: bounty.payout_fee,
+        claims: bounty.claims,
+        metadata: deserializeFromIcrc16Map(bounty.bounty_metadata),
+        challengeParameters: deserializeIcrc16Value(
+          bounty.challenge_parameters,
+        ),
+        claimedTimestamp: fromNullable(bounty.claimed),
+        claimedDate: claimedDateNs ? nsToDate(claimedDateNs) : undefined,
+        timeoutDate: timeoutDateNs ? nsToDate(timeoutDateNs) : undefined,
+      };
+    });
+  } catch (error) {
+    console.error('Error fetching bounties:', error);
+    return [];
+  }
+};
+
+// 2. Define the user-friendly request object for our function.
+export interface ListSubmissionsRequest {
+  take?: bigint;
+  prev?: string; // The wasm_id of the last item from the previous page
+}
+
+/**
+ * Fetches a paginated list of all WASM submissions that are ready for DAO review.
+ * @param identity The identity to use for the call (can be anonymous).
+ * @param request The pagination options for the query.
+ */
+export const listPendingSubmissions = async (
+  identity: Identity,
+  request: ListSubmissionsRequest,
+): Promise<PendingSubmission[]> => {
+  const registryActor = getRegistryActor(identity);
+  try {
+    // 3. Transform the user-friendly request into the format Candid expects.
+    //    Optional values are wrapped in an array: [] for null, [value] for some.
+    const candidRequest = {
+      take: toNullable(request.take),
+      prev: toNullable(request.prev),
+    };
+
+    // 4. Call the new canister endpoint.
+    const submissions =
+      await registryActor.list_pending_submissions(candidRequest);
+
+    // 5. The return type from the canister already matches our desired interface,
+    //    so we can return it directly. No complex processing is needed.
+    return submissions;
+  } catch (error) {
+    console.error('Error fetching pending submissions:', error);
+    // Return an empty array on failure to prevent the CLI from crashing.
     return [];
   }
 };

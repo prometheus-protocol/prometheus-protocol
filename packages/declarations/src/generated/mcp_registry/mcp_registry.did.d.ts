@@ -60,10 +60,10 @@ export interface Bounty {
   'created' : bigint,
   'creator' : Principal,
   'token_amount' : bigint,
-  'bounty_metadata' : ICRC16Map__1,
+  'bounty_metadata' : ICRC16Map,
   'claimed' : [] | [bigint],
   'token_canister_id' : Principal,
-  'challenge_parameters' : ICRC16__1,
+  'challenge_parameters' : ICRC16,
   'validation_call_timeout' : bigint,
   'bounty_id' : bigint,
   'validation_canister_id' : Principal,
@@ -71,13 +71,25 @@ export interface Bounty {
   'timeout_date' : [] | [bigint],
   'payout_fee' : bigint,
 }
+export type BountyFilter = { 'status' : BountyStatus } |
+  { 'audit_type' : string } |
+  { 'creator' : Principal };
+export interface BountyListingRequest {
+  'prev' : [] | [bigint],
+  'take' : [] | [bigint],
+  'filter' : [] | [Array<BountyFilter>],
+}
+export type BountyListingResponse = { 'ok' : Array<Bounty> } |
+  { 'err' : string };
+export type BountyStatus = { 'Claimed' : null } |
+  { 'Open' : null };
 export interface BountySubmissionRequest {
   'account' : [] | [Account],
   'bounty_id' : bigint,
-  'submission' : ICRC16,
+  'submission' : ICRC16__1,
 }
 export type BountySubmissionResult = {
-    'Ok' : { 'result' : [] | [RunBountyResult], 'claim_id' : bigint }
+    'Ok' : { 'result' : [] | [RunBountyResult__1], 'claim_id' : bigint }
   } |
   {
     'Error' : { 'Generic' : string } |
@@ -100,17 +112,17 @@ export interface CanisterVersion {
   'calculated_hash' : Uint8Array | number[],
 }
 export interface ClaimRecord {
-  'result' : [] | [RunBountyResult__1],
+  'result' : [] | [RunBountyResult],
   'claim_account' : [] | [Account],
   'time_submitted' : bigint,
   'claim_id' : bigint,
   'caller' : Principal,
-  'claim_metadata' : ICRC16Map__1,
-  'submission' : ICRC16__1,
+  'claim_metadata' : ICRC16Map,
+  'submission' : ICRC16,
 }
 export interface CreateBountyRequest {
-  'bounty_metadata' : ICRC16Map,
-  'challenge_parameters' : ICRC16,
+  'bounty_metadata' : ICRC16Map__1,
+  'challenge_parameters' : ICRC16__1,
   'start_date' : [] | [bigint],
   'bounty_id' : [] | [bigint],
   'validation_canister_id' : Principal,
@@ -290,7 +302,7 @@ export interface ICRC118WasmRegistryCanister {
     ],
     Array<Bounty>
   >,
-  'icrc127_metadata' : ActorMethod<[], ICRC16Map__1>,
+  'icrc127_metadata' : ActorMethod<[], ICRC16Map>,
   'icrc127_submit_bounty' : ActorMethod<
     [BountySubmissionRequest],
     BountySubmissionResult
@@ -301,10 +313,15 @@ export interface ICRC118WasmRegistryCanister {
   'icrc3_supported_block_types' : ActorMethod<[], Array<BlockType>>,
   'is_controller_of_type' : ActorMethod<[string, Principal], Result_1>,
   'is_wasm_verified' : ActorMethod<[string], boolean>,
+  'list_bounties' : ActorMethod<[BountyListingRequest], BountyListingResponse>,
+  'list_pending_submissions' : ActorMethod<
+    [PaginationRequest],
+    Array<PendingSubmission>
+  >,
   'set_auditor_credentials_canister_id' : ActorMethod<[Principal], Result>,
 }
 export type ICRC16 = { 'Int' : bigint } |
-  { 'Map' : ICRC16Map } |
+  { 'Map' : Array<[string, ICRC16]> } |
   { 'Nat' : bigint } |
   { 'Set' : Array<ICRC16> } |
   { 'Nat16' : number } |
@@ -358,7 +375,7 @@ export interface ICRC16Property__4 {
   'immutable' : boolean,
 }
 export type ICRC16__1 = { 'Int' : bigint } |
-  { 'Map' : Array<[string, ICRC16__1]> } |
+  { 'Map' : ICRC16Map__1 } |
   { 'Nat' : bigint } |
   { 'Set' : Array<ICRC16__1> } |
   { 'Nat16' : number } |
@@ -466,7 +483,7 @@ export interface InitArgList {
 export type InitArgs = {};
 export type ListBountiesFilter = { 'claimed_by' : Account } |
   { 'validation_canister' : Principal } |
-  { 'metadata' : ICRC16Map } |
+  { 'metadata' : ICRC16Map__1 } |
   { 'claimed' : boolean } |
   { 'created_after' : bigint } |
   { 'created_before' : bigint };
@@ -482,6 +499,16 @@ export type ManageControllerResult = { 'Ok' : bigint } |
       { 'Generic' : string } |
       { 'Unauthorized' : null }
   };
+export interface PaginationRequest {
+  'prev' : [] | [string],
+  'take' : [] | [bigint],
+}
+export interface PendingSubmission {
+  'attestation_types' : Array<string>,
+  'wasm_id' : string,
+  'commit_hash' : Uint8Array | number[],
+  'repo_url' : string,
+}
 export type Result = { 'ok' : null } |
   { 'err' : string };
 export type Result_1 = { 'ok' : boolean } |

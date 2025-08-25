@@ -169,6 +169,18 @@ type Result =
    err: text;
    ok;
  };
+type PendingSubmission = 
+ record {
+   attestation_types: vec text;
+   commit_hash: blob;
+   repo_url: text;
+   wasm_id: text;
+ };
+type PaginationRequest = 
+ record {
+   prev: opt text;
+   take: opt nat;
+ };
 type ManageControllerResult = 
  variant {
    Error: variant {
@@ -193,7 +205,7 @@ type ListBountiesFilter =
    claimed_by: Account;
    created_after: nat;
    created_before: nat;
-   metadata: ICRC16Map;
+   metadata: ICRC16Map__1;
    validation_canister: principal;
  };
 type InitArgs = record {};
@@ -318,10 +330,7 @@ type ICRC16__1 =
    Int32: int32;
    Int64: int64;
    Int8: int8;
-   Map: vec record {
-              text;
-              ICRC16__1;
-            };
+   Map: ICRC16Map__1;
    Nat: nat;
    Nat16: nat16;
    Nat32: nat32;
@@ -406,7 +415,10 @@ type ICRC16 =
    Int32: int32;
    Int64: int64;
    Int8: int8;
-   Map: ICRC16Map;
+   Map: vec record {
+              text;
+              ICRC16;
+            };
    Nat: nat;
    Nat16: nat16;
    Nat32: nat32;
@@ -466,7 +478,7 @@ type ICRC118WasmRegistryCanister =
        prev: opt nat;
        take: opt nat;
      }) -> (vec Bounty) query;
-   icrc127_metadata: () -> (ICRC16Map__1) query;
+   icrc127_metadata: () -> (ICRC16Map) query;
    icrc127_submit_bounty: (req: BountySubmissionRequest) ->
     (BountySubmissionResult);
    icrc3_get_archives: (args: GetArchivesArgs) -> (GetArchivesResult) query;
@@ -475,6 +487,16 @@ type ICRC118WasmRegistryCanister =
    icrc3_supported_block_types: () -> (vec BlockType) query;
    is_controller_of_type: (namespace: text, user: principal) -> (Result_1);
    is_wasm_verified: (wasm_id: text) -> (bool) query;
+   /// * @notice Fetches a paginated and filtered list of all bounties.
+   ///    * @param req The request object containing optional filters and pagination cursors.
+   ///    * @return A result containing an array of matching `ICRC127.Bounty` records or an error.
+   list_bounties: (req: BountyListingRequest) ->
+    (BountyListingResponse) query;
+   /// * @notice Fetches a paginated list of all WASM submissions that have new, unreviewed attestations.
+   ///    * @param req The pagination request object.
+   ///    * @return An array of `PendingSubmission` records.
+   list_pending_submissions: (req: PaginationRequest) ->
+    (vec PendingSubmission) query;
    set_auditor_credentials_canister_id: (canister_id: principal) -> (Result);
  };
 type GetWasmsFilter = 
@@ -655,8 +677,8 @@ type CreateBountyResult =
 type CreateBountyRequest = 
  record {
    bounty_id: opt nat;
-   bounty_metadata: ICRC16Map;
-   challenge_parameters: ICRC16;
+   bounty_metadata: ICRC16Map__1;
+   challenge_parameters: ICRC16__1;
    start_date: opt nat;
    timeout_date: nat;
    validation_canister_id: principal;
@@ -666,9 +688,9 @@ type ClaimRecord =
    caller: principal;
    claim_account: opt Account;
    claim_id: nat;
-   claim_metadata: ICRC16Map__1;
-   result: opt RunBountyResult__1;
-   submission: ICRC16__1;
+   claim_metadata: ICRC16Map;
+   result: opt RunBountyResult;
+   submission: ICRC16;
    time_submitted: nat;
  };
 type CanisterVersion = 
@@ -701,20 +723,42 @@ type BountySubmissionResult =
           };
    Ok: record {
          claim_id: nat;
-         result: opt RunBountyResult;
+         result: opt RunBountyResult__1;
        };
  };
 type BountySubmissionRequest = 
  record {
    account: opt Account;
    bounty_id: nat;
-   submission: ICRC16;
+   submission: ICRC16__1;
+ };
+type BountyStatus = 
+ variant {
+   Claimed;
+   Open;
+ };
+type BountyListingResponse = 
+ variant {
+   err: text;
+   ok: vec Bounty;
+ };
+type BountyListingRequest = 
+ record {
+   filter: opt vec BountyFilter;
+   prev: opt nat;
+   take: opt nat;
+ };
+type BountyFilter = 
+ variant {
+   audit_type: text;
+   creator: principal;
+   status: BountyStatus;
  };
 type Bounty = 
  record {
    bounty_id: nat;
-   bounty_metadata: ICRC16Map__1;
-   challenge_parameters: ICRC16__1;
+   bounty_metadata: ICRC16Map;
+   challenge_parameters: ICRC16;
    claimed: opt nat;
    claimed_date: opt nat;
    claims: vec ClaimRecord;

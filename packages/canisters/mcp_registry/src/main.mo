@@ -29,6 +29,7 @@ import Map "mo:map/Map";
 
 import AppStore "AppStore";
 import AuditorCredentials "AuditorCredentials";
+import Bounty "Bounty";
 
 import ICRC118WasmRegistry "../../../../libs/icrc118/src";
 import Service "../../../../libs/icrc118/src/service";
@@ -901,6 +902,194 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
 
     return #ok(Buffer.toArray(out));
+  };
+
+  /**
+   * @notice Fetches a paginated and filtered list of all bounties.
+   * @param req The request object containing optional filters and pagination cursors.
+   * @return A result containing an array of matching `ICRC127.Bounty` records or an error.
+   */
+  public shared query func list_bounties(req : Bounty.BountyListingRequest) : async Bounty.BountyListingResponse {
+    // 1. Handle optional arguments and set defaults.
+    let filters = switch (req.filter) { case null []; case (?fs) fs };
+    let take = switch (req.take) { case null 20; case (?n) Nat.min(n, 100) };
+    let prev = req.prev;
+
+    // 2. Fetch ALL bounties into an in-memory array.
+    let all_bounties = BTree.toValueArray(icrc127().state.bounties);
+
+    Debug.print("[DEBUG] Total bounties fetched: " # debug_show (all_bounties.size()));
+
+    // 3. Define the filtering logic in a helper function.
+    // A bounty must match ALL filters in the request to be included.
+    func matchesAllFilters(bounty : ICRC127.Bounty, filters : [Bounty.BountyFilter]) : Bool {
+      if (filters.size() == 0) return true;
+
+      for (f in filters.vals()) {
+        switch (f) {
+          case (#status(statusFilter)) {
+            let is_claimed = bounty.claimed != null;
+            switch (statusFilter) {
+              case (#Open) { if (is_claimed) return false };
+              case (#Claimed) { if (not is_claimed) return false };
+            };
+          };
+          case (#audit_type(typeFilter)) {
+            // --- START: APPLYING THE REFERENCE PATTERN ---
+
+            // 1. Safely check if challenge_parameters is a Map, just like the reference.
+            switch (bounty.challenge_parameters) {
+              case (#Map(params_map)) {
+                // 2. It's a map! Now we can use our clean helper on it.
+                switch (AppStore.getICRC16TextOptional(params_map, "audit_type")) {
+                  case (?bountyType) {
+                    // The key was found and was Text. Compare the value.
+                    if (bountyType != typeFilter) { return false };
+                  };
+                  case (null) {
+                    // The key was not found within the map, or was the wrong type. Filter fails.
+                    return false;
+                  };
+                };
+              };
+              case (_) {
+                // The challenge_parameters were not a Map at all. Filter fails.
+                return false;
+              };
+            };
+            // --- END: APPLYING THE REFERENCE PATTERN ---
+          };
+          case (#creator(creatorFilter)) {
+            if (bounty.creator != creatorFilter) return false;
+          };
+        };
+      };
+      // If the bounty survived all filters, it's a match.
+      return true;
+    };
+
+    // 4. Apply pagination and filtering to the in-memory list.
+    var started = prev == null;
+    var count : Nat = 0;
+    let out = Buffer.Buffer<ICRC127.Bounty>(take);
+
+    label main for (bounty in all_bounties.vals()) {
+      if (not started) {
+        switch (prev) {
+          case null {};
+          case (?p) {
+            // We skip items until we find the one matching `prev` (the last bounty_id of the previous page).
+            if (bounty.bounty_id == p) { started := true };
+            continue main;
+          };
+        };
+      };
+
+      // `started` is now true.
+      if (matchesAllFilters(bounty, filters)) {
+        out.add(bounty);
+        count += 1;
+        if (count >= take) break main;
+      };
+    };
+
+    return #ok(Buffer.toArray(out));
+  };
+
+  // --- DAO-Specific Endpoints ---
+
+  // Define the shape of the data we'll return for the DAO list command.
+  public type PendingSubmission = {
+    wasm_id : Text;
+    repo_url : Text;
+    commit_hash : Blob;
+    attestation_types : [Text]; // A list of all NEW audit types submitted since the last review.
+  };
+
+  // A standard pagination request type.
+  public type PaginationRequest = {
+    take : ?Nat;
+    prev : ?Text; // The wasm_id of the last item from the previous page.
+  };
+
+  /**
+   * @notice Fetches a paginated list of all WASM submissions that have new, unreviewed attestations.
+   * @param req The pagination request object.
+   * @return An array of `PendingSubmission` records.
+   */
+  public shared query func list_pending_submissions(req : PaginationRequest) : async [PendingSubmission] {
+    let take = switch (req.take) { case null 20; case (?n) Nat.min(n, 100) };
+    let prev = req.prev;
+
+    // This buffer will hold all submissions that are determined to be ready for review.
+    var submissions_to_review = Buffer.Buffer<PendingSubmission>(0);
+
+    // We must iterate through all verification requests to see which ones are pending.
+    let all_requests = icrc126().state.requests;
+
+    for ((wasm_id, request) in Map.entries(all_requests)) {
+      // 1. Get the timestamp of the last time this wasm_id was finalized by the DAO.
+      // If it has never been finalized, the timestamp is effectively 0.
+      let last_finalization_ts : Time.Time = switch (BTree.get(finalization_log, Text.compare, wasm_id)) {
+        case (null) { 0 };
+        case (?record) { record.timestamp };
+      };
+
+      // 2. Get all audit records (attestations and divergences) for this wasm_id.
+      let audit_records = switch (Map.get(icrc126().state.audits, Map.thash, wasm_id)) {
+        case (null) { [] };
+        case (?records) { records };
+      };
+
+      // 3. Find all attestations that are NEWER than the last finalization.
+      var new_attestations = Buffer.Buffer<ICRC126.AttestationRecord>(0);
+      for (record in audit_records.vals()) {
+        switch (record) {
+          case (#Attestation(att_record)) {
+            if (att_record.timestamp > last_finalization_ts) {
+              new_attestations.add(att_record);
+            };
+          };
+          case (_) { /* Ignore divergences for this query */ };
+        };
+      };
+
+      // 4. If we found any new attestations, this submission is ready for review.
+      if (new_attestations.size() > 0) {
+        // Collect the audit types of the new attestations for the response.
+        var new_att_types : [Text] = [];
+        for (att in new_attestations.vals()) {
+          new_att_types := Array.append(new_att_types, [att.audit_type]);
+        };
+
+        submissions_to_review.add({
+          wasm_id = wasm_id;
+          repo_url = request.repo;
+          commit_hash = request.commit_hash;
+          attestation_types = new_att_types;
+        });
+      };
+    };
+
+    // 5. Apply pagination to the in-memory list of reviewable submissions.
+    var started = prev == null;
+    var count : Nat = 0;
+    let out = Buffer.Buffer<PendingSubmission>(take);
+
+    label main for (sub in submissions_to_review.vals()) {
+      if (not started) {
+        switch (prev) {
+          case null {};
+          case (?p) { if (sub.wasm_id == p) { started := true }; continue main };
+        };
+      };
+
+      out.add(sub);
+      count += 1;
+      if (count >= take) break main;
+    };
+
+    return Buffer.toArray(out);
   };
 
   //------------------- SAMPLE FUNCTION -------------------//
