@@ -11,6 +11,7 @@ import {
   ICRC16Map,
   PendingSubmission,
   VerificationOutcome,
+  VerificationRequest,
 } from '@prometheus-protocol/declarations/mcp_registry/mcp_registry.did.js';
 import { calculateSecurityTier, nsToDate } from '../utils.js';
 import { fromNullable, toNullable } from '@dfinity/utils';
@@ -45,9 +46,17 @@ export interface ProcessedBounty {
   timeoutDate?: Date; // Unwrapped and converted
 }
 
+export interface ProcessedVerificationRequest {
+  repo: string;
+  commit_hash: string;
+  wasm_hash: string;
+  metadata: Record<string, any>; // Deserialized metadata
+}
+
 // Update the VerificationStatus interface to use our new clean type.
 export interface VerificationStatus {
   isVerified: boolean;
+  verificationRequest: ProcessedVerificationRequest | null;
   attestations: ProcessedAttestation[];
   bounties: ProcessedBounty[];
 }
@@ -62,12 +71,31 @@ export const getVerificationStatus = async (
 ): Promise<VerificationStatus> => {
   const registryActor = getRegistryActor();
 
-  const [isVerifiedResult, attestationsResult, bountiesResult] =
-    await Promise.all([
-      registryActor.is_wasm_verified(wasmId),
-      registryActor.get_attestations_for_wasm(wasmId),
-      registryActor.get_bounties_for_wasm(wasmId),
-    ]);
+  const [
+    isVerifiedResult,
+    verificationResult,
+    attestationsResult,
+    bountiesResult,
+  ] = await Promise.all([
+    registryActor.is_wasm_verified(wasmId),
+    registryActor.get_verification_request(wasmId),
+    registryActor.get_attestations_for_wasm(wasmId),
+    registryActor.get_bounties_for_wasm(wasmId),
+  ]);
+
+  const verificationRequest = fromNullable(verificationResult);
+
+  const processedRequest: ProcessedVerificationRequest | null =
+    verificationRequest
+      ? {
+          repo: verificationRequest.repo,
+          commit_hash: Buffer.from(verificationRequest.commit_hash).toString(
+            'hex',
+          ),
+          wasm_hash: Buffer.from(verificationRequest.wasm_hash).toString('hex'),
+          metadata: deserializeFromIcrc16Map(verificationRequest.metadata),
+        }
+      : null;
 
   // 3. Process the attestations right here, in the API layer.
   const processedAttestations: ProcessedAttestation[] = attestationsResult.map(
@@ -113,6 +141,7 @@ export const getVerificationStatus = async (
 
   return {
     isVerified: isVerifiedResult,
+    verificationRequest: processedRequest,
     attestations: processedAttestations,
     bounties: processedBounties,
   };
@@ -447,6 +476,7 @@ export const createBounty = async (
     start_date: [],
     challenge_parameters: {
       Map: [
+        // The wasm_hash must be passed as a Blob (Uint8Array).
         ['wasm_hash', { Blob: wasm_hash }],
         ['audit_type', { Text: audit_type }],
       ],

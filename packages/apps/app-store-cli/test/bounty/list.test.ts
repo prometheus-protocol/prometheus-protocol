@@ -16,12 +16,15 @@ describe('bounty list command', () => {
   const mockBounty = {
     id: 123n,
     tokenAmount: 1_000_000n,
-    metadata: { audit_type: 'security_v1', wasm_id: 'a1b2c3d4e5f6' },
+    metadata: {},
     claimedTimestamp: undefined, // This makes it 'Open'
     creator: Principal.fromText('aaaaa-aa'), // mock principal
     created: new Date(),
     tokenCanisterId: Principal.fromText('aaaaa-aa'),
-    challengeParameters: {},
+    challengeParameters: {
+      audit_type: 'security_v1',
+      wasm_hash: 'a1b2c3d4e5f6',
+    },
     challengePeriod: 0n,
     claimedBy: null,
     payoutTransactionId: null,

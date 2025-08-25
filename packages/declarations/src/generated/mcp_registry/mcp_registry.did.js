@@ -236,6 +236,46 @@ export const idlFactory = ({ IDL }) => {
     'hash_tree' : IDL.Vec(IDL.Nat8),
     'last_block_hash' : IDL.Vec(IDL.Nat8),
   });
+  const ICRC16Property__2 = IDL.Record({
+    'value' : ICRC16__2,
+    'name' : IDL.Text,
+    'immutable' : IDL.Bool,
+  });
+  ICRC16__2.fill(
+    IDL.Variant({
+      'Int' : IDL.Int,
+      'Map' : ICRC16Map__3,
+      'Nat' : IDL.Nat,
+      'Set' : IDL.Vec(ICRC16__2),
+      'Nat16' : IDL.Nat16,
+      'Nat32' : IDL.Nat32,
+      'Nat64' : IDL.Nat64,
+      'Blob' : IDL.Vec(IDL.Nat8),
+      'Bool' : IDL.Bool,
+      'Int8' : IDL.Int8,
+      'Nat8' : IDL.Nat8,
+      'Nats' : IDL.Vec(IDL.Nat),
+      'Text' : IDL.Text,
+      'Bytes' : IDL.Vec(IDL.Nat8),
+      'Int16' : IDL.Int16,
+      'Int32' : IDL.Int32,
+      'Int64' : IDL.Int64,
+      'Option' : IDL.Opt(ICRC16__2),
+      'Floats' : IDL.Vec(IDL.Float64),
+      'Float' : IDL.Float64,
+      'Principal' : IDL.Principal,
+      'Array' : IDL.Vec(ICRC16__2),
+      'ValueMap' : IDL.Vec(IDL.Tuple(ICRC16__2, ICRC16__2)),
+      'Class' : IDL.Vec(ICRC16Property__2),
+    })
+  );
+  ICRC16Map__3.fill(IDL.Vec(IDL.Tuple(IDL.Text, ICRC16__2)));
+  const VerificationRequest = IDL.Record({
+    'metadata' : ICRC16Map__3,
+    'repo' : IDL.Text,
+    'commit_hash' : IDL.Vec(IDL.Nat8),
+    'wasm_hash' : IDL.Vec(IDL.Nat8),
+  });
   const SupportedStandard = IDL.Record({ 'url' : IDL.Text, 'name' : IDL.Text });
   const CreateCanisterType = IDL.Record({
     'canister_type_namespace' : IDL.Text,
@@ -362,40 +402,6 @@ export const idlFactory = ({ IDL }) => {
     'total_chunks' : IDL.Nat,
     'chunk_id' : IDL.Nat,
   });
-  const ICRC16Property__2 = IDL.Record({
-    'value' : ICRC16__2,
-    'name' : IDL.Text,
-    'immutable' : IDL.Bool,
-  });
-  ICRC16__2.fill(
-    IDL.Variant({
-      'Int' : IDL.Int,
-      'Map' : ICRC16Map__3,
-      'Nat' : IDL.Nat,
-      'Set' : IDL.Vec(ICRC16__2),
-      'Nat16' : IDL.Nat16,
-      'Nat32' : IDL.Nat32,
-      'Nat64' : IDL.Nat64,
-      'Blob' : IDL.Vec(IDL.Nat8),
-      'Bool' : IDL.Bool,
-      'Int8' : IDL.Int8,
-      'Nat8' : IDL.Nat8,
-      'Nats' : IDL.Vec(IDL.Nat),
-      'Text' : IDL.Text,
-      'Bytes' : IDL.Vec(IDL.Nat8),
-      'Int16' : IDL.Int16,
-      'Int32' : IDL.Int32,
-      'Int64' : IDL.Int64,
-      'Option' : IDL.Opt(ICRC16__2),
-      'Floats' : IDL.Vec(IDL.Float64),
-      'Float' : IDL.Float64,
-      'Principal' : IDL.Principal,
-      'Array' : IDL.Vec(ICRC16__2),
-      'ValueMap' : IDL.Vec(IDL.Tuple(ICRC16__2, ICRC16__2)),
-      'Class' : IDL.Vec(ICRC16Property__2),
-    })
-  );
-  ICRC16Map__3.fill(IDL.Vec(IDL.Tuple(IDL.Text, ICRC16__2)));
   const AttestationRequest = IDL.Record({
     'metadata' : ICRC16Map__3,
     'wasm_id' : IDL.Text,
@@ -416,12 +422,6 @@ export const idlFactory = ({ IDL }) => {
   const DivergenceResult = IDL.Variant({
     'Ok' : IDL.Nat,
     'Error' : IDL.Variant({ 'NotFound' : IDL.Null, 'Generic' : IDL.Text }),
-  });
-  const VerificationRequest = IDL.Record({
-    'metadata' : ICRC16Map__3,
-    'repo' : IDL.Text,
-    'commit_hash' : IDL.Vec(IDL.Nat8),
-    'wasm_hash' : IDL.Vec(IDL.Nat8),
   });
   const ICRC16Property__1 = IDL.Record({
     'value' : ICRC16__1,
@@ -617,6 +617,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'get_tip' : IDL.Func([], [Tip], ['query']),
+    'get_verification_request' : IDL.Func(
+        [IDL.Text],
+        [IDL.Opt(VerificationRequest)],
+        ['query'],
+      ),
     'hello' : IDL.Func([], [IDL.Text], []),
     'icrc10_supported_standards' : IDL.Func(
         [],
