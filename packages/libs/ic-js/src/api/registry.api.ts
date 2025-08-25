@@ -447,6 +447,7 @@ export const createBounty = async (
     start_date: [],
     challenge_parameters: {
       Map: [
+        // The wasm_hash must be passed as a Blob (Uint8Array).
         ['wasm_hash', { Blob: wasm_hash }],
         ['audit_type', { Text: audit_type }],
       ],

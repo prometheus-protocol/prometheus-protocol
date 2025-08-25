@@ -59,9 +59,10 @@ export function registerListBountiesCommand(program: Command) {
 
         // 3. Format the bounties into a clean, readable table.
         const formattedBounties = bounties.map((bounty) => {
-          const wasmId = (bounty.metadata?.wasm_id as string) || 'N/A';
+          const wasmId =
+            (bounty.challengeParameters?.wasm_id as string) || 'N/A';
           const auditType =
-            (bounty.metadata?.audit_type as string) || 'Unknown';
+            (bounty.challengeParameters?.audit_type as string) || 'Unknown';
           const status = bounty.claimedTimestamp ? '✅ Claimed' : '🟢 Open';
 
           return {

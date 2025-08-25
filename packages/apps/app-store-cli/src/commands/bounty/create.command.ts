@@ -1,101 +1,60 @@
 import type { Command } from 'commander';
-import fs from 'node:fs';
-import path from 'node:path';
-import crypto from 'node:crypto';
-import yaml from 'js-yaml';
 import prompts from 'prompts';
-import { createBounty, approveAllowance } from '@prometheus-protocol/ic-js';
+import {
+  createBounty,
+  approveAllowance,
+  getCanisterId,
+} from '@prometheus-protocol/ic-js';
 import { Principal } from '@dfinity/principal';
 import {
   getCurrentIdentityName,
   loadDfxIdentity,
 } from '../../identity.node.js';
 
-interface Manifest {
-  submission: {
-    wasm_path: string;
-  };
-}
-
 export function registerCreateBountyCommand(program: Command) {
   program
-    // 1. Use positional arguments for the core "what" of the command.
     .command('create <amount> <token-canister>')
-    .description(
-      'Creates a new tokenized bounty for the WASM in prometheus.yml.',
+    .description('Creates a new tokenized bounty for a specific WASM hash.')
+    // 1. The WASM ID is now a required option, making the command self-contained.
+    .requiredOption(
+      '--wasm-id <string>',
+      'The hex-encoded SHA-256 hash of the WASM to create a bounty for.',
     )
-    // 2. Keep the rest as required options.
     .requiredOption(
       '--audit-type <string>',
-      'The specific audit being requested (e.g., "security", "tools").',
+      'The specific audit being requested (e.g., "security_v1").',
     )
     .option(
       '--timeout-days <number>',
       'The number of days until the bounty expires.',
       '30',
     )
-    // 3. The action now receives the positional arguments directly.
     .action(async (amount, tokenCanister, options) => {
-      const configPath = path.join(process.cwd(), 'prometheus.yml');
-      if (!fs.existsSync(configPath)) {
-        console.error(
-          '❌ Error: `prometheus.yml` not found. Please run `prom-cli init` first.',
-        );
-        return;
-      }
-
-      console.log('\n💰 Creating new tokenized bounty from manifest...');
+      console.log('\n💰 Creating new tokenized bounty...');
 
       try {
-        const manifest = yaml.load(
-          fs.readFileSync(configPath, 'utf-8'),
-        ) as Manifest;
-
-        if (!manifest.submission || !manifest.submission.wasm_path) {
+        // 2. Convert the user-provided hex string into a Buffer for the canister call.
+        const wasmId = options.wasmId;
+        // Add validation for the hash format for better UX.
+        if (!/^[a-fA-F0-9]{64}$/.test(wasmId)) {
           console.error(
-            '❌ Error: Manifest is incomplete. Please ensure `wasm_path` is set.',
+            '❌ Error: --wasm-id must be a 64-character hex string (SHA-256 hash).',
           );
           return;
         }
-
-        const wasmPath = path.resolve(
-          process.cwd(),
-          manifest.submission.wasm_path,
-        );
-        const wasmBuffer = fs.readFileSync(wasmPath);
-        const wasmHash = crypto
-          .createHash('sha256')
-          .update(wasmBuffer)
-          .digest();
-        console.log(
-          `   For WASM Hash: ${Buffer.from(wasmHash).toString('hex')}`,
-        );
+        const wasmHash = Buffer.from(wasmId, 'hex');
+        console.log(`   For WASM ID: ${wasmId}`);
 
         const identityName = getCurrentIdentityName();
         console.log(`   🔑 Using current dfx identity: '${identityName}'`);
         const identity = loadDfxIdentity(identityName);
 
-        const registryCanisterIdStr = process.env.REGISTRY_CANISTER_ID;
-        if (!registryCanisterIdStr) {
-          console.error(
-            '❌ Configuration Error: The REGISTRY_CANISTER_ID environment variable is not set.',
-          );
-          console.error(
-            '   Set the environment variable like this: \`export REGISTRY_CANISTER_ID=ufxgi-4p777-77774-qaadq-cai\`',
-          );
-          return;
-        }
+        const registryCanisterIdStr = getCanisterId('MCP_REGISTRY');
         const registryCanisterId = Principal.fromText(registryCanisterIdStr);
         const tokenCanisterPrincipal = Principal.fromText(tokenCanister);
 
-        // --- The Fix: Sanitize the amount string before converting to BigInt ---
-        // The user might input "100_000_000" for readability, which is not a valid
-        // string for the BigInt() constructor. We must remove the underscores first.
         const sanitizedAmount = amount.replaceAll('_', '');
-
-        // 1. A 'number' for the approveAllowance function, which expects it.
         const amountAsNumber = Number(sanitizedAmount);
-        // 2. A 'BigInt' for the createBounty function, which needs it for the canister call.
         const amountAsBigInt = BigInt(sanitizedAmount);
 
         // --- Step 1: Confirm the entire operation with the user ---
@@ -140,6 +99,7 @@ export function registerCreateBountyCommand(program: Command) {
           BigInt(Date.now()) * 1_000_000n +
           BigInt(timeoutDays) * 24n * 60n * 60n * 1_000_000_000n;
 
+        // 3. The ic-js call now uses the wasmHash derived from the --wasm-id option.
         const bountyId = await createBounty(identity, {
           wasm_hash: wasmHash,
           audit_type: options.auditType,
@@ -153,11 +113,10 @@ export function registerCreateBountyCommand(program: Command) {
         console.log('\n🎉 Success!');
         console.log(`   Bounty with ID ${bountyId} is now active.`);
         console.log(
-          '   Auditors can see this bounty by running `prom-cli status` and claim it by filing the required attestation.',
+          '   Auditors can now discover this bounty by running `app-store bounty list`.',
         );
       } catch (error) {
-        console.error('\n❌ Operation failed:');
-        console.error(error);
+        console.error('\n❌ Operation failed:', error);
       }
     });
 }
