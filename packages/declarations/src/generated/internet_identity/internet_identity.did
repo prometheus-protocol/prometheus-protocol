@@ -275,7 +275,9 @@ type InternetIdentityInit = record {
     // If present, list of origins using the new authentication flow.
     new_flow_origins : opt vec text;
     // Configuration for OpenID Google client
-    openid_google : opt opt OpenIdConfig;
+    openid_google : opt opt GoogleOpenIdConfig;
+    // Configurations for OpenID clients
+    openid_configs : opt vec OpenIdConfig;
     // Configuration for Web Analytics
     analytics_config : opt opt AnalyticsConfig;
     // Configuration to fetch root key or not from frontend assets
@@ -289,6 +291,7 @@ type InternetIdentityInit = record {
     dummy_auth : opt opt DummyAuthConfig;
     // Feature flags
     feature_flag_continue_from_another_device : opt bool;
+    feature_flag_enable_generic_open_id_fe : opt bool;
 };
 
 type ChallengeKey = text;
@@ -360,8 +363,19 @@ type Aud = text;
 type JWT = text;
 type Salt = blob;
 
-type OpenIdConfig = record {
+type GoogleOpenIdConfig = record {
     client_id : text;
+};
+
+type OpenIdConfig = record {
+    name : text;
+    logo : text;
+    issuer : text;
+    client_id : text;
+    jwks_uri : text;
+    auth_uri : text;
+    auth_scope : vec text;
+    fedcm_uri : opt text;
 };
 
 type OpenIdCredentialKey = record { Iss; Sub };
@@ -479,6 +493,7 @@ type AuthnMethodData = record {
 type OpenIDRegFinishArg = record {
     jwt : JWT;
     salt : Salt;
+    name : text;
 };
 
 // Extra information about registration status for new authentication methods
@@ -919,7 +934,6 @@ service : (opt InternetIdentityInit) -> {
     // HTTP Gateway protocol
     // =====================
     http_request : (request : HttpRequest) -> (HttpResponse) query;
-    http_request_update : (request : HttpRequest) -> (HttpResponse);
 
     // Internal Methods
     // ================
