@@ -1,0 +1,9 @@
+{
+  "name": "@prometheus-protocol/pre-mcpt",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The ICRC1 token canister before the mainnet launch of MCPT.",
+  "devDependencies": {
+    "@dfinity/pic": "^0.13.1"
+  }
+}

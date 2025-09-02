@@ -13,7 +13,7 @@ import TT "mo:timer-tool";
 import ICRC10 "mo:icrc10-mo";
 import Log "mo:stable-local-log";
 import ICRC3 "mo:icrc3-mo";
-import CertTree "mo:cert/CertTree";
+import CertTree "mo:ic-certification/CertTree";
 import Blob "mo:base/Blob";
 import Debug "mo:base/Debug";
 import Sha256 "mo:sha2/Sha256";
