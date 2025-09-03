@@ -40,6 +40,22 @@
         "node_compatibility": true
       }
     },
+    "usage_tracker": {
+      "main": "packages/canisters/usage_tracker/src/main.mo",
+      "type": "motoko",
+      "declarations": {
+        "output": "packages/declarations/src/generated/usage_tracker",
+        "node_compatibility": true
+      }
+    },
+    "mcp_server": {
+      "main": "packages/canisters/mcp_server/src/main.mo",
+      "type": "motoko",
+      "declarations": {
+        "output": "packages/declarations/src/generated/mcp_server",
+        "node_compatibility": true
+      }
+    },
     "icrc1_ledger": {
       "type": "custom",
       "candid": "https://github.com/dfinity/ic/releases/download/ledger-suite-icrc-2025-06-19/ledger.did",

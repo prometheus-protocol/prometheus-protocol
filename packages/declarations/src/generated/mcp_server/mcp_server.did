@@ -1,0 +1,92 @@
+type TreasuryError = 
+ variant {
+   LedgerTrap: text;
+   NotOwner;
+   TransferFailed: TransferError;
+ };
+type TransferError = 
+ variant {
+   BadBurn: record {min_burn_amount: nat;};
+   BadFee: record {expected_fee: nat;};
+   CreatedInFuture: record {ledger_time: Timestamp;};
+   Duplicate: record {duplicate_of: nat;};
+   GenericError: record {
+                   error_code: nat;
+                   message: text;
+                 };
+   InsufficientFunds: record {balance: nat;};
+   TemporarilyUnavailable;
+   TooOld;
+ };
+type Timestamp = nat64;
+type Subaccount = blob;
+type StreamingToken = blob;
+type StreamingStrategy = variant {
+                           Callback:
+                            record {
+                              callback: StreamingCallback;
+                              token: StreamingToken;
+                            };};
+type StreamingCallbackResponse = 
+ record {
+   body: blob;
+   token: opt StreamingToken;
+ };
+type StreamingCallback = func (StreamingToken) ->
+                          (opt StreamingCallbackResponse) query;
+type Result_1 = 
+ variant {
+   err: TreasuryError;
+   ok;
+ };
+type Result = 
+ variant {
+   err: TreasuryError;
+   ok: nat;
+ };
+type McpServer = 
+ service {
+   /// Get the current owner of the canister.
+   get_owner: () -> (principal) query;
+   /// Get the canister's balance of a specific ICRC-1 token.
+   get_treasury_balance: (ledger_id: principal) -> (nat);
+   /// Handle incoming HTTP requests.
+   http_request: (req: HttpRequest) -> (HttpResponse) query;
+   /// Handle streaming callbacks for large HTTP responses.
+   http_request_streaming_callback: (token: StreamingToken) ->
+    (opt StreamingCallbackResponse) query;
+   /// Handle incoming HTTP requests that modify state (e.g., POST).
+   http_request_update: (req: HttpRequest) -> (HttpResponse);
+   /// Set a new owner for the canister. Only the current owner can call this.
+   set_owner: (new_owner: principal) -> (Result_1);
+   /// Withdraw tokens from the canister's treasury to a specified destination.
+   withdraw: (ledger_id: principal, amount: nat, destination: Destination) ->
+    (Result);
+ };
+type HttpResponse = 
+ record {
+   body: blob;
+   headers: vec Header;
+   status_code: nat16;
+   streaming_strategy: opt StreamingStrategy;
+   upgrade: opt bool;
+ };
+type HttpRequest = 
+ record {
+   body: blob;
+   certificate_version: opt nat16;
+   headers: vec Header;
+   method: text;
+   url: text;
+ };
+type Header = 
+ record {
+   text;
+   text;
+ };
+type Destination = 
+ record {
+   owner: principal;
+   subaccount: opt Subaccount;
+ };
+service : () -> McpServer

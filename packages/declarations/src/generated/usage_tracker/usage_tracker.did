@@ -1,0 +1,61 @@
+type UsageTracker = 
+ service {
+   /// Adds a Wasm hash to the allowlist of approved servers.
+   add_approved_wasm_hash: (hash: blob) -> (Result);
+   /// Returns the current admin principal.
+   get_admin: () -> (principal) query;
+   /// * Allows the designated payout canister to atomically retrieve all collected logs and clear the buffer.
+   ///      * This is an update call because it modifies the canister's state by clearing the logs.
+   ///      * This pattern prevents unbounded memory growth and ensures that logs are processed exactly once.
+   get_and_clear_logs: () -> (Result_1);
+   /// Returns the current payout canister principal.
+   get_payout_canister: () -> (opt principal) query;
+   /// Checks if a given Wasm hash is on the allowlist.
+   is_wasm_hash_approved: (hash: blob) -> (bool) query;
+   /// * The primary entry point for MCP servers to submit their usage statistics.
+   ///     * This method performs an inter-canister call to verify the caller's Wasm hash against the allowlist.
+   log_call: (stats: UsageStats) -> (Result);
+   /// Removes a Wasm hash from the allowlist.
+   remove_approved_wasm_hash: (hash: blob) -> (Result);
+   /// Sets the designated payout canister.
+   set_payout_canister: (canister_id: principal) -> (Result);
+   /// Transfers admin rights to a new principal.
+   transfer_admin: (new_admin: principal) -> (Result);
+ };
+type UsageStats = 
+ record {
+   activity: vec CallerActivity;
+   end_timestamp_ns: nat;
+   start_timestamp_ns: nat;
+ };
+type Time = int;
+type Result_1 = 
+ variant {
+   err: text;
+   ok: vec LogEntry;
+ };
+type Result = 
+ variant {
+   err: text;
+   ok;
+ };
+type LogEntry = 
+ record {
+   server_id: principal;
+   stats: UsageStats;
+   timestamp: Time;
+ };
+type CallerActivity = 
+ record {
+   call_count: nat;
+   caller: principal;
+   tool_id: text;
+ };
+/// * The UsageTracker canister serves as a high-throughput logbook for the "Proof-of-Use" system.
+///  * It accepts usage statistics from approved MCP server canisters and makes them available to a designated payout canister.
+///  *
+///  * Security Model (MVP):
+///  * Authorization is based on the Wasm hash of the calling canister. A canister is considered "approved"
+///  * if its Wasm hash is present in an admin-managed allowlist. This implies that the canister's Wasm
+///  * has passed a `beacon_v1` audit, verifying that its usage reporting logic is correct and cannot be tampered with.
+service : () -> UsageTracker
