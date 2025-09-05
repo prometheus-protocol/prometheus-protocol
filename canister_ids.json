@@ -2,7 +2,7 @@
   "app_store_ui": {
     "ic": "gyeil-qyaaa-aaaai-q32uq-cai"
   },
-  "auditor_credentials": {
+  "audit_hub": {
     "ic": "eq6xo-cyaaa-aaaai-q32yq-cai"
   },
   "auth_server": {
@@ -19,6 +19,9 @@
   },
   "mcp_registry": {
     "ic": "grhdx-gqaaa-aaaai-q32va-cai"
+  },
+  "pre_mcpt": {
+    "ic": "mz2jc-iiaaa-aaaai-q33pq-cai"
   },
   "usage_tracker": {
     "ic": "m63pw-fqaaa-aaaai-q33pa-cai"
