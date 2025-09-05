@@ -1,3 +1,9 @@
+type UsageStats = 
+ record {
+   activity: vec CallerActivity;
+   end_timestamp_ns: Time;
+   start_timestamp_ns: Time;
+ };
 type TreasuryError = 
  variant {
    LedgerTrap: text;
@@ -19,6 +25,7 @@ type TransferError =
    TooOld;
  };
 type Timestamp = nat64;
+type Time = int;
 type Subaccount = blob;
 type StreamingToken = blob;
 type StreamingStrategy = variant {
@@ -34,6 +41,11 @@ type StreamingCallbackResponse =
  };
 type StreamingCallback = func (StreamingToken) ->
                           (opt StreamingCallbackResponse) query;
+type Result_2 = 
+ variant {
+   err: text;
+   ok;
+ };
 type Result_1 = 
  variant {
    err: TreasuryError;
@@ -46,6 +58,10 @@ type Result =
  };
 type McpServer = 
  service {
+   /// * This function is called by the test suite. It instantiates an actor
+   ///   * for the UsageTracker and calls its `log_call` method.
+   call_tracker: (tracker_canister_id: principal, stats: UsageStats) ->
+    (Result_2);
    /// Get the current owner of the canister.
    get_owner: () -> (principal) query;
    /// Get the canister's balance of a specific ICRC-1 token.
@@ -88,5 +104,11 @@ type Destination =
  record {
    owner: principal;
    subaccount: opt Subaccount;
+ };
+type CallerActivity = 
+ record {
+   call_count: nat;
+   caller: principal;
+   tool_id: text;
  };
 service : () -> McpServer

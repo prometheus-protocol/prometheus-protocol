@@ -8,6 +8,9 @@ type UsageTracker =
    ///      * This is an update call because it modifies the canister's state by clearing the logs.
    ///      * This pattern prevents unbounded memory growth and ensures that logs are processed exactly once.
    get_and_clear_logs: () -> (Result_1);
+   /// Returns the aggregated metrics for a specific server.
+   get_metrics_for_server: (server_id: principal) ->
+    (opt ServerMetricsShared) query;
    /// Returns the current payout canister principal.
    get_payout_canister: () -> (opt principal) query;
    /// Checks if a given Wasm hash is on the allowlist.
@@ -25,10 +28,22 @@ type UsageTracker =
 type UsageStats = 
  record {
    activity: vec CallerActivity;
-   end_timestamp_ns: nat;
-   start_timestamp_ns: nat;
+   end_timestamp_ns: Time;
+   start_timestamp_ns: Time;
  };
 type Time = int;
+type ServerMetricsShared = 
+ record {
+   invocations_by_tool: vec record {
+                              text;
+                              nat;
+                            };
+   invocations_by_user: vec record {
+                              principal;
+                              nat;
+                            };
+   total_invocations: nat;
+ };
 type Result_1 = 
  variant {
    err: text;

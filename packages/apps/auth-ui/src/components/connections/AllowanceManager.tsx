@@ -35,7 +35,9 @@ import { isDefined } from '@/lib/utils';
 import { Auth } from '@prometheus-protocol/declarations';
 
 const formSchema = z.object({
-  budget: z.number().min(0, { message: 'Allowance cannot be negative.' }),
+  budget: z.coerce
+    .number()
+    .min(0, { message: 'Allowance cannot be negative.' }),
 });
 
 interface AllowanceManagerProps {
@@ -87,7 +89,9 @@ export function AllowanceManager({
   const { mutate: initialSetup, isPending: isSettingUp } =
     useInitialPaymentSetupMutation();
   const { mutate: updateAllowance, isPending: isUpdating } =
-    useUpdateAllowanceMutation();
+    useUpdateAllowanceMutation(
+      selectedTokenPrincipal ?? Principal.fromText('aaaaa-aa'),
+    );
 
   const form = useForm<z.input<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -164,6 +168,7 @@ export function AllowanceManager({
         </div>
       ) : (
         <Form {...form}>
+          {/* @ts-ignore */}
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
               control={form.control}
