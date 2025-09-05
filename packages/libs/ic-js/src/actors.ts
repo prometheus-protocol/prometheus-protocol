@@ -99,7 +99,7 @@ export const getIcrcActor = (canisterId: Principal, identity?: Identity) => {
 export const getCredentialsActor = (identity?: Identity) => {
   return createActor<Credentials._SERVICE>(
     Credentials.idlFactory,
-    getCanisterId('AUDITOR_CREDENTIALS'),
+    getCanisterId('AUDIT_HUB'),
     identity,
   );
 };

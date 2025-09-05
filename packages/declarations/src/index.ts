@@ -1,4 +1,4 @@
-import * as Credentials from './generated/auditor_credentials/auditor_credentials.did.js';
+import * as Credentials from './generated/audit_hub/audit_hub.did.js';
 import * as Auth from './generated/auth_server/auth_server.did.js';
 import * as Registry from './generated/mcp_registry/mcp_registry.did.js';
 import * as Orchestrator from './generated/mcp_orchestrator/mcp_orchestrator.did.js';
