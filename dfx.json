@@ -32,6 +32,14 @@
         "node_compatibility": true
       }
     },
+    "audit_hub": {
+      "main": "packages/canisters/audit_hub/src/main.mo",
+      "type": "motoko",
+      "declarations": {
+        "output": "packages/declarations/src/generated/audit_hub",
+        "node_compatibility": true
+      }
+    },
     "pre_mcpt": {
       "main": "packages/canisters/pre_mcpt/src/main.mo",
       "type": "motoko",

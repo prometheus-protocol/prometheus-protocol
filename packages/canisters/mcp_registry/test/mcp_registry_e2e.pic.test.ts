@@ -28,8 +28,8 @@ import {
   init as ledgerInit,
 } from '@declarations/icrc1_ledger/icrc1_ledger.did.js';
 import type { _SERVICE as LedgerService } from '@declarations/icrc1_ledger/icrc1_ledger.did.js';
-import { idlFactory as credentialIdlFactory } from '@declarations/auditor_credentials/auditor_credentials.did.js';
-import type { _SERVICE as CredentialService } from '@declarations/auditor_credentials/auditor_credentials.did.js';
+import { idlFactory as credentialIdlFactory } from '@declarations/audit_hub/audit_hub.did.js';
+import type { _SERVICE as CredentialService } from '@declarations/audit_hub/audit_hub.did.js';
 import { createHash } from 'node:crypto';
 
 // --- Wasm Paths ---
@@ -48,10 +48,10 @@ const LEDGER_WASM_PATH = path.resolve(
   '../../../../',
   '.dfx/local/canisters/icrc1_ledger/icrc1_ledger.wasm.gz',
 );
-const CREDENTIAL_WASM_PATH = path.resolve(
+const AUDIT_HUB_WASM_PATH = path.resolve(
   __dirname,
   '../../../../',
-  '.dfx/local/canisters/auditor_credentials/auditor_credentials.wasm',
+  '.dfx/local/canisters/audit_hub/audit_hub.wasm',
 );
 const DUMMY_UPGRADE_WASM_PATH = REGISTRY_WASM_PATH;
 
@@ -69,6 +69,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
   let registryActor: Actor<RegistryService>;
   let orchestratorActor: Actor<OrchestratorService>;
   let ledgerActor: Actor<LedgerService>;
+  let auditHubActor: Actor<CredentialService>;
   let registryCanisterId: Principal;
   let ledgerCanisterId: Principal;
   let targetCanisterId: Principal;
@@ -78,11 +79,13 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     pic = await PocketIc.create(url);
 
     // 1. Deploy Dependencies
-    const credentialFixture = await pic.setupCanister<CredentialService>({
+    const auditHub = await pic.setupCanister<CredentialService>({
       idlFactory: credentialIdlFactory,
-      wasm: CREDENTIAL_WASM_PATH,
+      wasm: AUDIT_HUB_WASM_PATH,
       sender: daoIdentity.getPrincipal(),
     });
+    auditHubActor = auditHub.actor;
+
     const ledgerFixture = await pic.setupCanister<LedgerService>({
       idlFactory: ledgerIdlFactory,
       wasm: LEDGER_WASM_PATH,
@@ -154,24 +157,27 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     // 3. Setup Permissions and Funds
     registryActor.setIdentity(daoIdentity);
     await registryActor.set_auditor_credentials_canister_id(
-      credentialFixture.canisterId,
+      auditHub.canisterId,
     );
 
     orchestratorActor.setIdentity(daoIdentity);
     await orchestratorActor.set_mcp_registry_id(registryFixture.canisterId);
 
-    credentialFixture.actor.setIdentity(daoIdentity);
-    await credentialFixture.actor.issue_credential(
+    auditHub.actor.setIdentity(daoIdentity);
+    await auditHub.actor.mint_tokens(
       reproAuditorIdentity.getPrincipal(),
       'build',
+      1000n,
     );
-    await credentialFixture.actor.issue_credential(
+    await auditHub.actor.mint_tokens(
       securityAuditorIdentity.getPrincipal(),
       'security',
+      1000n,
     );
-    await credentialFixture.actor.issue_credential(
+    await auditHub.actor.mint_tokens(
       qualityAuditorIdentity.getPrincipal(),
       'quality',
+      1000n,
     );
     ledgerActor.setIdentity(daoIdentity);
     await ledgerActor.icrc1_transfer({
@@ -306,27 +312,43 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       { identity: securityAuditorIdentity, type: 'security' },
       { identity: qualityAuditorIdentity, type: 'quality' },
     ];
-    for (const auditor of auditors) {
-      console.log(`  - ${auditor.type} audit...`);
-      registryActor.setIdentity(auditor.identity);
-      const res = await registryActor.icrc126_file_attestation({
-        wasm_id: wasmId,
-        metadata: [['126:audit_type', { Text: auditor.type }]],
-      });
-      expect('Ok' in res).toBe(true);
+    const reputationStakeAmount = 100n;
 
+    for (const auditor of auditors) {
+      console.log(`  - ${auditor.type} auditor is reserving the bounty...`);
+      // STEP 1: RESERVE THE BOUNTY (on the Audit Hub)
+      auditHubActor.setIdentity(auditor.identity);
+      const reserveResult = await auditHubActor.reserve_bounty(
+        bountyIds[auditor.type].toString(),
+        auditor.type,
+        reputationStakeAmount,
+      );
+      expect(reserveResult).toHaveProperty('ok');
+
+      console.log(`  - ${auditor.type} auditor is filing the attestation...`);
+      // STEP 2: FILE THE ATTESTATION (on the Registry Facade)
+      registryActor.setIdentity(auditor.identity);
+      const attestResult = await registryActor.icrc126_file_attestation({
+        wasm_id: wasmId,
+        metadata: [
+          ['126:audit_type', { Text: auditor.type }],
+          ['bounty_id', { Nat: bountyIds[auditor.type] }], // Pass bounty_id
+        ],
+      });
+      expect(attestResult).toHaveProperty('Ok'); // This will now pass
+
+      console.log(
+        `  - ${auditor.type} auditor is submitting the bounty for payout...`,
+      );
+      // STEP 3: SUBMIT THE BOUNTY FOR PAYOUT (on the Registry Facade)
       const claimResult = await registryActor.icrc127_submit_bounty({
         bounty_id: bountyIds[auditor.type],
         submission: { Text: 'Attestation filed.' },
         account: [],
       });
-      expect('Ok' in claimResult).toBe(true);
-      if ('Ok' in claimResult) {
-        const resArr = claimResult.Ok.result;
-        if (resArr && resArr[0] && resArr[0].result) {
-          expect(resArr[0].result).toHaveProperty('Valid');
-        }
-      }
+      expect(claimResult).toHaveProperty('Ok');
+      // @ts-ignore
+      expect(claimResult.Ok.result[0].result).toHaveProperty('Valid');
     }
 
     // === PHASE 4.0: DAO discovers the submission is ready for review ===
@@ -372,7 +394,18 @@ describe('MCP Registry Full E2E Lifecycle', () => {
 
     // Assert that the queue is now empty
     expect(submissionsAfterFinalization).toHaveLength(0);
-    // === PHASE 4.5: Verify the new public query for attestations ===
+    // === PHASE 4.5: DAO releases the stakes after successful claims ===
+    console.log('DAO is releasing auditor stakes...');
+    auditHubActor.setIdentity(daoIdentity);
+    for (const auditor of auditors) {
+      await auditHubActor.release_stake(bountyIds[auditor.type].toString());
+      const finalBalance = await auditHubActor.get_available_balance(
+        auditor.identity.getPrincipal(),
+        auditor.type,
+      );
+      expect(finalBalance).toBe(1000n); // Verify stake was returned
+    }
+
     // Attestations are not public until the verification is finalized.
     registryActor.setIdentity(developerIdentity); // Any identity can query
 

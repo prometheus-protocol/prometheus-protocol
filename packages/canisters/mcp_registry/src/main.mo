@@ -28,7 +28,7 @@ import ICRC2 "mo:icrc2-types";
 import Map "mo:map/Map";
 
 import AppStore "AppStore";
-import AuditorCredentials "AuditorCredentials";
+import AuditHub "AuditHub";
 import Bounty "Bounty";
 
 import ICRC118WasmRegistry "../../../../libs/icrc118/src";
@@ -264,9 +264,13 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
               };
               case (?id) {
                 // The ID is set, so we can proceed with the check.
-                let credentials : AuditorCredentials.Service = actor (Principal.toText(id));
-                let permission_result = await credentials.verify_credential(auditor, audit_type);
-                return permission_result;
+                let auditHub : AuditHub.Service = actor (Principal.toText(id));
+
+                // Call the new method to get the auditor's balance for the specific token type.
+                let balance : AuditHub.Balance = await auditHub.get_available_balance(auditor, audit_type);
+
+                // An auditor is qualified if their available balance of the required token is greater than zero.
+                return balance > 0;
               };
             };
           };
@@ -617,6 +621,25 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   };
 
   public shared (msg) func icrc126_file_attestation(req : ICRC126Service.AttestationRequest) : async ICRC126Service.AttestationResult {
+    let bounty_id = switch (AuditHub.get_bounty_id_from_metadata(req.metadata)) {
+      case (null) {
+        return #Error(#Generic("Attestation metadata must include a 'bounty_id'."));
+      };
+      case (?id) { id };
+    };
+
+    switch (_credentials_canister_id) {
+      case (null) { return #Error(#Generic("Audit Hub is not configured.")) };
+      case (?id) {
+        let auditHub : AuditHub.Service = actor (Principal.toText(id));
+        let is_authorized = await auditHub.is_bounty_ready_for_collection(bounty_id, msg.caller);
+
+        if (not is_authorized) {
+          return #Error(#Unauthorized);
+        };
+      };
+    };
+
     await icrc126().icrc126_file_attestation(msg.caller, req);
   };
 
@@ -629,6 +652,26 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     await icrc127().icrc127_create_bounty<system>(msg.caller, req);
   };
   public shared (msg) func icrc127_submit_bounty(req : ICRC127Service.BountySubmissionRequest) : async ICRC127Service.BountySubmissionResult {
+    // ==========================================================================
+    // == NEW SECURITY CHECK: Verify the caller is the authorized claimant.
+    // ==========================================================================
+    let bounty_id_text = Nat.toText(req.bounty_id);
+
+    switch (_credentials_canister_id) {
+      case (null) { return #Error(#Generic("Audit Hub is not configured.")) };
+      case (?id) {
+        let auditHub : AuditHub.Service = actor (Principal.toText(id));
+        let is_authorized = await auditHub.is_bounty_ready_for_collection(bounty_id_text, msg.caller);
+
+        if (not is_authorized) {
+          return #Error(#Generic("Caller is not the authorized claimant for this bounty or the lock has expired."));
+        };
+      };
+    };
+
+    // If the identity check passes, we forward the call.
+    // The underlying ICRC-127 canister will then invoke our `validate_submission` hook,
+    // which is responsible for checking if the attestation has been filed.
     await icrc127().icrc127_submit_bounty(msg.caller, req);
   };
   public query func icrc127_get_bounty(bounty_id : Nat) : async ?ICRC127.Bounty {

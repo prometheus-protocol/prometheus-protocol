@@ -1,0 +1,37 @@
+type TokenId = text;
+type Timestamp = int;
+type Result = 
+ variant {
+   err: text;
+   ok;
+ };
+type BountyLock = 
+ record {
+   claimant: principal;
+   expires_at: Timestamp;
+   stake_amount: Balance;
+   stake_token_id: TokenId;
+ };
+type BountyId = text;
+type Balance = nat;
+type AuditHub = 
+ service {
+   burn_tokens: (auditor: principal, token_id: TokenId, amount: Balance) ->
+    (Result);
+   cleanup_expired_lock: (bounty_id: BountyId) -> (Result);
+   get_available_balance: (auditor: principal, token_id: TokenId) ->
+    (Balance) query;
+   get_bounty_lock: (bounty_id: BountyId) -> (opt BountyLock) query;
+   get_owner: () -> (principal) query;
+   get_staked_balance: (auditor: principal, token_id: TokenId) ->
+    (Balance) query;
+   is_bounty_ready_for_collection: (bounty_id: BountyId, potential_claimant:
+    principal) -> (bool) query;
+   mint_tokens: (auditor: principal, token_id: TokenId, amount: Balance) ->
+    (Result);
+   release_stake: (bounty_id: BountyId) -> (Result);
+   reserve_bounty: (bounty_id: BountyId, token_id: TokenId, stake_amount:
+    Balance) -> (Result);
+   transfer_ownership: (new_owner: principal) -> (Result);
+ };
+service : () -> AuditHub
