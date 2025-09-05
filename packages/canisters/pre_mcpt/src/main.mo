@@ -76,7 +76,7 @@ shared ({ caller = _owner }) actor class Token(
     archiveIndexType = #Stable;
     maxRecordsToArchive = 8000;
     archiveCycles = 20_000_000_000_000;
-    archiveControllers = null; //??[put cycle ops prinicpal here];
+    archiveControllers = ??[Principal.fromText("cpbhu-5iaaa-aaaad-aalta-cai")]; //??[put cycle ops prinicpal here];
     supportedBlocks = [
       {
         block_type = "1xfer";
