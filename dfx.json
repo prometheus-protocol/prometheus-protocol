@@ -24,14 +24,6 @@
         "node_compatibility": true
       }
     },
-    "auditor_credentials": {
-      "main": "packages/canisters/auditor_credentials/src/main.mo",
-      "type": "motoko",
-      "declarations": {
-        "output": "packages/declarations/src/generated/auditor_credentials",
-        "node_compatibility": true
-      }
-    },
     "audit_hub": {
       "main": "packages/canisters/audit_hub/src/main.mo",
       "type": "motoko",
