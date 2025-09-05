@@ -5,9 +5,12 @@ import Result "mo:base/Result";
 import Option "mo:base/Option";
 import Buffer "mo:base/Buffer";
 import Time "mo:base/Time";
+import Iter "mo:base/Iter";
+import Debug "mo:base/Debug";
 import { ic } "mo:ic";
 import Base16 "mo:base16/Base16";
 import Vector "mo:vector";
+import Array "mo:base/Array";
 
 /**
  * The UsageTracker canister serves as a high-throughput logbook for the "Proof-of-Use" system.
@@ -31,8 +34,8 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   };
 
   public type UsageStats = {
-    start_timestamp_ns : Nat;
-    end_timestamp_ns : Nat;
+    start_timestamp_ns : Time.Time;
+    end_timestamp_ns : Time.Time;
     activity : [CallerActivity];
     // The signature field is omitted for this MVP implementation.
   };
@@ -50,6 +53,13 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
     invocations_by_user : Map.Map<Principal, Nat>;
     // Maps a tool_id (Text) to its total call count on this server.
     invocations_by_tool : Map.Map<Text, Nat>;
+  };
+
+  // A public-facing, immutable version of ServerMetrics for query calls.
+  public type ServerMetricsShared = {
+    total_invocations : Nat;
+    invocations_by_user : [(Principal, Nat)];
+    invocations_by_tool : [(Text, Nat)];
   };
 
   // ==================================================================================================
@@ -170,6 +180,7 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   public shared (msg) func log_call(stats : UsageStats) : async Result.Result<(), Text> {
     let caller = msg.caller;
 
+    Debug.print("UsageTracker: Received log_call from " # Principal.toText(caller) # " with " # debug_show (Array.size(stats.activity)) # " activity records.");
     // 1. Get the status of the calling canister to retrieve its Wasm hash.
     let status_result = await ic.canister_info({
       canister_id = caller;
@@ -230,6 +241,22 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   // ==================================================================================================
   // PUBLIC QUERIES (For UI / Devs)
   // ==================================================================================================
+  private func to_shared_metrics(metrics : ServerMetrics) : ServerMetricsShared {
+    return {
+      total_invocations = metrics.total_invocations;
+      invocations_by_user = Iter.toArray(Map.entries(metrics.invocations_by_user));
+      invocations_by_tool = Iter.toArray(Map.entries(metrics.invocations_by_tool));
+    };
+  };
+
+  /// Returns the aggregated metrics for a specific server.
+  public shared query func get_metrics_for_server(server_id : Principal) : async ?ServerMetricsShared {
+    // Use Option.map to cleanly apply the conversion function if a value exists.
+    return Option.map(
+      Map.get(aggregated_metrics, Map.phash, server_id),
+      to_shared_metrics,
+    );
+  };
 
   /// Returns the current admin principal.
   public shared query func get_admin() : async Principal {

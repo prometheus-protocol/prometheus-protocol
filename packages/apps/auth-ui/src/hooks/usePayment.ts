@@ -56,7 +56,7 @@ type UpdateAllowanceArgs = {
   icrc2CanisterId: Principal;
 };
 
-export const useUpdateAllowanceMutation = () => {
+export const useUpdateAllowanceMutation = (icrc2CanisterId: Principal) => {
   return useMutation<UpdateAllowanceArgs, void>({
     mutationFn: async ({
       identity,
@@ -74,7 +74,7 @@ export const useUpdateAllowanceMutation = () => {
     },
     successMessage: 'Allowance updated successfully!',
     errorMessage: 'Failed to update allowance. Please try again.',
-    queryKeysToRefetch: [],
+    queryKeysToRefetch: [[icrc2CanisterId]],
   });
 };
 

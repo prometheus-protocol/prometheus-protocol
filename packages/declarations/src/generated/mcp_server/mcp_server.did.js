@@ -1,4 +1,16 @@
 export const idlFactory = ({ IDL }) => {
+  const Time = IDL.Int;
+  const CallerActivity = IDL.Record({
+    'call_count' : IDL.Nat,
+    'tool_id' : IDL.Text,
+    'caller' : IDL.Principal,
+  });
+  const UsageStats = IDL.Record({
+    'start_timestamp_ns' : Time,
+    'end_timestamp_ns' : Time,
+    'activity' : IDL.Vec(CallerActivity),
+  });
+  const Result_2 = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   const Header = IDL.Tuple(IDL.Text, IDL.Text);
   const HttpRequest = IDL.Record({
     'url' : IDL.Text,
@@ -57,6 +69,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const Result = IDL.Variant({ 'ok' : IDL.Nat, 'err' : TreasuryError });
   const McpServer = IDL.Service({
+    'call_tracker' : IDL.Func([IDL.Principal, UsageStats], [Result_2], []),
     'get_owner' : IDL.Func([], [IDL.Principal], ['query']),
     'get_treasury_balance' : IDL.Func([IDL.Principal], [IDL.Nat], []),
     'http_request' : IDL.Func([HttpRequest], [HttpResponse], ['query']),

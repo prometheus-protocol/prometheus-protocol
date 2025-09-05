@@ -2,6 +2,11 @@ import type { Principal } from '@dfinity/principal';
 import type { ActorMethod } from '@dfinity/agent';
 import type { IDL } from '@dfinity/candid';
 
+export interface CallerActivity {
+  'call_count' : bigint,
+  'tool_id' : string,
+  'caller' : Principal,
+}
 export interface Destination {
   'owner' : Principal,
   'subaccount' : [] | [Subaccount],
@@ -22,6 +27,7 @@ export interface HttpResponse {
   'status_code' : number,
 }
 export interface McpServer {
+  'call_tracker' : ActorMethod<[Principal, UsageStats], Result_2>,
   'get_owner' : ActorMethod<[], Principal>,
   'get_treasury_balance' : ActorMethod<[Principal], bigint>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
@@ -37,6 +43,8 @@ export type Result = { 'ok' : bigint } |
   { 'err' : TreasuryError };
 export type Result_1 = { 'ok' : null } |
   { 'err' : TreasuryError };
+export type Result_2 = { 'ok' : null } |
+  { 'err' : string };
 export type StreamingCallback = ActorMethod<
   [StreamingToken],
   [] | [StreamingCallbackResponse]
@@ -50,6 +58,7 @@ export type StreamingStrategy = {
   };
 export type StreamingToken = Uint8Array | number[];
 export type Subaccount = Uint8Array | number[];
+export type Time = bigint;
 export type Timestamp = bigint;
 export type TransferError = {
     'GenericError' : { 'message' : string, 'error_code' : bigint }
@@ -64,6 +73,11 @@ export type TransferError = {
 export type TreasuryError = { 'LedgerTrap' : string } |
   { 'NotOwner' : null } |
   { 'TransferFailed' : TransferError };
+export interface UsageStats {
+  'start_timestamp_ns' : Time,
+  'end_timestamp_ns' : Time,
+  'activity' : Array<CallerActivity>,
+}
 export interface _SERVICE extends McpServer {}
 export declare const idlFactory: IDL.InterfaceFactory;
 export declare const init: (args: { IDL: typeof IDL }) => IDL.Type[];

@@ -3,6 +3,7 @@ import Text "mo:base/Text";
 import Blob "mo:base/Blob";
 import Debug "mo:base/Debug";
 import Principal "mo:base/Principal";
+import Time "mo:base/Time";
 
 import HttpTypes "mo:http-types";
 import Map "mo:map/Map";
@@ -295,5 +296,46 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
 
   system func postupgrade() {
     HttpAssets.postupgrade(http_assets);
+  };
+
+  // ==================================================================================================
+  // TYPES (These must match the UsageTracker's types for compatibility)
+  // ==================================================================================================
+
+  public type CallerActivity = {
+    caller : Principal;
+    tool_id : Text;
+    call_count : Nat;
+  };
+
+  public type UsageStats = {
+    start_timestamp_ns : Time.Time;
+    end_timestamp_ns : Time.Time;
+    activity : [CallerActivity];
+  };
+
+  // Define an actor type for the UsageTracker to enable typed inter-canister calls.
+  private type UsageTrackerActor = actor {
+    log_call : (stats : UsageStats) -> async Result.Result<(), Text>;
+  };
+
+  // ==================================================================================================
+  // PUBLIC METHOD (The Test Harness Entry Point)
+  // ==================================================================================================
+
+  /**
+  * This function is called by the test suite. It instantiates an actor
+  * for the UsageTracker and calls its `log_call` method.
+  */
+  public shared (msg) func call_tracker(tracker_canister_id : Principal, stats : UsageStats) : async Result.Result<(), Text> {
+
+    // 1. Create a typed actor reference to the UsageTracker canister.
+    let tracker : UsageTrackerActor = actor (Principal.toText(tracker_canister_id));
+
+    // 2. Make the inter-canister call.
+    let result = await tracker.log_call(stats);
+
+    // 3. Return the result back to the test suite.
+    return result;
   };
 };

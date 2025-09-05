@@ -16,7 +16,7 @@ node_modules/
 dist/
 
 .mops
- *.env
+*.env
 
 # Playwright
 /test-results/
@@ -26,3 +26,4 @@ dist/
 
 # Prometheus Protocol Secrets - DO NOT COMMIT
 .env
+libs/ICRC118WasmRegistry-mo
