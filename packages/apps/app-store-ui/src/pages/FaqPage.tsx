@@ -45,7 +45,7 @@ Please report it to the server's development team immediately. We also ask that 
 ## For Developers
 
 ### How do I submit my MCP server for certification?
-The process is straightforward. You can find a step-by-step guide on our [For Developers page](/developers). You will need a public source code repository (like GitHub) and to follow our preparation guide.
+The process is straightforward. You can find a step-by-step guide on our [Server Developer Docs](https://docs.prometheusprotocol.org/guides/service-devs/overview). You will need a public source code repository (like GitHub) and to follow our preparation guide.
 
 ### How much does an audit cost?
 During our initial launch phase, audits are subsidized by the Prometheus Foundation and are free for qualifying open-source projects. In the future, the Prometheus DAO will establish a fee structure to sustainably fund community auditors.

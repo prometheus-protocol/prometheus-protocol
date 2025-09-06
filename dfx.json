@@ -68,9 +68,6 @@
     },
     "app_store_ui": {
       "dependencies": ["mcp_registry"],
-      "app_store_ui": {
-        "entrypoint": "packages/apps/app_store_ui/src/index.html"
-      },
       "source": ["dist/app_store_ui/"],
       "type": "assets",
       "declarations": {
@@ -80,13 +77,19 @@
     },
     "auth_ui": {
       "dependencies": ["auth_server"],
-      "auth_ui": {
-        "entrypoint": "packages/apps/auth_ui/src/index.html"
-      },
       "source": ["dist/auth_ui/"],
       "type": "assets",
       "declarations": {
         "output": "packages/declarations/src/generated/auth_ui",
+        "node_compatibility": true
+      }
+    },
+    "docs": {
+      "dependencies": ["auth_server"],
+      "source": ["dist/docs/"],
+      "type": "assets",
+      "declarations": {
+        "output": "packages/declarations/src/generated/docs",
         "node_compatibility": true
       }
     },

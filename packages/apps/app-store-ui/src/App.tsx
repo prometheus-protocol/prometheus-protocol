@@ -18,11 +18,9 @@ import { CertificatePage } from './pages/CertificatePage';
 import { TermsOfServicePage } from './pages/TermsOfServicePage';
 import { PrivacyPolicyPage } from './pages/PrivacyPolicPage';
 import { AboutPage } from './pages/AboutPage';
-import { ForDevelopersPage } from './pages/ForDevelopersPage';
 import { ContactPage } from './pages/ContactPage';
 import { FaqPage } from './pages/FaqPage';
 import { CommunityPage } from './pages/CommunityPage';
-import { ProtocolPage } from './pages/ProtocolPage';
 
 import { configure as configureIcJs } from '@prometheus-protocol/ic-js';
 
@@ -78,8 +76,6 @@ function App() {
                 element={<CertificatePage />}
               />
               <Route path="about" element={<AboutPage />} />
-              <Route path="developers" element={<ForDevelopersPage />} />
-              <Route path="protocol" element={<ProtocolPage />} />
 
               {/* Resources */}
               <Route path="contact" element={<ContactPage />} />

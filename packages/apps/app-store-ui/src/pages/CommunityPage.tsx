@@ -32,7 +32,7 @@ There are many ways to get involved, no matter your skill set.
 -   **Follow Us:** Stay connected with our progress on [GitHub](https://github.com/your-repo) and other social platforms.
 
 ### For Developers & Builders
--   **Submit Your MCP Server:** The most direct way to contribute is to build and [submit your MCP server for certification](/developers). Help us grow the registry of trusted AI infrastructure.
+-   **Submit Your MCP Server:** The most direct way to contribute is to build and [submit your MCP server for certification](https://docs.prometheusprotocol.org/guides/service-devs/overview). Help us grow the registry of trusted AI infrastructure.
 -   **Contribute to the Codebase:** The protocol itself is open source. Check out our repositories on GitHub, review code, report issues, and contribute with pull requests.
 -   **Help Others:** Share your expertise in our developer support channels on Discord. Helping others is a powerful way to strengthen the entire ecosystem.
 
