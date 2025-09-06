@@ -26,7 +26,7 @@ export function registerClaimBountyCommand(program: Command) {
     // 1. Use a required positional argument for bountyId and an optional one for wasmId.
     .command('claim <bountyId> [wasmId]')
     .description(
-      'Claims a bounty. Reads WASM ID from prometheus.yml if not provided.',
+      'Claims a reserved bounty after the corresponding attestation has been successfully submitted. Reads WASM ID from prometheus.yml if not provided.',
     )
     .action(async (bountyIdStr, wasmId) => {
       let targetWasmId = wasmId;

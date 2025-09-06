@@ -4,6 +4,7 @@ import type { Command } from 'commander';
 import { registerCreateBountyCommand } from './create.command.js';
 import { registerClaimBountyCommand } from './claim.command.js';
 import { registerListBountiesCommand } from './list.command.js';
+import { registerReserveBountyCommand } from './reserve.command.js';
 
 export function registerBountyCommands(program: Command) {
   // Create the main 'bounty' command
@@ -13,6 +14,7 @@ export function registerBountyCommands(program: Command) {
 
   // Register the individual commands on the new 'bountyCmd' instance
   registerCreateBountyCommand(bountyCmd);
-  registerClaimBountyCommand(bountyCmd);
   registerListBountiesCommand(bountyCmd);
+  registerReserveBountyCommand(bountyCmd);
+  registerClaimBountyCommand(bountyCmd);
 }

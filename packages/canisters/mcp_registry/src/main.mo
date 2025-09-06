@@ -655,13 +655,12 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     // ==========================================================================
     // == NEW SECURITY CHECK: Verify the caller is the authorized claimant.
     // ==========================================================================
-    let bounty_id_text = Nat.toText(req.bounty_id);
 
     switch (_credentials_canister_id) {
       case (null) { return #Error(#Generic("Audit Hub is not configured.")) };
       case (?id) {
         let auditHub : AuditHub.Service = actor (Principal.toText(id));
-        let is_authorized = await auditHub.is_bounty_ready_for_collection(bounty_id_text, msg.caller);
+        let is_authorized = await auditHub.is_bounty_ready_for_collection(req.bounty_id, msg.caller);
 
         if (not is_authorized) {
           return #Error(#Generic("Caller is not the authorized claimant for this bounty or the lock has expired."));

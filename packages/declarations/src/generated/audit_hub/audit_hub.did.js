@@ -2,7 +2,7 @@ export const idlFactory = ({ IDL }) => {
   const TokenId = IDL.Text;
   const Balance = IDL.Nat;
   const Result = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
-  const BountyId = IDL.Text;
+  const BountyId = IDL.Nat;
   const Timestamp = IDL.Int;
   const BountyLock = IDL.Record({
     'stake_token_id' : TokenId,
@@ -20,6 +20,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'get_bounty_lock' : IDL.Func([BountyId], [IDL.Opt(BountyLock)], ['query']),
     'get_owner' : IDL.Func([], [IDL.Principal], ['query']),
+    'get_stake_requirement' : IDL.Func(
+        [TokenId],
+        [IDL.Opt(Balance)],
+        ['query'],
+      ),
     'get_staked_balance' : IDL.Func(
         [IDL.Principal, TokenId],
         [Balance],
@@ -32,7 +37,8 @@ export const idlFactory = ({ IDL }) => {
       ),
     'mint_tokens' : IDL.Func([IDL.Principal, TokenId, Balance], [Result], []),
     'release_stake' : IDL.Func([BountyId], [Result], []),
-    'reserve_bounty' : IDL.Func([BountyId, TokenId, Balance], [Result], []),
+    'reserve_bounty' : IDL.Func([BountyId, TokenId], [Result], []),
+    'set_stake_requirement' : IDL.Func([TokenId, Balance], [Result], []),
     'transfer_ownership' : IDL.Func([IDL.Principal], [Result], []),
   });
   return AuditHub;

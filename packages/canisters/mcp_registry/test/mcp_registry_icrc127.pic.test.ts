@@ -162,8 +162,14 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
       expires_at: [],
     });
 
-    // 6. Mint Reputation Tokens to our auditors
     auditHubActor.setIdentity(daoIdentity);
+    // Configure the required stake for the reputation token
+    await auditHubActor.set_stake_requirement(
+      reputationTokenId,
+      reputationStakeAmount,
+    );
+
+    // 6. Mint Reputation Tokens to our auditors
     await auditHubActor.mint_tokens(
       auditorIdentity.getPrincipal(),
       reputationTokenId,
@@ -200,7 +206,6 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
       ],
       start_date: [],
     });
-    console.log('createResult:', createResult);
     bountyId = ('Ok' in createResult && createResult.Ok.bounty_id) || 0n;
   });
 
@@ -228,11 +233,7 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
   it('should REJECT attestation from an auditor who did not reserve the bounty', async () => {
     // The legitimate auditor reserves the bounty
     auditHubActor.setIdentity(auditorIdentity);
-    await auditHubActor.reserve_bounty(
-      bountyId.toString(),
-      reputationTokenId,
-      reputationStakeAmount,
-    );
+    await auditHubActor.reserve_bounty(bountyId, reputationTokenId);
 
     // The malicious auditor tries to file the attestation
     registryActor.setIdentity(maliciousAuditorIdentity);
@@ -279,9 +280,8 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
     // --- 1. Reserve the Bounty ---
     auditHubActor.setIdentity(auditorIdentity);
     const reserveResult = await auditHubActor.reserve_bounty(
-      bountyId.toString(),
+      bountyId,
       reputationTokenId,
-      reputationStakeAmount,
     );
     expect(reserveResult).toHaveProperty('ok');
 
@@ -294,7 +294,6 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
         ['bounty_id', { Nat: bountyId }], // Pass bounty_id
       ],
     });
-    console.log('Attest Result:', attestResult);
     expect(attestResult).toHaveProperty('Ok');
 
     // --- 3. Submit the Bounty (as the claimant) ---
@@ -318,7 +317,7 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
 
     // --- 5. Verify Stake was Returned (by DAO releasing it) ---
     auditHubActor.setIdentity(daoIdentity);
-    await auditHubActor.release_stake(bountyId.toString());
+    await auditHubActor.release_stake(bountyId);
     const finalReputation = await auditHubActor.get_available_balance(
       auditorIdentity.getPrincipal(),
       reputationTokenId,

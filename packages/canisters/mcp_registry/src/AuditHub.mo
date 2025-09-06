@@ -13,7 +13,7 @@ module AuditHub {
   // --- TYPE DEFINITIONS (Translated from the AuditHub canister) ---
 
   public type TokenId = Text;
-  public type BountyId = Text;
+  public type BountyId = Nat;
   public type Balance = Nat;
   public type Timestamp = Int;
 
@@ -32,8 +32,8 @@ module AuditHub {
       if (key == "bounty_id") {
         switch (val) {
           // Bounties are Nats, but let's be flexible and accept Text too
-          case (#Nat(n)) { return ?Nat.toText(n) };
-          case (#Text(t)) { return ?t };
+          case (#Nat(n)) { return ?n };
+          case (#Text(t)) { return Nat.fromText(t) };
           case (_) { return null };
         };
       };

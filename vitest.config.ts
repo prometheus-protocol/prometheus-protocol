@@ -6,6 +6,7 @@ export default defineConfig({
   // The main test configuration block.
   test: {
     watch: false, // Canister tests are usually run in CI or manually
+
     // Define the separate test projects here.
     projects: [
       {

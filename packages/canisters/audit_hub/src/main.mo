@@ -18,7 +18,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() {
   public type TokenId = Text;
 
   // A unique identifier for a bounty, matching the ID from the ICRC-127 canister.
-  public type BountyId = Text;
+  public type BountyId = Nat;
 
   // A balance of reputation tokens.
   public type Balance = Nat;
@@ -54,6 +54,9 @@ shared ({ caller = deployer }) persistent actor class AuditHub() {
 
   // Tracks active locks on bounties.
   var bounty_locks = Map.new<BountyId, BountyLock>();
+
+  // Configuration: Minimum stake requirements per token type.
+  var stake_requirements = Map.new<TokenId, Balance>();
 
   // ==================================================================================
   // == HELPER FUNCTIONS
@@ -94,6 +97,14 @@ shared ({ caller = deployer }) persistent actor class AuditHub() {
     return owner;
   };
 
+  public shared (msg) func set_stake_requirement(token_id : TokenId, amount : Balance) : async Result.Result<(), Text> {
+    if (not is_owner(msg.caller)) {
+      return #err("Unauthorized.");
+    };
+    Map.set(stake_requirements, thash, token_id, amount);
+    return #ok(());
+  };
+
   public shared (msg) func transfer_ownership(new_owner : Principal) : async Result.Result<(), Text> {
     if (not is_owner(msg.caller)) {
       return #err("Unauthorized: Only the owner can transfer ownership.");
@@ -130,9 +141,9 @@ shared ({ caller = deployer }) persistent actor class AuditHub() {
   // ==================================================================================
 
   // Allows an auditor to stake reputation tokens to reserve a bounty.
-  public shared (msg) func reserve_bounty(bounty_id : BountyId, token_id : TokenId, stake_amount : Balance) : async Result.Result<(), Text> {
+  public shared (msg) func reserve_bounty(bounty_id : BountyId, token_id : TokenId) : async Result.Result<(), Text> {
     // 1. Check if bounty is already locked by someone else.
-    switch (Map.get(bounty_locks, thash, bounty_id)) {
+    switch (Map.get(bounty_locks, Map.nhash, bounty_id)) {
       case (?lock) {
         if (Time.now() < lock.expires_at) {
           return #err("Bounty is already locked.");
@@ -143,6 +154,13 @@ shared ({ caller = deployer }) persistent actor class AuditHub() {
     };
 
     let auditor = msg.caller;
+
+    let stake_amount = switch (Map.get(stake_requirements, thash, token_id)) {
+      case (null) {
+        return #err("No stake requirement configured for this token type.");
+      };
+      case (?amount) { amount };
+    };
 
     // 2. Check if auditor has enough available tokens to stake.
     let available = _get_balance(available_balances, auditor, token_id);
@@ -162,7 +180,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() {
       stake_amount = stake_amount;
       stake_token_id = token_id;
     };
-    Map.set(bounty_locks, thash, bounty_id, new_lock);
+    Map.set(bounty_locks, Map.nhash, bounty_id, new_lock);
 
     return #ok(());
   };
@@ -173,7 +191,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() {
       return #err("Unauthorized.");
     };
 
-    let lock = switch (Map.get(bounty_locks, thash, bounty_id)) {
+    let lock = switch (Map.get(bounty_locks, Map.nhash, bounty_id)) {
       case (null) { return #err("Lock not found.") };
       case (?l) { l };
     };
@@ -185,13 +203,13 @@ shared ({ caller = deployer }) persistent actor class AuditHub() {
     _set_balance(available_balances, lock.claimant, lock.stake_token_id, current_available + lock.stake_amount);
 
     // Delete the lock.
-    Map.delete(bounty_locks, thash, bounty_id);
+    Map.delete(bounty_locks, Map.nhash, bounty_id);
     return #ok(());
   };
 
   // Public function anyone can call to clean up an expired lock and slash the stake.
   public shared (msg) func cleanup_expired_lock(bounty_id : BountyId) : async Result.Result<(), Text> {
-    let lock = switch (Map.get(bounty_locks, thash, bounty_id)) {
+    let lock = switch (Map.get(bounty_locks, Map.nhash, bounty_id)) {
       case (null) { return #err("Lock not found.") };
       case (?l) { l };
     };
@@ -205,7 +223,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() {
     _set_balance(staked_balances, lock.claimant, lock.stake_token_id, current_staked - lock.stake_amount);
 
     // Delete the lock, making the bounty available again.
-    Map.delete(bounty_locks, thash, bounty_id);
+    Map.delete(bounty_locks, Map.nhash, bounty_id);
     return #ok(());
   };
 
@@ -213,9 +231,13 @@ shared ({ caller = deployer }) persistent actor class AuditHub() {
   // == PUBLIC QUERY & VERIFICATION METHODS
   // ==================================================================================
 
+  public shared query func get_stake_requirement(token_id : TokenId) : async ?Balance {
+    return Map.get(stake_requirements, thash, token_id);
+  };
+
   // The critical function called by the ICRC-127 canister before payout.
   public shared query func is_bounty_ready_for_collection(bounty_id : BountyId, potential_claimant : Principal) : async Bool {
-    switch (Map.get(bounty_locks, thash, bounty_id)) {
+    switch (Map.get(bounty_locks, Map.nhash, bounty_id)) {
       case (null) {
         // No lock exists, so no one can claim it.
         return false;
@@ -236,6 +258,6 @@ shared ({ caller = deployer }) persistent actor class AuditHub() {
   };
 
   public shared query func get_bounty_lock(bounty_id : BountyId) : async ?BountyLock {
-    return Map.get(bounty_locks, thash, bounty_id);
+    return Map.get(bounty_locks, Map.nhash, bounty_id);
   };
 };

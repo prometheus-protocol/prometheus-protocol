@@ -4,7 +4,7 @@ import {
   Registry,
   Orchestrator,
   Ledger,
-  Credentials,
+  AuditHub,
   Auth,
 } from '@prometheus-protocol/declarations';
 import { getCanisterId, getHost } from './config.js';
@@ -96,9 +96,9 @@ export const getIcrcActor = (canisterId: Principal, identity?: Identity) => {
  * @param identity Optional identity to use for the actor
  * @returns
  */
-export const getCredentialsActor = (identity?: Identity) => {
-  return createActor<Credentials._SERVICE>(
-    Credentials.idlFactory,
+export const getAuditHubActor = (identity?: Identity) => {
+  return createActor<AuditHub._SERVICE>(
+    AuditHub.idlFactory,
     getCanisterId('AUDIT_HUB'),
     identity,
   );

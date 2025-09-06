@@ -126,7 +126,7 @@ describe('bounty list command', () => {
     // Assert
     expect(consoleLogSpy).toHaveBeenCalledWith(
       expect.stringContaining(
-        'No bounties found matching the specified criteria.',
+        'No bounties found matching the criteria.', // Removed the word "specified"
       ),
     );
     expect(consoleTableSpy).not.toHaveBeenCalled();
