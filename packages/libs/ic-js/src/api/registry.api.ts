@@ -1,6 +1,10 @@
 import { Certificate, HttpAgent, Identity } from '@dfinity/agent';
-import { getOrchestratorActor, getRegistryActor } from '../actors.js';
-import { Registry } from '@prometheus-protocol/declarations';
+import {
+  getAuditHubActor,
+  getOrchestratorActor,
+  getRegistryActor,
+} from '../actors.js';
+import { AuditHub, Registry } from '@prometheus-protocol/declarations';
 import { Principal } from '@dfinity/principal';
 import {
   AppListing,
@@ -496,6 +500,65 @@ export const createBounty = async (
   return result.Ok.bounty_id;
 };
 
+/**
+ * Fetches the full record for a single ICRC-127 bounty.
+ * @param bounty_id The ID of the bounty to fetch.
+ * @returns The full Bounty record, or undefined if not found.
+ */
+export const getBounty = async (
+  bounty_id: bigint,
+): Promise<Registry.Bounty | undefined> => {
+  const registryActor = getRegistryActor();
+  const result = await registryActor.icrc127_get_bounty(bounty_id);
+  return fromNullable(result);
+};
+
+export const getBountyLock = async (
+  bounty_id: bigint,
+): Promise<AuditHub.BountyLock | undefined> => {
+  const auditHubActor = getAuditHubActor();
+  const result = await auditHubActor.get_bounty_lock(bounty_id);
+  return fromNullable(result);
+};
+
+/**
+ * Get the required stake amount for a specific audit type from the Audit Hub.
+ * @param audit_type The audit type to check (e.g., "security_v1").
+ * @returns The required stake amount, or undefined if no requirement is set.
+ */
+export const getStakeRequirement = async (
+  audit_type: string,
+): Promise<bigint | undefined> => {
+  const auditHubActor = getAuditHubActor();
+  const result = await auditHubActor.get_stake_requirement(audit_type);
+  return fromNullable(result);
+};
+
+export interface ReserveBountyArgs {
+  bounty_id: bigint; // The ID of the bounty to reserve
+  token_id: string; // e.g., "security_v1"
+}
+
+/**
+ * Stakes reputation tokens to reserve an exclusive lock on a bounty.
+ * This is the mandatory first step for an auditor before filing an attestation.
+ *
+ * @throws If the reservation fails (e.g., insufficient stake, already reserved).
+ */
+export const reserveBounty = async (
+  identity: Identity,
+  args: ReserveBountyArgs,
+): Promise<void> => {
+  const { bounty_id, token_id } = args;
+  const auditHubActor = getAuditHubActor(identity);
+
+  const result = await auditHubActor.reserve_bounty(bounty_id, token_id);
+
+  if ('err' in result) {
+    throw new Error(`Failed to reserve bounty: ${JSON.stringify(result.err)}`);
+  }
+};
+
 export interface ClaimBountyArgs {
   bounty_id: bigint;
   wasm_id: string; // The lowercase hex string ID of the WASM
@@ -539,6 +602,7 @@ export const claimBounty = async (
 
 export interface FileAttestationArgs {
   wasm_hash: string;
+  bounty_id: bigint;
   metadata: ICRC16Map;
 }
 
@@ -549,12 +613,17 @@ export const fileAttestation = async (
   identity: Identity,
   args: FileAttestationArgs,
 ): Promise<void> => {
-  const { wasm_hash, metadata } = args;
+  const { wasm_hash, bounty_id, metadata } = args;
   const registryActor = getRegistryActor(identity);
 
+  // Create a new metadata array that includes the required bounty_id.
+  // This ensures the facade check can link the attestation to the lock.
   const result = await registryActor.icrc126_file_attestation({
     wasm_id: wasm_hash,
-    metadata: metadata,
+    metadata: [
+      ...metadata,
+      ['bounty_id', { Nat: bounty_id }], // Ensure the bounty_id is included
+    ],
   });
 
   if ('Error' in result) {

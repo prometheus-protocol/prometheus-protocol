@@ -78,6 +78,12 @@ describe('MCP Registry ICRC-126 Integration with Audit Hub', () => {
     });
     registryActor = registryFixture.actor;
 
+    // Configure the required stake for the reputation token
+    auditHubActor.setIdentity(daoIdentity);
+    const res = await auditHubActor.set_stake_requirement(
+      reputationTokenId,
+      reputationStakeAmount,
+    );
     // 3. Setup Permissions and Reputation Tokens
     registryActor.setIdentity(daoIdentity);
     await registryActor.set_auditor_credentials_canister_id(
@@ -144,11 +150,7 @@ describe('MCP Registry ICRC-126 Integration with Audit Hub', () => {
   it('should REJECT an attestation from a different auditor who did not reserve the bounty', async () => {
     // The legitimate auditor reserves the bounty
     auditHubActor.setIdentity(securityAuditorIdentity);
-    await auditHubActor.reserve_bounty(
-      bountyId.toString(),
-      reputationTokenId,
-      reputationStakeAmount,
-    );
+    await auditHubActor.reserve_bounty(bountyId, reputationTokenId);
 
     // The malicious (but qualified) auditor tries to file the attestation
     registryActor.setIdentity(maliciousAuditorIdentity);
@@ -165,11 +167,7 @@ describe('MCP Registry ICRC-126 Integration with Audit Hub', () => {
   it('should ACCEPT an attestation from the auditor who correctly reserved the bounty', async () => {
     // Step 1: Reserve the bounty
     auditHubActor.setIdentity(securityAuditorIdentity);
-    await auditHubActor.reserve_bounty(
-      bountyId.toString(),
-      reputationTokenId,
-      reputationStakeAmount,
-    );
+    const res = await auditHubActor.reserve_bounty(bountyId, reputationTokenId);
 
     // Step 2: File the attestation
     registryActor.setIdentity(securityAuditorIdentity);
@@ -188,11 +186,7 @@ describe('MCP Registry ICRC-126 Integration with Audit Hub', () => {
   it('should log the successful attestation to the ICRC-3 log', async () => {
     // This test relies on the previous test's flow
     auditHubActor.setIdentity(securityAuditorIdentity);
-    await auditHubActor.reserve_bounty(
-      bountyId.toString(),
-      reputationTokenId,
-      reputationStakeAmount,
-    );
+    await auditHubActor.reserve_bounty(bountyId, reputationTokenId);
     registryActor.setIdentity(securityAuditorIdentity);
     await registryActor.icrc126_file_attestation({
       wasm_id: wasmId,

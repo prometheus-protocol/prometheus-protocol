@@ -12,7 +12,7 @@ type BountyLock =
    stake_amount: Balance;
    stake_token_id: TokenId;
  };
-type BountyId = text;
+type BountyId = nat;
 type Balance = nat;
 type AuditHub = 
  service {
@@ -23,6 +23,7 @@ type AuditHub =
     (Balance) query;
    get_bounty_lock: (bounty_id: BountyId) -> (opt BountyLock) query;
    get_owner: () -> (principal) query;
+   get_stake_requirement: (token_id: TokenId) -> (opt Balance) query;
    get_staked_balance: (auditor: principal, token_id: TokenId) ->
     (Balance) query;
    is_bounty_ready_for_collection: (bounty_id: BountyId, potential_claimant:
@@ -30,8 +31,8 @@ type AuditHub =
    mint_tokens: (auditor: principal, token_id: TokenId, amount: Balance) ->
     (Result);
    release_stake: (bounty_id: BountyId) -> (Result);
-   reserve_bounty: (bounty_id: BountyId, token_id: TokenId, stake_amount:
-    Balance) -> (Result);
+   reserve_bounty: (bounty_id: BountyId, token_id: TokenId) -> (Result);
+   set_stake_requirement: (token_id: TokenId, amount: Balance) -> (Result);
    transfer_ownership: (new_owner: principal) -> (Result);
  };
 service : () -> AuditHub

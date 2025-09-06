@@ -164,6 +164,11 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     await orchestratorActor.set_mcp_registry_id(registryFixture.canisterId);
 
     auditHub.actor.setIdentity(daoIdentity);
+    // Configure the required stake for the reputation token
+    await auditHubActor.set_stake_requirement('build', 100n);
+    await auditHubActor.set_stake_requirement('security', 100n);
+    await auditHubActor.set_stake_requirement('quality', 100n);
+
     await auditHub.actor.mint_tokens(
       reproAuditorIdentity.getPrincipal(),
       'build',
@@ -268,11 +273,9 @@ describe('MCP Registry Full E2E Lifecycle', () => {
 
     // Check that the bounties were created successfully
     const bounties = await registryActor.get_bounties_for_wasm(wasmId);
-    console.log(`Found ${bounties.length} bounties for the WASM ID.`);
     expect(bounties).toHaveLength(auditTypes.length);
 
     // === PHASE 3.5: Auditor discovers bounties using the new generic list endpoint ===
-    console.log('Auditor is discovering bounties...');
     registryActor.setIdentity(reproAuditorIdentity); // Any auditor can discover
 
     // Test 1: Filter for a specific, open audit type
@@ -281,8 +284,6 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       take: [10n],
       prev: [],
     });
-
-    console.log('Open security bounty result:', openSecurityBountyResult);
 
     expect('ok' in openSecurityBountyResult).toBe(true);
     if ('ok' in openSecurityBountyResult) {
@@ -312,20 +313,16 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       { identity: securityAuditorIdentity, type: 'security' },
       { identity: qualityAuditorIdentity, type: 'quality' },
     ];
-    const reputationStakeAmount = 100n;
 
     for (const auditor of auditors) {
-      console.log(`  - ${auditor.type} auditor is reserving the bounty...`);
       // STEP 1: RESERVE THE BOUNTY (on the Audit Hub)
       auditHubActor.setIdentity(auditor.identity);
       const reserveResult = await auditHubActor.reserve_bounty(
-        bountyIds[auditor.type].toString(),
+        bountyIds[auditor.type],
         auditor.type,
-        reputationStakeAmount,
       );
       expect(reserveResult).toHaveProperty('ok');
 
-      console.log(`  - ${auditor.type} auditor is filing the attestation...`);
       // STEP 2: FILE THE ATTESTATION (on the Registry Facade)
       registryActor.setIdentity(auditor.identity);
       const attestResult = await registryActor.icrc126_file_attestation({
@@ -337,9 +334,6 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       });
       expect(attestResult).toHaveProperty('Ok'); // This will now pass
 
-      console.log(
-        `  - ${auditor.type} auditor is submitting the bounty for payout...`,
-      );
       // STEP 3: SUBMIT THE BOUNTY FOR PAYOUT (on the Registry Facade)
       const claimResult = await registryActor.icrc127_submit_bounty({
         bounty_id: bountyIds[auditor.type],
@@ -352,7 +346,6 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     }
 
     // === PHASE 4.0: DAO discovers the submission is ready for review ===
-    console.log('DAO is checking for pending submissions...');
     registryActor.setIdentity(daoIdentity);
 
     const pendingSubmissions = await registryActor.list_pending_submissions({
@@ -381,9 +374,6 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     expect('ok' in finalizeResult).toBe(true);
 
     // === PHASE 4.2: DAO verifies the submission is no longer pending ===
-    console.log(
-      'DAO is verifying the submission has been removed from the queue...',
-    );
     registryActor.setIdentity(daoIdentity);
 
     const submissionsAfterFinalization =
@@ -395,10 +385,9 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     // Assert that the queue is now empty
     expect(submissionsAfterFinalization).toHaveLength(0);
     // === PHASE 4.5: DAO releases the stakes after successful claims ===
-    console.log('DAO is releasing auditor stakes...');
     auditHubActor.setIdentity(daoIdentity);
     for (const auditor of auditors) {
-      await auditHubActor.release_stake(bountyIds[auditor.type].toString());
+      await auditHubActor.release_stake(bountyIds[auditor.type]);
       const finalBalance = await auditHubActor.get_available_balance(
         auditor.identity.getPrincipal(),
         auditor.type,

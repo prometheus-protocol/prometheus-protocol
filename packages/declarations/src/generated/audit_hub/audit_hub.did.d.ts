@@ -8,6 +8,7 @@ export interface AuditHub {
   'get_available_balance' : ActorMethod<[Principal, TokenId], Balance>,
   'get_bounty_lock' : ActorMethod<[BountyId], [] | [BountyLock]>,
   'get_owner' : ActorMethod<[], Principal>,
+  'get_stake_requirement' : ActorMethod<[TokenId], [] | [Balance]>,
   'get_staked_balance' : ActorMethod<[Principal, TokenId], Balance>,
   'is_bounty_ready_for_collection' : ActorMethod<
     [BountyId, Principal],
@@ -15,11 +16,12 @@ export interface AuditHub {
   >,
   'mint_tokens' : ActorMethod<[Principal, TokenId, Balance], Result>,
   'release_stake' : ActorMethod<[BountyId], Result>,
-  'reserve_bounty' : ActorMethod<[BountyId, TokenId, Balance], Result>,
+  'reserve_bounty' : ActorMethod<[BountyId, TokenId], Result>,
+  'set_stake_requirement' : ActorMethod<[TokenId, Balance], Result>,
   'transfer_ownership' : ActorMethod<[Principal], Result>,
 }
 export type Balance = bigint;
-export type BountyId = string;
+export type BountyId = bigint;
 export interface BountyLock {
   'stake_token_id' : TokenId,
   'claimant' : Principal,

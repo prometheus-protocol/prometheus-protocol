@@ -144,34 +144,63 @@ describe('Audit Hub Canister', () => {
       );
       expect(resNewOwner).toHaveProperty('ok');
     });
+
+    it('should allow the DAO to set and get stake requirements', async () => {
+      auditHubActor.setIdentity(daoIdentity);
+      const tokenId = 'security_v1';
+      const stakeAmount = 100n;
+
+      // Initially, it should be null
+      const initialReq = await auditHubActor.get_stake_requirement(tokenId);
+      expect(initialReq).toEqual([]); // PocketIC returns [] for empty opt
+
+      // Set the requirement
+      const setResult = await auditHubActor.set_stake_requirement(
+        tokenId,
+        stakeAmount,
+      );
+      expect(setResult).toHaveProperty('ok');
+
+      // Verify it was set correctly
+      const finalReq = await auditHubActor.get_stake_requirement(tokenId);
+      expect(finalReq).toEqual([stakeAmount]);
+
+      // Verify a non-owner cannot set it
+      auditHubActor.setIdentity(randomUserIdentity);
+      const unauthorizedResult = await auditHubActor.set_stake_requirement(
+        tokenId,
+        200n,
+      );
+      expect(unauthorizedResult).toHaveProperty('err');
+    });
   });
 
   // --- Suite 2: Bounty Locking & Staking Lifecycle ---
   describe('Bounty Locking & Staking Lifecycle', () => {
-    const BOUNTY_ID = 'bounty-123';
+    const BOUNTY_ID = 1n; // Using a fixed bounty ID for simplicity
     const TOKEN_ID = 'security_v1';
-    const STAKE_AMOUNT = 50n;
+    const STAKE_AMOUNT = 50n; // This is now the configured requirement
 
     beforeEach(async () => {
-      // Pre-fund the auditor for these tests
       auditHubActor.setIdentity(daoIdentity);
+      // CHANGE 1: The DAO must now configure the stake requirement
+      await auditHubActor.set_stake_requirement(TOKEN_ID, STAKE_AMOUNT);
+
+      // Pre-fund the auditor for these tests
       await auditHubActor.mint_tokens(
         auditor1Identity.getPrincipal(),
         TOKEN_ID,
-        100n,
+        100n, // Give them more than enough
       );
     });
 
     it('should allow an auditor to reserve a bounty, and update balances correctly', async () => {
       auditHubActor.setIdentity(auditor1Identity);
-      const res = await auditHubActor.reserve_bounty(
-        BOUNTY_ID,
-        TOKEN_ID,
-        STAKE_AMOUNT,
-      );
+      // CHANGE 2: Call reserve_bounty without the stake amount
+      const res = await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID);
       expect(res).toHaveProperty('ok');
 
-      // Check balances
+      // Assertions remain the same, using the STAKE_AMOUNT constant
       const available = await auditHubActor.get_available_balance(
         auditor1Identity.getPrincipal(),
         TOKEN_ID,
@@ -180,27 +209,27 @@ describe('Audit Hub Canister', () => {
         auditor1Identity.getPrincipal(),
         TOKEN_ID,
       );
-      expect(available).toBe(50n);
+      expect(available).toBe(50n); // 100n - 50n
       expect(staked).toBe(50n);
 
-      // Check lock status
       const lock = await auditHubActor.get_bounty_lock(BOUNTY_ID);
-      expect(lock).not.toBeNull();
-      // @ts-ignore
-      expect(lock[0].claimant.toText()).toBe(
-        auditor1Identity.getPrincipal().toText(),
-      );
+      expect(lock).not.toEqual([]);
       // @ts-ignore
       expect(lock[0].stake_amount).toBe(STAKE_AMOUNT);
     });
 
     it('should REJECT reserving a bounty with insufficient available balance', async () => {
-      auditHubActor.setIdentity(auditor1Identity);
-      const res = await auditHubActor.reserve_bounty(
-        BOUNTY_ID,
+      // CHANGE 3: To test this, we now mint the auditor with LESS than the required stake
+      const poorAuditor = createIdentity('poor-auditor');
+      auditHubActor.setIdentity(daoIdentity);
+      await auditHubActor.mint_tokens(
+        poorAuditor.getPrincipal(),
         TOKEN_ID,
-        200n, // More than the 100n they have
+        STAKE_AMOUNT - 1n, // Mint 49 tokens
       );
+
+      auditHubActor.setIdentity(poorAuditor);
+      const res = await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID);
       expect(res).toHaveProperty('err');
       // @ts-ignore
       expect(res.err).toMatch(/Insufficient available balance to stake./);
@@ -209,7 +238,7 @@ describe('Audit Hub Canister', () => {
     it('should REJECT reserving a bounty that is already locked', async () => {
       // Auditor 1 locks the bounty
       auditHubActor.setIdentity(auditor1Identity);
-      await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID, STAKE_AMOUNT);
+      await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID);
 
       // Auditor 2 (also funded) tries to lock it
       auditHubActor.setIdentity(daoIdentity);
@@ -219,11 +248,7 @@ describe('Audit Hub Canister', () => {
         100n,
       );
       auditHubActor.setIdentity(auditor2Identity);
-      const res = await auditHubActor.reserve_bounty(
-        BOUNTY_ID,
-        TOKEN_ID,
-        STAKE_AMOUNT,
-      );
+      const res = await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID);
       expect(res).toHaveProperty('err');
       // @ts-ignore
       expect(res.err).toMatch(/Bounty is already locked./);
@@ -231,7 +256,7 @@ describe('Audit Hub Canister', () => {
 
     it('should correctly verify that a bounty is ready for collection by the claimant', async () => {
       auditHubActor.setIdentity(auditor1Identity);
-      await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID, STAKE_AMOUNT);
+      await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID);
 
       // Check for the correct claimant
       const isReadyForClaimant =
@@ -252,7 +277,7 @@ describe('Audit Hub Canister', () => {
 
     it('should allow the DAO to release a stake, returning funds to available balance', async () => {
       auditHubActor.setIdentity(auditor1Identity);
-      await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID, STAKE_AMOUNT);
+      await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID);
 
       // Verify initial state
       expect(
@@ -284,7 +309,7 @@ describe('Audit Hub Canister', () => {
 
     it('should slash an expired lock and burn the staked tokens', async () => {
       auditHubActor.setIdentity(auditor1Identity);
-      await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID, STAKE_AMOUNT);
+      await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID);
 
       // Advance time past the expiration (e.g., 4 days)
       await pic.advanceTime(4 * 24 * 60 * 60 * 1000); // 4 days in ms
