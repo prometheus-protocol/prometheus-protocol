@@ -1,22 +1,42 @@
 import { Link } from 'react-router-dom';
 import { Logo } from '../Logo';
-// --- 1. IMPORT THE ICON ---
 import { ExternalLink } from 'lucide-react';
 import { GITHUB_LINK } from '@/lib/const';
 
-// --- 2. UPDATE THE GITHUB LINK DATA ---
+// --- 1. DEFINE THE DOCS URL ---
+const DOCS_LINK = 'https://docs.prometheusprotocol.org';
+
 const protocolLinks = [
   { href: '/about', label: 'About Us' },
-  { href: '/developers', label: 'For Developers' },
-  { href: '/protocol', label: 'Protocol Overview' },
+  {
+    href: `${DOCS_LINK}/introduction`,
+    label: 'Protocol Overview',
+    external: true,
+  },
+  {
+    href: `${DOCS_LINK}/guides/service-devs/overview`,
+    label: 'For Developers',
+    external: true,
+  },
+  {
+    href: `${DOCS_LINK}/guides/auditors/overview`,
+    label: 'For Auditors',
+    external: true,
+  },
   {
     href: GITHUB_LINK,
     label: 'GitHub',
-    external: true, // Mark this link as external
+    external: true,
   },
 ];
 
+// --- 2. ADD THE DOCS LINK TO THE RESOURCES ARRAY ---
 const resourcesLinks = [
+  {
+    href: DOCS_LINK,
+    label: 'Documentation',
+    external: true, // Mark as external
+  },
   { href: '/contact', label: 'Contact Us' },
   { href: '/faq', label: 'FAQ' },
   { href: '/community', label: 'Community' },
@@ -39,7 +59,7 @@ export function Footer() {
       <div className="container pt-16 pb-8 mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-9 gap-12 md:gap-24 border-b pb-12">
           <div className="col-span-3 flex flex-col items-start">
-            <Logo className="mb-6 h-18 -mt-3" />
+            <Logo className="mb-4 h-18 -mt-3" />
             <p className="text-sm text-muted-foreground mb-4 max-w-3xs">
               A decentralized platform for managing and monetizing MCP servers.
             </p>
@@ -51,7 +71,6 @@ export function Footer() {
             <ul className="space-y-3">
               {protocolLinks.map((link) => (
                 <li key={link.href}>
-                  {/* --- 3. ADD CONDITIONAL RENDERING LOGIC --- */}
                   {link.external ? (
                     <a
                       href={link.href}
@@ -77,13 +96,25 @@ export function Footer() {
               Resources
             </h3>
             <ul className="space-y-3">
+              {/* --- 3. UPDATE THE RENDERING LOGIC FOR THIS SECTION --- */}
               {resourcesLinks.map((link) => (
                 <li key={link.href}>
-                  <Link
-                    to={link.href}
-                    className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-                    {link.label}
-                  </Link>
+                  {link.external ? (
+                    <a
+                      href={link.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-muted-foreground transition-colors hover:text-foreground flex items-center gap-2">
+                      {link.label}
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  ) : (
+                    <Link
+                      to={link.href}
+                      className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+                      {link.label}
+                    </Link>
+                  )}
                 </li>
               ))}
             </ul>

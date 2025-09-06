@@ -32,7 +32,7 @@ The **Prometheus Foundation**, a non-profit entity based in the British Virgin I
 Whether you're building the next great AI agent or providing the infrastructure that powers them, you are a vital part of this ecosystem.
 
 -   **For Agent Builders & Users:** [Explore our registry of certified MCP servers](/). Find reliable, secure infrastructure for your AI agents and make safer, more informed connections.
--   **For Server Developers:** [Learn how to submit your MCP server for certification](/developers). Showcase the quality of your AI infrastructure and earn the trust of the entire agent ecosystem.
+-   **For Server Developers:** [Learn how to submit your MCP server for certification](https://docs.prometheusprotocol.org/guides/service-devs/overview). Showcase the quality of your AI infrastructure and earn the trust of the entire agent ecosystem.
 --   **For Everyone:** Become a part of the conversation. Join our community on [Discord](${DISCORD_LINK}) and follow our progress on [GitHub](${GITHUB_LINK}).
 
 Together, we can build a safer, more transparent foundation for decentralized AI.
