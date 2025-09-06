@@ -1,6 +1,6 @@
 {
   "app_store_ui": {
-    "ic": "gyeil-qyaaa-aaaai-q32uq-cai"
+    "ic": "jfbth-daaaa-aaaai-q33qa-cai"
   },
   "audit_hub": {
     "ic": "eq6xo-cyaaa-aaaai-q32yq-cai"
@@ -19,6 +19,12 @@
   },
   "mcp_registry": {
     "ic": "grhdx-gqaaa-aaaai-q32va-cai"
+  },
+  "mcp_server": {
+    "ic": "jcavt-oyaaa-aaaai-q33qq-cai"
+  },
+  "old_app_store_ui": {
+    "ic": "gyeil-qyaaa-aaaai-q32uq-cai"
   },
   "pre_mcpt": {
     "ic": "mz2jc-iiaaa-aaaai-q33pq-cai"
