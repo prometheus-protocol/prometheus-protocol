@@ -1,6 +1,13 @@
+// packages/cli/src/commands/bounty/list.command.ts
+
 import type { Command } from 'commander';
 import { Principal } from '@dfinity/principal';
-import { listBounties, BountyFilterInput } from '@prometheus-protocol/ic-js';
+// --- CHANGE 1: Import the new getBountyLock function ---
+import {
+  listBounties,
+  getBountyLock,
+  BountyFilterInput,
+} from '@prometheus-protocol/ic-js';
 import {
   loadDfxIdentity,
   getCurrentIdentityName,
@@ -10,7 +17,6 @@ export function registerListBountiesCommand(program: Command) {
   program
     .command('list')
     .description('Lists and filters all available bounties on the network.')
-    // 1. Add all the powerful filtering and pagination options.
     .option('--status <status>', "Filter by status ('Open' or 'Claimed')")
     .option(
       '--audit-type <type>',
@@ -31,7 +37,6 @@ export function registerListBountiesCommand(program: Command) {
       try {
         const identity = loadDfxIdentity(getCurrentIdentityName());
 
-        // 2. Build the filter array and request object from the CLI options.
         const filters: BountyFilterInput[] = [];
         if (options.status) {
           if (options.status !== 'Open' && options.status !== 'Claimed') {
@@ -53,26 +58,42 @@ export function registerListBountiesCommand(program: Command) {
         });
 
         if (bounties.length === 0) {
-          console.log('   No bounties found matching the specified criteria.');
+          console.log('ℹ️ No bounties found matching the criteria.');
           return;
         }
 
-        // 3. Format the bounties into a clean, readable table.
-        const formattedBounties = bounties.map((bounty) => {
+        // --- CHANGE 2: Fetch lock statuses for all bounties in parallel ---
+        console.log('   Checking reservation statuses...');
+        const lockStatuses = await Promise.all(
+          bounties.map((b) => getBountyLock(b.id.toString())),
+        );
+
+        // --- CHANGE 3: Update the formatting logic to include the new status ---
+        const formattedBounties = bounties.map((bounty, index) => {
           const wasmId =
             Buffer.from(
               bounty.challengeParameters?.wasm_hash as string,
             ).toString('hex') || 'N/A';
           const auditType =
             (bounty.challengeParameters?.audit_type as string) || 'Unknown';
-          const status = bounty.claimedTimestamp ? '✅ Claimed' : '🟢 Open';
+
+          // New, more detailed status logic
+          let status: string;
+          if (bounty.claimedTimestamp) {
+            status = '✅ Claimed';
+          } else if (lockStatuses[index]) {
+            // If a lock exists for this bounty
+            status = '🔒 Reserved';
+          } else {
+            status = '🟢 Open';
+          }
 
           return {
             'Bounty ID': bounty.id,
             Reward: `${bounty.tokenAmount.toLocaleString()} tokens`,
             'Audit Type': auditType,
             'WASM ID': wasmId,
-            Status: status,
+            Status: status, // Use the new, more detailed status
           };
         });
 

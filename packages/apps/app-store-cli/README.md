@@ -69,15 +69,17 @@ Commands for managing the application lifecycle from within your project.
 Commands for discovering, auditing, and claiming rewards.
 
 - `npx @prometheus-protocol/app-store-cli bounty list`
-  - Lists all available bounties on the network, with powerful filtering options.
+  - Lists all available bounties on the network, showing their status (Open, Reserved, or Claimed).
+- `npx @prometheus-protocol/app-store-cli bounty reserve <bounty-id>`
+  - Reserves an open bounty by staking reputation tokens, granting an exclusive lock.
 - `npx @prometheus-protocol/app-store-cli bounty create`
   - Creates a new bounty to incentivize a specific audit for a WASM.
-- `npx @prometheus-protocol/app-store-cli bounty claim`
-  - Claims a bounty after a corresponding attestation has been filed.
+- `npx @prometheus-protocol/app-store-cli bounty claim <bounty-id>`
+  - Claims a **reserved** bounty after the corresponding attestation has been successfully submitted.
 - `npx @prometheus-protocol/app-store-cli attest generate`
-  - Generates a template JSON file for a specific audit type.
-- `npx @prometheus-protocol/app-store-cli attest submit`
-  - Submits a completed attestation file to the network.
+  - Generates a template YAML file for a specific audit type.
+- `npx @prometheus-protocol/app-store-cli attest submit <file> --bounty-id <id>`
+  - Submits a completed attestation file **for a reserved bounty.**
 
 ---
 
@@ -106,21 +108,23 @@ This example shows the complete journey, using the correct invocation for each r
 
 #### 2. Sponsor Creates a Bounty (standalone)
 
-- `npx @prometheus-protocol/app-store-cli bounty create --wasm-id <wasm_id> --type app_info_v1 --amount 1000000`
+- `npx @prometheus-protocol/app-store-cli bounty create 100000000 <token-canister-id> --wasm-id <wasm_id> --audit-type security_v1`
 
 #### 3. Auditor Discovers and Completes the Audit (standalone)
 
 - Discover work: `npx @prometheus-protocol/app-store-cli bounty list`
-- Generate template: `npx @prometheus-protocol/app-store-cli attest generate --type app_info_v1`
-- Submit work: `npx @prometheus-protocol/app-store-cli attest submit --file attestation.json`
-- Get paid: `npx @prometheus-protocol/app-store-cli bounty claim --bounty-id <bounty_id>`
+- **Reserve the bounty:** `npx @prometheus-protocol/app-store-cli bounty reserve <bounty_id>`
+- Generate template: `npx @prometheus-protocol/app-store-cli attest generate --type security_v1`
+- **Edit the generated `attestation.yml`** with your findings.
+- Submit work for the bounty: `npx @prometheus-protocol/app-store-cli attest submit attestation.yml --bounty-id <bounty_id>`
+- Get paid: `npx @prometheus-protocol/app-store-cli bounty claim <bounty_id>`
 
 #### 4. DAO Reviews and Finalizes (standalone)
 
 - Discover pending work: `npx @prometheus-protocol/app-store-cli dao list`
 - Generate a decision ballot: `npx @prometheus-protocol/app-store-cli dao generate-ballot --wasm-id <wasm_id>`
-- **Edit the generated `ballot.json`** to set the outcome to `Verified` or `Rejected`.
-- Submit the completed ballot: `npx @prometheus-protocol/app-store-cli dao finalize --file ballot.json`
+- **Edit the generated `ballot.yml`** to set the outcome to `Verified` or `Rejected`.
+- Submit the completed ballot: `npx @prometheus-protocol/app-store-cli dao finalize --file ballot.yml`
 
 #### 5. Developer Publishes the Verified Version (from their project)
 

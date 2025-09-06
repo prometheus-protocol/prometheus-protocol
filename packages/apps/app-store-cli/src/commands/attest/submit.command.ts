@@ -13,18 +13,29 @@ import {
 
 export function registerSubmitAttestationCommand(program: Command) {
   program
-    // 1. Use a required positional argument for the file path.
     .command('submit <file>')
-    .description('Submits a completed attestation YAML file.')
-    // 2. The action now receives the file path directly.
-    .action(async (file) => {
+    .description(
+      'Submits a completed attestation YAML file for a specific bounty.',
+    )
+    // --- CHANGE 1: Add a required option for the bounty ID ---
+    .requiredOption(
+      '-b, --bounty-id <id>',
+      'The ID of the bounty this attestation is for',
+    )
+    // --- CHANGE 2: Update the action to receive the options object ---
+    .action(async (file, options) => {
       const filePath = path.resolve(process.cwd(), file);
       if (!fs.existsSync(filePath)) {
         console.error(`❌ Error: File not found at ${filePath}`);
         return;
       }
 
-      console.log(`\n🛡️ Submitting attestation from ${file}...`);
+      // --- CHANGE 3: Get the bounty ID from the options ---
+      const bountyId = BigInt(options.bountyId);
+
+      console.log(
+        `\n🛡️ Submitting attestation from ${file} for bounty #${bountyId}...`,
+      );
 
       try {
         const manifest = yaml.load(fs.readFileSync(filePath, 'utf-8')) as any;
@@ -43,13 +54,19 @@ export function registerSubmitAttestationCommand(program: Command) {
         console.log(`   🔑 Using current dfx identity: '${identityName}'`);
         const identity = loadDfxIdentity(identityName);
 
-        console.log('   📞 Calling the registry to file attestation...');
+        console.log(
+          `   📞 Calling the registry to file attestation for bounty #${bountyId}...`,
+        );
+        // --- CHANGE 4: Pass the bounty_id to the library function ---
         await fileAttestation(identity, {
           wasm_hash: wasmHash,
           metadata: onChainMetadata,
+          bounty_id: bountyId, // The new, required property
         });
 
-        console.log('\n🎉 Success! Your attestation has been filed on-chain.');
+        console.log(
+          `\n🎉 Success! Your attestation has been filed on-chain for bounty #${bountyId}.`,
+        );
       } catch (error) {
         console.error('\n❌ Operation failed:');
         console.error(error);
