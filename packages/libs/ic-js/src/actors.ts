@@ -6,6 +6,7 @@ import {
   Ledger,
   AuditHub,
   Auth,
+  AppBounties,
 } from '@prometheus-protocol/declarations';
 import { getCanisterId, getHost } from './config.js';
 
@@ -100,6 +101,14 @@ export const getAuditHubActor = (identity?: Identity) => {
   return createActor<AuditHub._SERVICE>(
     AuditHub.idlFactory,
     getCanisterId('AUDIT_HUB'),
+    identity,
+  );
+};
+
+export const getAppBountiesActor = (identity?: Identity) => {
+  return createActor<AppBounties._SERVICE>(
+    AppBounties.idlFactory,
+    getCanisterId('APP_BOUNTIES'),
     identity,
   );
 };

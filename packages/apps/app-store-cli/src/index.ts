@@ -21,6 +21,8 @@ import { fileURLToPath } from 'url';
 import { registerCanisterCommands } from './commands/canister/canister.commands.js';
 import { registerControllerCommands } from './commands/controller/controller.commands.js';
 import { registerVersionCommands } from './commands/version/version.commands.js';
+import { registerAppBountiesCommand } from './commands/app-bounties/app-bounties.commands.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -134,6 +136,9 @@ registerDaoCommands(program);
 registerCanisterCommands(program); // Assuming you create a parent for register, upgrade, status
 registerControllerCommands(program); // Assuming you create a parent for add, remove, list
 registerVersionCommands(program); // Assuming you create a parent for list, deprecate
+
+// 5. App Bounties Commands (Related to application-specific bounties)
+registerAppBountiesCommand(program);
 
 // Parse the command line arguments
 await program.parseAsync(process.argv);
