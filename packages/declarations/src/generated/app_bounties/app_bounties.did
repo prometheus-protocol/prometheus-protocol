@@ -1,0 +1,38 @@
+type Timestamp = int;
+type Result_1 = 
+ variant {
+   err: text;
+   ok: BountyId;
+ };
+type Result = 
+ variant {
+   err: text;
+   ok;
+ };
+type BountyId = nat;
+type Bounty = 
+ record {
+   created_at: Timestamp;
+   details_markdown: text;
+   id: BountyId;
+   reward_amount: float64;
+   reward_token: text;
+   short_description: text;
+   status: text;
+   title: text;
+ };
+type AppBounties = 
+ service {
+   create_bounty: (title: text, short_description: text, reward_amount:
+    float64, reward_token: text, status: text, details_markdown: text) ->
+    (Result_1);
+   delete_bounty: (id: BountyId) -> (Result);
+   get_all_bounties: () -> (vec Bounty) query;
+   get_bounty: (id: BountyId) -> (opt Bounty) query;
+   get_owner: () -> (principal) query;
+   transfer_ownership: (new_owner: principal) -> (Result);
+   update_bounty: (id: BountyId, title: text, short_description: text,
+    reward_amount: float64, reward_token: text, status: text,
+    details_markdown: text) -> (Result);
+ };
+service : () -> AppBounties
