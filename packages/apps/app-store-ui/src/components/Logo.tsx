@@ -14,7 +14,11 @@ export function Logo({ className }: LogoProps) {
   return (
     <div className={cn('flex items-center space-x-2', className)}>
       <Link to="/">
-        <img src="/logo.png" alt="MCP App Store Logo" className="max-h-14" />
+        <img
+          src="/logo.png"
+          alt="Prometheus Protocol Logo"
+          className="max-h-10 md:max-h-14"
+        />
       </Link>
     </div>
   );

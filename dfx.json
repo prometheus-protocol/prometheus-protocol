@@ -56,6 +56,14 @@
         "node_compatibility": true
       }
     },
+    "app_bounties": {
+      "main": "packages/canisters/app_bounties/src/main.mo",
+      "type": "motoko",
+      "declarations": {
+        "output": "packages/declarations/src/generated/app_bounties",
+        "node_compatibility": true
+      }
+    },
     "icrc1_ledger": {
       "type": "custom",
       "candid": "https://github.com/dfinity/ic/releases/download/ledger-suite-icrc-2025-06-19/ledger.did",

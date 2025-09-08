@@ -1,0 +1,10 @@
+{
+  "name": "@prometheus-protocol/audit-hub",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The Motoko canister for the Prometheus Protocol Audit Hub.",
+  "scripts": {},
+  "devDependencies": {
+    "@dfinity/pic": "^0.13.1"
+  }
+}

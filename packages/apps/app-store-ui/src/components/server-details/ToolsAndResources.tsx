@@ -6,6 +6,7 @@ import {
 } from '@/components/ui/accordion';
 import { ServerTool } from '@prometheus-protocol/ic-js';
 import { Wrench } from 'lucide-react'; // We'll reuse the Wrench icon for the empty state
+import Token from '../Token';
 
 interface ToolsAndResourcesProps {
   tools: ServerTool[];
@@ -41,11 +42,7 @@ export function ToolsAndResources({ tools }: ToolsAndResourcesProps) {
                       <span className="text-sm text-foreground font-mono">
                         {tool.cost}
                       </span>
-                      <img
-                        src="/images/pmp-token.webp"
-                        alt="PMP Token"
-                        className="h-4 inline-block"
-                      />
+                      <Token className="h-4" />
                     </div>
                   </div>
                 </AccordionTrigger>

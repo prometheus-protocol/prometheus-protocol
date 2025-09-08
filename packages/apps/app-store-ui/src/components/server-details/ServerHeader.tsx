@@ -23,7 +23,7 @@ export function ServerHeader({ server, onInstallClick }: ServerHeaderProps) {
           Home
         </Link>
         <span className="mx-2">/</span>
-        <span>App Info</span>
+        <span className="text-gray-200">App Info</span>
       </nav>
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-x-12 gap-y-16">
         <div className="lg:col-span-3">

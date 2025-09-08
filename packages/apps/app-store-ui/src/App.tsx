@@ -23,6 +23,7 @@ import { FaqPage } from './pages/FaqPage';
 import { CommunityPage } from './pages/CommunityPage';
 
 import { configure as configureIcJs } from '@prometheus-protocol/ic-js';
+import AppBountiesPage from './pages/AppBountiesPage';
 
 // --- CONFIGURE THE SHARED PACKAGE ---
 // This object is created at BUILD TIME. Vite replaces each `process.env`
@@ -32,6 +33,7 @@ const canisterIds = {
   MCP_ORCHESTRATOR: process.env.CANISTER_ID_MCP_ORCHESTRATOR!,
   AUTH_SERVER: process.env.CANISTER_ID_AUTH_SERVER!,
   AUDITOR_CREDENTIALS: process.env.CANISTER_ID_AUDITOR_CREDENTIALS!,
+  APP_BOUNTIES: process.env.CANISTER_ID_APP_BOUNTIES!,
   // ... add all other canister IDs your app needs
 };
 
@@ -75,6 +77,10 @@ function App() {
                 path="server/:serverId/certificate"
                 element={<CertificatePage />}
               />
+
+              <Route path="bounties" element={<AppBountiesPage />} />
+
+              {/* Static informational pages */}
               <Route path="about" element={<AboutPage />} />
 
               {/* Resources */}

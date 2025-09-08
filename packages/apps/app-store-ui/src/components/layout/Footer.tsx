@@ -56,12 +56,12 @@ export function Footer() {
           absolute top-0 left-0 w-full h-px
         "
       />
-      <div className="container pt-16 pb-8 mx-auto">
+      <div className="container pt-14 pb-8 mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-9 gap-12 md:gap-24 border-b pb-12">
           <div className="col-span-3 flex flex-col items-start">
-            <Logo className="mb-4 h-18 -mt-3" />
+            <Logo className="mb-4 h-12 -mt-2" />
             <p className="text-sm text-muted-foreground mb-4 max-w-3xs">
-              A decentralized platform for managing and monetizing MCP servers.
+              Rewarding Trusted, Open-Source AI.
             </p>
           </div>
           <div className="col-span-2">
@@ -96,7 +96,6 @@ export function Footer() {
               Resources
             </h3>
             <ul className="space-y-3">
-              {/* --- 3. UPDATE THE RENDERING LOGIC FOR THIS SECTION --- */}
               {resourcesLinks.map((link) => (
                 <li key={link.href}>
                   {link.external ? (
@@ -109,9 +108,10 @@ export function Footer() {
                       <ExternalLink className="h-3.5 w-3.5" />
                     </a>
                   ) : (
+                    // --- FIX: Added flex and items-center for consistency ---
                     <Link
                       to={link.href}
-                      className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+                      className="text-sm text-muted-foreground transition-colors hover:text-foreground flex items-center">
                       {link.label}
                     </Link>
                   )}
@@ -126,9 +126,10 @@ export function Footer() {
             <ul className="space-y-3">
               {legalLinks.map((link) => (
                 <li key={link.href}>
+                  {/* --- FIX: Added flex and items-center for consistency --- */}
                   <Link
                     to={link.href}
-                    className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+                    className="text-sm text-muted-foreground transition-colors hover:text-foreground flex items-center">
                     {link.label}
                   </Link>
                 </li>
