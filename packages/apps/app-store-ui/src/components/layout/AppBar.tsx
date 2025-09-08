@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 // --- 1. Import NavLink instead of Link for active state handling ---
-import { NavLink, Link, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { LoginButton } from '../LoginButton';
 import { Logo } from '../Logo';
 import { SearchInput } from '../SearchInput';
@@ -8,48 +8,62 @@ import { Search, X, Menu } from 'lucide-react';
 import { Button } from '../ui/button';
 import {
   NavigationMenu,
-  NavigationMenuContent,
   NavigationMenuItem,
   NavigationMenuLink,
   NavigationMenuList,
-  NavigationMenuTrigger,
   navigationMenuTriggerStyle,
 } from '@/components/ui/navigation-menu';
 import { cn } from '@/lib/utils';
 import React from 'react';
 
-// --- 2. Make ListItem router-aware for future use ---
-const ListItem = React.forwardRef<
-  React.ElementRef<'a'>,
-  React.ComponentPropsWithoutRef<'a'>
->(({ className, title, children, href, ...props }, ref) => {
-  const isInternal = href && href.startsWith('/');
+interface ListItemProps extends React.HTMLAttributes<HTMLAnchorElement> {
+  title: string;
+  children: React.ReactNode;
+  href?: string; // For standard external links
+  to?: string; // For internal React Router links
+}
 
-  const Component = isInternal ? Link : 'a';
-  const linkProps = isInternal
-    ? { to: href }
-    : { href, target: '_blank', rel: 'noopener noreferrer' };
+const ListItem = React.forwardRef<HTMLAnchorElement, ListItemProps>(
+  ({ className, title, children, href, to, ...props }, ref) => {
+    // Combine common props to avoid repetition
+    const commonProps = {
+      ref,
+      className: cn(
+        'block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground',
+        className,
+      ),
+      ...props,
+    };
 
-  return (
-    <li>
-      <NavigationMenuLink asChild>
-        <Component
-          ref={ref}
-          className={cn(
-            'block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground',
-            className,
+    // The content is the same for both link types
+    const content = (
+      <>
+        <div className="text-sm font-medium leading-none">{title}</div>
+        <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
+          {children}
+        </p>
+      </>
+    );
+
+    return (
+      <li>
+        <NavigationMenuLink asChild>
+          {/* If a 'to' prop is provided, render a React Router Link. */}
+          {to ? (
+            <Link to={to} {...commonProps}>
+              {content}
+            </Link>
+          ) : (
+            /* Otherwise, render a standard anchor tag. */
+            <a href={href} {...commonProps}>
+              {content}
+            </a>
           )}
-          {...linkProps}
-          {...props}>
-          <div className="text-sm font-medium leading-none">{title}</div>
-          <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-            {children}
-          </p>
-        </Component>
-      </NavigationMenuLink>
-    </li>
-  );
-});
+        </NavigationMenuLink>
+      </li>
+    );
+  },
+);
 ListItem.displayName = 'ListItem';
 
 export function AppBar() {

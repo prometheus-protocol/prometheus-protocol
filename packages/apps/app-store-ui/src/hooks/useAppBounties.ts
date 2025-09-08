@@ -1,15 +1,18 @@
 // packages/hooks/src/useBounties.ts
 
 import { useQuery } from '@tanstack/react-query';
-import { getAllAppBounties, getAppBounty } from '@prometheus-protocol/ic-js';
-import { Bounty } from '@prometheus-protocol/declarations';
+import {
+  getAllAppBounties,
+  getAppBounty,
+  AppBounties,
+} from '@prometheus-protocol/ic-js';
 
 /**
  * React Query hook to fetch the list of all public app bounties.
  * This is used for the main bounty board page.
  */
 export const useGetAllAppBounties = () => {
-  return useQuery<Bounty[]>({
+  return useQuery<AppBounties.Bounty[]>({
     // A simple, unique key for this query.
     queryKey: ['appBounties'],
     queryFn: async () => {
@@ -24,7 +27,7 @@ export const useGetAllAppBounties = () => {
  * @param bountyId The ID of the bounty as a bigint.
  */
 export const useGetAppBounty = (bountyId: bigint | undefined) => {
-  return useQuery<Bounty | null>({
+  return useQuery<AppBounties.Bounty | null>({
     // The query key includes the specific ID to ensure uniqueness per bounty.
     queryKey: ['appBounty', bountyId],
     queryFn: async () => {
