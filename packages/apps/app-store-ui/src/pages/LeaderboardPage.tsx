@@ -73,7 +73,7 @@ const LeaderboardPodium = ({
           </h3>
         </div>
         <img
-          src={`https://api.dicebear.com/8.x/pixel-art/svg?seed=${entry.user.toText()}`}
+          src={`https://api.dicebear.com/8.x/adventurer/svg?seed=${entry.user.toText()}`}
           alt="Avatar"
           className="w-20 h-20 rounded-full mb-4 bg-gray-800 p-1"
         />
@@ -122,7 +122,7 @@ const LeaderboardList = ({
         type === 'user'
           ? (entry as Leaderboard.UserLeaderboardEntry).user
           : (entry as Leaderboard.ServerLeaderboardEntry).server;
-      const avatarType = type === 'user' ? 'pixel-art' : 'bottts-neutral';
+      const avatarType = type === 'user' ? 'adventurer' : 'bottts';
       return (
         <div
           key={entry.rank}
@@ -132,7 +132,7 @@ const LeaderboardList = ({
           </div>
           <div className="col-span-6 flex items-center gap-4">
             <img
-              src={`https://api.dicebear.com/8.x/${avatarType}/svg?seed=${principal}`}
+              src={`https://api.dicebear.com/9.x/${avatarType}/svg?seed=${principal}`}
               alt="Avatar"
               className="w-10 h-10 rounded-full bg-gray-800 p-1"
             />

@@ -41,8 +41,8 @@ describe('bounty reserve command', () => {
     vi.mocked(identityApi.loadDfxIdentity).mockReturnValue({} as any);
 
     vi.mocked(api.getBounty).mockResolvedValue({
-      bounty_id: MOCK_BOUNTY_ID,
-      challenge_parameters: {
+      bountyId: MOCK_BOUNTY_ID,
+      challengeParameters: {
         Map: [['audit_type', { Text: MOCK_AUDIT_TYPE }]],
       },
     } as any);

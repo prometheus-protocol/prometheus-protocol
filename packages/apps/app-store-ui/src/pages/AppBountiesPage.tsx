@@ -13,6 +13,7 @@ import { Link } from 'react-router-dom';
 import { useGetAllAppBounties } from '@/hooks/useAppBounties';
 import { BountyBoardSkeleton } from '@/components/bounties/BountyBoardSkeleton';
 import { BountyBoardError } from '@/components/bounties/BountyBoardError';
+import { fromUSDC, toUSDC } from '@/lib/tokens';
 
 // Helper to format status color (remains the same)
 const getStatusColor = (status: string) => {
@@ -121,7 +122,7 @@ export default function PublicBountyBoardPage() {
                     </div>
                     <div className="col-span-6 md:col-span-3 flex items-center justify-start md:justify-end gap-2">
                       <span className="font-mono text-white">
-                        {bounty.reward_amount}
+                        ${fromUSDC(BigInt(bounty.reward_amount))}
                       </span>
                       <Token className="h-5" />
                     </div>

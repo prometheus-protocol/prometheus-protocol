@@ -17,7 +17,7 @@ import {
   VerificationOutcome,
   VerificationRequest,
 } from '@prometheus-protocol/declarations/mcp_registry/mcp_registry.did.js';
-import { calculateSecurityTier, nsToDate } from '../utils.js';
+import { calculateSecurityTier, nsToDate, processBounty } from '../utils.js';
 import { fromNullable, toNullable } from '@dfinity/utils';
 import { deserializeFromIcrc16Map, deserializeIcrc16Value } from '../icrc16.js';
 
@@ -33,7 +33,7 @@ export interface ProcessedAttestation {
 }
 
 // This is our new, clean, UI-friendly interface for a bounty.
-export interface ProcessedBounty {
+export interface AuditBounty {
   id: bigint;
   creator: Principal;
   created: Date; // Converted from bigint
@@ -62,7 +62,7 @@ export interface VerificationStatus {
   isVerified: boolean;
   verificationRequest: ProcessedVerificationRequest | null;
   attestations: ProcessedAttestation[];
-  bounties: ProcessedBounty[];
+  bounties: AuditBounty[];
 }
 
 /**
@@ -112,8 +112,8 @@ export const getVerificationStatus = async (
     }),
   );
 
-  const processedBounties: ProcessedBounty[] = bountiesResult.map(
-    (bounty): ProcessedBounty => {
+  const processedBounties: AuditBounty[] = bountiesResult.map(
+    (bounty): AuditBounty => {
       const claimedDateNs = fromNullable(bounty.claimed_date);
       const timeoutDateNs = fromNullable(bounty.timeout_date);
 
@@ -507,10 +507,12 @@ export const createBounty = async (
  */
 export const getBounty = async (
   bounty_id: bigint,
-): Promise<Registry.Bounty | undefined> => {
+): Promise<AuditBounty | undefined> => {
   const registryActor = getRegistryActor();
   const result = await registryActor.icrc127_get_bounty(bounty_id);
-  return fromNullable(result);
+  return result.length > 0
+    ? processBounty(result[0] as Registry.Bounty)
+    : undefined;
 };
 
 export const getBountyLock = async (
@@ -1097,10 +1099,9 @@ export interface ListBountiesRequest {
  * @param request The filter and pagination options for the query.
  */
 export const listBounties = async (
-  identity: Identity,
   request: ListBountiesRequest,
-): Promise<ProcessedBounty[]> => {
-  const registryActor = getRegistryActor(identity);
+): Promise<AuditBounty[]> => {
+  const registryActor = getRegistryActor();
   try {
     // 2. Transform the user-friendly request object into the format Candid expects.
     const requestFilters =
@@ -1143,29 +1144,7 @@ export const listBounties = async (
     const rawBounties = result.ok;
 
     // 5. The processing logic remains the same, but now operates on the successful result.
-    return rawBounties.map((bounty): ProcessedBounty => {
-      const claimedDateNs = fromNullable(bounty.claimed_date);
-      const timeoutDateNs = fromNullable(bounty.timeout_date);
-
-      return {
-        id: bounty.bounty_id,
-        creator: bounty.creator,
-        created: nsToDate(bounty.created),
-        tokenAmount: bounty.token_amount,
-        tokenCanisterId: bounty.token_canister_id,
-        validationCanisterId: bounty.validation_canister_id,
-        validationCallTimeout: bounty.validation_call_timeout,
-        payoutFee: bounty.payout_fee,
-        claims: bounty.claims,
-        metadata: deserializeFromIcrc16Map(bounty.bounty_metadata),
-        challengeParameters: deserializeIcrc16Value(
-          bounty.challenge_parameters,
-        ),
-        claimedTimestamp: fromNullable(bounty.claimed),
-        claimedDate: claimedDateNs ? nsToDate(claimedDateNs) : undefined,
-        timeoutDate: timeoutDateNs ? nsToDate(timeoutDateNs) : undefined,
-      };
-    });
+    return rawBounties.map(processBounty);
   } catch (error) {
     console.error('Error fetching bounties:', error);
     return [];

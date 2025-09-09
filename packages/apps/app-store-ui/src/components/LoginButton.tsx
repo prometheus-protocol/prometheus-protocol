@@ -36,7 +36,7 @@ export function LoginButton() {
             size="icon"
             className="rounded-full h-10 w-10">
             <img
-              src={`https://api.dicebear.com/9.x/pixel-art/svg?seed=${identity.getPrincipal().toText()}`}
+              src={`https://api.dicebear.com/9.x/adventurer/svg?seed=${identity.getPrincipal().toText()}`}
               alt="Avatar"
               className="w-10 h-10 rounded-full bg-gray-800"
             />

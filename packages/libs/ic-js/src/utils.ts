@@ -1,3 +1,8 @@
+import { Bounty } from '@prometheus-protocol/declarations/mcp_registry/mcp_registry.did.js';
+import { AuditBounty } from './api';
+import { fromNullable } from '@dfinity/utils';
+import { deserializeFromIcrc16Map, deserializeIcrc16Value } from './index.js';
+
 /** * Converts a nanosecond timestamp to a JavaScript Date object.
  * This is useful for converting timestamps from the Internet Computer's
  * nanosecond precision to JavaScript's millisecond precision.
@@ -57,4 +62,26 @@ export function calculateSecurityTier(completedAudits: string[]): SecurityTier {
 
   // Default fallback.
   return 'Unranked';
+}
+
+export function processBounty(bounty: Bounty): AuditBounty {
+  const claimedDateNs = fromNullable(bounty.claimed_date);
+  const timeoutDateNs = fromNullable(bounty.timeout_date);
+
+  return {
+    id: bounty.bounty_id,
+    creator: bounty.creator,
+    created: nsToDate(bounty.created),
+    tokenAmount: bounty.token_amount,
+    tokenCanisterId: bounty.token_canister_id,
+    validationCanisterId: bounty.validation_canister_id,
+    validationCallTimeout: bounty.validation_call_timeout,
+    payoutFee: bounty.payout_fee,
+    claims: bounty.claims,
+    metadata: deserializeFromIcrc16Map(bounty.bounty_metadata),
+    challengeParameters: deserializeIcrc16Value(bounty.challenge_parameters),
+    claimedTimestamp: fromNullable(bounty.claimed),
+    claimedDate: claimedDateNs ? nsToDate(claimedDateNs) : undefined,
+    timeoutDate: timeoutDateNs ? nsToDate(timeoutDateNs) : undefined,
+  };
 }
