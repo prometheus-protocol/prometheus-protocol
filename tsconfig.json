@@ -16,6 +16,7 @@
     "jsx": "react-jsx"
   },
   "include": [
+    "scripts/**/*.ts",
     "packages/**/*.ts",
     "packages/**/*.tsx",
     "packages/**/*.d.ts",

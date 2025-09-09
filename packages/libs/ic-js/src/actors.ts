@@ -7,6 +7,7 @@ import {
   AuditHub,
   Auth,
   AppBounties,
+  Leaderboard,
 } from '@prometheus-protocol/declarations';
 import { getCanisterId, getHost } from './config.js';
 
@@ -105,10 +106,22 @@ export const getAuditHubActor = (identity?: Identity) => {
   );
 };
 
+/**
+ * @param identity Optional identity to use for the actor
+ * @returns
+ */
 export const getAppBountiesActor = (identity?: Identity) => {
   return createActor<AppBounties._SERVICE>(
     AppBounties.idlFactory,
     getCanisterId('APP_BOUNTIES'),
+    identity,
+  );
+};
+
+export const getLeaderboardActor = (identity?: Identity) => {
+  return createActor<Leaderboard._SERVICE>(
+    Leaderboard.idlFactory,
+    getCanisterId('LEADERBOARD'),
     identity,
   );
 };

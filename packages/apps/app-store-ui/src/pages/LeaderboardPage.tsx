@@ -1,65 +1,15 @@
 import { Link } from 'react-router-dom';
-import { Award, Trophy } from 'lucide-react';
+import { AlertTriangle, Award, Trophy } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import JSConfetti from 'js-confetti';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { truncatePrincipal } from '@/lib/utils';
-
-// --- NEW MOCK DATA STRUCTURES ---
-// These simulate the data from the LeaderboardAggregator canister.
-
-interface UserLeaderboardEntry {
-  rank: number;
-  user: string; // Principal as a string
-  total_invocations: number;
-}
-
-interface ServerLeaderboardEntry {
-  rank: number;
-  server: string; // Principal as a string
-  total_invocations: number;
-}
-
-const userLeaderboardData: UserLeaderboardEntry[] = [
-  {
-    rank: 1,
-    user: 'lintek-pag3x-aaaaa-aaaaa-cai',
-    total_invocations: 1_250_345,
-  },
-  { rank: 2, user: 'tarkon-miv8c-aaaaa-aaaaa-cai', total_invocations: 980_123 },
-  { rank: 3, user: 'grovix-sol9r-aaaaa-aaaaa-cai', total_invocations: 750_678 },
-  { rank: 4, user: 'glimra-pov2c-aaaaa-aaaaa-cai', total_invocations: 512_456 },
-  { rank: 5, user: 'zunloy-ke8xq-aaaaa-aaaaa-cai', total_invocations: 489_789 },
-  { rank: 6, user: 'nexlor-vub9j-aaaaa-aaaaa-cai', total_invocations: 320_111 },
-];
-
-const serverLeaderboardData: ServerLeaderboardEntry[] = [
-  {
-    rank: 1,
-    server: 'mcp-chat-canister-aaaaa-cai',
-    total_invocations: 5_678_901,
-  },
-  {
-    rank: 2,
-    server: 'decentralized-storage-aaaaa-cai',
-    total_invocations: 4_123_456,
-  },
-  {
-    rank: 3,
-    server: 'onchain-game-server-aaaaa-cai',
-    total_invocations: 2_987_654,
-  },
-  {
-    rank: 4,
-    server: 'oracle-data-feed-aaaaa-cai',
-    total_invocations: 1_500_234,
-  },
-  {
-    rank: 5,
-    server: 'nft-minter-service-aaaaa-cai',
-    total_invocations: 950_876,
-  },
-];
+import {
+  useGetServerLeaderboard,
+  useGetUserLeaderboard,
+} from '@/hooks/useLeaderboard';
+import { Leaderboard } from '@prometheus-protocol/ic-js';
+import { Button } from '@/components/ui/button';
 
 // --- SUB-COMPONENTS ---
 
@@ -84,7 +34,7 @@ const tierStyles = {
 const LeaderboardPodium = ({
   topThree,
 }: {
-  topThree: UserLeaderboardEntry[];
+  topThree: Leaderboard.UserLeaderboardEntry[];
 }) => {
   const [champion, silver, bronze] = topThree;
   const jsConfettiRef = useRef<JSConfetti | null>(null);
@@ -100,7 +50,7 @@ const LeaderboardPodium = ({
   }, []);
 
   const podiumCard = (
-    entry: UserLeaderboardEntry,
+    entry: Leaderboard.UserLeaderboardEntry,
     tier: 'Champion' | 'Silver' | 'Bronze',
   ) => {
     const isChampion = tier === 'Champion';
@@ -123,12 +73,12 @@ const LeaderboardPodium = ({
           </h3>
         </div>
         <img
-          src={`https://api.dicebear.com/8.x/pixel-art/svg?seed=${entry.user}`}
+          src={`https://api.dicebear.com/8.x/pixel-art/svg?seed=${entry.user.toText()}`}
           alt="Avatar"
           className="w-20 h-20 rounded-full mb-4 bg-gray-800 p-1"
         />
         <p className={`font-mono text-lg ${styles.text}`}>
-          {truncatePrincipal(entry.user)}
+          {truncatePrincipal(entry.user.toText())}
         </p>
         <div className="flex items-center gap-2 mt-2">
           <span className="font-mono text-gray-400">
@@ -153,7 +103,10 @@ const LeaderboardList = ({
   data,
   type,
 }: {
-  data: (UserLeaderboardEntry | ServerLeaderboardEntry)[];
+  data: (
+    | Leaderboard.UserLeaderboardEntry
+    | Leaderboard.ServerLeaderboardEntry
+  )[];
   type: 'user' | 'server';
 }) => (
   <div className="space-y-3">
@@ -167,8 +120,8 @@ const LeaderboardList = ({
     {data.map((entry) => {
       const principal =
         type === 'user'
-          ? (entry as UserLeaderboardEntry).user
-          : (entry as ServerLeaderboardEntry).server;
+          ? (entry as Leaderboard.UserLeaderboardEntry).user
+          : (entry as Leaderboard.ServerLeaderboardEntry).server;
       const avatarType = type === 'user' ? 'pixel-art' : 'bottts-neutral';
       return (
         <div
@@ -184,7 +137,7 @@ const LeaderboardList = ({
               className="w-10 h-10 rounded-full bg-gray-800 p-1"
             />
             <span className="font-mono text-white">
-              {truncatePrincipal(principal)}
+              {truncatePrincipal(principal.toText())}
             </span>
           </div>
           <div className="col-span-4 text-right">
@@ -225,20 +178,76 @@ const LeaderboardSkeleton = () => (
     </div>
   </div>
 );
+// --- 1. NEW ERROR COMPONENT ---
+// This can be moved to its own file if you prefer.
+const LeaderboardError = ({ onRetry }: { onRetry: () => void }) => (
+  <div className="w-full max-w-5xl mx-auto pt-12 pb-24 flex flex-col items-center justify-center text-center text-gray-400">
+    <AlertTriangle className="h-12 w-12 text-red-500 mb-4" />
+    <h2 className="text-2xl font-bold text-white mb-2">
+      Failed to Load Leaderboard
+    </h2>
+    <p className="mb-6">
+      There was a problem fetching the data. Please check your connection and
+      try again.
+    </p>
+    <Button onClick={onRetry} variant="secondary">
+      Retry
+    </Button>
+  </div>
+);
 
 // --- MAIN PAGE COMPONENT ---
+const INITIAL_VISIBLE_COUNT = 25;
+const LOAD_MORE_INCREMENT = 25;
+
 export default function LeaderboardPage() {
   const [activeTab, setActiveTab] = useState<'users' | 'servers'>('users');
-  const isLoading = false;
-  const isError = false;
+  const [visibleUserCount, setVisibleUserCount] = useState(
+    INITIAL_VISIBLE_COUNT,
+  );
+  // --- 1. ADD STATE FOR SERVER PAGINATION ---
+  const [visibleServerCount, setVisibleServerCount] = useState(
+    INITIAL_VISIBLE_COUNT,
+  );
+
+  const {
+    data: users,
+    isLoading: usersLoading,
+    isError: usersError,
+    refetch: refetchUsers,
+  } = useGetUserLeaderboard();
+
+  const {
+    data: servers,
+    isLoading: serversLoading,
+    isError: serversError,
+    refetch: refetchServers,
+  } = useGetServerLeaderboard();
+
+  const isLoading = usersLoading || serversLoading;
+  const isError = usersError || serversError;
+
+  const handleRetry = () => {
+    if (usersError) refetchUsers();
+    if (serversError) refetchServers();
+  };
 
   if (isLoading) {
     return <LeaderboardSkeleton />;
   }
-  // if (isError) { return <LeaderboardError onRetry={...} />; }
 
-  const topThreeUsers = userLeaderboardData.slice(0, 3);
-  const restOfUsers = userLeaderboardData.slice(3);
+  if (isError) {
+    return <LeaderboardError onRetry={handleRetry} />;
+  }
+
+  const topThreeUsers = users?.slice(0, 3) || [];
+  const restOfUsers = users?.slice(3) || [];
+  const allServers = servers || [];
+
+  // Slice the data for display
+  const visibleUsers = restOfUsers.slice(0, visibleUserCount);
+  // --- 2. SLICE THE SERVER DATA FOR DISPLAY ---
+  const visibleServers = allServers.slice(0, visibleServerCount);
 
   return (
     <div className="w-full max-w-5xl mx-auto pt-12 pb-24 text-gray-300">
@@ -267,13 +276,44 @@ export default function LeaderboardPage() {
 
         <TabsContent value="users">
           <div className="mt-16 md:mt-24">
-            <LeaderboardPodium topThree={topThreeUsers} />
-            <LeaderboardList data={restOfUsers} type="user" />
+            {topThreeUsers.length > 0 && (
+              <LeaderboardPodium topThree={topThreeUsers} />
+            )}
+            <LeaderboardList data={visibleUsers} type="user" />
+
+            {restOfUsers.length > visibleUserCount && (
+              <div className="text-center mt-8">
+                <Button
+                  onClick={() =>
+                    setVisibleUserCount(
+                      (prevCount) => prevCount + LOAD_MORE_INCREMENT,
+                    )
+                  }
+                  variant="outline">
+                  Load More
+                </Button>
+              </div>
+            )}
           </div>
         </TabsContent>
 
         <TabsContent value="servers">
-          <LeaderboardList data={serverLeaderboardData} type="server" />
+          {/* --- 3. UPDATE THE SERVERS TAB --- */}
+          <LeaderboardList data={visibleServers} type="server" />
+
+          {allServers.length > visibleServerCount && (
+            <div className="text-center mt-8">
+              <Button
+                onClick={() =>
+                  setVisibleServerCount(
+                    (prevCount) => prevCount + LOAD_MORE_INCREMENT,
+                  )
+                }
+                variant="outline">
+                Load More
+              </Button>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 

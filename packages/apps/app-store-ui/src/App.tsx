@@ -35,6 +35,7 @@ const canisterIds = {
   AUTH_SERVER: process.env.CANISTER_ID_AUTH_SERVER!,
   AUDITOR_CREDENTIALS: process.env.CANISTER_ID_AUDITOR_CREDENTIALS!,
   APP_BOUNTIES: process.env.CANISTER_ID_APP_BOUNTIES!,
+  LEADERBOARD: process.env.CANISTER_ID_LEADERBOARD!,
   // ... add all other canister IDs your app needs
 };
 
