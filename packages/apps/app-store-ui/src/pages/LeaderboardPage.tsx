@@ -290,7 +290,7 @@ export default function LeaderboardPage() {
       </nav>
 
       {/* Header */}
-      <header className="mb-32">
+      <header className="mb-24">
         <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
           Leaderboard
         </h1>

@@ -32,7 +32,11 @@ export function LoginButton() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button size="icon" className="rounded-full">
-            <User className="h-5 w-5" />
+            <img
+              src={`https://api.dicebear.com/8.x/pixel-art/svg?seed=${identity.getPrincipal().toText()}`}
+              alt="Avatar"
+              className="w-8 h-8 rounded-full bg-gray-800 p-1"
+            />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-54">
