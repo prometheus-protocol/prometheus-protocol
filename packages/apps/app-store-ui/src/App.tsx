@@ -24,6 +24,7 @@ import { CommunityPage } from './pages/CommunityPage';
 
 import { configure as configureIcJs } from '@prometheus-protocol/ic-js';
 import AppBountiesPage from './pages/AppBountiesPage';
+import LeaderboardPage from './pages/LeaderboardPage';
 
 // --- CONFIGURE THE SHARED PACKAGE ---
 // This object is created at BUILD TIME. Vite replaces each `process.env`
@@ -79,6 +80,7 @@ function App() {
               />
 
               <Route path="bounties" element={<AppBountiesPage />} />
+              <Route path="leaderboard" element={<LeaderboardPage />} />
 
               {/* Static informational pages */}
               <Route path="about" element={<AboutPage />} />
