@@ -25,7 +25,7 @@ CANISTER_NAME="app_bounties"
 TITLE_1="PMP Token Faucet"
 DESC_1="Get PMP tokens for development of Prometheus MCP servers."
 REWARD_1=0.0001
-TOKEN_1="preMCPT"
+TOKEN_1="USDC"
 STATUS_1="Open"
 # Using $'...' to correctly handle newlines and special characters in the markdown.
 DETAILS_1=$'The PMP Token Faucet provides developers with the necessary tokens to build and test their applications on the Prometheus Protocol.\n\n### Key Features\n*   Get tokens for testing and development\n*   Uses On-Chain Identity for secure access\n*   Instant token delivery\n\nClick [here](https://discord.com/channels/YOUR_SERVER_ID/YOUR_CHANNEL_ID) to claim on Discord.'
@@ -34,7 +34,7 @@ DETAILS_1=$'The PMP Token Faucet provides developers with the necessary tokens t
 TITLE_2="Implement Metrics Endpoint"
 DESC_2="Add a Prometheus-compatible /metrics endpoint to the node."
 REWARD_2=0.05
-TOKEN_2="preMCPT"
+TOKEN_2="USDC"
 STATUS_2="Open"
 DETAILS_2=$'This bounty is for implementing a standard `/metrics` endpoint on the MCP server node that exposes key performance indicators.\n\n### Acceptance Criteria\n1.  Endpoint must be available at `/metrics`.\n2.  Must be compatible with Prometheus scraping.\n3.  Must include at least the following metrics:\n    *   `mcp_active_connections`\n    *   `mcp_requests_total` (with method and status labels)\n    *   `mcp_request_duration_seconds` (histogram)\n\nSubmit a pull request to the main repository for review. Claim the bounty in the Discord channel once the PR is merged.\n\nClick [here](https://discord.com/channels/YOUR_SERVER_ID/YOUR_CHANNEL_ID) to claim on Discord.'
 
@@ -42,7 +42,7 @@ DETAILS_2=$'This bounty is for implementing a standard `/metrics` endpoint on th
 TITLE_3="Documentation Translation: Japanese"
 DESC_3="Translate the core protocol documentation into Japanese."
 REWARD_3=0.02
-TOKEN_3="preMCPT"
+TOKEN_3="USDC"
 STATUS_3="In Progress"
 DETAILS_3=$'We are looking for a native Japanese speaker to translate our core technical documentation.\n\n### Scope\n*   Protocol Overview\n*   Getting Started Guide\n*   API Reference\n\nPlease coordinate in the Discord channel before starting work to avoid duplication of effort.\n\nClick [here](https://discord.com/channels/YOUR_SERVER_ID/YOUR_CHANNEL_ID) to coordinate and claim.'
 

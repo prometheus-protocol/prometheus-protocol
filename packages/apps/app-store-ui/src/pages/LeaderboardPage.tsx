@@ -168,7 +168,7 @@ const LeaderboardPodium = ({
           </p>
           <div className="flex items-center gap-2 mt-2">
             <span className="font-mono text-gray-400">{entry.points}</span>
-            <Token className="h-4" />
+            <Token className="h-5" />
           </div>
         </div>
       </>
@@ -210,7 +210,7 @@ const LeaderboardList = ({ rest }: { rest: typeof leaderboardData }) => (
         </div>
         <div className="col-span-4 flex items-center justify-end gap-2">
           <span className="font-mono text-white">{entry.points}</span>
-          <Token className="h-4" />
+          <Token className="h-5" />
         </div>
       </div>
     ))}
@@ -290,7 +290,7 @@ export default function LeaderboardPage() {
       </nav>
 
       {/* Header */}
-      <header className="mb-24">
+      <header className="mb-32 md:mb-24">
         <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
           Leaderboard
         </h1>

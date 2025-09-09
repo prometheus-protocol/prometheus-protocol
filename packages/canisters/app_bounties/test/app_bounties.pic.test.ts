@@ -121,7 +121,7 @@ describe('App Bounty Canister', () => {
       title: 'PMP Token Faucet',
       short_description: 'Get PMP tokens for development.',
       reward_amount: 0.0001,
-      reward_token: 'preMCPT',
+      reward_token: 'USDC',
       status: 'Open',
       details_markdown: '### Key Features...',
     };
@@ -136,7 +136,12 @@ describe('App Bounty Canister', () => {
 
       // Create the bounty
       const createResult = await appBountyActor.create_bounty(
-        ...Object.values(bounty1Data),
+        bounty1Data.title,
+        bounty1Data.short_description,
+        bounty1Data.reward_amount,
+        bounty1Data.reward_token,
+        bounty1Data.status,
+        bounty1Data.details_markdown,
       );
       expect(createResult).toHaveProperty('ok');
       // @ts-ignore
@@ -159,13 +164,23 @@ describe('App Bounty Canister', () => {
       appBountyActor.setIdentity(ownerIdentity);
       // @ts-ignore
       const { ok: bountyId } = await appBountyActor.create_bounty(
-        ...Object.values(bounty1Data),
+        bounty1Data.title,
+        bounty1Data.short_description,
+        bounty1Data.reward_amount,
+        bounty1Data.reward_token,
+        bounty1Data.status,
+        bounty1Data.details_markdown,
       );
 
       const updatedData = { ...bounty1Data, status: 'In Progress' };
       const updateResult = await appBountyActor.update_bounty(
         bountyId,
-        ...Object.values(updatedData),
+        updatedData.title,
+        updatedData.short_description,
+        updatedData.reward_amount,
+        updatedData.reward_token,
+        updatedData.status,
+        updatedData.details_markdown,
       );
       expect(updateResult).toHaveProperty('ok');
 
@@ -178,7 +193,12 @@ describe('App Bounty Canister', () => {
       appBountyActor.setIdentity(ownerIdentity);
       // @ts-ignore
       const { ok: bountyId } = await appBountyActor.create_bounty(
-        ...Object.values(bounty1Data),
+        bounty1Data.title,
+        bounty1Data.short_description,
+        bounty1Data.reward_amount,
+        bounty1Data.reward_token,
+        bounty1Data.status,
+        bounty1Data.details_markdown,
       );
 
       // Verify it exists

@@ -123,7 +123,7 @@ export default function PublicBountyBoardPage() {
                       <span className="font-mono text-white">
                         {bounty.reward_amount}
                       </span>
-                      <Token className="h-4" />
+                      <Token className="h-5" />
                     </div>
                     <div className="col-span-6 md:col-span-2 flex items-center justify-end">
                       <span

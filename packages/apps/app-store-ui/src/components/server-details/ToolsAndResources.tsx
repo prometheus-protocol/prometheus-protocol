@@ -42,7 +42,7 @@ export function ToolsAndResources({ tools }: ToolsAndResourcesProps) {
                       <span className="text-sm text-foreground font-mono">
                         {tool.cost}
                       </span>
-                      <Token className="h-4" />
+                      <Token className="h-5" />
                     </div>
                   </div>
                 </AccordionTrigger>
