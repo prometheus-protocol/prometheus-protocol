@@ -10,7 +10,7 @@ const BLANK_BOUNTY_TEMPLATE = {
   details_markdown:
     '# Bounty Details\n\n## 1. Project Goal\n\n*A clear, concise statement of what this bounty aims to achieve.*\n\n## 2. Scope of Work\n\n*A detailed list of features and requirements.*\n\n- Feature A\n- Feature B\n- Integration with X\n\n## 3. Acceptance Criteria\n\n*How the DAO will judge a successful submission. Be specific.*\n\n- Must be deployed as an MCP server.\n- Code must be open-sourced under an MIT license.\n- Must pass all tests in the provided suite.\n\n## 4. How to Claim\n\n*Instructions for developers.*\n\n- Submit your work by opening a pull request against the `bounty-submissions` repository.\n- Post a link to your PR in the official Discord channel.',
   reward_amount: 0.0,
-  reward_token: 'preMCPT',
+  reward_token: 'USDC',
   status: 'Open',
 };
 

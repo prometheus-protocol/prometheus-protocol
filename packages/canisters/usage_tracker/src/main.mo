@@ -258,6 +258,15 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
     );
   };
 
+  /// Returns the aggregated metrics for all servers.
+  public shared query func get_all_server_metrics() : async [(Principal, ServerMetricsShared)] {
+    let all_metrics = Buffer.Buffer<(Principal, ServerMetricsShared)>(Map.size(aggregated_metrics));
+    for ((server_id, metrics) in Map.entries(aggregated_metrics)) {
+      all_metrics.add((server_id, to_shared_metrics(metrics)));
+    };
+    return Buffer.toArray(all_metrics);
+  };
+
   /// Returns the current admin principal.
   public shared query func get_admin() : async Principal {
     return admin;
@@ -272,5 +281,31 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   public shared query func is_wasm_hash_approved(hash : Blob) : async Bool {
     let wasm_id = Base16.encode(hash);
     return Option.isSome(Map.get(approved_wasm_hashes, Map.thash, wasm_id));
+  };
+
+  // Add this function inside your UsageTracker actor class.
+
+  /**
+    * [ADMIN-ONLY] A backdoor for seeding local development data.
+    * Bypasses the Wasm hash check but requires the caller to be the admin.
+    * Allows logging usage on behalf of any server principal.
+    */
+  public shared (msg) func seed_log(server_id : Principal, stats : UsageStats) : async Result.Result<(), Text> {
+    if (not is_admin(msg.caller)) {
+      return #err("Unauthorized: Only the admin can call seed_log.");
+    };
+
+    // Create and store the log entry
+    let new_log : LogEntry = {
+      server_id = server_id;
+      timestamp = Time.now();
+      stats = stats;
+    };
+    Vector.add(logs, new_log);
+
+    // Update the aggregated metrics for the UI.
+    update_metrics(server_id, stats);
+
+    return #ok(());
   };
 };

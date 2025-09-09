@@ -1,0 +1,34 @@
+type UserLeaderboardEntry = 
+ record {
+   rank: nat;
+   total_invocations: nat;
+   user: principal;
+ };
+type Time = int;
+type ServerLeaderboardEntry = 
+ record {
+   rank: nat;
+   server: principal;
+   total_invocations: nat;
+ };
+type Result = 
+ variant {
+   err: text;
+   ok;
+ };
+type Leaderboard = 
+ service {
+   get_last_updated: () -> (Time) query;
+   get_owner: () -> (principal) query;
+   get_server_leaderboard: () -> (vec ServerLeaderboardEntry) query;
+   get_user_leaderboard: () -> (vec UserLeaderboardEntry) query;
+   init: (canister_id: principal) -> ();
+   trigger_manual_update: () -> (Result);
+ };
+/// * The Leaderboard canister serves as a read-optimized cache for ecosystem rankings.
+///  * It periodically pulls raw data from the UsageTracker canister, computes the "Top Users" and
+///  * "Top Servers" leaderboards, and stores them in a sorted state.
+///  *
+///  * This separation of concerns ensures that the frontend can load leaderboard data with fast,
+///  * cheap query calls, without putting computational strain on the write-heavy UsageTracker.
+service : () -> Leaderboard

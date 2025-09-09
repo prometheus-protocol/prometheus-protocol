@@ -14,7 +14,7 @@ describe('app bounties list command', () => {
     title: 'Test Bounty',
     status: 'Open',
     reward_amount: 1.5,
-    reward_token: 'preMCPT',
+    reward_token: 'USDC',
     short_description: '',
     details_markdown: '',
     created_at: 0n,
@@ -45,7 +45,7 @@ describe('app bounties list command', () => {
       ID: 1,
       Title: 'Test Bounty',
       Status: 'Open',
-      Reward: '1.5 preMCPT',
+      Reward: '1.5 USDC',
     });
 
     consoleTableSpy.mockRestore();

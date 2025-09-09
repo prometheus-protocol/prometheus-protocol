@@ -69,13 +69,13 @@ export default function PublicBountyBoardPage() {
           Home
         </Link>
         <span className="mx-2">/</span>
-        <span className="text-gray-200">Public Bounty Board</span>
+        <span className="text-gray-200">App Bounty Board</span>
       </nav>
 
       {/* Header */}
-      <header className="mb-24">
+      <header className="mb-18">
         <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
-          Public Bounty Board
+          App Bounty Board
         </h1>
         <p className="mt-4 text-lg text-gray-400 max-w-3xl">
           Browse open projects and claim bounties for building and listing new
@@ -123,7 +123,7 @@ export default function PublicBountyBoardPage() {
                       <span className="font-mono text-white">
                         {bounty.reward_amount}
                       </span>
-                      <Token className="h-4" />
+                      <Token className="h-5" />
                     </div>
                     <div className="col-span-6 md:col-span-2 flex items-center justify-end">
                       <span

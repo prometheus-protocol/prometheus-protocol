@@ -31,15 +31,22 @@ export function LoginButton() {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button size="icon" className="rounded-full">
-            <User className="h-5 w-5" />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full h-10 w-10">
+            <img
+              src={`https://api.dicebear.com/9.x/pixel-art/svg?seed=${identity.getPrincipal().toText()}`}
+              alt="Avatar"
+              className="w-10 h-10 rounded-full bg-gray-800"
+            />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-54">
           <DropdownMenuLabel>My Account</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem disabled>
-            <span className="text-xs text-muted-foreground">
+            <span className="text-sm text-foreground">
               {truncatePrincipal(identity.getPrincipal().toText())}
             </span>
           </DropdownMenuItem>

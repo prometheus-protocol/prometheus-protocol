@@ -4,3 +4,4 @@ export * from './payment.api.js';
 export * from './registry.api.js';
 export * from './orchestrator.api.js';
 export * from './bounties.api.js';
+export * from './leaderboard.api.js';

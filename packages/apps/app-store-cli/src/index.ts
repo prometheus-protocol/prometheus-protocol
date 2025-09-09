@@ -14,6 +14,7 @@ import { registerDiscoverCommand } from './commands/discover.js';
 import { registerBountyCommands } from './commands/bounty/bounty.commands.js';
 import { registerAttestCommands } from './commands/attest/attest.commands.js';
 import { registerDaoCommands } from './commands/dao/dao.commands.js';
+import { registerLeaderboardCommands } from './commands/leaderboard/leaderboard.commands.js';
 
 import packageJson from '../package.json' with { type: 'json' };
 
@@ -139,6 +140,9 @@ registerVersionCommands(program); // Assuming you create a parent for list, depr
 
 // 5. App Bounties Commands (Related to application-specific bounties)
 registerAppBountiesCommand(program);
+
+// 6. Leaderboard Commands (Related to leaderboards)
+registerLeaderboardCommands(program);
 
 // Parse the command line arguments
 await program.parseAsync(process.argv);

@@ -4,6 +4,12 @@ type UsageTracker =
    add_approved_wasm_hash: (hash: blob) -> (Result);
    /// Returns the current admin principal.
    get_admin: () -> (principal) query;
+   /// Returns the aggregated metrics for all servers.
+   get_all_server_metrics: () ->
+    (vec record {
+           principal;
+           ServerMetricsShared;
+         }) query;
    /// * Allows the designated payout canister to atomically retrieve all collected logs and clear the buffer.
    ///      * This is an update call because it modifies the canister's state by clearing the logs.
    ///      * This pattern prevents unbounded memory growth and ensures that logs are processed exactly once.
@@ -20,6 +26,10 @@ type UsageTracker =
    log_call: (stats: UsageStats) -> (Result);
    /// Removes a Wasm hash from the allowlist.
    remove_approved_wasm_hash: (hash: blob) -> (Result);
+   /// * [ADMIN-ONLY] A backdoor for seeding local development data.
+   ///     * Bypasses the Wasm hash check but requires the caller to be the admin.
+   ///     * Allows logging usage on behalf of any server principal.
+   seed_log: (server_id: principal, stats: UsageStats) -> (Result);
    /// Sets the designated payout canister.
    set_payout_canister: (canister_id: principal) -> (Result);
    /// Transfers admin rights to a new principal.

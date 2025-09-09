@@ -92,7 +92,7 @@ export function AppBar() {
 
   return (
     <>
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pt-0 sm:pt-2 px-6 sm:px-8 lg:px-8 relative shadow-[var(--shadow-header)]">
+      <header className="sticky top-0 z-30 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pt-0 sm:pt-2 px-6 sm:px-8 lg:px-8 relative shadow-[var(--shadow-header)]">
         <div className="container flex h-20 md:h-26 items-center justify-between mx-auto">
           <div className="flex items-center justify-start gap-16">
             <Logo />
@@ -105,6 +105,19 @@ export function AppBar() {
                       to="/bounties"
                       className={cn(navigationMenuTriggerStyle(), 'text-base')}>
                       App Bounties
+                    </Link>
+                  </NavigationMenuLink>
+                </NavigationMenuItem>
+
+                <NavigationMenuItem>
+                  {/* --- 3. THE CORRECT IMPLEMENTATION --- */}
+                  <NavigationMenuLink
+                    asChild
+                    active={pathname === '/leaderboard'}>
+                    <Link
+                      to="/leaderboard"
+                      className={cn(navigationMenuTriggerStyle(), 'text-base')}>
+                      Leaderboard
                     </Link>
                   </NavigationMenuLink>
                 </NavigationMenuItem>
@@ -166,7 +179,7 @@ export function AppBar() {
       )}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm md:hidden">
-          <div className="fixed left-0 top-0 h-full w-full max-w-xs bg-background p-6">
+          <div className="fixed right-0 top-0 h-full w-full max-w-xs bg-background p-6">
             <div className="flex items-center justify-between mb-8">
               <Logo />
               <Button
@@ -179,17 +192,22 @@ export function AppBar() {
             </div>
             <nav className="flex flex-col space-y-4">
               <Link
+                to="/"
+                className="text-lg font-medium"
+                onClick={() => setIsMobileMenuOpen(false)}>
+                Discover Apps
+              </Link>
+              <Link
                 to="/bounties"
                 className="text-lg font-medium"
                 onClick={() => setIsMobileMenuOpen(false)}>
                 App Bounties
               </Link>
-              <div className="text-lg font-medium">Audit Hub</div>
               <Link
-                to="/audits/bounties"
-                className="pl-4 text-muted-foreground"
+                to="/leaderboard"
+                className="text-lg font-medium"
                 onClick={() => setIsMobileMenuOpen(false)}>
-                Audit Bounties
+                Leaderboard
               </Link>
             </nav>
           </div>

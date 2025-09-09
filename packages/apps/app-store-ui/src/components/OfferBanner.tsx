@@ -6,8 +6,8 @@ export function OfferBanner() {
   return (
     <section className="bg-primary/80 rounded-4xl p-8 md:p-12 my-20 text-center relative [perspective:10000px]">
       <img
-        src="/images/pmp-token.webp"
-        alt="PMP Token"
+        src="/images/usdc.svg"
+        alt="USDC Token"
         className="
             w-28 h-28 mx-auto mb-6 
             [animation:var(--animate-flip-pause)]
@@ -15,7 +15,7 @@ export function OfferBanner() {
           "
       />
       <h2 className="text-3xl font-bold tracking-tight text-neutral-900">
-        Build on the Prometheus Protocol
+        Build on Prometheus Protocol and earn USDC
       </h2>
       <p className="mt-2 text-xl md:text-2xl tracking-tight text-neutral-800 max-w-2xl mx-auto">
         Explore our public bounty board for paid opportunities. Contribute to

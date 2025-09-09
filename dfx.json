@@ -32,14 +32,6 @@
         "node_compatibility": true
       }
     },
-    "pre_mcpt": {
-      "main": "packages/canisters/pre_mcpt/src/main.mo",
-      "type": "motoko",
-      "declarations": {
-        "output": "packages/declarations/src/generated/pre_mcpt",
-        "node_compatibility": true
-      }
-    },
     "usage_tracker": {
       "main": "packages/canisters/usage_tracker/src/main.mo",
       "type": "motoko",
@@ -61,6 +53,14 @@
       "type": "motoko",
       "declarations": {
         "output": "packages/declarations/src/generated/app_bounties",
+        "node_compatibility": true
+      }
+    },
+    "leaderboard": {
+      "main": "packages/canisters/leaderboard/src/main.mo",
+      "type": "motoko",
+      "declarations": {
+        "output": "packages/declarations/src/generated/leaderboard",
         "node_compatibility": true
       }
     },
