@@ -84,6 +84,7 @@ describe('Leaderboard Aggregator Canister', () => {
     aggregatorCanisterId = aggregatorFixture.canisterId;
 
     // Initialize the aggregator with the tracker's canister ID
+    aggregatorActor.setIdentity(ADMIN_IDENTITY);
     await aggregatorActor.init(trackerCanisterId);
   });
 
