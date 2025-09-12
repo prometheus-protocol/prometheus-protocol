@@ -78,8 +78,6 @@ export default function SetupPage() {
             spenderPrincipal={spenderPrincipal}
             onSuccess={handleSuccess}
             submitButtonText="Approve & Continue"
-            isSetupFlow={true} // <-- Tell it this is the setup flow
-            sessionId={sessionId!} // <-- Provide the session ID
           />
         )}
       </CardContent>

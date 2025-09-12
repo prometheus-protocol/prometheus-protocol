@@ -1,19 +1,14 @@
 import { getTierInfo } from '@/lib/get-tier-info';
 import { cn } from '@/lib/utils';
-import {
-  AppStoreDetails,
-  VerificationStatus,
-} from '@prometheus-protocol/ic-js';
+import { AppStoreDetails, CORE_AUDIT_TYPES } from '@prometheus-protocol/ic-js';
 
 // 1. Update the props to accept our live data objects.
 interface CertificateSummaryCardProps {
   appDetails: AppStoreDetails;
-  verificationStatus: VerificationStatus;
 }
 
 export function CertificateSummaryCard({
   appDetails,
-  verificationStatus,
 }: CertificateSummaryCardProps) {
   // 2. Get tier info directly from the app's security tier.
   const tierInfo = getTierInfo(appDetails.securityTier);
@@ -39,7 +34,7 @@ export function CertificateSummaryCard({
         <div className="text-right">
           {/* 3. Display the number of completed audits */}
           <p className={cn('text-5xl font-bold', tierInfo.textColorClass)}>
-            {verificationStatus.attestations.length}
+            {appDetails.attestations.length} / {CORE_AUDIT_TYPES.length}
           </p>
           <p className="text-xs text-muted-foreground">Completed Audits</p>
         </div>

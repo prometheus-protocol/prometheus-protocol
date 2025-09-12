@@ -74,6 +74,21 @@
         "node_compatibility": true
       }
     },
+    "usdc_ledger": {
+      "type": "custom",
+      "candid": "https://github.com/dfinity/ic/releases/download/ledger-suite-icrc-2025-06-19/ledger.did",
+      "wasm": "https://github.com/dfinity/ic/releases/download/ledger-suite-icrc-2025-06-19/ic-icrc1-ledger.wasm.gz",
+      "init_arg": "(variant { Init = record { token_symbol = \"USDC\"; token_name = \"USD Coin\"; decimals = opt 6; minting_account = record { owner = principal \"feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae\" }; transfer_fee = 10; initial_balances = vec { record { record { owner = principal \"feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae\" }; 100_000_000_000 } }; archive_options = record { num_blocks_to_archive = 1000; trigger_threshold = 2000; controller_id = principal \"feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae\" }; metadata = vec { record { \"icrc1:logo\"; variant { Text = \"https://www.circle.com/hs-fs/hubfs/s-logos/usdc-logo-color.svg?width=80&name=usdc-logo-color.svg\" } } }; feature_flags = opt record { icrc2 = true }; } })",
+      "declarations": {
+        "output": "packages/declarations/src/generated/icrc1_ledger",
+        "node_compatibility": true
+      },
+      "remote": {
+        "id": {
+          "ic": "53nhb-haaaa-aaaar-qbn5q-cai"
+        }
+      }
+    },
     "app_store_ui": {
       "dependencies": ["mcp_registry"],
       "app_store_ui": {

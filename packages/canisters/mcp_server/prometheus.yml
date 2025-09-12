@@ -1,0 +1,26 @@
+# Prometheus Application Manifest
+# This is the permanent, unique identifier for your application.
+namespace: com.example.app
+
+# This section contains all data for a specific version.
+submission:
+  name: Some cool thing
+  description: It helps you do some stuff
+  publisher: Jesse
+  category: Utilities
+  repo_url: https://github.com/jesse/app
+  canister_id: vb2j2-fp777-77774-qaafq-cai
+  mcp_path: /mcp
+  why_this_app: Its great
+  key_features:
+    - stuff
+    - more stuff
+  tags:
+    - ai
+    - blockchain
+  visuals:
+    icon_url: ''
+    banner_url: ''
+    gallery_images: []
+  git_commit: 'd8e1f951891731d7e43be1f55eebde2ec7c7707b'
+  wasm_path: ../../../.dfx/local/canisters/mcp_server/mcp_server.wasm

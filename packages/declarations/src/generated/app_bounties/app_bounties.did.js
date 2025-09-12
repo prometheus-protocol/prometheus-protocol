@@ -8,14 +8,14 @@ export const idlFactory = ({ IDL }) => {
     'status' : IDL.Text,
     'title' : IDL.Text,
     'reward_token' : IDL.Text,
-    'reward_amount' : IDL.Float64,
+    'reward_amount' : IDL.Nat,
     'short_description' : IDL.Text,
     'created_at' : Timestamp,
     'details_markdown' : IDL.Text,
   });
   const AppBounties = IDL.Service({
     'create_bounty' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Float64, IDL.Text, IDL.Text, IDL.Text],
+        [IDL.Text, IDL.Text, IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
         [Result_1],
         [],
       ),
@@ -25,15 +25,7 @@ export const idlFactory = ({ IDL }) => {
     'get_owner' : IDL.Func([], [IDL.Principal], ['query']),
     'transfer_ownership' : IDL.Func([IDL.Principal], [Result], []),
     'update_bounty' : IDL.Func(
-        [
-          BountyId,
-          IDL.Text,
-          IDL.Text,
-          IDL.Float64,
-          IDL.Text,
-          IDL.Text,
-          IDL.Text,
-        ],
+        [BountyId, IDL.Text, IDL.Text, IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
         [Result],
         [],
       ),

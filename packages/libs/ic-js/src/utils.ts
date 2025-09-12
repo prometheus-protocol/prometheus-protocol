@@ -1,5 +1,14 @@
-import { Bounty } from '@prometheus-protocol/declarations/mcp_registry/mcp_registry.did.js';
-import { AuditBounty } from './api';
+import {
+  AttestationRecord,
+  AttestationRequest,
+  Bounty,
+  VerificationRequest,
+} from '@prometheus-protocol/declarations/mcp_registry/mcp_registry.did.js';
+import {
+  AuditBounty,
+  ProcessedAttestation,
+  ProcessedVerificationRequest,
+} from './api';
 import { fromNullable } from '@dfinity/utils';
 import { deserializeFromIcrc16Map, deserializeIcrc16Value } from './index.js';
 
@@ -84,4 +93,69 @@ export function processBounty(bounty: Bounty): AuditBounty {
     claimedDate: claimedDateNs ? nsToDate(claimedDateNs) : undefined,
     timeoutDate: timeoutDateNs ? nsToDate(timeoutDateNs) : undefined,
   };
+}
+
+export function processAttestation(
+  attestation: AttestationRecord,
+): ProcessedAttestation {
+  return {
+    audit_type: attestation.audit_type,
+    timestamp: attestation.timestamp,
+    auditor: attestation.auditor,
+    payload: deserializeFromIcrc16Map(attestation.metadata),
+  };
+}
+
+export function processVerificationRequest(
+  request: VerificationRequest,
+): ProcessedVerificationRequest {
+  const processedRequest = {
+    repo: request.repo,
+    commit_hash: uint8ArrayToHex(request.commit_hash as Uint8Array),
+    wasm_hash: uint8ArrayToHex(request.wasm_hash as Uint8Array),
+    metadata: deserializeFromIcrc16Map(request.metadata),
+  };
+
+  return processedRequest;
+}
+
+/**
+ * Converts a Uint8Array to a hexadecimal string.
+ * @param bytes The Uint8Array to convert.
+ * @returns The hexadecimal string representation.
+ */
+export function uint8ArrayToHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Converts a hexadecimal string to a Uint8Array.
+ * @param hexString The hexadecimal string to convert.
+ * @returns The corresponding Uint8Array.
+ */
+export function hexToUint8Array(hexString: string): Uint8Array {
+  // Ensure the hex string has an even number of characters, remove 0x prefix if present
+  const cleanHexString = hexString.startsWith('0x')
+    ? hexString.slice(2)
+    : hexString;
+  if (cleanHexString.length % 2 !== 0) {
+    throw new Error('Hex string must have an even number of characters');
+  }
+
+  const bytes = new Uint8Array(cleanHexString.length / 2);
+  for (let i = 0; i < cleanHexString.length; i += 2) {
+    bytes[i / 2] = parseInt(cleanHexString.substring(i, i + 2), 16);
+  }
+  return bytes;
+}
+
+// Truncate hex hash strings for display, e.g.:
+// a1b2c3d4e5f6...y7z8a9b0c1d2
+export function truncateHash(hash: string, length = 4): string {
+  if (hash.length <= length * 2) {
+    return hash; // No need to truncate
+  }
+  return `${hash.slice(0, length)}...${hash.slice(-length)}`;
 }

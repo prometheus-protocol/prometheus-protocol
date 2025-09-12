@@ -23,6 +23,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useState } from 'react';
+import { Tokens } from '@prometheus-protocol/ic-js';
 
 // --- NEW High-Fidelity Skeleton Component ---
 const ServerDetailsSkeleton = () => (
@@ -114,17 +115,35 @@ export default function ServerDetailsPage() {
     }
   };
 
+  // Find the specific bounty for the 'tools_v1' audit type
+  const toolsBounty = server.bounties.find(
+    (bounty) => bounty.challengeParameters.audit_type === 'tools_v1',
+  );
+
   return (
     <>
-      <div className="container mx-auto py-8 pb-32">
+      <div className="w-full max-w-6xl mx-auto py-8 pb-32">
         <ServerHeader server={server} onInstallClick={handleInstallClick} />
 
         <div className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-x-16 gap-y-8">
           <main className="lg:col-span-2 space-y-16 mt-8">
             <AboutSection server={server} />
-            <ToolsAndResources tools={server.tools} />
-            <DataSafetySection safetyInfo={server.dataSafety} />
-            <ReviewsSection reviews={server.reviews} />
+            <ToolsAndResources
+              tools={server.tools}
+              paymentToken={Tokens.USDC}
+              appId={server.id}
+              bounty={toolsBounty}
+            />
+            <DataSafetySection
+              safetyInfo={server.dataSafety}
+              appId={server.id}
+              paymentToken={Tokens.USDC}
+            />
+            <ReviewsSection
+              reviews={server.reviews}
+              appId={server.id}
+              paymentToken={Tokens.USDC}
+            />
           </main>
 
           <aside className="lg:col-span-1 space-y-8">

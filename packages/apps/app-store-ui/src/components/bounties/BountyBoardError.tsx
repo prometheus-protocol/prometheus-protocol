@@ -9,7 +9,7 @@ interface BountyBoardErrorProps {
 }
 
 export const BountyBoardError = ({ onRetry }: BountyBoardErrorProps) => (
-  <div className="w-full max-w-5xl mx-auto py-8 flex flex-col items-center justify-center text-center min-h-[60vh]">
+  <div className="w-full max-w-6xl mx-auto py-8 flex flex-col items-center justify-center text-center min-h-[60vh]">
     <AlertTriangle className="w-16 h-16 text-destructive/50 mb-6" />
     <h2 className="text-2xl font-bold text-white">Failed to Load Bounties</h2>
     <p className="mt-2 text-muted-foreground max-w-md">

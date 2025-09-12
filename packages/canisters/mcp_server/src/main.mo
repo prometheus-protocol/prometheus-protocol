@@ -49,31 +49,31 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
   // See the README for more details.
   // =================================================================================
 
-  transient let authContext : ?AuthTypes.AuthContext = null;
+  // transient let authContext : ?AuthTypes.AuthContext = null;
 
   // --- UNCOMMENT THIS BLOCK TO ENABLE AUTHENTICATION ---
 
-  // let issuerUrl = "https://bfggx-7yaaa-aaaai-q32gq-cai.icp0.io";
-  // let allowanceUrl = "https://bmfnl-jqaaa-aaaai-q32ha-cai.icp0.io";
-  // let requiredScopes = ["openid"];
+  let issuerUrl = "https://bfggx-7yaaa-aaaai-q32gq-cai.icp0.io";
+  let allowanceUrl = "https://bmfnl-jqaaa-aaaai-q32ha-cai.icp0.io";
+  let requiredScopes = ["openid"];
 
-  // //function to transform the response for jwks client
-  // public query func transformJwksResponse({
-  //   context : Blob;
-  //   response : IC.HttpRequestResult;
-  // }) : async IC.HttpRequestResult {
-  //   {
-  //     response with headers = []; // not intersted in the headers
-  //   };
-  // };
+  //function to transform the response for jwks client
+  public query func transformJwksResponse({
+    context : Blob;
+    response : IC.HttpRequestResult;
+  }) : async IC.HttpRequestResult {
+    {
+      response with headers = []; // not intersted in the headers
+    };
+  };
 
-  // // Initialize the auth context with the issuer URL and required scopes.
-  // transient let authContext : ?AuthTypes.AuthContext = ?AuthState.init(
-  //   Principal.fromActor(self),
-  //   issuerUrl,
-  //   requiredScopes,
-  //   transformJwksResponse,
-  // );
+  // Initialize the auth context with the issuer URL and required scopes.
+  transient let authContext : ?AuthTypes.AuthContext = ?AuthState.init(
+    Principal.fromActor(self),
+    issuerUrl,
+    requiredScopes,
+    transformJwksResponse,
+  );
 
   // --- END OF AUTHENTICATION BLOCK ---
 
@@ -156,8 +156,8 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
   // --- 3. CONFIGURE THE SDK ---
   transient let mcpConfig : McpTypes.McpConfig = {
     self = Principal.fromActor(self);
-    allowanceUrl = null; // No allowance URL needed for free tools.
-    // allowanceUrl = ?allowanceUrl; // Uncomment this line if using paid tools.
+    // allowanceUrl = null; // No allowance URL needed for free tools.
+    allowanceUrl = ?allowanceUrl; // Uncomment this line if using paid tools.
     serverInfo = {
       name = "full-onchain-mcp-server";
       title = "Full On-chain MCP Server";

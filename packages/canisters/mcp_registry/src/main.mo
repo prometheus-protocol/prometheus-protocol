@@ -314,69 +314,59 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
   };
 
+  /**
+   * @notice Fetches the single most recent attestation for each audit type for a given WASM.
+   * @dev This function has been refactored to IGNORE the finalization log. In a reputation-
+   *      based system, the stake provided by a trusted auditor is the guarantee of quality,
+   *      making a secondary finalization step unnecessary. This function now returns the
+   *      latest submitted attestation for each type, making the system more responsive.
+   * @param wasm_id The hex string identifier of the WASM.
+   * @return An array containing the most recent `AttestationRecord` for each audit type.
+   */
   private func _get_attestations_for_wasm(wasm_id : Text) : [ICRC126.AttestationRecord] {
 
-    // --- Step 1: Find the timestamp of the last finalization for this WASM ID ---
-    let last_finalization_record = BTree.get(finalization_log, Text.compare, wasm_id);
-
-    let finalization_ts = switch (last_finalization_record) {
-      case (null) {
-        // This WASM has never been finalized. According to the logic, no attestations
-        // are "official" yet. Return an empty array.
-        Debug.print("[DEBUG] No finalization record found for wasm_id: \"" # wasm_id # "\"");
-        return [];
-      };
-      case (?record) {
-        // We found a finalization record, use its timestamp as our cutoff.
-        record.timestamp;
-      };
-    };
-
-    // --- Step 2: Get all audit records for the WASM ID ---
+    // --- Step 1: Get all audit records for the WASM ID ---
     let state = icrc126().state;
     let all_audit_records = switch (Map.get(state.audits, Map.thash, wasm_id)) {
       case (null) {
+        // No audits have ever been filed for this WASM. Return an empty array.
         Debug.print("[DEBUG] No audits found for wasm_id: \"" # wasm_id # "\"");
         return [];
       };
       case (?records) { records };
     };
 
-    // --- Step 3: Filter for attestations created *before or at* the finalization time ---
-    var valid_attestations = Buffer.Buffer<ICRC126.AttestationRecord>(0);
+    // --- Step 2: Find the single most recent attestation for each audit type ---
+    // We use a mutable map to track the latest attestation we've seen for each `audit_type`.
+    // This ensures that even if multiple attestations of the same type exist, only the
+    // newest one is returned.
+    var latest_by_type = Map.new<Text, ICRC126.AttestationRecord>();
+
     for (record in all_audit_records.vals()) {
       switch (record) {
         case (#Attestation(att_record)) {
-          // The core filtering logic: only include attestations "stamped" by the finalization.
-          if (att_record.timestamp <= finalization_ts) {
-            valid_attestations.add(att_record);
+          // This is an attestation record, process it.
+          let existing = Map.get(latest_by_type, Map.thash, att_record.audit_type);
+          switch (existing) {
+            case (null) {
+              // This is the first time we've seen this audit_type, so it's the latest by default.
+              Map.set(latest_by_type, Map.thash, att_record.audit_type, att_record);
+            };
+            case (?prev_att) {
+              // We've seen this type before. If the current one is newer, it replaces the old one.
+              if (att_record.timestamp > prev_att.timestamp) {
+                Map.set(latest_by_type, Map.thash, att_record.audit_type, att_record);
+              };
+            };
           };
         };
-        case (#Divergence(_)) { /* Ignore */ };
-      };
-    };
-
-    // --- Step 4: From the valid attestations, find the single most recent for each type ---
-    // We use a mutable map to track the latest attestation we've seen for each audit_type.
-    var latest_by_type = Map.new<Text, ICRC126.AttestationRecord>();
-
-    for (att in valid_attestations.vals()) {
-      let existing = Map.get(latest_by_type, Map.thash, att.audit_type);
-      switch (existing) {
-        case (null) {
-          // This is the first time we've seen this audit_type, so it's the latest by default.
-          Map.set(latest_by_type, Map.thash, att.audit_type, att);
-        };
-        case (?prev_att) {
-          // We've seen this type before. If the current one is newer, it replaces the old one.
-          if (att.timestamp > prev_att.timestamp) {
-            Map.set(latest_by_type, Map.thash, att.audit_type, att);
-          };
+        case (#Divergence(_)) {
+          // Ignore divergence records for this query.
         };
       };
     };
 
-    // The values of the map now represent the definitive, "official" set of attestations.
+    // The values of the map now represent the definitive, most up-to-date set of attestations.
     return Iter.toArray(Map.vals(latest_by_type));
   };
 
@@ -832,14 +822,19 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       take = null;
     });
 
+    Debug.print("[DEBUG] Total canister types fetched: " # debug_show (all_canister_types.size()));
+
     // 3. Pre-process and "join" data into a complete list of potential listings.
     //    This is done in memory before filtering and pagination.
     var all_listings = Buffer.Buffer<AppStore.AppListing>(all_canister_types.size());
+    Debug.print("[DEBUG] Processing canister types to build listings...");
     for (canister_type in all_canister_types.vals()) {
       // a. Find the latest version for this canister type.
       if (canister_type.versions.size() > 0) {
         // Start with the first version as the potential latest.
         var latest_version = canister_type.versions[0];
+
+        Debug.print("[DEBUG] Evaluating canister type: \"" # canister_type.canister_type_namespace # "\" with " # debug_show (canister_type.versions.size()) # " versions.");
 
         // If there are more versions, iterate from the second element (index 1) to the end.
         if (canister_type.versions.size() > 1) {
@@ -1015,23 +1010,35 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     var count : Nat = 0;
     let out = Buffer.Buffer<ICRC127.Bounty>(take);
 
-    label main for (bounty in all_bounties.vals()) {
+    // Use a while loop to iterate from the last index (newest) to the first (oldest).
+    var i = all_bounties.size();
+    label collect while (i > 0) {
+      i -= 1;
+      let bounty = all_bounties[i];
+
       if (not started) {
+        // If we have a `prev` cursor, we need to find it before we start collecting.
         switch (prev) {
-          case null {};
           case (?p) {
-            // We skip items until we find the one matching `prev` (the last bounty_id of the previous page).
-            if (bounty.bounty_id == p) { started := true };
-            continue main;
+            if (bounty.bounty_id == p) {
+              // We found the last item of the previous page.
+              // We will start collecting on the *next* iteration.
+              started := true;
+            };
+            // Continue to the next iteration, skipping the current item.
+            continue collect;
+          };
+          case (null) {
+            // This case is handled by the initial `started` assignment, but included for completeness.
           };
         };
       };
 
-      // `started` is now true.
+      // `started` is now true. We can start collecting matching bounties.
       if (matchesAllFilters(bounty, filters)) {
         out.add(bounty);
         count += 1;
-        if (count >= take) break main;
+        if (count >= take) break collect; // Exit the loop once we have enough items.
       };
     };
 
@@ -1151,7 +1158,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     // 3. Return the result. `Map.get` returns an optional, which matches our function's return type.
     return result;
   };
-
   //------------------- SAMPLE FUNCTION -------------------//
 
   public shared func hello() : async Text {

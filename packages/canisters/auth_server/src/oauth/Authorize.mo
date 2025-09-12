@@ -106,67 +106,30 @@ module {
     // BIND the session to the caller's principal.
     session.user_principal := ?caller;
 
-    // 3. Check if the `prometheus:charge` scope was requested
-    let requires_payment_setup = Text.contains(session.scope, #text("prometheus:charge"));
-    var next_step : Types.AuthFlowStep = #consent;
+    // --- THE CORE CHANGE ---
+    // The flow is now streamlined. After login, the user ALWAYS proceeds to the consent screen.
+    // The responsibility of checking allowances is moved out of the authorization flow and
+    // onto the resource server at the time of the charge attempt.
 
-    // 4. Determine the next step based *only* on the presence of the scope.
-    if (requires_payment_setup) {
-      // If the charge scope is present, ALWAYS go to the setup page.
-      session.status := #awaiting_payment_setup;
-      next_step := #setup;
-    } else {
-      // If the scope is not present, go directly to consent.
-      session.status := #awaiting_consent;
-      next_step := #consent;
-    };
-
-    // 5. Update the session in the map
+    // 3. Transition the session state directly to awaiting consent.
+    session.status := #awaiting_consent;
     Map.set(context.authorize_sessions, thash, session_id, session);
 
-    // 7. Prepare scope details for the consent data
+    // 4. Prepare the data for the consent screen.
     let scope_details = Scope.build_scope_details(context, session);
-
     let consent_data : Types.ConsentData = {
       client_name = session.resource_server_name;
       logo_uri = session.resource_server_logo;
       scopes = scope_details;
     };
 
+    // 5. Return the confirmation, always directing the frontend to the #consent step.
     return #ok({
-      next_step = next_step;
+      next_step = #consent; // Always go to consent now.
       consent_data = consent_data;
+      // We still pass this so the consent screen can show which tokens are accepted if needed.
       accepted_payment_canisters = session.accepted_payment_canisters;
     });
-  };
-
-  // This function is called by the frontend after the user successfully sets up their allowance.
-  public func complete_payment_setup(context : Types.Context, session_id : Text, caller : Principal) : async Result.Result<Null, Text> {
-    let session = switch (Map.get(context.authorize_sessions, thash, session_id)) {
-      case (null) return #err("Invalid or expired session ID.");
-      case (?s) s;
-    };
-
-    // VALIDATE that the caller is the bound user.
-    switch (session.user_principal) {
-      case (null) return #err("Session not yet associated with a user.");
-      case (?owner_principal) {
-        if (owner_principal != caller) {
-          return #err("Caller does not match session owner.");
-        };
-      };
-    };
-
-    // Validate state transition
-    if (session.status != #awaiting_payment_setup) {
-      return #err("Invalid session state. Expected #awaiting_payment_setup.");
-    };
-
-    // Transition state to the final consent step
-    session.status := #awaiting_consent;
-    Map.set(context.authorize_sessions, thash, session_id, session);
-
-    return #ok(null);
   };
 
   public func complete_authorize(context : Types.Context, session_id : Text, caller : Principal) : async Result.Result<Text, Text> {

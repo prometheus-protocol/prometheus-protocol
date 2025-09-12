@@ -74,7 +74,7 @@ function HomePage() {
   }
 
   return (
-    <div className="w-full mx-auto">
+    <div className="w-full max-w-6xl mx-auto">
       <section className="my-16">
         <h1 className="font-header text-4xl font-bold tracking-tight mb-12 uppercase">
           Welcome {userName}

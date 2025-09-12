@@ -15,7 +15,7 @@ type Bounty =
    created_at: Timestamp;
    details_markdown: text;
    id: BountyId;
-   reward_amount: float64;
+   reward_amount: nat;
    reward_token: text;
    short_description: text;
    status: text;
@@ -23,8 +23,8 @@ type Bounty =
  };
 type AppBounties = 
  service {
-   create_bounty: (title: text, short_description: text, reward_amount:
-    float64, reward_token: text, status: text, details_markdown: text) ->
+   create_bounty: (title: text, short_description: text, reward_amount: 
+    nat, reward_token: text, status: text, details_markdown: text) ->
     (Result_1);
    delete_bounty: (id: BountyId) -> (Result);
    get_all_bounties: () -> (vec Bounty) query;
@@ -32,7 +32,7 @@ type AppBounties =
    get_owner: () -> (principal) query;
    transfer_ownership: (new_owner: principal) -> (Result);
    update_bounty: (id: BountyId, title: text, short_description: text,
-    reward_amount: float64, reward_token: text, status: text,
-    details_markdown: text) -> (Result);
+    reward_amount: nat, reward_token: text, status: text, details_markdown:
+    text) -> (Result);
  };
 service : () -> AppBounties

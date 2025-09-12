@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Image as ImageIcon } from 'lucide-react'; // A nice placeholder icon
+import { cn } from '@/lib/utils';
 
 interface ImageWithFallbackProps
   extends React.ImgHTMLAttributes<HTMLImageElement> {
@@ -33,7 +34,7 @@ export function ImageWithFallback({
     <img
       src={src}
       alt={alt}
-      className={className}
+      className={cn(className, 'border border-grey-600')}
       onError={() => setHasError(true)} // This is the key!
       {...props}
     />

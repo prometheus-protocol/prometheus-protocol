@@ -16,7 +16,7 @@ const AuditListItemSkeleton = () => (
 );
 
 export const AuditHubSkeleton = () => (
-  <div className="w-full max-w-5xl mx-auto pt-12 pb-24 animate-pulse">
+  <div className="w-full max-w-6xl mx-auto pt-12 pb-24 animate-pulse">
     {/* Header Skeleton */}
     <div className="h-4 w-1/4 bg-muted rounded mb-8" /> {/* Breadcrumbs */}
     <header className="mb-18 space-y-4">

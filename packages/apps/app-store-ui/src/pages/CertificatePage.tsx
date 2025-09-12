@@ -1,100 +1,108 @@
+import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   BadgeCheck,
-  Zap,
-  Award,
   PackageCheckIcon,
-  ShieldCheck,
-  Github,
   Info,
-  FileCode,
   AlertTriangle,
+  Hourglass,
+  FileCode,
+  Github,
+  ToolCase,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { CertificateSummaryCard } from '@/components/CertificateSummaryCard';
+import { useGetAppDetails } from '@/hooks/useAppStore';
+import { getTierInfo } from '@/lib/get-tier-info';
+import { cn, truncatePrincipal } from '@/lib/utils';
+import {
+  AttestationData,
+  AuditBounty,
+  CORE_AUDIT_TYPES,
+  ProcessedAttestation,
+  Registry,
+  Tokens,
+} from '@prometheus-protocol/ic-js';
+import NotFoundPage from './NotFoundPage';
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import NotFoundPage from './NotFoundPage';
-import { cn, truncatePrincipal } from '@/lib/utils';
-import { CertificateSummaryCard } from '@/components/CertificateSummaryCard';
-import { getTierInfo } from '@/lib/get-tier-info';
-import {
-  useGetAppDetails,
-  useGetVerificationStatus,
-} from '@/hooks/useAppStore';
-import { useMemo } from 'react';
-import { Button } from '@/components/ui/button';
+import { CreateBountyDialog } from '@/components/server-details/CreateBountyDialog';
 
-const backgroundSvg = `url('/images/certificate.svg')`;
+// --- CONSTANTS & HELPERS ---
 
-// Helper to get display info for each audit type
 const getAuditDisplayInfo = (auditType: string) => {
   switch (auditType) {
-    case 'security_v1':
+    case 'app_info_v1':
       return {
-        name: 'Security Audit',
-        icon: <ShieldCheck className="h-8 w-8 text-primary" />,
+        name: 'Application Info',
+        icon: <Info className="h-8 w-8 text-primary" />,
+        missingIcon: <Info className="h-8 w-8 text-muted-foreground" />,
       };
     case 'build_reproducibility_v1':
       return {
         name: 'Build Reproducibility',
         icon: <PackageCheckIcon className="h-8 w-8 text-primary" />,
-      };
-    case 'tools_v1':
-      return {
-        name: 'Tools & Resources',
-        icon: <Zap className="h-8 w-8 text-primary" />,
-      };
-    case 'app_info_v1':
-      return {
-        name: 'Application Information',
-        icon: <Info className="h-8 w-8 text-primary" />,
+        missingIcon: (
+          <PackageCheckIcon className="h-8 w-8 text-muted-foreground" />
+        ),
       };
     case 'data_safety_v1':
       return {
         name: 'Data Safety',
-        icon: <Award className="h-8 w-8 text-primary" />,
+        icon: <BadgeCheck className="h-8 w-8 text-primary" />,
+        missingIcon: <BadgeCheck className="h-8 w-8 text-muted-foreground" />,
+      };
+    case 'tools_v1':
+      return {
+        name: 'Tool Info',
+        icon: <ToolCase className="h-8 w-8 text-primary" />,
+        missingIcon: <ToolCase className="h-8 w-8 text-muted-foreground" />,
       };
     default:
       return {
         name: auditType,
         icon: <FileCode className="h-8 w-8 text-primary" />,
+        missingIcon: <FileCode className="h-8 w-8 text-muted-foreground" />,
       };
   }
 };
 
-// --- NEW High-Fidelity Skeleton Component ---
+const backgroundSvg = `url('/images/certificate.svg')`;
+
+// --- HELPER COMPONENTS ---
+
 const CertificatePageSkeleton = () => (
   <div
-    className="container mx-auto pt-8 mb-24 relative animate-pulse"
+    className="w-full max-w-6xl mx-auto pt-8 mb-24 relative animate-pulse"
     style={{
       backgroundImage: backgroundSvg,
       backgroundRepeat: 'no-repeat',
       backgroundPosition: 'center 70px',
       backgroundSize: 'clamp(320px, 60vw, 400px)',
     }}>
-    <div className="h-4 w-1/3 bg-muted rounded mb-8" /> {/* Breadcrumbs */}
+    <div className="h-4 w-1/3 bg-muted rounded mb-8" />
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-32">
       <div className="lg:col-span-2 space-y-12">
-        <div className="h-10 w-3/4 bg-muted rounded" /> {/* Title */}
-        <div className="h-32 bg-muted/50 rounded-lg" /> {/* Summary Card */}
+        <div className="h-10 w-3/4 bg-muted rounded" />
+        <div className="h-32 bg-muted/50 rounded-lg" />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="h-20 bg-muted/50 rounded-lg" />
           <div className="h-20 bg-muted/50 rounded-lg" />
           <div className="h-20 bg-muted/50 rounded-lg" />
           <div className="h-20 bg-muted/50 rounded-lg" />
         </div>
-        <div className="h-40 bg-muted/50 rounded-lg" /> {/* Hashes */}
+        <div className="h-40 bg-muted/50 rounded-lg" />
       </div>
     </div>
   </div>
 );
 
-// --- NEW User-Friendly Error Component ---
 const CertificatePageError = ({ onRetry }: { onRetry: () => void }) => (
-  <div className="container mx-auto py-8 flex flex-col items-center justify-center text-center min-h-[60vh]">
+  <div className="w-full max-w-6xl mx-auto py-8 flex flex-col items-center justify-center text-center min-h-[60vh]">
     <AlertTriangle className="w-16 h-16 text-destructive/50 mb-6" />
     <h2 className="text-2xl font-bold">Failed to Load Certificate</h2>
     <p className="mt-2 text-muted-foreground max-w-md">
@@ -110,65 +118,138 @@ const CertificatePageError = ({ onRetry }: { onRetry: () => void }) => (
   </div>
 );
 
+// --- NEW CoreAttestationCard Component ---
+
+interface CoreAttestationCardProps {
+  auditType: string;
+  attestation?: ProcessedAttestation;
+  bounty?: AuditBounty;
+  appId: string;
+}
+
+function CoreAttestationCard({
+  auditType,
+  attestation,
+  bounty,
+  appId,
+}: CoreAttestationCardProps) {
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const displayInfo = getAuditDisplayInfo(auditType);
+  const paymentToken = Tokens.USDC;
+
+  if (attestation) {
+    const certifiedOn = new Date(
+      Number(attestation.timestamp / 1_000_000n),
+    ).toLocaleDateString();
+    return (
+      <div className="flex items-start gap-4 p-4 border rounded-lg bg-muted/30">
+        <div className="flex items-start gap-4">
+          <div className="flex-shrink-0 mt-1">{displayInfo.icon}</div>
+          <div className="flex-grow">
+            <p className="text-lg font-semibold">{displayInfo.name}</p>
+            <p className="text-sm font-mono text-muted-foreground">
+              Certified by:{' '}
+              <span className="text-foreground">
+                {truncatePrincipal(attestation.auditor.toText())}
+              </span>
+            </p>
+            <p className="text-sm font-mono text-muted-foreground">
+              Certified on:{' '}
+              <span className="text-foreground">{certifiedOn}</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (bounty) {
+    return (
+      <div className="flex items-start gap-4 p-4 border rounded-lg bg-muted/30">
+        <div className="flex-shrink-0 mt-1">
+          <Hourglass className="h-8 w-8 text-muted-foreground" />
+        </div>
+        <div className="flex-grow">
+          <p className="text-lg font-semibold">{displayInfo.name}</p>
+          <p className="text-sm text-muted-foreground mb-2">
+            A bounty of{' '}
+            <span className="font-bold text-foreground">
+              {paymentToken.fromAtomic(bounty.tokenAmount)}{' '}
+              {paymentToken.symbol}
+            </span>{' '}
+            is available.
+          </p>
+          <Button size="sm" variant="secondary" asChild>
+            <Link to={`/audit-hub/${bounty.id.toString()}`}>View Bounty</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="flex items-start gap-4 p-4 border rounded-lg bg-muted/30">
+        <div className="flex-shrink-0 mt-1">{displayInfo.missingIcon}</div>
+        <div className="flex-grow">
+          <p className="text-lg font-semibold text-muted-foreground">
+            {displayInfo.name}
+          </p>
+          <p className="text-sm text-muted-foreground mb-2">
+            This attestation is missing.
+          </p>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setIsDialogOpen(true)}>
+            Sponsor Bounty
+          </Button>
+        </div>
+      </div>
+      <CreateBountyDialog
+        isOpen={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        appId={appId}
+        auditType={auditType}
+        paymentToken={paymentToken}
+      />
+    </>
+  );
+}
+
+// --- MAIN CertificatePage Component ---
+
 export function CertificatePage() {
   const { serverId } = useParams<{ serverId: string }>();
-
   const {
     data: appDetails,
-    isLoading: isAppDetailsLoading,
-    isError: isAppDetailsError,
-    refetch: refetchAppDetails,
+    isLoading,
+    isError,
+    refetch,
   } = useGetAppDetails(serverId);
 
-  const {
-    data: verificationStatus,
-    isLoading: isVerificationLoading,
-    isError: isVerificationError,
-    refetch: refetchVerificationStatus,
-  } = useGetVerificationStatus(serverId);
-
-  const isLoading = isAppDetailsLoading || isVerificationLoading;
-  const isError = isAppDetailsError || isVerificationError;
-
-  const handleRetry = () => {
-    refetchAppDetails();
-    refetchVerificationStatus();
-  };
-
-  // This memo correctly extracts version-specific proof data from the attestations.
   const extractedData = useMemo(() => {
-    if (!verificationStatus?.attestations) return {};
-
-    // Find the payload from the specific attestation that contains the build proof.
+    if (!appDetails?.attestations) return {};
     const buildPayload =
-      verificationStatus.attestations.find(
+      appDetails.attestations.find(
         (a) => a.audit_type === 'build_reproducibility_v1',
       )?.payload || {};
-
     return {
       gitCommit: buildPayload.git_commit || null,
       canisterId: buildPayload.canister_id || null,
       repoUrl: buildPayload.repo_url || null,
     };
-  }, [verificationStatus]);
+  }, [appDetails]);
 
-  if (isLoading) {
-    return <CertificatePageSkeleton />;
-  }
-
-  if (isError) {
-    return <CertificatePageError onRetry={handleRetry} />;
-  }
-
-  if (!appDetails || !verificationStatus) {
-    return <NotFoundPage />;
-  }
+  if (isLoading) return <CertificatePageSkeleton />;
+  if (isError) return <CertificatePageError onRetry={refetch} />;
+  if (!appDetails) return <NotFoundPage />;
 
   const tierInfo = getTierInfo(appDetails.securityTier);
 
   return (
     <div
-      className="container mx-auto pt-8 mb-24 relative"
+      className="w-full max-w-6xl mx-auto pt-8 mb-24 relative"
       style={{
         backgroundImage: backgroundSvg,
         backgroundRepeat: 'no-repeat',
@@ -192,45 +273,28 @@ export function CertificatePage() {
           <div className="lg:col-span-2">
             <h1 className="text-4xl font-bold tracking-tight flex items-center gap-3 mb-12">
               {appDetails.name}
-              {verificationStatus.isVerified && (
+              {appDetails.securityTier !== 'Unranked' && (
                 <BadgeCheck className="h-8 w-8 text-primary" />
               )}
             </h1>
+            <CertificateSummaryCard appDetails={appDetails} />
 
-            <CertificateSummaryCard
-              appDetails={appDetails}
-              verificationStatus={verificationStatus}
-            />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-10 mb-12">
-              {verificationStatus.attestations.map((att, index) => {
-                const displayInfo = getAuditDisplayInfo(att.audit_type);
-                const certifiedOn = new Date(
-                  Number(att.timestamp / 1_000_000n),
-                ).toLocaleDateString();
-
-                // Each item in the grid is a self-contained block.
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 mb-12">
+              {CORE_AUDIT_TYPES.map((auditType) => {
+                const attestation = appDetails.attestations.find(
+                  (a) => a.audit_type === auditType,
+                );
+                const bounty = appDetails.bounties.find(
+                  (b) => b.challengeParameters.audit_type === auditType,
+                );
                 return (
-                  <div key={index} className="flex items-start gap-4">
-                    {/* Icon (using items-start alignment now) */}
-                    <div className="flex-shrink-0 mt-1">{displayInfo.icon}</div>
-
-                    {/* Details */}
-                    <div className="flex-grow">
-                      <p className="text-lg font-semibold capitalize">
-                        {displayInfo.name}
-                      </p>
-                      <p className="text-sm font-mono text-muted-foreground">
-                        Certified by:{' '}
-                        <span className="text-foreground">
-                          {truncatePrincipal(att.auditor.toText())}
-                        </span>
-                      </p>
-                      <p className="text-sm font-mono text-muted-foreground">
-                        Certified on:{' '}
-                        <span className="text-foreground">{certifiedOn}</span>
-                      </p>
-                    </div>
-                  </div>
+                  <CoreAttestationCard
+                    key={auditType}
+                    auditType={auditType}
+                    attestation={attestation}
+                    bounty={bounty}
+                    appId={appDetails.id}
+                  />
                 );
               })}
             </div>
@@ -264,14 +328,12 @@ export function CertificatePage() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 rounded-md bg-muted px-3 py-2 mt-4 text-sm font-semibold text-foreground transition-colors hover:bg-muted/80">
-                  <Github className="h-4 w-4" />
-                  View Commit on GitHub
+                  <Github className="h-4 w-4" /> View Commit on GitHub
                 </a>
               )}
             </div>
           </div>
 
-          {/* Right Column: Mascot */}
           <div className="relative hidden lg:flex items-end justify-end">
             <div className="relative">
               <img
@@ -282,13 +344,13 @@ export function CertificatePage() {
               <div
                 className={cn(
                   'absolute -top-24 right-24 bg-card border rounded-3xl p-3 min-w-60 bg-primary text-center',
-                  tierInfo.borderColorClass, // Dynamic border color
+                  tierInfo.borderColorClass,
                 )}>
                 <p className="text-background">{tierInfo.mascotText}</p>
                 <div
                   className={cn(
                     'absolute right-8 -bottom-2 w-4 h-4 bg-card border-b border-r transform rotate-45 bg-primary',
-                    tierInfo.borderColorClass, // Dynamic border color for the triangle
+                    tierInfo.borderColorClass,
                   )}
                 />
               </div>
@@ -296,7 +358,6 @@ export function CertificatePage() {
           </div>
         </div>
 
-        {/* Accordions */}
         <Accordion
           type="multiple"
           className="w-full border border-primary/60 divide-y divide-primary/60">

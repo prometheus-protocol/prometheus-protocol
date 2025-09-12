@@ -13,7 +13,7 @@ import { Link } from 'react-router-dom';
 import { useGetAllAppBounties } from '@/hooks/useAppBounties';
 import { BountyBoardSkeleton } from '@/components/bounties/BountyBoardSkeleton';
 import { BountyBoardError } from '@/components/bounties/BountyBoardError';
-import { fromUSDC, toUSDC } from '@/lib/tokens';
+import { Tokens } from '@prometheus-protocol/ic-js';
 
 // Helper to format status color (remains the same)
 const getStatusColor = (status: string) => {
@@ -63,7 +63,7 @@ export default function PublicBountyBoardPage() {
   }
 
   return (
-    <div className="w-full max-w-5xl mx-auto pt-12 pb-24 text-gray-300">
+    <div className="w-full max-w-6xl mx-auto pt-12 pb-24 text-gray-300">
       {/* Breadcrumbs */}
       <nav className="text-sm text-muted-foreground mb-8">
         <Link to="/" className="hover:underline">
@@ -122,7 +122,10 @@ export default function PublicBountyBoardPage() {
                     </div>
                     <div className="col-span-6 md:col-span-3 flex items-center justify-start md:justify-end gap-2">
                       <span className="font-mono text-white">
-                        ${fromUSDC(BigInt(bounty.reward_amount))}
+                        $
+                        {Number(
+                          Tokens.USDC.fromAtomic(bounty.reward_amount),
+                        ).toFixed(2)}
                       </span>
                       <Token className="h-5" />
                     </div>

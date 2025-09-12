@@ -5,11 +5,10 @@ import Token from '@/components/Token';
 import { Link } from 'react-router-dom';
 // --- 1. Import the new hook and types for the Audit Hub ---
 import { useGetAllAuditBounties } from '@/hooks/useAuditBounties';
-import { AuditBounty } from '@prometheus-protocol/ic-js'; // Assuming this type exists
+import { AuditBounty, Tokens } from '@prometheus-protocol/ic-js'; // Assuming this type exists
 import { AuditHubSkeleton } from '@/components/audits/AuditHubSkeleton';
 import { AuditHubError } from '@/components/audits/AuditHubError';
-import { uint8ArrayToHex } from '@/lib/utils';
-import { fromUSDC } from '@/lib/tokens';
+import { uint8ArrayToHex } from '@prometheus-protocol/ic-js/utils';
 
 // Helper to format status color (can be reused)
 const getStatusColor = (status: string) => {
@@ -53,9 +52,7 @@ const AuditListItem = ({ audit }: { audit: AuditBounty }) => {
         <div className="flex justify-between items-start mb-4">
           <div className="flex items-center gap-3">
             {getProjectIcon(auditType)}
-            <span className="font-semibold text-white text-lg">
-              {projectName}
-            </span>
+            <span className="font-semibold text-white text-lg">{audit.id}</span>
           </div>
           <Link
             to={`/audit-hub/${audit.id}`}
@@ -83,7 +80,7 @@ const AuditListItem = ({ audit }: { audit: AuditBounty }) => {
               Reward
             </div>
             <div className="flex items-center gap-2 font-mono text-white">
-              {fromUSDC(audit.tokenAmount)}
+              {Tokens.USDC.fromAtomic(audit.tokenAmount)}
               <Token className="h-5" />
             </div>
           </div>
@@ -93,13 +90,14 @@ const AuditListItem = ({ audit }: { audit: AuditBounty }) => {
       {/* --- DESKTOP VIEW --- */}
       {/* This view is hidden by default and visible as a grid on medium screens and up */}
       <div className="hidden md:grid grid-cols-12 gap-4 items-center px-4 py-4">
-        <div className="col-span-4 flex items-center gap-3">
+        <div className="col-span-2 flex items-center gap-3">
           {getProjectIcon(auditType)}
-          <span className="font-semibold text-white">{projectName}</span>
+          <span className="font-semibold text-white">{audit.id}</span>
         </div>
-        <div className="col-span-3 text-gray-400">{auditType}</div>
+        <div className="col-span-2 text-gray-400">{auditType}</div>
+        <div className="col-span-3">{projectName}</div>
         <div className="col-span-2 flex items-center justify-end gap-2 font-mono text-white">
-          ${fromUSDC(audit.tokenAmount)}
+          ${Tokens.USDC.fromAtomic(audit.tokenAmount)}
           <Token className="h-5" />
         </div>
         <div className="col-span-2 text-center">
@@ -110,7 +108,7 @@ const AuditListItem = ({ audit }: { audit: AuditBounty }) => {
         <div className="col-span-1 text-right">
           <Link
             to={`/audit-hub/${audit.id}`}
-            className="text-primary hover:underline font-semibold">
+            className="text-primary hover:underline font-semibold px-2">
             View
           </Link>
         </div>
@@ -128,19 +126,41 @@ export default function AuditHubPage() {
     refetch,
   } = useGetAllAuditBounties();
 
+  // --- 1. IMPLEMENTED FILTERING LOGIC ---
   const filteredAudits = useMemo(() => {
     const audits = auditsFromCanister ?? [];
     const lowercasedQuery = searchQuery.toLowerCase().trim();
-    if (!lowercasedQuery) return audits;
 
-    return audits;
+    // If the search query is empty, return all audits immediately.
+    if (!lowercasedQuery) {
+      return audits;
+    }
+
+    // Otherwise, filter the list.
+    return audits.filter((audit) => {
+      // Safely access the audit type and convert to lowercase.
+      const auditType =
+        audit.challengeParameters?.audit_type?.toLowerCase() || '';
+
+      // Safely access the wasm_hash, convert it to a hex string, and then to lowercase.
+      const wasmHashBytes = audit.challengeParameters?.wasm_hash;
+      const wasmHashHex = wasmHashBytes
+        ? uint8ArrayToHex(wasmHashBytes).toLowerCase()
+        : '';
+
+      // Return true if the query is found in either the audit type or the wasm hash.
+      return (
+        auditType.includes(lowercasedQuery) ||
+        wasmHashHex.includes(lowercasedQuery)
+      );
+    });
   }, [auditsFromCanister, searchQuery]);
 
   if (isLoading) return <AuditHubSkeleton />;
   if (isError) return <AuditHubError onRetry={refetch} />;
 
   return (
-    <div className="w-full max-w-5xl mx-auto pt-12 pb-24 text-gray-300">
+    <div className="w-full max-w-6xl mx-auto pt-12 pb-24 text-gray-300">
       {/* Breadcrumbs */}
       <nav className="text-sm text-muted-foreground mb-8">
         <Link to="/" className="hover:underline">
@@ -179,8 +199,9 @@ export default function AuditHubPage() {
       <div className="space-y-3">
         {/* --- 2. HIDE HEADERS ON MOBILE --- */}
         <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-2 text-gray-500 font-semibold uppercase text-sm">
-          <div className="col-span-4">Project Name</div>
-          <div className="col-span-3">Audit Type</div>
+          <div className="col-span-2">Audit ID</div>
+          <div className="col-span-2">Audit Type</div>
+          <div className="col-span-3">WASM</div>
           <div className="col-span-2 text-right">Reward</div>
           <div className="col-span-2 text-center">Status</div>
           <div className="col-span-1 text-right">Action</div>
