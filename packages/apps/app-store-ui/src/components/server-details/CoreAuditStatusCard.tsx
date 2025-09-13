@@ -12,6 +12,7 @@ interface CoreAuditStatusCardProps {
   record?: ProcessedAuditRecord;
   bounty?: AuditBounty;
   appId: string;
+  onSponsorClick: () => void;
 }
 
 const StatusInfo = ({ status }: { status: AuditStatus }) => {
@@ -52,6 +53,7 @@ export const CoreAuditStatusCard = ({
   status,
   bounty,
   appId,
+  onSponsorClick,
 }: CoreAuditStatusCardProps) => {
   const info = getAuditTypeInfo(auditType);
 
@@ -75,9 +77,9 @@ export const CoreAuditStatusCard = ({
           </Button>
         )}
         {status === 'unavailable' && (
-          <Button variant="secondary" size="sm" disabled>
+          <Button variant="secondary" size="sm" onClick={onSponsorClick}>
             Sponsor
-          </Button> // Placeholder for future
+          </Button>
         )}
       </div>
     </div>

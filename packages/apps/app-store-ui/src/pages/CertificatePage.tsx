@@ -229,7 +229,9 @@ export function CertificatePage() {
     isError,
     refetch,
   } = useGetAppDetails(appId);
-
+  const [sponsoringAuditType, setSponsoringAuditType] = useState<string | null>(
+    null,
+  );
   const buildInfo = appDetails?.buildInfo;
 
   if (isLoading) return <CertificatePageSkeleton />;
@@ -239,162 +241,178 @@ export function CertificatePage() {
   const tierInfo = getTierInfo(appDetails.securityTier);
 
   return (
-    <div
-      className="w-full max-w-6xl mx-auto pt-12 mb-24 relative"
-      style={{
-        backgroundImage: backgroundSvg,
-        backgroundRepeat: 'no-repeat',
-        backgroundPosition: 'center 70px',
-        backgroundSize: 'clamp(320px, 60vw, 400px)',
-      }}>
-      <nav className="text-sm text-muted-foreground mb-8">
-        <Link to="/" className="hover:underline">
-          Home
-        </Link>
-        <span className="mx-2">/</span>
-        <Link to={`/apps/${appId}`} className="hover:underline">
-          App Info
-        </Link>
-        <span className="mx-2">/</span>
-        <span className="text-gray-200">Certificate</span>
-      </nav>
+    <>
+      <div
+        className="w-full max-w-6xl mx-auto pt-12 mb-24 relative"
+        style={{
+          backgroundImage: backgroundSvg,
+          backgroundRepeat: 'no-repeat',
+          backgroundPosition: 'center 70px',
+          backgroundSize: 'clamp(320px, 60vw, 400px)',
+        }}>
+        <nav className="text-sm text-muted-foreground mb-8">
+          <Link to="/" className="hover:underline">
+            Home
+          </Link>
+          <span className="mx-2">/</span>
+          <Link to={`/apps/${appId}`} className="hover:underline">
+            App Info
+          </Link>
+          <span className="mx-2">/</span>
+          <span className="text-gray-200">Certificate</span>
+        </nav>
 
-      <div className="relative overflow-hidden">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-32">
-          <div className="lg:col-span-2">
-            <h1 className="text-4xl font-bold tracking-tight flex items-center gap-3 mb-12">
-              {appDetails.name}
-              {appDetails.securityTier !== 'Unranked' && (
-                <BadgeCheck className="h-8 w-8 text-primary" />
-              )}
-            </h1>
-            <CertificateSummaryCard appDetails={appDetails} />
+        <div className="relative overflow-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-32">
+            <div className="lg:col-span-2">
+              <h1 className="text-4xl font-bold tracking-tight flex items-center gap-3 mb-12">
+                {appDetails.name}
+                {appDetails.securityTier !== 'Unranked' && (
+                  <BadgeCheck className="h-8 w-8 text-primary" />
+                )}
+              </h1>
+              <CertificateSummaryCard appDetails={appDetails} />
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 mb-12">
-              {CORE_AUDIT_TYPES.map((auditType) => {
-                // Find the corresponding record and bounty for this audit type.
-                const record = appDetails.auditRecords.find(
-                  (rec: ProcessedAuditRecord) => {
-                    if (rec.type === 'attestation')
-                      return rec.audit_type === auditType;
-                    // A divergence only counts for the build audit
-                    if (rec.type === 'divergence')
-                      return auditType === 'build_reproducibility_v1';
-                    return false;
-                  },
-                );
-                const bounty = appDetails.bounties.find(
-                  (b) => b.challengeParameters.audit_type === auditType,
-                );
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 mb-12">
+                {CORE_AUDIT_TYPES.map((auditType) => {
+                  // Find the corresponding record and bounty for this audit type.
+                  const record = appDetails.auditRecords.find(
+                    (rec: ProcessedAuditRecord) => {
+                      if (rec.type === 'attestation')
+                        return rec.audit_type === auditType;
+                      // A divergence only counts for the build audit
+                      if (rec.type === 'divergence')
+                        return auditType === 'build_reproducibility_v1';
+                      return false;
+                    },
+                  );
+                  const bounty = appDetails.bounties.find(
+                    (b) => b.challengeParameters.audit_type === auditType,
+                  );
 
-                // Determine the status based on the data we found.
-                let status: 'success' | 'failure' | 'pending' | 'unavailable' =
-                  'unavailable';
-                if (record?.type === 'attestation') status = 'success';
-                else if (record?.type === 'divergence') status = 'failure';
-                else if (bounty) status = 'pending';
+                  // Determine the status based on the data we found.
+                  let status:
+                    | 'success'
+                    | 'failure'
+                    | 'pending'
+                    | 'unavailable' = 'unavailable';
+                  if (record?.type === 'attestation') status = 'success';
+                  else if (record?.type === 'divergence') status = 'failure';
+                  else if (bounty) status = 'pending';
 
-                return (
-                  <CoreAuditStatusCard
-                    key={auditType}
-                    auditType={auditType}
-                    status={status}
-                    record={record}
-                    bounty={bounty}
-                    appId={appDetails.id}
-                  />
-                );
-              })}
-            </div>
-            {/* --- 3. USE THE SIMPLIFIED buildInfo OBJECT --- */}
-            <div className="space-y-2 mb-12 font-mono text-md">
-              {buildInfo?.canisterId && (
+                  return (
+                    <CoreAuditStatusCard
+                      key={auditType}
+                      auditType={auditType}
+                      status={status}
+                      record={record}
+                      bounty={bounty}
+                      appId={appDetails.id}
+                      onSponsorClick={() => setSponsoringAuditType(auditType)}
+                    />
+                  );
+                })}
+              </div>
+              {/* --- 3. USE THE SIMPLIFIED buildInfo OBJECT --- */}
+              <div className="space-y-2 mb-12 font-mono text-md">
+                {buildInfo?.canisterId && (
+                  <p>
+                    Canister ID:{' '}
+                    <span className="text-muted-foreground break-words">
+                      {buildInfo.canisterId}
+                    </span>
+                  </p>
+                )}
                 <p>
-                  Canister ID:{' '}
+                  Wasm Hash:{' '}
                   <span className="text-muted-foreground break-words">
-                    {buildInfo.canisterId}
+                    {appId}
                   </span>
                 </p>
-              )}
-              <p>
-                Wasm Hash:{' '}
-                <span className="text-muted-foreground break-words">
-                  {appId}
-                </span>
-              </p>
-              {buildInfo?.gitCommit && (
-                <p>
-                  Git Commit:{' '}
-                  <span className="text-muted-foreground break-words">
-                    {buildInfo.gitCommit}
-                  </span>
-                </p>
-              )}
-              {buildInfo?.repoUrl && buildInfo.gitCommit && (
-                <a href={`${buildInfo.repoUrl}/commit/${buildInfo.gitCommit}`}>
-                  View Commit on GitHub
-                </a>
-              )}
-              {buildInfo?.status === 'failure' && (
-                <div className="text-red-400 pt-4">
-                  <p className="font-sans font-semibold">
-                    Build Failure Reason:
+                {buildInfo?.gitCommit && (
+                  <p>
+                    Git Commit:{' '}
+                    <span className="text-muted-foreground break-words">
+                      {buildInfo.gitCommit}
+                    </span>
                   </p>
-                  <p className="text-muted-foreground font-sans whitespace-pre-wrap">
-                    {buildInfo.failureReason}
-                  </p>
-                </div>
-              )}
+                )}
+                {buildInfo?.repoUrl && buildInfo.gitCommit && (
+                  <a
+                    href={`${buildInfo.repoUrl}/commit/${buildInfo.gitCommit}`}>
+                    View Commit on GitHub
+                  </a>
+                )}
+                {buildInfo?.status === 'failure' && (
+                  <div className="text-red-400 pt-4">
+                    <p className="font-sans font-semibold">
+                      Build Failure Reason:
+                    </p>
+                    <p className="text-muted-foreground font-sans whitespace-pre-wrap">
+                      {buildInfo.failureReason}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
 
-          <div className="relative hidden lg:flex items-end justify-end">
-            <div className="relative">
-              <img
-                src="/images/promie.png"
-                alt="Prometheus Protocol Mascot"
-                className="w-52 h-auto mb-12"
-              />
-              <div
-                className={cn(
-                  'absolute -top-24 right-24 bg-card border rounded-3xl p-3 min-w-60 bg-primary text-center',
-                  tierInfo.borderColorClass,
-                )}>
-                <p className="text-background">{tierInfo.mascotText}</p>
+            <div className="relative hidden lg:flex items-end justify-end">
+              <div className="relative">
+                <img
+                  src="/images/promie.png"
+                  alt="Prometheus Protocol Mascot"
+                  className="w-52 h-auto mb-12"
+                />
                 <div
                   className={cn(
-                    'absolute right-8 -bottom-2 w-4 h-4 bg-card border-b border-r transform rotate-45 bg-primary',
+                    'absolute -top-24 right-24 bg-card border rounded-3xl p-3 min-w-60 bg-primary text-center',
                     tierInfo.borderColorClass,
-                  )}
-                />
+                  )}>
+                  <p className="text-background">{tierInfo.mascotText}</p>
+                  <div
+                    className={cn(
+                      'absolute right-8 -bottom-2 w-4 h-4 bg-card border-b border-r transform rotate-45 bg-primary',
+                      tierInfo.borderColorClass,
+                    )}
+                  />
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <Accordion
-          type="multiple"
-          className="w-full border border-primary/60 divide-y divide-primary/60">
-          <AccordionItem value="dependencies" className="px-4">
-            <AccordionTrigger className="text-lg font-semibold py-4 hover:no-underline">
-              Dependencies
-            </AccordionTrigger>
-            <AccordionContent className="pt-2 pb-4 text-muted-foreground">
-              Details about project dependencies and their verified sources will
-              be listed here.
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem value="lineage" className="px-4">
-            <AccordionTrigger className="text-lg font-semibold py-4 hover:no-underline">
-              History and Lineage
-            </AccordionTrigger>
-            <AccordionContent className="pt-2 pb-4 text-muted-foreground">
-              A complete, verifiable history of code commits, audits, and
-              version lineage will be displayed here.
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+          <Accordion
+            type="multiple"
+            className="w-full border border-primary/60 divide-y divide-primary/60">
+            <AccordionItem value="dependencies" className="px-4">
+              <AccordionTrigger className="text-lg font-semibold py-4 hover:no-underline">
+                Dependencies
+              </AccordionTrigger>
+              <AccordionContent className="pt-2 pb-4 text-muted-foreground">
+                Details about project dependencies and their verified sources
+                will be listed here.
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="lineage" className="px-4">
+              <AccordionTrigger className="text-lg font-semibold py-4 hover:no-underline">
+                History and Lineage
+              </AccordionTrigger>
+              <AccordionContent className="pt-2 pb-4 text-muted-foreground">
+                A complete, verifiable history of code commits, audits, and
+                version lineage will be displayed here.
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </div>
       </div>
-    </div>
+
+      {/* --- 3. Render the Dialog, controlled by our new state --- */}
+      <CreateBountyDialog
+        isOpen={!!sponsoringAuditType}
+        onOpenChange={(open) => !open && setSponsoringAuditType(null)}
+        appId={appDetails.id}
+        auditType={sponsoringAuditType ?? ''} // Pass the currently selected audit type
+        paymentToken={Tokens.USDC}
+      />
+    </>
   );
 }
