@@ -240,7 +240,7 @@ export function CertificatePage() {
 
   return (
     <div
-      className="w-full max-w-6xl mx-auto pt-8 mb-24 relative"
+      className="w-full max-w-6xl mx-auto pt-12 mb-24 relative"
       style={{
         backgroundImage: backgroundSvg,
         backgroundRepeat: 'no-repeat',
@@ -253,10 +253,10 @@ export function CertificatePage() {
         </Link>
         <span className="mx-2">/</span>
         <Link to={`/apps/${appId}`} className="hover:underline">
-          {appDetails.name}
+          App Info
         </Link>
         <span className="mx-2">/</span>
-        <span>Certificate</span>
+        <span className="text-gray-200">Certificate</span>
       </nav>
 
       <div className="relative overflow-hidden">
