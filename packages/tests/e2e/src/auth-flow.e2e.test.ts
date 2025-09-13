@@ -230,62 +230,6 @@ describe('Authorization State Machine Flow', () => {
     expect(finalResult).toHaveProperty('ok');
   });
 
-  test('should require payment setup if `prometheus:charge` scope IS requested', async () => {
-    // Arrange: Start a flow WITH the charge scope
-    const sessionId = await startAuthFlowAndGetSessionId(
-      'openid profile prometheus:charge',
-    );
-    const endUserIdentity = Secp256k1KeyIdentity.generate();
-    const endUserActor = createActorFor(endUserIdentity);
-
-    if (!sessionId) {
-      throw new Error('Failed to get session ID from auth flow');
-    }
-
-    // Act 1: Confirm the login
-    const confirmResult = await endUserActor.confirm_login(sessionId);
-
-    // Assert 1: The backend must direct the frontend to the #setup step
-    expect(confirmResult).toHaveProperty('ok');
-    if (!('ok' in confirmResult)) throw new Error('confirm_login failed');
-    expect(confirmResult.ok.next_step).toEqual({ setup: null });
-    expect(confirmResult.ok.consent_data.scopes).toEqual([
-      {
-        id: 'openid',
-        description: 'Confirm your identity with this application.',
-      },
-      {
-        id: 'prometheus:charge',
-        description: 'Allow this application to charge your account.',
-      },
-    ]);
-    // Assert 2: A direct call to complete_authorize MUST FAIL because the state is #awaiting_payment_setup
-    const prematureFinalizeResult =
-      await endUserActor.complete_authorize(sessionId);
-    expect(prematureFinalizeResult).toHaveProperty('err');
-    if (!('err' in prematureFinalizeResult)) throw new Error('Expected error');
-    expect(prematureFinalizeResult.err).toContain('Invalid session state');
-
-    // Act 2: Simulate the user completing the payment setup step
-    const setupCompleteResult =
-      await endUserActor.complete_payment_setup(sessionId);
-    expect(setupCompleteResult).toHaveProperty('ok');
-
-    // Act 3: Now that setup is complete, the final authorization should succeed
-    const finalResult = await endUserActor.complete_authorize(sessionId);
-    expect(finalResult).toHaveProperty('ok');
-    if (!('ok' in finalResult)) throw new Error('Final authorization failed');
-
-    // Assert 3: The final redirect URL should contain a valid code
-    const finalRedirectUrl = new URL(finalResult.ok);
-    const authCode = finalRedirectUrl.searchParams.get('code');
-    const returnedState = finalRedirectUrl.searchParams.get('state');
-    expect(authCode).toBeDefined();
-    expect(authCode?.length).toBeGreaterThan(10);
-
-    expect(returnedState).toBe('state-machine-test-state==');
-  });
-
   test('should reject if a different user tries to continue the session (session fixation)', async () => {
     // Arrange: User A starts the flow
     const sessionId = await startAuthFlowAndGetSessionId(
@@ -308,7 +252,7 @@ describe('Authorization State Machine Flow', () => {
 
     // Act 2 (The Attack): User B (the attacker) tries to complete the next step
     const attackResult =
-      await userB_Attacker_Actor.complete_payment_setup(sessionId);
+      await userB_Attacker_Actor.complete_authorize(sessionId);
 
     // Assert: The call from the attacker MUST fail because their Principal does not match the one bound to the session
     expect(attackResult).toHaveProperty('err');

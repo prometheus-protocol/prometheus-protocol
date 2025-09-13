@@ -40,22 +40,6 @@ export const getSessionInfo = async (
 };
 
 /**
- * Called after a user successfully approves an ICRC-2 allowance.
- */
-export const completePaymentSetup = async (
-  identity: Identity,
-  sessionId: string,
-): Promise<void> => {
-  const authActor = getAuthActor(identity);
-  const result = await authActor.complete_payment_setup(sessionId);
-
-  if ('err' in result) {
-    throw new Error(result.err);
-  }
-  return;
-};
-
-/**
  * Called when the user clicks "Allow" on the consent screen.
  * This finalizes the authorization flow and generates the authorization code.
  * @returns The final redirect URL to send the user back to the client application.
