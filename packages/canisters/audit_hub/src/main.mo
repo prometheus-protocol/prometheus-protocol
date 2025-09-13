@@ -34,6 +34,13 @@ shared ({ caller = deployer }) persistent actor class AuditHub() {
     stake_token_id : TokenId;
   };
 
+  // The profile of an auditor, including their balances and reputation data.
+  public type AuditorProfile = {
+    available_balances : [(TokenId, Balance)];
+    staked_balances : [(TokenId, Balance)];
+    reputation : [(TokenId, Balance)]; // The reputation data as an array
+  };
+
   // The duration a lock is valid before it expires (e.g., 3 days).
   let LOCK_DURATION_NS : Int = 3 * 24 * 60 * 60 * 1_000_000_000; // 72 hours in nanoseconds
 
@@ -259,5 +266,29 @@ shared ({ caller = deployer }) persistent actor class AuditHub() {
 
   public shared query func get_bounty_lock(bounty_id : BountyId) : async ?BountyLock {
     return Map.get(bounty_locks, Map.nhash, bounty_id);
+  };
+
+  public shared query func get_auditor_profile(auditor : Principal) : async AuditorProfile {
+    let available_map = Map.get(available_balances, phash, auditor);
+    let staked_map = Map.get(staked_balances, phash, auditor);
+
+    // Convert the `available` balances map into the `reputation` array.
+    let reputation_array : [(TokenId, Balance)] = switch (available_map) {
+      case (null) [];
+      case (?balances_map) Map.toArray(balances_map);
+    };
+
+    // Convert the `staked` balances map into an array.
+    let staked_array : [(TokenId, Balance)] = switch (staked_map) {
+      case (null) [];
+      case (?balances_map) Map.toArray(balances_map);
+    };
+
+    // Construct and return the complete profile object using shareable types.
+    return {
+      available_balances = reputation_array; // available_balances is the same as reputation
+      staked_balances = staked_array;
+      reputation = reputation_array;
+    };
   };
 };

@@ -343,4 +343,119 @@ describe('Audit Hub Canister', () => {
       expect(lock).toStrictEqual([]); // Lock is removed
     });
   });
+
+  // --- Suite 3: Auditor Profile Query ---
+  describe('get_auditor_profile', () => {
+    it('should return null for an auditor with no balances', async () => {
+      const profile = await auditHubActor.get_auditor_profile(
+        randomUserIdentity.getPrincipal(),
+      );
+      // For an empty `opt`, PocketIC returns an empty array
+      expect(profile).toEqual({
+        available_balances: [],
+        staked_balances: [],
+        reputation: [],
+      });
+    });
+
+    it('should return a profile with only available balances and reputation', async () => {
+      // Setup: Mint two different token types to the auditor
+      auditHubActor.setIdentity(daoIdentity);
+      await auditHubActor.mint_tokens(
+        auditor1Identity.getPrincipal(),
+        'security_v1',
+        10n,
+      );
+      await auditHubActor.mint_tokens(
+        auditor1Identity.getPrincipal(),
+        'tools_v1',
+        5n,
+      );
+
+      // Action: Fetch the profile
+      const profileResult = await auditHubActor.get_auditor_profile(
+        auditor1Identity.getPrincipal(),
+      );
+
+      // Assertions
+      expect(profileResult).not.toEqual([]); // Should not be null
+      const profile = profileResult; // Unwrap the opt record
+
+      // Helper to sort arrays for consistent comparison, as map order is not guaranteed
+      const sortByName = (a: (string | bigint)[], b: (string | bigint)[]) => {
+        if (
+          a.length === 2 &&
+          b.length === 2 &&
+          typeof a[0] === 'string' &&
+          typeof b[0] === 'string'
+        ) {
+          return (a[0] as string).localeCompare(b[0] as string);
+        }
+        return 0;
+      };
+
+      const expectedBalances = [
+        ['security_v1', 10n],
+        ['tools_v1', 5n],
+      ].sort(sortByName);
+
+      expect(profile?.available_balances.sort(sortByName)).toEqual(
+        expectedBalances,
+      );
+      expect(profile?.reputation.sort(sortByName)).toEqual(expectedBalances);
+      expect(profile?.staked_balances).toEqual([]); // Should be an empty array
+    });
+
+    it('should return a complete profile with available, staked, and reputation balances', async () => {
+      // Setup: Configure stake requirements and mint various tokens
+      auditHubActor.setIdentity(daoIdentity);
+      await auditHubActor.set_stake_requirement('security_v1', 10n);
+      await auditHubActor.mint_tokens(
+        auditor1Identity.getPrincipal(),
+        'security_v1',
+        25n, // Will have 15n left after staking
+      );
+      await auditHubActor.mint_tokens(
+        auditor1Identity.getPrincipal(),
+        'tools_v1',
+        5n, // Will remain fully available
+      );
+
+      // Action 1: Auditor stakes some tokens
+      auditHubActor.setIdentity(auditor1Identity);
+      await auditHubActor.reserve_bounty(1n, 'security_v1');
+
+      // Action 2: Fetch the profile
+      const profileResult = await auditHubActor.get_auditor_profile(
+        auditor1Identity.getPrincipal(),
+      );
+      const profile = profileResult;
+
+      // Assertions
+      const sortByName = (a: (string | bigint)[], b: (string | bigint)[]) => {
+        if (
+          a.length === 2 &&
+          b.length === 2 &&
+          typeof a[0] === 'string' &&
+          typeof b[0] === 'string'
+        ) {
+          return (a[0] as string).localeCompare(b[0] as string);
+        }
+        return 0;
+      };
+
+      const expectedAvailable = [
+        ['security_v1', 15n],
+        ['tools_v1', 5n],
+      ].sort(sortByName);
+
+      const expectedStaked = [['security_v1', 10n]].sort(sortByName);
+
+      expect(profile?.available_balances.sort(sortByName)).toEqual(
+        expectedAvailable,
+      );
+      expect(profile?.reputation.sort(sortByName)).toEqual(expectedAvailable);
+      expect(profile?.staked_balances.sort(sortByName)).toEqual(expectedStaked);
+    });
+  });
 });

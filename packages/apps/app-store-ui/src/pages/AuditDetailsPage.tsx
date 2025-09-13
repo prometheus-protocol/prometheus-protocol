@@ -18,8 +18,6 @@ export default function AuditDetailsPage() {
     refetch,
   } = useGetAuditBounty(bountyId);
 
-  console.log('Audit Data:', audit);
-
   if (isLoading) return <AuditDetailsSkeleton />;
   if (isError) return <AuditHubError onRetry={refetch} />;
   if (!audit) {

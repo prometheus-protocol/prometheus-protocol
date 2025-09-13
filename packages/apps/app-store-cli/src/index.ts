@@ -13,7 +13,6 @@ import { registerPublishCommand } from './commands/publish.command.js';
 import { registerDiscoverCommand } from './commands/discover.js';
 import { registerBountyCommands } from './commands/bounty/bounty.commands.js';
 import { registerAttestCommands } from './commands/attest/attest.commands.js';
-import { registerDaoCommands } from './commands/dao/dao.commands.js';
 import { registerLeaderboardCommands } from './commands/leaderboard/leaderboard.commands.js';
 
 import packageJson from '../package.json' with { type: 'json' };
@@ -128,9 +127,6 @@ registerDiscoverCommand(program);
 // 2. Auditor & Bounty Commands (The second major workflow)
 registerBountyCommands(program);
 registerAttestCommands(program);
-
-// 3. DAO Commands (The third major workflow)
-registerDaoCommands(program);
 
 // 4. Advanced Management Commands (Less frequent, administrative tasks)
 // It's good practice to group these related commands together.

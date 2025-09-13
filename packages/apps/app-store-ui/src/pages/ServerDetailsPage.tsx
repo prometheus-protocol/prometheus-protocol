@@ -24,10 +24,11 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useState } from 'react';
 import { Tokens } from '@prometheus-protocol/ic-js';
+import { CreateBountyDialog } from '@/components/server-details/CreateBountyDialog';
 
 // --- NEW High-Fidelity Skeleton Component ---
 const ServerDetailsSkeleton = () => (
-  <div className="container mx-auto py-8 pb-32 animate-pulse">
+  <div className="w-full max-w-6xl mx-auto py-8 pb-32 animate-pulse">
     {/* Header Skeleton */}
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-x-12 gap-y-8">
       <div className="lg:col-span-3 space-y-8">
@@ -65,7 +66,7 @@ const ServerDetailsSkeleton = () => (
 
 // --- NEW User-Friendly Error Component ---
 const ServerDetailsError = ({ onRetry }: { onRetry: () => void }) => (
-  <div className="container mx-auto py-8 flex flex-col items-center justify-center text-center min-h-[60vh]">
+  <div className="w-full max-w-6xl mx-auto py-8 flex flex-col items-center justify-center text-center min-h-[60vh]">
     <AlertTriangle className="w-16 h-16 text-destructive/50 mb-6" />
     <h2 className="text-2xl font-bold">Failed to Load App Details</h2>
     <p className="mt-2 text-muted-foreground max-w-md">
@@ -82,18 +83,14 @@ const ServerDetailsError = ({ onRetry }: { onRetry: () => void }) => (
 );
 
 export default function ServerDetailsPage() {
-  const { serverId } = useParams<{ serverId: string }>();
+  const { appId } = useParams<{ appId: string }>();
+  const [isBountyDialogOpen, setIsBountyDialogOpen] = useState(false);
   const [dialogState, setDialogState] = useState<
     'closed' | 'install' | 'confirm'
   >('closed');
 
   // Destructure `refetch` to pass to the error component
-  const {
-    data: server,
-    isLoading,
-    isError,
-    refetch,
-  } = useGetAppDetails(serverId);
+  const { data: server, isLoading, isError, refetch } = useGetAppDetails(appId);
 
   if (isLoading) {
     return <ServerDetailsSkeleton />;
@@ -122,28 +119,46 @@ export default function ServerDetailsPage() {
 
   return (
     <>
-      <div className="w-full max-w-6xl mx-auto py-8 pb-32">
-        <ServerHeader server={server} onInstallClick={handleInstallClick} />
+      <div className="w-full max-w-6xl mx-auto pt-12 pb-32">
+        <ServerHeader
+          server={server}
+          onInstallClick={handleInstallClick}
+          onSponsorClick={() => setIsBountyDialogOpen(true)}
+        />
 
         <div className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-x-16 gap-y-8">
           <main className="lg:col-span-2 space-y-16 mt-8">
             <AboutSection server={server} />
-            <ToolsAndResources
-              tools={server.tools}
-              paymentToken={Tokens.USDC}
-              appId={server.id}
-              bounty={toolsBounty}
-            />
-            <DataSafetySection
-              safetyInfo={server.dataSafety}
-              appId={server.id}
-              paymentToken={Tokens.USDC}
-            />
-            <ReviewsSection
-              reviews={server.reviews}
-              appId={server.id}
-              paymentToken={Tokens.USDC}
-            />
+
+            {/* --- 3. Conditionally render sections that depend on attestations --- */}
+            {server.status === 'Now Available' ? (
+              <>
+                <ToolsAndResources
+                  tools={server.tools}
+                  paymentToken={Tokens.USDC}
+                  appId={server.id}
+                  bounty={toolsBounty}
+                />
+                <DataSafetySection
+                  safetyInfo={server.dataSafety}
+                  appId={server.id}
+                  paymentToken={Tokens.USDC}
+                />
+                <ReviewsSection
+                  reviews={server.reviews}
+                  appId={server.id}
+                  paymentToken={Tokens.USDC}
+                />
+              </>
+            ) : (
+              // Optional: A placeholder for pending apps
+              <div className="border border-gray-600 rounded-lg p-8 text-center text-muted-foreground">
+                <p>
+                  Detailed security and data safety information will be
+                  available after the next audit is complete.
+                </p>
+              </div>
+            )}
           </main>
 
           <aside className="lg:col-span-1 space-y-8">
@@ -151,6 +166,14 @@ export default function ServerDetailsPage() {
           </aside>
         </div>
       </div>
+
+      <CreateBountyDialog
+        isOpen={isBountyDialogOpen}
+        onOpenChange={setIsBountyDialogOpen}
+        appId={server.id}
+        auditType="app_info_v1"
+        paymentToken={Tokens.USDC}
+      />
 
       <InstallDialog
         server={server}

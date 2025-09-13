@@ -44,7 +44,7 @@ const FeaturedCarouselSkeleton = () => (
 // The main skeleton for the entire home page
 export const HomePageSkeleton = () => {
   return (
-    <div className="container w-full mx-auto animate-pulse">
+    <div className="w-full max-w-6xl mx-auto animate-pulse">
       <section className="my-16">
         {/* Welcome Header Skeleton */}
         <div className="h-10 w-1/3 bg-muted rounded mb-12" />

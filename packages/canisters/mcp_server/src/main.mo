@@ -143,7 +143,7 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
     };
 
     // The human-readable report.
-    let report = "The weather in " # location # " is sunny.";
+    let report = "The weather in " # location # " is extra sunny.";
 
     // Build the structured JSON payload that matches our outputSchema.
     let structuredPayload = Json.obj([("report", Json.str(report))]);

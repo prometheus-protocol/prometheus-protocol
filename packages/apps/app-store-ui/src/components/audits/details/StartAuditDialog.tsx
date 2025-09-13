@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { AuditBountyWithDetails } from '@prometheus-protocol/ic-js';
 import { truncateHash } from '@prometheus-protocol/ic-js/utils';
+import { getReputationDisplayInfo } from '@/components/LoginButton';
 
 interface StartAuditDialogProps {
   isOpen: boolean;
@@ -21,7 +22,7 @@ interface StartAuditDialogProps {
 }
 
 const DetailRow = ({ label, value }: { label: string; value: string }) => (
-  <div className="flex justify-between w-full max-w-sm text-left">
+  <div className="flex justify-between w-full text-left">
     <span className="text-primary font-semibold">{label}:</span>
     <span className="text-gray-200">{value}</span>
   </div>
@@ -52,10 +53,12 @@ export function StartAuditDialog({
     }
   };
 
+  const reputationDisplayInfo = getReputationDisplayInfo(audit.auditType);
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="border-gray-600 shadow-none sm:max-w-lg">
-        <div className="flex flex-col items-center text-center p-4 sm:p-8">
+        <div className="flex flex-col items-center text-center sm:p-4">
           {/* You'll need to add this image to your /public folder */}
           <img
             src="/images/pmp-token.png"
@@ -73,11 +76,11 @@ export function StartAuditDialog({
             <DetailRow label="Time limit for completion" value="72 Hours" />
             <DetailRow
               label="Required stake"
-              value={`${stakeAmount} ${audit.auditType}`}
+              value={`${stakeAmount} ${reputationDisplayInfo.name}`}
             />
             <DetailRow
               label="Available balance"
-              value={`${auditorBalance.toLocaleString()} ${audit.auditType}`}
+              value={`${auditorBalance.toLocaleString()} ${reputationDisplayInfo.name}`}
             />
           </div>
 
@@ -88,7 +91,7 @@ export function StartAuditDialog({
             from your account as outlined in the bounty terms.
           </p>
 
-          <div className="flex space-x-2 mb-12 w-full">
+          <div className="flex space-x-2 mb-12 w-full max-w-md">
             <Checkbox
               id="agree-terms"
               checked={isAgreed}

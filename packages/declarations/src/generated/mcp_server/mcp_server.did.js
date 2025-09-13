@@ -62,6 +62,12 @@ export const idlFactory = ({ IDL }) => {
     'TransferFailed' : TransferError,
   });
   const Result_1 = IDL.Variant({ 'ok' : IDL.Null, 'err' : TreasuryError });
+  const HttpHeader = IDL.Record({ 'value' : IDL.Text, 'name' : IDL.Text });
+  const HttpRequestResult = IDL.Record({
+    'status' : IDL.Nat,
+    'body' : IDL.Vec(IDL.Nat8),
+    'headers' : IDL.Vec(HttpHeader),
+  });
   const Subaccount = IDL.Vec(IDL.Nat8);
   const Destination = IDL.Record({
     'owner' : IDL.Principal,
@@ -80,6 +86,16 @@ export const idlFactory = ({ IDL }) => {
       ),
     'http_request_update' : IDL.Func([HttpRequest], [HttpResponse], []),
     'set_owner' : IDL.Func([IDL.Principal], [Result_1], []),
+    'transformJwksResponse' : IDL.Func(
+        [
+          IDL.Record({
+            'context' : IDL.Vec(IDL.Nat8),
+            'response' : HttpRequestResult,
+          }),
+        ],
+        [HttpRequestResult],
+        ['query'],
+      ),
     'withdraw' : IDL.Func([IDL.Principal, IDL.Nat, Destination], [Result], []),
   });
   return McpServer;

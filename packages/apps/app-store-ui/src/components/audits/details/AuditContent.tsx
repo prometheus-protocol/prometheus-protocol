@@ -1,6 +1,4 @@
 import {
-  FileText,
-  Github,
   Info,
   ExternalLink,
   PlayCircle,
@@ -21,11 +19,12 @@ import { AppInfoAttestation } from './results/AppInfoAttestation';
 import { SecurityAttestation } from './results/SecurityAttestation';
 import { ToolsAttestation } from './results/ToolsAttestation';
 import { BuildReproducibilityAttestation } from './results/BuildReproducibilityAttestation';
-import { SecurityAttestationForm } from './forms/SecurityAttestationForm';
 import { ToolsAttestationForm } from './forms/ToolsAttestationForm';
 import { Section } from '@/components/Section';
 import { useGetReputationBalance } from '@/hooks/useAuditBounties';
 import { AppInfoAttestationForm } from './forms/AppInfoAttestationForm';
+import { BuildReproducibilityAttestationForm } from './forms/BuildReproducibilityAttestationForm';
+import { DivergenceReport } from './results/DivergenceReport';
 
 // --- 1. EXTRACT REUSABLE SECTIONS INTO THEIR OWN COMPONENTS ---
 const InstructionsSection = ({ hasStake }: { hasStake: boolean }) => {
@@ -101,10 +100,10 @@ const AttestationForm = ({ audit }: { audit: AuditBountyWithDetails }) => {
   switch (audit.auditType) {
     case 'app_info_v1':
       return <AppInfoAttestationForm audit={audit} />;
-    case 'security_v1':
-      return <SecurityAttestationForm audit={audit} />;
     case 'tools_v1':
       return <ToolsAttestationForm audit={audit} />;
+    case 'build_reproducibility_v1':
+      return <BuildReproducibilityAttestationForm audit={audit} />;
     default:
       return (
         <p>Attestation form for {audit.auditType} is not yet implemented.</p>
@@ -113,59 +112,70 @@ const AttestationForm = ({ audit }: { audit: AuditBountyWithDetails }) => {
 };
 
 // --- 2. RESTRUCTURE THE MAIN AuditContent COMPONENT ---
-
 export const AuditContent = ({ audit }: { audit: AuditBountyWithDetails }) => {
   const { identity } = useInternetIdentity();
   const getReputationBalance = useGetReputationBalance(audit.auditType);
   const currentBalance = getReputationBalance.data ?? 0;
   const hasStake = currentBalance > audit.stake;
 
-  // State 1: Audit is complete. Show only the results.
-  if (audit.status !== 'In Prog' && audit.results?.attestationData) {
-    const {
-      auditType,
-      results: { attestationData },
-    } = audit;
-    switch (auditType) {
-      case 'app_info_v1':
-        return (
-          <AppInfoAttestation
-            data={attestationData as AppInfoAttestationData}
-          />
-        );
-      case 'security_v1':
-        return (
-          <SecurityAttestation
-            data={attestationData as SecurityAttestationData}
-          />
-        );
-      case 'tools_v1':
-        return (
-          <ToolsAttestation data={attestationData as ToolsAttestationData} />
-        );
-      case 'build_reproducibility_v1':
-        return (
-          <BuildReproducibilityAttestation
-            data={attestationData as BuildReproducibilityAttestationData}
-          />
-        );
-      default:
-        return <p>Unknown attestation type: {auditType}</p>;
+  // --- REFACTORED LOGIC ---
+
+  // State 1: Audit is complete. Show the appropriate result (success or failure).
+  if (audit.status === 'Completed') {
+    // This guard is important in case the results are somehow missing.
+    if (!audit.results) {
+      return <p>Audit is complete, but results are unavailable.</p>;
+    }
+
+    // Use the discriminated union 'type' to render the correct component.
+    switch (audit.results.type) {
+      case 'success':
+        const {
+          auditType,
+          results: { data },
+        } = audit;
+        // This inner switch handles the different types of SUCCESSFUL attestations.
+        switch (auditType) {
+          case 'app_info_v1':
+            return <AppInfoAttestation data={data as AppInfoAttestationData} />;
+          case 'security_v1':
+            return (
+              <SecurityAttestation data={data as SecurityAttestationData} />
+            );
+          case 'tools_v1':
+            return <ToolsAttestation data={data as ToolsAttestationData} />;
+          case 'build_reproducibility_v1':
+            return (
+              <BuildReproducibilityAttestation
+                data={data as BuildReproducibilityAttestationData}
+              />
+            );
+          default:
+            return <p>Unknown attestation type: {auditType}</p>;
+        }
+
+      case 'failure':
+        // This case handles the DIVERGENCE report outcome.
+        return <DivergenceReport reason={audit.results.reason} />;
     }
   }
 
-  // For all other states (Open, In Prog), determine the main content and show resources.
+  // State 2: Audit is "In Prog" and claimed by the current user. Show the form.
   const isClaimedByCurrentUser =
     identity && audit.claimedBy?.toText() === identity.getPrincipal().toText();
 
+  if (isClaimedByCurrentUser) {
+    return (
+      <div className="space-y-16">
+        <AttestationForm audit={audit} />
+      </div>
+    );
+  }
+
+  // State 3: Default state (Open, or In Prog by another user). Show instructions.
   return (
     <div className="space-y-16">
-      {/* The main content is now conditional: either the form or the instructions */}
-      {isClaimedByCurrentUser ? (
-        <AttestationForm audit={audit} />
-      ) : (
-        <InstructionsSection hasStake={hasStake} />
-      )}
+      <InstructionsSection hasStake={hasStake} />
     </div>
   );
 };

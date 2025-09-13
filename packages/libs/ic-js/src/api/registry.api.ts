@@ -7,10 +7,7 @@ import {
   CanisterType,
   GetCanisterTypesRequest,
   ICRC16Map,
-  PendingSubmission,
-  VerificationOutcome,
 } from '@prometheus-protocol/declarations/mcp_registry/mcp_registry.did.js';
-import { toNullable } from '@dfinity/utils';
 import { SecurityTier } from './audit.api.js';
 import { uint8ArrayToHex } from '../utils.js';
 
@@ -26,10 +23,7 @@ export const submitVerificationRequest = async (
   args: Registry.VerificationRequest,
 ): Promise<bigint> => {
   const registryActor = getRegistryActor(identity);
-  const result = await registryActor.icrc126_verification_request({
-    ...args,
-    metadata: [], // Metadata can be added later if needed
-  });
+  const result = await registryActor.icrc126_verification_request(args);
 
   return result;
 };
@@ -312,35 +306,6 @@ export const getControllers = async (
   return results[0].controllers.map((p: Principal) => p.toText());
 };
 
-export interface FinalizeVerificationArgs {
-  wasm_id: string; // The lowercase hex string ID
-  outcome: VerificationOutcome;
-  metadata: ICRC16Map;
-}
-
-/**
- * Finalizes the verification status of a WASM as a DAO action.
- */
-export const finalizeVerification = async (
-  identity: Identity,
-  args: FinalizeVerificationArgs,
-): Promise<void> => {
-  const { wasm_id, outcome, metadata } = args;
-  const registryActor = getRegistryActor(identity);
-
-  const result = await registryActor.finalize_verification(
-    wasm_id,
-    outcome,
-    metadata,
-  );
-
-  if ('error' in result) {
-    throw new Error(
-      `Failed to finalize verification: ${JSON.stringify(result.error)}`,
-    );
-  }
-};
-
 export interface CreateCanisterTypeArgs {
   namespace: string;
   name: string;
@@ -506,6 +471,7 @@ export interface AppStoreListing {
   publisher: string;
   iconUrl: string;
   bannerUrl: string;
+  status: 'Now Available' | 'Coming Soon';
 }
 
 function unwrapSecurityTier(
@@ -554,49 +520,17 @@ export const getAppStoreListings = async (): Promise<AppStoreListing[]> => {
         bannerUrl: item.banner_url, // Mapping snake_case to camelCase
         category: item.category,
         securityTier: unwrapSecurityTier(item.security_tier),
+        status:
+          'Pending' in item.status
+            ? 'Coming Soon'
+            : 'Verified' in item.status
+              ? 'Now Available'
+              : 'Coming Soon',
       }),
     );
   } catch (error) {
     console.error(`Error calling get_app_listings:`, error);
     // Return an empty array on network/agent-level failure so the UI doesn't break.
-    return [];
-  }
-};
-
-// 2. Define the user-friendly request object for our function.
-export interface ListSubmissionsRequest {
-  take?: bigint;
-  prev?: string; // The wasm_id of the last item from the previous page
-}
-
-/**
- * Fetches a paginated list of all WASM submissions that are ready for DAO review.
- * @param identity The identity to use for the call (can be anonymous).
- * @param request The pagination options for the query.
- */
-export const listPendingSubmissions = async (
-  identity: Identity,
-  request: ListSubmissionsRequest,
-): Promise<PendingSubmission[]> => {
-  const registryActor = getRegistryActor(identity);
-  try {
-    // 3. Transform the user-friendly request into the format Candid expects.
-    //    Optional values are wrapped in an array: [] for null, [value] for some.
-    const candidRequest = {
-      take: toNullable(request.take),
-      prev: toNullable(request.prev),
-    };
-
-    // 4. Call the new canister endpoint.
-    const submissions =
-      await registryActor.list_pending_submissions(candidRequest);
-
-    // 5. The return type from the canister already matches our desired interface,
-    //    so we can return it directly. No complex processing is needed.
-    return submissions;
-  } catch (error) {
-    console.error('Error fetching pending submissions:', error);
-    // Return an empty array on failure to prevent the CLI from crashing.
     return [];
   }
 };

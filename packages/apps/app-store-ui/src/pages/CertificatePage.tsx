@@ -20,6 +20,7 @@ import {
   AuditBounty,
   CORE_AUDIT_TYPES,
   ProcessedAttestation,
+  ProcessedAuditRecord,
   Registry,
   Tokens,
 } from '@prometheus-protocol/ic-js';
@@ -31,6 +32,7 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { CreateBountyDialog } from '@/components/server-details/CreateBountyDialog';
+import { CoreAuditStatusCard } from '@/components/server-details/CoreAuditStatusCard';
 
 // --- CONSTANTS & HELPERS ---
 
@@ -220,26 +222,15 @@ function CoreAttestationCard({
 // --- MAIN CertificatePage Component ---
 
 export function CertificatePage() {
-  const { serverId } = useParams<{ serverId: string }>();
+  const { appId } = useParams<{ appId: string }>();
   const {
     data: appDetails,
     isLoading,
     isError,
     refetch,
-  } = useGetAppDetails(serverId);
+  } = useGetAppDetails(appId);
 
-  const extractedData = useMemo(() => {
-    if (!appDetails?.attestations) return {};
-    const buildPayload =
-      appDetails.attestations.find(
-        (a) => a.audit_type === 'build_reproducibility_v1',
-      )?.payload || {};
-    return {
-      gitCommit: buildPayload.git_commit || null,
-      canisterId: buildPayload.canister_id || null,
-      repoUrl: buildPayload.repo_url || null,
-    };
-  }, [appDetails]);
+  const buildInfo = appDetails?.buildInfo;
 
   if (isLoading) return <CertificatePageSkeleton />;
   if (isError) return <CertificatePageError onRetry={refetch} />;
@@ -261,7 +252,7 @@ export function CertificatePage() {
           Home
         </Link>
         <span className="mx-2">/</span>
-        <Link to={`/server/${serverId}`} className="hover:underline">
+        <Link to={`/apps/${appId}`} className="hover:underline">
           {appDetails.name}
         </Link>
         <span className="mx-2">/</span>
@@ -281,55 +272,78 @@ export function CertificatePage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 mb-12">
               {CORE_AUDIT_TYPES.map((auditType) => {
-                const attestation = appDetails.attestations.find(
-                  (a) => a.audit_type === auditType,
+                // Find the corresponding record and bounty for this audit type.
+                const record = appDetails.auditRecords.find(
+                  (rec: ProcessedAuditRecord) => {
+                    if (rec.type === 'attestation')
+                      return rec.audit_type === auditType;
+                    // A divergence only counts for the build audit
+                    if (rec.type === 'divergence')
+                      return auditType === 'build_reproducibility_v1';
+                    return false;
+                  },
                 );
                 const bounty = appDetails.bounties.find(
                   (b) => b.challengeParameters.audit_type === auditType,
                 );
+
+                // Determine the status based on the data we found.
+                let status: 'success' | 'failure' | 'pending' | 'unavailable' =
+                  'unavailable';
+                if (record?.type === 'attestation') status = 'success';
+                else if (record?.type === 'divergence') status = 'failure';
+                else if (bounty) status = 'pending';
+
                 return (
-                  <CoreAttestationCard
+                  <CoreAuditStatusCard
                     key={auditType}
                     auditType={auditType}
-                    attestation={attestation}
+                    status={status}
+                    record={record}
                     bounty={bounty}
                     appId={appDetails.id}
                   />
                 );
               })}
             </div>
-
+            {/* --- 3. USE THE SIMPLIFIED buildInfo OBJECT --- */}
             <div className="space-y-2 mb-12 font-mono text-md">
-              {extractedData.canisterId && (
+              {buildInfo?.canisterId && (
                 <p>
                   Canister ID:{' '}
                   <span className="text-muted-foreground break-words">
-                    {extractedData.canisterId}
+                    {buildInfo.canisterId}
                   </span>
                 </p>
               )}
               <p>
                 Wasm Hash:{' '}
                 <span className="text-muted-foreground break-words">
-                  {serverId}
+                  {appId}
                 </span>
               </p>
-              {extractedData.gitCommit && (
+              {buildInfo?.gitCommit && (
                 <p>
                   Git Commit:{' '}
                   <span className="text-muted-foreground break-words">
-                    {extractedData.gitCommit}
+                    {buildInfo.gitCommit}
                   </span>
                 </p>
               )}
-              {extractedData.repoUrl && extractedData.gitCommit && (
-                <a
-                  href={`${extractedData.repoUrl}/commit/${extractedData.gitCommit}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-md bg-muted px-3 py-2 mt-4 text-sm font-semibold text-foreground transition-colors hover:bg-muted/80">
-                  <Github className="h-4 w-4" /> View Commit on GitHub
+              {buildInfo?.repoUrl && buildInfo.gitCommit && (
+                <a href={`${buildInfo.repoUrl}/commit/${buildInfo.gitCommit}`}>
+                  View Commit on GitHub
                 </a>
+              )}
+              {buildInfo?.status === 'failure' && (
+                <div className="text-red-400 pt-4">
+                  <p className="font-sans font-semibold">
+                    Build Failure Reason:
+                  </p>
+                  <p className="text-muted-foreground font-sans whitespace-pre-wrap">
+                    {buildInfo.failureReason}
+                  </p>
+                </div>
               )}
             </div>
           </div>

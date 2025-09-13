@@ -77,11 +77,8 @@ function App() {
               <Route path="/" element={<HomePage />} />
 
               {/* The details page for a specific MCP server, accessible by a slug or ID */}
-              <Route path="/server/:serverId" element={<ServerDetailsPage />} />
-              <Route
-                path="server/:serverId/certificate"
-                element={<CertificatePage />}
-              />
+              <Route path="/apps/:appId" element={<ServerDetailsPage />} />
+              <Route path="/certificate/:appId" element={<CertificatePage />} />
 
               {/* Audit Hub Routes */}
               <Route path="audit-hub">

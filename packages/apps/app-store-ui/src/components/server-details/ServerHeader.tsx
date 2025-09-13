@@ -1,24 +1,29 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, Coins } from 'lucide-react'; // Import Coins icon for sponsoring
 import { MediaGallery } from './MediaGallery';
 import { getTierInfo } from '@/lib/get-tier-info';
 import { cn } from '@/lib/utils';
 import { AppStoreDetails } from '@prometheus-protocol/ic-js';
 import { ImageWithFallback } from '@/components/ui/image-with-fallback';
 
+// --- 1. Update the props to accept the new sponsor click handler ---
 interface ServerHeaderProps {
   server: AppStoreDetails;
   onInstallClick: () => void;
+  onSponsorClick: () => void; // New prop for the sponsor action
 }
 
-// This is now a stateless presentation component.
-export function ServerHeader({ server, onInstallClick }: ServerHeaderProps) {
+export function ServerHeader({
+  server,
+  onInstallClick,
+  onSponsorClick,
+}: ServerHeaderProps) {
   const tierInfo = getTierInfo(server.securityTier);
   const navigate = useNavigate();
 
   const handleViewCertClick = () => {
-    navigate('./certificate');
+    navigate(`/certificate/${server.id}`);
   };
 
   return (
@@ -34,60 +39,112 @@ export function ServerHeader({ server, onInstallClick }: ServerHeaderProps) {
         <div className="lg:col-span-3">
           <h1 className="text-4xl font-bold tracking-tight">{server.name}</h1>
 
-          <div className="mt-10 flex flex-wrap items-center gap-y-6 gap-x-6">
-            <div className="flex gap-4 items-start">
-              {/* --- USE THE FALLBACK COMPONENT --- */}
-              <ImageWithFallback
-                src={server.iconUrl}
-                alt={`${server.name} icon`}
-                className="w-11 h-11 rounded-md"
-              />
-              <div>
-                <span className="text-md font-bold">{server.publisher}</span>
-                <p className="text-xs text-muted-foreground italic">
-                  In-app transactions available
-                </p>
+          {/* --- 2. CONDITIONAL UI BLOCK STARTS HERE --- */}
+          {server.status === 'Coming Soon' ? (
+            // --- UI for PENDING apps ---
+            <>
+              <div className="mt-10 flex flex-wrap items-center gap-y-6 gap-x-6">
+                {/* Publisher Info (remains the same) */}
+                <div className="flex gap-4 items-start">
+                  <ImageWithFallback
+                    src={server.iconUrl}
+                    alt={`${server.name} icon`}
+                    className="w-11 h-11 rounded-md"
+                  />
+                  <div>
+                    <span className="text-md font-bold">
+                      {server.publisher}
+                    </span>
+                    <p className="text-xs text-muted-foreground italic">
+                      Developer Submission
+                    </p>
+                  </div>
+                </div>
+                <div className="hidden h-12 w-px bg-border sm:block" />
+                {/* "Build Verified" Info Block (replaces Security Tier) */}
+                <div className="flex items-start gap-4">
+                  <div className="border border-green-700/50 w-11 h-11 rounded-md flex items-center justify-center">
+                    <ShieldCheck className="w-8 h-8 text-green-400" />
+                  </div>
+                  <div>
+                    <span className="text-md font-bold">Build Verified</span>
+                    <p className="text-xs text-muted-foreground italic">
+                      Source code has been successfully reproduced.
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
-
-            <div className="hidden h-12 w-px bg-border sm:block" />
-
-            <div className="flex items-start gap-4">
-              <div className="border border-gray-700 w-11 h-11 rounded-md flex items-center justify-center">
-                <tierInfo.Icon
-                  className={cn('w-8 h-8', tierInfo.textColorClass)}
-                />
+              <div className="max-w-lg mt-8 text-sm text-amber-300/80 bg-amber-900/30 border border-amber-500/30 rounded-md p-3">
+                This app is coming soon! Sponsor the listing audit to get it
+                fully reviewed and published on the store.
               </div>
-              <div>
-                <span className="text-md font-bold">{tierInfo.name}</span>
-                <Link
-                  to={'./certificate'}
-                  className="text-xs text-muted-foreground italic hover:underline">
-                  <p>{tierInfo.description}</p>
-                </Link>
+              <div className="mt-8 flex items-center gap-4">
+                <Button
+                  size="lg"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold min-w-[150px]"
+                  onClick={onSponsorClick} // <-- Use the new prop
+                >
+                  <Coins className="mr-2 h-5 w-5" />
+                  Sponsor Listing
+                </Button>
               </div>
-            </div>
-          </div>
-
-          <div className="mt-12 flex items-center gap-4">
-            <Button
-              size="lg"
-              className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold min-w-[150px]"
-              onClick={onInstallClick} // <-- USE THE PROP
-            >
-              Install
-            </Button>
-            <Button
-              onClick={handleViewCertClick}
-              variant="ghost"
-              className="flex items-center gap-2 text-muted-foreground">
-              <ShieldCheck />
-              View security certificate
-            </Button>
-          </div>
+            </>
+          ) : (
+            // --- UI for LISTED apps (Your Original Code) ---
+            <>
+              <div className="mt-10 flex flex-wrap items-center gap-y-6 gap-x-6">
+                <div className="flex gap-4 items-start">
+                  <ImageWithFallback
+                    src={server.iconUrl}
+                    alt={`${server.name} icon`}
+                    className="w-11 h-11 rounded-md"
+                  />
+                  <div>
+                    <span className="text-md font-bold">
+                      {server.publisher}
+                    </span>
+                    <p className="text-xs text-muted-foreground italic">
+                      In-app transactions available
+                    </p>
+                  </div>
+                </div>
+                <div className="hidden h-12 w-px bg-border sm:block" />
+                <div className="flex items-start gap-4">
+                  <div className="border border-gray-700 w-11 h-11 rounded-md flex items-center justify-center">
+                    <tierInfo.Icon
+                      className={cn('w-8 h-8', tierInfo.textColorClass)}
+                    />
+                  </div>
+                  <div>
+                    <span className="text-md font-bold">{tierInfo.name}</span>
+                    <Link
+                      to={`/certificate/${server.id}`}
+                      className="text-xs text-muted-foreground italic hover:underline">
+                      <p>{tierInfo.description}</p>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-12 flex items-center gap-4">
+                <Button
+                  size="lg"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold min-w-[150px]"
+                  onClick={onInstallClick}>
+                  Install
+                </Button>
+                <Button
+                  onClick={handleViewCertClick}
+                  variant="ghost"
+                  className="flex items-center gap-2 text-muted-foreground">
+                  <ShieldCheck />
+                  View security certificate
+                </Button>
+              </div>
+            </>
+          )}
         </div>
 
-        <div className="lg:col-span-2 flex flex-col justify-end">
+        <div className="lg:col-span-2 flex flex-col">
           <MediaGallery images={server.galleryImages} appName={server.name} />
         </div>
       </div>

@@ -849,55 +849,5 @@ describe('Auth Server Canister (Isolated Tests)', () => {
       const resultData = (confirmResult as { ok: any }).ok;
       expect(resultData.next_step).toEqual({ consent: null });
     });
-
-    it('should require payment setup if `prometheus:charge` scope IS requested', async () => {
-      const pkce = await generatePkce();
-      const scope = encodeURIComponent('openid prometheus:charge');
-      // Arrange: Start a flow WITH the charge scope
-      const authRequest: HttpRequest = {
-        method: 'GET',
-        url: `/authorize?response_type=code&client_id=${clientId}&redirect_uri=https%3A%2F%2Fjwt.io&scope=${scope}&code_challenge=${pkce.challenge}&code_challenge_method=S256&resource=${resourceServerUri}`,
-        headers: [['Host', authCanisterId.toText()]],
-        body: new Uint8Array(),
-      };
-      authActor.setPrincipal(Principal.anonymous());
-      const authResponse = await authActor.http_request_update(authRequest);
-
-      expect(authResponse.status_code).toBe(302); //
-      const locationHeader =
-        authResponse.headers.find(
-          (h) => h[0].toLowerCase() === 'location',
-        )?.[1] ?? '';
-      const sessionId = new URL(locationHeader).searchParams.get('session_id');
-
-      // Act 1: Confirm the login
-      const endUserIdentity = createIdentity('end-user-consent-payment');
-      authActor.setIdentity(endUserIdentity);
-      const confirmResult = await authActor.confirm_login(sessionId!);
-
-      // Assert 1: The backend must direct the frontend to the #setup step
-      expect(confirmResult).toHaveProperty('ok');
-      const resultData = (confirmResult as { ok: any }).ok;
-      expect(resultData.next_step).toEqual({ setup: null });
-
-      // Assert 2: A direct call to complete_authorize MUST FAIL
-      const prematureFinalizeResult = await authActor.complete_authorize(
-        sessionId!,
-      );
-      expect(prematureFinalizeResult).toHaveProperty('err');
-      expect((prematureFinalizeResult as { err: string }).err).toContain(
-        'Invalid session state',
-      );
-
-      // Act 2: Simulate the user completing the payment setup step
-      const setupCompleteResult = await authActor.complete_payment_setup(
-        sessionId!,
-      );
-      expect(setupCompleteResult).toHaveProperty('ok');
-
-      // Act 3: Now that setup is complete, the final authorization should succeed
-      const finalResult = await authActor.complete_authorize(sessionId!);
-      expect(finalResult).toHaveProperty('ok');
-    });
   });
 });

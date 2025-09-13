@@ -20,6 +20,7 @@ import {
   nsToDate,
   processAttestation,
   processBounty,
+  processVerificationRecord,
   processVerificationRequest,
   uint8ArrayToHex,
 } from '../utils.js';
@@ -66,10 +67,39 @@ export interface ProcessedVerificationRequest {
   metadata: Record<string, any>;
 }
 
+export interface ProcessedVerificationRecord {
+  repo: string;
+  commit_hash: string;
+  wasm_hash: string;
+  requester: Principal;
+  timestamp: Date;
+  metadata: Record<string, any>;
+}
+
+export interface ProcessedAttestationRecord {
+  type: 'attestation'; // The discriminator
+  auditor: Principal;
+  audit_type: string;
+  metadata: Record<string, any>;
+  timestamp: bigint;
+}
+
+export interface ProcessedDivergenceRecord {
+  type: 'divergence'; // The discriminator
+  reporter: Principal;
+  report: string;
+  metadata: Record<string, any>;
+  timestamp: bigint;
+}
+
+export type ProcessedAuditRecord =
+  | ProcessedAttestationRecord
+  | ProcessedDivergenceRecord;
+
 export interface VerificationStatus {
   isVerified: boolean;
   verificationRequest: ProcessedVerificationRequest | null;
-  attestations: ProcessedAttestation[];
+  auditRecords: ProcessedAuditRecord[];
   bounties: AuditBounty[];
 }
 
@@ -124,53 +154,75 @@ export interface ClaimBountyArgs {
 }
 
 // --- FUNCTIONS ---
-
 /**
- * Fetches and PROCESSES the verification status for a given WASM hash.
- * @returns An object containing the final verification status and a list of
- *          fully deserialized attestations.
+ * Fetches and assembles the complete verification status for a single WASM.
+ * This orchestrates multiple canister calls to build a complete, UI-friendly object.
+ *
+ * @param wasmId The lowercase hex string ID of the WASM to fetch.
+ * @returns A complete VerificationStatus object.
  */
 export const getVerificationStatus = async (
-  wasmId: string, // Lowercase hex string ID of the WASM
+  wasmId: string,
 ): Promise<VerificationStatus> => {
   const registryActor = getRegistryActor();
 
+  // 1. Fetch all data in parallel. Renamed for clarity.
   const [
     isVerifiedResult,
     verificationResult,
-    attestationsResult,
+    auditRecordsResult, // <-- Renamed from attestationsResult
     bountiesResult,
   ] = await Promise.all([
     registryActor.is_wasm_verified(wasmId),
     registryActor.get_verification_request(wasmId),
-    registryActor.get_attestations_for_wasm(wasmId),
+    registryActor.get_audit_records_for_wasm(wasmId), // This now fetches both types
     registryActor.get_bounties_for_wasm(wasmId),
   ]);
 
   const verificationRequest = fromNullable(verificationResult);
-
   const processedRequest: ProcessedVerificationRequest | null =
     verificationRequest
       ? processVerificationRequest(verificationRequest)
       : null;
 
-  // 3. Process the attestations right here, in the API layer.
-  const processedAttestations: ProcessedAttestation[] = attestationsResult.map(
-    (att): ProcessedAttestation => ({
-      audit_type: att.audit_type,
-      timestamp: att.timestamp,
-      auditor: att.auditor,
-      // The deserialization happens here!
-      payload: deserializeFromIcrc16Map(att.metadata),
-    }),
+  // --- 2. Process the audit records using a type guard ---
+  // The result is now an array of our discriminated union type.
+  const processedAuditRecords: ProcessedAuditRecord[] = auditRecordsResult.map(
+    (record): ProcessedAuditRecord => {
+      // This is the crucial type guard. We check which variant the record is.
+      if ('Attestation' in record) {
+        const att = record.Attestation;
+        return {
+          type: 'attestation',
+          auditor: att.auditor,
+          audit_type: att.audit_type,
+          timestamp: att.timestamp,
+          metadata: deserializeFromIcrc16Map(att.metadata),
+        };
+      } else {
+        // 'Divergence' in record
+        const div = record.Divergence;
+        return {
+          type: 'divergence',
+          reporter: div.reporter,
+          report: div.report,
+          timestamp: div.timestamp,
+          metadata:
+            div.metadata.length > 0
+              ? deserializeFromIcrc16Map(div.metadata[0]!)
+              : {},
+        };
+      }
+    },
   );
 
   const processedBounties: AuditBounty[] = bountiesResult.map(processBounty);
 
+  // 3. Return the final object with the corrected property name and data.
   return {
     isVerified: isVerifiedResult,
     verificationRequest: processedRequest,
-    attestations: processedAttestations,
+    auditRecords: processedAuditRecords, // <-- Use the new name and the processed data
     bounties: processedBounties,
   };
 };
@@ -283,9 +335,7 @@ export interface AuditBountyWithDetails {
   status: 'Open' | 'Claimed' | 'In Prog' | 'Completed' | 'AwaitingClaim';
   claimedBy?: { toText: () => string };
   completedDate?: Date;
-  results?: {
-    attestationData: AttestationData;
-  };
+  results?: AuditResults;
   repo: string;
   commitHash: string;
   lockExpiresAt?: Date;
@@ -299,6 +349,10 @@ export interface AuditBountyWithDetails {
  * @param bountyId The ID of the bounty to fetch.
  * @returns A complete AuditBounty object, or null if not found.
  */
+/**
+ * Fetches and assembles all data for a single audit bounty.
+ * This is the primary data source for the Audit Details page.
+ */
 export const getAuditBounty = async (
   identity: Identity | undefined,
   bountyId: bigint,
@@ -306,101 +360,104 @@ export const getAuditBounty = async (
   const registryActor = getRegistryActor();
   const auditHubActor = getAuditHubActor();
 
-  console.log('identity', identity);
-
-  // 1. Fetch the core ICRC-127 bounty record.
+  // 1. Fetch the core ICRC-127 bounty record (unchanged).
   const rawBountyOpt = await registryActor.icrc127_get_bounty(bountyId);
-  if (rawBountyOpt.length === 0) {
-    return null; // Bounty not found.
-  }
+  if (rawBountyOpt.length === 0) return null;
   const processed = processBounty(rawBountyOpt[0]);
+  const wasmId = uint8ArrayToHex(processed.challengeParameters.wasm_hash);
 
-  const wasmHashBytes = processed.challengeParameters?.wasm_hash as
-    | Uint8Array
-    | undefined;
-  if (!wasmHashBytes) {
-    throw new Error(`Bounty #${bountyId} is malformed: missing wasm_hash.`);
-  }
-  const wasmId = uint8ArrayToHex(wasmHashBytes);
-
-  // 2. Fetch ancillary data in parallel.
-  const [verificationRequest, allAttestations, bountyLockOpt, bountyStakeOpt] =
-    await Promise.all([
-      registryActor.get_verification_request(wasmId),
-      registryActor.get_attestations_for_wasm(wasmId),
-      auditHubActor.get_bounty_lock(bountyId),
-      auditHubActor.get_stake_requirement(
-        processed.challengeParameters?.audit_type,
-      ),
-    ]);
+  // 2. Fetch ancillary data, using the unified audit records endpoint.
+  const [
+    verificationRequest,
+    allAuditRecords, // <-- CORRECTLY NAMED: This contains both attestations and divergences
+    bountyLockOpt,
+    bountyStakeOpt,
+  ] = await Promise.all([
+    registryActor.get_verification_request(wasmId),
+    getAuditRecordsForWasm(wasmId), // <-- CORRECT: Using the unified fetcher
+    auditHubActor.get_bounty_lock(bountyId),
+    auditHubActor.get_stake_requirement(
+      processed.challengeParameters.audit_type,
+    ),
+  ]);
 
   const bountyLock: AuditHub.BountyLock | undefined =
     fromNullable(bountyLockOpt);
   const bountyStake: bigint | undefined = fromNullable(bountyStakeOpt);
 
-  // 3. Determine the final status and find the matching attestation.
+  // 3. Determine the final status by finding the matching audit record (of any type).
   let status: AuditBountyWithDetails['status'] = 'Open';
-  let results: AuditBountyWithDetails['results'] | undefined;
-  let completedDate: AuditBountyWithDetails['completedDate'] | undefined;
-  let lockExpiresAt: AuditBountyWithDetails['lockExpiresAt'] | undefined;
+  let results: AuditResults | undefined;
+  let completedDate: Date | undefined;
+  let lockExpiresAt: Date | undefined;
 
-  const matchingAttestation = allAttestations.find(
-    (att: Registry.AttestationRecord) => {
-      const meta = deserializeFromIcrc16Map(att.metadata);
+  // --- KEY CHANGE #1: Find the matching record by checking metadata correctly for each type ---
+  const matchingRecord = allAuditRecords.find(
+    (record: ProcessedAuditRecord) => {
+      // The metadata, which contains the bounty_id, is in a different place for each type.
+      const meta = record.metadata;
       return meta.bounty_id === bountyId;
     },
   );
 
-  if (matchingAttestation) {
+  if (matchingRecord) {
     status = 'Completed';
-    completedDate = new Date(
-      Number(matchingAttestation.timestamp / 1_000_000n),
-    );
-    results = {
-      attestationData: deserializeFromIcrc16Map(
-        matchingAttestation.metadata,
-      ) as AttestationData,
-    };
+    completedDate = new Date(Number(matchingRecord.timestamp / 1_000_000n));
+
+    // --- KEY CHANGE #2: Use the discriminated union 'type' to set the results ---
+    if (matchingRecord.type === 'attestation') {
+      results = {
+        type: 'success',
+        data: matchingRecord.metadata as AttestationData,
+      };
+    } else {
+      // type is 'divergence'
+      results = {
+        type: 'failure',
+        reason: matchingRecord.report,
+      };
+    }
   } else if (bountyLock) {
     status = 'In Prog';
     lockExpiresAt = nsToDate(bountyLock.expires_at);
   }
 
-  // This is the crucial new check. It runs AFTER the main status checks.
+  // --- KEY CHANGE #3: The "Awaiting Claim" check must also handle the union type ---
   if (identity && status === 'Completed') {
     const currentUserPrincipal = identity.getPrincipal();
-    // Check if the current user has filed an attestation for this WASM
-    const userAttestation = allAttestations.find(
-      (att) => att.auditor.compareTo(currentUserPrincipal) === 'eq',
-    );
+    // Find if the current user submitted the record for THIS bounty.
+    const userSubmission = allAuditRecords.find((record) => {
+      if (record.metadata.bounty_id !== bountyId) return false;
 
-    // If the user has an attestation, but the bounty has no claims,
-    // we are in the special "Awaiting Claim" state.
-    if (userAttestation && processed.claims.length === 0) {
+      const author =
+        record.type === 'attestation' ? record.auditor : record.reporter;
+      return author.compareTo(currentUserPrincipal) === 'eq';
+    });
+
+    if (userSubmission && processed.claims.length === 0) {
       status = 'AwaitingClaim';
     }
   }
 
   if (!fromNullable(verificationRequest)) {
-    return null; // No verification request means no valid audit.
+    return null;
   }
-
   const processedRequest = processVerificationRequest(
     fromNullable(verificationRequest)!,
   );
 
-  // 4. Assemble and return the final, comprehensive object.
+  // 4. Assemble and return the final object.
   return {
     id: processed.id,
-    projectName: wasmId, // We don't have a project name on-chain yet
-    auditType: processed.challengeParameters?.audit_type,
+    projectName: wasmId,
+    auditType: processed.challengeParameters.audit_type,
     reward: processed.tokenAmount,
-    stake: bountyStake ?? 0n, // Stake comes from the lock
+    stake: bountyStake ?? 0n,
     status,
     claimedBy: bountyLock?.claimant,
     completedDate,
     lockExpiresAt,
-    results,
+    results, // <-- This now holds the correctly typed result
     repo: processedRequest.repo,
     commitHash: processedRequest.commit_hash,
   };
@@ -564,6 +621,18 @@ function buildServerUrl(canisterId: Principal, path: string): string {
   return url.toString();
 }
 
+export interface BuildInfo {
+  status: 'success' | 'failure' | 'unknown';
+  gitCommit: string | null;
+  repoUrl: string | null;
+  canisterId: string | null;
+  failureReason: string | null;
+}
+
+export type AuditResults =
+  | { type: 'success'; data: Record<string, any> }
+  | { type: 'failure'; reason: string };
+
 export interface AppStoreDetails {
   id: string;
   name: string;
@@ -589,7 +658,10 @@ export interface AppStoreDetails {
   };
   reviews: any[]; // To be implemented later
   bounties: AuditBounty[];
-  attestations: ProcessedAttestation[];
+  auditRecords: ProcessedAuditRecord[];
+  results?: AuditResults;
+  buildInfo: BuildInfo;
+  status: 'Now Available' | 'Coming Soon';
 }
 
 /**
@@ -626,25 +698,132 @@ export const getAppDetailsByHash = async (
     },
     reviews: [],
     bounties: [],
-    attestations: [],
+    auditRecords: [],
+    results: undefined,
+    buildInfo: {
+      // Initialize with default values
+      status: 'unknown',
+      gitCommit: null,
+      repoUrl: null,
+      canisterId: null,
+      failureReason: null,
+    },
+    status: 'Coming Soon', // Default to 'Coming Soon'
   };
 
   const registryActor = getRegistryActor();
 
   try {
-    // 2. Fetch attestations AND bounties in parallel for better performance.
-    const [attestationsResult, bountiesResult] = await Promise.all([
-      registryActor.get_attestations_for_wasm(wasmId),
-      registryActor.get_bounties_for_wasm(wasmId), // Assuming this method exists
+    // 1. Fetch all necessary data in parallel, including the definitive verification status.
+    const [
+      isVerifiedResult,
+      auditRecordsResult,
+      bountiesResult,
+      verificationRequestResult,
+    ] = await Promise.all([
+      registryActor.is_wasm_verified(wasmId),
+      getAuditRecordsForWasm(wasmId),
+      registryActor.get_bounties_for_wasm(wasmId),
+      registryActor.get_verification_request(wasmId),
     ]);
+
     details.bounties = bountiesResult.map(processBounty);
-    details.attestations = attestationsResult.map(processAttestation);
+    const allAuditRecords = auditRecordsResult; // This now contains both types
+
+    // 2. Find and process the specific Build Reproducibility record first.
+    const buildRecord = allAuditRecords.find(
+      (record) =>
+        (record.type === 'attestation' &&
+          record.audit_type === 'build_reproducibility_v1') ||
+        record.type === 'divergence', // In our system, divergence is only for build failures
+    );
+
+    if (buildRecord) {
+      if (buildRecord.type === 'attestation') {
+        const payload = buildRecord.metadata;
+        details.buildInfo = {
+          status: 'success',
+          gitCommit: payload.git_commit || null,
+          repoUrl: payload.repo_url || null,
+          canisterId: payload.canister_id || null,
+          failureReason: null,
+        };
+      } else {
+        // It's a divergence record
+        details.buildInfo = {
+          status: 'failure',
+          // For now, we get the reason. We can enrich this later if needed.
+          failureReason: buildRecord.report,
+          gitCommit: null, // Not available in divergence report
+          repoUrl: null, // Not available in divergence report
+          canisterId: null, // Not available in divergence report
+        };
+      }
+    }
+
+    // 3. Process all OTHER (declarative) attestations to populate app info.
+    const declarativeAttestations = allAuditRecords.filter(
+      (record): record is ProcessedAttestationRecord =>
+        record.type === 'attestation' &&
+        record.audit_type !== 'build_reproducibility_v1',
+    );
+
+    const appInfoAttestation = declarativeAttestations.find(
+      (att) => att.audit_type === 'app_info_v1',
+    );
+
+    if (appInfoAttestation) {
+      // --- PATH A: APP IS FULLY LISTED ---
+      // We have an app_info_v1 attestation, so it's the source of truth.
+      const payload = appInfoAttestation.metadata;
+      const serverUrl = buildServerUrl(
+        Principal.fromText(payload.canister_id),
+        payload.mcp_path || '',
+      );
+      details.name = payload.name || '';
+      details.publisher = payload.publisher || '';
+      details.serverUrl = serverUrl;
+      details.category = payload.category || '';
+      details.iconUrl = payload.icon_url || '';
+      details.bannerUrl = payload.banner_url || '';
+      details.galleryImages = payload.gallery_images || [];
+      details.description = payload.description || '';
+      details.keyFeatures = payload.key_features || [];
+      details.whyThisApp = payload.why_this_app || '';
+      details.tags = payload.tags || [];
+      details.status = 'Now Available';
+      details.auditRecords = allAuditRecords;
+    } else {
+      // --- PATH B: APP IS PENDING ---
+      // No app_info_v1 attestation found. Fall back to the verification request metadata.
+      const verificationRequest = fromNullable(verificationRequestResult);
+      if (verificationRequest) {
+        const payload =
+          processVerificationRequest(verificationRequest).metadata;
+        const serverUrl = buildServerUrl(
+          Principal.fromText(payload.canister_id),
+          payload.mcp_path || '',
+        );
+        details.name = payload.name || '';
+        details.publisher = payload.publisher || '';
+        details.serverUrl = serverUrl;
+        details.category = payload.category || 'Coming Soon';
+        details.description = payload.description || '';
+        details.whyThisApp = payload.why_this_app || '';
+        details.keyFeatures = payload.key_features || [];
+        details.tags = payload.tags || [];
+        // Visuals are nested in the verification request
+        details.iconUrl = payload.visuals?.icon_url || '';
+        details.bannerUrl = payload.visuals?.banner_url || '';
+        details.galleryImages = payload.visuals?.gallery_images || [];
+        details.status = 'Coming Soon';
+        details.auditRecords = allAuditRecords;
+      }
+    }
 
     // 2. Loop through attestations and explicitly map data.
-    const completedAuditTypes: string[] = [];
-    for (const attestation of details.attestations) {
-      completedAuditTypes.push(attestation.audit_type);
-      const payload = attestation.payload;
+    for (const attestation of declarativeAttestations) {
+      const payload = attestation.metadata;
 
       switch (attestation.audit_type) {
         case 'app_info_v1':
@@ -692,20 +871,21 @@ export const getAppDetailsByHash = async (
           break;
 
         case 'build_reproducibility_v1':
-          if (payload.status) {
-            details.dataSafety.points.push({
-              title: 'Build Reproducibility',
-              description:
-                payload.status === 'success'
-                  ? 'This app has reproducible builds.'
-                  : 'This app does not have reproducible builds.',
-            });
-          }
+          details.buildInfo = {
+            status: payload.status || 'unknown',
+            gitCommit: payload.git_commit || null,
+            repoUrl: payload.repo_url || null,
+            canisterId: payload.canister_id || null,
+            failureReason: payload.failure_reason || null,
+          };
           break;
       }
     }
     // 3. Set the security tier based on completed audit types.
-    details.securityTier = calculateSecurityTier(completedAuditTypes);
+    details.securityTier = calculateSecurityTier(
+      isVerifiedResult,
+      declarativeAttestations.map((a) => a.audit_type),
+    );
   } catch (e) {
     console.error('Failed to parse attestation payload:', e);
   }
@@ -805,4 +985,126 @@ export const getReputationBalance = async (
     token_id,
   );
   return result;
+};
+
+// 1. Define the new, complete, and ergonomic interface.
+//    We use Maps for easy lookups in the frontend.
+export interface AuditorProfile {
+  reputation: Map<string, bigint>;
+  available_balances: Map<string, bigint>;
+  staked_balances: Map<string, bigint>;
+}
+/**
+ * Fetches the complete profile for the current user's principal from the Audit Hub.
+ * It transforms the canister's array-based response into a more ergonomic
+ * object with Maps for easy data access.
+ *
+ * @param identity The user's identity.
+ * @returns The user's complete auditor profile.
+ */
+export const getAuditorProfile = async (
+  identity: Identity,
+): Promise<AuditorProfile> => {
+  const auditHubActor = getAuditHubActor(identity);
+  const principal = identity.getPrincipal();
+
+  // 2. Call the canister. The result is an optional record, which the agent
+  //    represents as a single-element array `[record]` or an empty array `[]`.
+  const profileResult = await auditHubActor.get_auditor_profile(principal);
+
+  // 4. Destructure the record from the array.
+  const rawProfile = profileResult;
+
+  // 5. Transform the arrays of tuples into Maps and return the clean object.
+  //    The Map constructor elegantly handles this conversion.
+  return {
+    reputation: new Map(rawProfile.reputation),
+    available_balances: new Map(rawProfile.available_balances),
+    staked_balances: new Map(rawProfile.staked_balances),
+  };
+};
+
+/** Fetches a list of all pending verification requests from the registry.
+ * Each request is fully processed and deserialized for easy consumption.
+ * @returns An array of processed verification requests.
+ */
+export const listPendingVerifications = async (): Promise<
+  ProcessedVerificationRecord[]
+> => {
+  const registryActor = getRegistryActor();
+
+  const requests = await registryActor.list_pending_verifications();
+
+  return requests.map(processVerificationRecord);
+};
+
+export interface SubmitDivergenceArgs {
+  bountyId: bigint;
+  wasmId: string;
+  reason: string;
+}
+
+/**
+ * Submits a divergence report for a failed build verification.
+ * @param args - The arguments for the divergence report.
+ * @returns The result from the canister.
+ */
+export const submitDivergence = async (
+  identity: Identity,
+  { bountyId, wasmId, reason }: SubmitDivergenceArgs,
+) => {
+  const actor = getRegistryActor(identity);
+
+  // The canister requires the bounty_id in the metadata for authorization.
+  const metadata: ICRC16Map = [['bounty_id', { Nat: bountyId }]];
+
+  const result = await actor.icrc126_file_divergence({
+    wasm_id: wasmId,
+    divergence_report: reason,
+    metadata: [metadata], // Note: metadata is optional, so it's wrapped in an array
+  });
+
+  if ('Error' in result) {
+    throw new Error(
+      `Failed to submit divergence: ${Object.keys(result.Error)[0]}`,
+    );
+  }
+
+  return result.Ok;
+};
+
+/**
+ * Fetches the complete audit history (attestations and divergences) for a given WASM ID.
+ */
+export const getAuditRecordsForWasm = async (
+  wasmId: string,
+): Promise<ProcessedAuditRecord[]> => {
+  const actor = getRegistryActor();
+  const rawRecords = await actor.get_audit_records_for_wasm(wasmId);
+
+  return rawRecords.map((record) => {
+    if ('Attestation' in record) {
+      const att = record.Attestation;
+      return {
+        type: 'attestation',
+        auditor: att.auditor,
+        audit_type: att.audit_type,
+        metadata: deserializeFromIcrc16Map(att.metadata),
+        timestamp: att.timestamp,
+      };
+    } else {
+      // 'Divergence' in record
+      const div = record.Divergence;
+      return {
+        type: 'divergence',
+        reporter: div.reporter,
+        report: div.report,
+        metadata:
+          div.metadata.length > 0
+            ? deserializeFromIcrc16Map(div.metadata[0]!)
+            : {},
+        timestamp: div.timestamp,
+      };
+    }
+  });
 };

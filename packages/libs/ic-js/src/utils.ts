@@ -1,12 +1,13 @@
 import {
   AttestationRecord,
-  AttestationRequest,
   Bounty,
+  VerificationRecord,
   VerificationRequest,
 } from '@prometheus-protocol/declarations/mcp_registry/mcp_registry.did.js';
 import {
   AuditBounty,
   ProcessedAttestation,
+  ProcessedVerificationRecord,
   ProcessedVerificationRequest,
 } from './api';
 import { fromNullable } from '@dfinity/utils';
@@ -26,50 +27,44 @@ export function nsToDate(ns: bigint): Date {
 export type SecurityTier = 'Gold' | 'Silver' | 'Bronze' | 'Unranked';
 
 /**
- * Calculates the security tier based on a list of completed audit types.
- * This logic is a direct TypeScript port of the Motoko canister's calculation
- * to ensure consistency between the app listings and the app details pages.
- * @param completedAudits An array of strings, e.g., ['app_info_v1', 'build_reproducibility_v1'].
+ * Calculates the security tier based on a definitive verification status and a list
+ * of completed declarative audits.
+ *
+ * @param isBuildVerified A boolean indicating if the WASM has passed the ICRC-126 verification lifecycle.
+ * @param completedDeclarativeAudits An array of audit type strings (e.g., ['app_info_v1', 'data_safety_v1']).
  * @returns The calculated SecurityTier.
  */
-export function calculateSecurityTier(completedAudits: string[]): SecurityTier {
-  // Helper to check if a specific audit is present.
-  // `Array.prototype.includes` is the direct equivalent of the Motoko `find` check.
+export function calculateSecurityTier(
+  isBuildVerified: boolean,
+  completedDeclarativeAudits: string[],
+): SecurityTier {
+  // Helper to check if a specific declarative audit is present in the array.
   const hasAudit = (auditType: string): boolean => {
-    return completedAudits.includes(auditType);
+    return completedDeclarativeAudits.includes(auditType);
   };
 
-  // Check for tiers in descending order of prestige.
-  // Gold: Requires everything, including a security audit.
+  // Gold: Requires a verified build AND all key declarative audits.
   if (
+    isBuildVerified &&
     hasAudit('app_info_v1') &&
-    hasAudit('build_reproducibility_v1') &&
     hasAudit('tools_v1') &&
-    hasAudit('security_v1')
+    hasAudit('data_safety_v1')
   ) {
     return 'Gold';
   }
 
-  // Silver: App info, build is reproducible, and tools are verified.
-  if (
-    hasAudit('app_info_v1') &&
-    hasAudit('build_reproducibility_v1') &&
-    hasAudit('tools_v1')
-  ) {
+  // Silver: Verified build, app info, and tools.
+  if (isBuildVerified && hasAudit('app_info_v1') && hasAudit('tools_v1')) {
     return 'Silver';
   }
 
-  // Bronze: App info is present and the build is reproducible. The foundation of trust.
-  if (hasAudit('app_info_v1') && hasAudit('build_reproducibility_v1')) {
+  // Bronze: The foundation of trust - a verified build and basic app info.
+  if (isBuildVerified && hasAudit('app_info_v1')) {
     return 'Bronze';
   }
 
-  // If it has app_info but doesn't meet Bronze, it's Unranked.
-  if (hasAudit('app_info_v1')) {
-    return 'Unranked';
-  }
-
-  // Default fallback.
+  // If none of the tiered conditions are met (e.g., build is not verified),
+  // the app is considered Unranked. This correctly implements your rule.
   return 'Unranked';
 }
 
@@ -104,6 +99,21 @@ export function processAttestation(
     auditor: attestation.auditor,
     payload: deserializeFromIcrc16Map(attestation.metadata),
   };
+}
+
+export function processVerificationRecord(
+  request: VerificationRecord,
+): ProcessedVerificationRecord {
+  const processedRecord = {
+    requester: request.requester,
+    metadata: deserializeFromIcrc16Map(request.metadata),
+    repo: request.repo,
+    timestamp: new Date(Number(request.timestamp / 1_000_000n)),
+    commit_hash: uint8ArrayToHex(request.commit_hash as Uint8Array),
+    wasm_hash: uint8ArrayToHex(request.wasm_hash as Uint8Array),
+  };
+
+  return processedRecord;
 }
 
 export function processVerificationRequest(

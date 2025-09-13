@@ -17,6 +17,9 @@ import {
   getCanisterId,
   getAllowance,
   approveAllowance,
+  getAuditorProfile,
+  listPendingVerifications,
+  submitDivergence,
 } from '@prometheus-protocol/ic-js';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import useMutation from './useMutation';
@@ -204,6 +207,7 @@ export const useClaimBounty = () => {
     queryKeysToRefetch: [
       ['auditBounties'],
       ['balance', identity?.getPrincipal().toText()],
+      ['auditorProfile', identity?.getPrincipal().toText()],
     ], // Refetch to show the final "Completed" state
   });
 };
@@ -326,11 +330,92 @@ export const useSponsorBounty = () => {
       return bountyId;
     },
     successMessage: 'Bounty sponsored successfully!',
-    queryKeysToRefetch: [['auditBounties'], ['appDetails'], ['tokenBalance']],
+    queryKeysToRefetch: [
+      ['auditBounties'],
+      ['appDetails'],
+      ['tokenBalance'],
+      ['pendingVerifications'],
+    ],
   });
 
   return {
     ...mutation,
     status,
   };
+};
+
+/**
+ * A React Query hook to fetch the current user's auditor reputation.
+ *
+ * It transforms the raw canister data into a more UI-friendly Map.
+ * @returns A query object with the user's reputation as a Map<string, number>.
+ */
+export const useAuditorProfile = () => {
+  const { identity } = useInternetIdentity();
+  const principal = identity?.getPrincipal();
+
+  return useQuery({
+    queryKey: ['auditorProfile', principal?.toString()],
+    queryFn: async () => {
+      if (!identity) {
+        throw new Error('User is not authenticated.');
+      }
+      return getAuditorProfile(identity);
+    },
+    enabled: !!principal,
+  });
+};
+
+export const useListPendingVerifications = () => {
+  return useQuery({
+    queryKey: ['pendingVerifications'],
+    queryFn: listPendingVerifications,
+  });
+};
+
+interface SubmitDivergenceArgs {
+  bountyId: bigint;
+  wasmId: string;
+  reason: string;
+}
+
+/**
+ * A React Query mutation hook for submitting a divergence report and claiming the bounty.
+ *
+ * This follows the same logic as submitting an attestation, as a successful
+ * divergence report is considered a valid completion of the audit work.
+ */
+export const useSubmitDivergence = () => {
+  const { identity } = useInternetIdentity();
+
+  return useMutation<SubmitDivergenceArgs, void>({
+    mutationFn: async ({ bountyId, wasmId, reason }) => {
+      if (!identity) {
+        throw new Error('You must be logged in to submit a report.');
+      }
+
+      // Step 1: File the divergence report
+      await submitDivergence(identity, {
+        bountyId,
+        wasmId,
+        reason,
+      });
+
+      // Step 2: Immediately claim the bounty upon successful submission
+      await claimBounty(identity, {
+        bounty_id: bountyId,
+        wasm_id: wasmId,
+      });
+    },
+
+    successMessage: 'Divergence report submitted and bounty claimed!',
+
+    // The state changes are identical, so we refetch the same data.
+    queryKeysToRefetch: [
+      ['auditBounties'],
+      ['appStoreListings'],
+      ['appDetails'],
+      ['balance', identity?.getPrincipal().toText()],
+    ],
+  });
 };

@@ -33,7 +33,7 @@ describe('attest generate command', () => {
     });
 
     // Act: Use the new positional argument structure
-    const cliArgs = ['attest', 'generate', 'security_v1'];
+    const cliArgs = ['attest', 'generate', 'app_info_v1'];
     await program.parseAsync(cliArgs, { from: 'user' });
 
     // Assert
@@ -44,7 +44,7 @@ describe('attest generate command', () => {
     );
     const parsedYaml = yaml.load(fileContent as string) as any;
     expect(parsedYaml.wasm_hash).toBe(CALCULATED_WASM_HASH);
-    expect(parsedYaml.metadata['126:audit_type']).toBe('security_v1');
+    expect(parsedYaml.metadata['126:audit_type']).toBe('app_info_v1');
   });
 
   // Test Case 2: Auditor workflow (explicit wasm_hash)
@@ -53,7 +53,7 @@ describe('attest generate command', () => {
     const explicitWasmHash = 'explicit-hash-abcdef123';
 
     // Act
-    const cliArgs = ['attest', 'generate', 'security_v1', explicitWasmHash];
+    const cliArgs = ['attest', 'generate', 'app_info_v1', explicitWasmHash];
     await program.parseAsync(cliArgs, { from: 'user' });
 
     // Assert
@@ -77,7 +77,7 @@ describe('attest generate command', () => {
       .mockImplementation(() => {});
 
     // Act
-    const cliArgs = ['attest', 'generate', 'security_v1'];
+    const cliArgs = ['attest', 'generate', 'app_info_v1'];
     await program.parseAsync(cliArgs, { from: 'user' });
 
     // Assert

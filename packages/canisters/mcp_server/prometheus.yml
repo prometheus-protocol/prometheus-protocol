@@ -19,8 +19,8 @@ submission:
     - ai
     - blockchain
   visuals:
-    icon_url: ''
-    banner_url: ''
-    gallery_images: []
+    icon_url: https://prometheusprotocol.org/icons/icon-007.png
+    banner_url: https://prometheusprotocol.org/banners/pmp-faucet.webp
+    gallery_images: [https://prometheusprotocol.org/banners/pmp-faucet.webp]
   git_commit: 'd8e1f951891731d7e43be1f55eebde2ec7c7707b'
   wasm_path: ../../../.dfx/local/canisters/mcp_server/mcp_server.wasm

@@ -12,12 +12,18 @@ export interface Destination {
   'subaccount' : [] | [Subaccount],
 }
 export type Header = [string, string];
+export interface HttpHeader { 'value' : string, 'name' : string }
 export interface HttpRequest {
   'url' : string,
   'method' : string,
   'body' : Uint8Array | number[],
   'headers' : Array<Header>,
   'certificate_version' : [] | [number],
+}
+export interface HttpRequestResult {
+  'status' : bigint,
+  'body' : Uint8Array | number[],
+  'headers' : Array<HttpHeader>,
 }
 export interface HttpResponse {
   'body' : Uint8Array | number[],
@@ -37,6 +43,10 @@ export interface McpServer {
   >,
   'http_request_update' : ActorMethod<[HttpRequest], HttpResponse>,
   'set_owner' : ActorMethod<[Principal], Result_1>,
+  'transformJwksResponse' : ActorMethod<
+    [{ 'context' : Uint8Array | number[], 'response' : HttpRequestResult }],
+    HttpRequestResult
+  >,
   'withdraw' : ActorMethod<[Principal, bigint, Destination], Result>,
 }
 export type Result = { 'ok' : bigint } |

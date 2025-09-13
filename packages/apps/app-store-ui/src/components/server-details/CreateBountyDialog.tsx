@@ -127,13 +127,16 @@ export function CreateBountyDialog({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Sponsor Bounty: {auditType}</DialogTitle>
-          <DialogDescription>
-            Fund a bounty to incentivize auditors to complete this attestation.
-            The amount will be transferred from your account to the registry
-            canister.
+          <DialogTitle>Sponsor Bounty</DialogTitle>
+          <DialogDescription className="text-sm text-primary">
+            {auditType}
           </DialogDescription>
         </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Fund a bounty to incentivize auditors to complete this attestation.
+          The amount will be transferred from your account to the registry
+          canister.
+        </p>
         <Form {...form}>
           <form
             // @ts-ignore

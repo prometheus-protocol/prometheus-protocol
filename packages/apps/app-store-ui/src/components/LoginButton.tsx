@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useInternetIdentity } from 'ic-use-internet-identity';
-import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 import {
   DropdownMenu,
@@ -11,11 +10,58 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 // --- 1. Import the Check icon for feedback ---
-import { User, LogOut, Loader2, Copy, Check, Wallet } from 'lucide-react';
+import {
+  User,
+  LogOut,
+  Loader2,
+  Copy,
+  Check,
+  Wallet,
+  Info,
+  PackageCheckIcon,
+  BadgeCheck,
+  ToolCase,
+} from 'lucide-react';
 import { truncatePrincipal } from '@/lib/utils';
 import { TransferDialog } from './TransferDialog';
 import { useTokenBalance } from '@/hooks/usePayment';
 import { Tokens } from '@prometheus-protocol/ic-js';
+import { useAuditorProfile } from '@/hooks/useAuditBounties';
+import { ReputationBar } from './ReputationBar';
+
+export const getReputationDisplayInfo = (auditType: string) => {
+  // 'app_info_v1',
+  // 'build_reproducibility_v1',
+  // 'data_safety_v1',
+  // 'tools_v1',
+  switch (auditType) {
+    case 'app_info_v1':
+      return {
+        name: 'App Info',
+        icon: <Info className="h-4 w-4 text-muted-foreground" />,
+      };
+    case 'build_reproducibility_v1':
+      return {
+        name: 'Build Reproducibility',
+        icon: <PackageCheckIcon className="h-4 w-4 text-muted-foreground" />,
+      };
+    case 'data_safety_v1':
+      return {
+        name: 'Data Safety',
+        icon: <BadgeCheck className="h-4 w-4 text-muted-foreground" />,
+      };
+    case 'tools_v1':
+      return {
+        name: 'Tool Details',
+        icon: <ToolCase className="h-4 w-4 text-muted-foreground" />,
+      };
+    default:
+      return {
+        name: auditType,
+        icon: <User className="h-4 w-4 text-muted-foreground" />,
+      };
+  }
+};
 
 export function LoginButton() {
   const { identity, login, clear, loginStatus } = useInternetIdentity();
@@ -23,10 +69,33 @@ export function LoginButton() {
   const { data: usdcBalance, isLoading: isBalanceLoading } = useTokenBalance(
     Tokens.USDC,
   );
+  const { data: profile, isLoading: isProfileLoading } = useAuditorProfile();
   const usdcBalanceNum = Number(Tokens.USDC.fromAtomic(usdcBalance ?? 0n));
 
   // --- 2. Add state to track copy status ---
   const [isCopied, setIsCopied] = useState(false);
+
+  // 2. Memoize the calculation for aggregated reputation data
+  const aggregatedReputation = useMemo(() => {
+    if (!profile) return [];
+
+    // Get a unique set of all reputation types the user has (available or staked)
+    const allReputationTypes = new Set([
+      ...profile.available_balances.keys(),
+      ...profile.staked_balances.keys(),
+    ]);
+
+    return Array.from(allReputationTypes).map((auditType) => {
+      const available = profile.available_balances.get(auditType) ?? 0n;
+      const staked = profile.staked_balances.get(auditType) ?? 0n;
+      const total = available + staked;
+      return {
+        auditType,
+        available: Number(available),
+        total: Number(total),
+      };
+    });
+  }, [profile]);
 
   // --- 3. Create a handler function for clarity ---
   const handleCopyPrincipal = (e: React.MouseEvent) => {
@@ -76,10 +145,11 @@ export function LoginButton() {
               />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuContent align="end" className="w-60">
+            {' '}
+            {/* Increased width for more content */}
             <DropdownMenuLabel>My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {/* --- 5. Refactored DropdownMenuItem for copying --- */}
             <DropdownMenuItem
               onClick={handleCopyPrincipal}
               className="cursor-pointer flex justify-between items-center">
@@ -92,7 +162,9 @@ export function LoginButton() {
                 <Copy className="h-4 w-4 text-muted-foreground" />
               )}
             </DropdownMenuItem>
-
+            {/* --- Balances Section --- */}
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Balances</DropdownMenuLabel>
             <DropdownMenuItem
               onClick={() => setIsTransferDialogOpen(true)}
               className="cursor-pointer flex justify-between items-center">
@@ -108,6 +180,40 @@ export function LoginButton() {
                 </span>
               )}
             </DropdownMenuItem>
+            {/* --- Reputation Section --- */}
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Reputation</DropdownMenuLabel>
+            {isProfileLoading ? (
+              <DropdownMenuItem disabled>
+                <div className="h-10 w-full bg-muted/50 rounded-sm animate-pulse" />
+              </DropdownMenuItem>
+            ) : aggregatedReputation.length > 0 ? (
+              aggregatedReputation.map(({ auditType, available, total }) => {
+                const displayInfo = getReputationDisplayInfo(auditType);
+                return (
+                  <DropdownMenuItem
+                    key={auditType}
+                    disabled
+                    className="opacity-100 focus:bg-transparent cursor-default flex flex-col items-start gap-1">
+                    {/* Row 1: Icon and Name */}
+                    <div className="flex items-center gap-1">
+                      {displayInfo.icon}
+                      <span className="text-xs text-foreground">
+                        {displayInfo.name}
+                      </span>
+                    </div>
+                    {/* Row 2: Reputation Bar */}
+                    <ReputationBar available={available} total={total} />
+                  </DropdownMenuItem>
+                );
+              })
+            ) : (
+              <DropdownMenuItem disabled className="opacity-100">
+                <span className="text-xs text-muted-foreground">
+                  No reputation earned yet.
+                </span>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={clear}
