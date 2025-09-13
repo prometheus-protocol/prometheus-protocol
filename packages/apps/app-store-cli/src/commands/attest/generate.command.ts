@@ -27,16 +27,6 @@ const TEMPLATES: Record<string, Record<string, any>> = {
       'A short, compelling reason why users should choose your app over others.',
     tags: ['Keyword1', 'Keyword2', 'SearchTerm'],
   },
-  security_v1: {
-    '126:audit_type': 'security_v1',
-    summary: 'A one-sentence summary of the findings.',
-    issues_found: [
-      {
-        severity: 'critical | high | medium | low | informational',
-        description: 'Describe the issue here.',
-      },
-    ],
-  },
   build_reproducibility_v1: {
     '126:audit_type': 'build_reproducibility_v1',
     // The auditor MUST declare the outcome. This is the most important field.

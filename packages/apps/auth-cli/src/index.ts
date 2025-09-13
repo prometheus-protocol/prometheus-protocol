@@ -11,6 +11,11 @@ import { registerUpdateCommand } from './commands/update.js';
 import { registerDeleteCommand } from './commands/delete.js';
 
 import packageJson from '../package.json' with { type: 'json' };
+import { fileURLToPath } from 'url';
+
+// ESM replacement for __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const program = new Command();
 

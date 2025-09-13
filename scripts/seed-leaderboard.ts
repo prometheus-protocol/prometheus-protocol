@@ -53,6 +53,10 @@ async function main() {
     canisterId: aggregatorId,
   });
 
+  // Initialize the aggregator canister (idempotent)
+  console.log('  - Initializing leaderboard canister...');
+  await aggregatorActor.init(Principal.fromText(trackerId.toText()));
+
   // --- NEW IDEMPOTENCY CHECK ---
   // 4. Check if the leaderboard already has data. If so, exit gracefully.
   console.log('  - Checking if leaderboard has already been seeded...');

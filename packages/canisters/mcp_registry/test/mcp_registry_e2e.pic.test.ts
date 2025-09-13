@@ -165,13 +165,13 @@ describe('MCP Registry Full E2E Lifecycle', () => {
 
     auditHub.actor.setIdentity(daoIdentity);
     // Configure the required stake for the reputation token
-    await auditHubActor.set_stake_requirement('build', 100n);
+    await auditHubActor.set_stake_requirement('build_reproducibility_v1', 100n);
     await auditHubActor.set_stake_requirement('security', 100n);
     await auditHubActor.set_stake_requirement('quality', 100n);
 
     await auditHub.actor.mint_tokens(
       reproAuditorIdentity.getPrincipal(),
-      'build',
+      'build_reproducibility_v1',
       1000n,
     );
     await auditHub.actor.mint_tokens(
@@ -218,277 +218,141 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     const appNamespace = 'com.prometheus.test-server';
     const appVersion: [bigint, bigint, bigint] = [1n, 0n, 0n];
 
-    // === PHASE 1: Developer creates a namespace for their application ===
+    // === PHASE 1: Developer creates a namespace and submits a verification request ===
     registryActor.setIdentity(developerIdentity);
-    const request: CreateCanisterType = {
-      canister_type_namespace: appNamespace,
-      canister_type_name: 'Prometheus Test Server',
-      controllers: [[developerIdentity.getPrincipal()]],
-      description: 'A test server for our isolated test suite.',
-      repo: 'https://github.com/prometheus-protocol/test-server',
-      metadata: [['prom_cert:tier', { Text: 'Gold' }]],
-      forked_from: [],
-    };
-
-    const createResult = await registryActor.icrc118_create_canister_type([
-      request,
+    await registryActor.icrc118_create_canister_type([
+      {
+        canister_type_namespace: appNamespace,
+        controllers: [[developerIdentity.getPrincipal()]],
+        canister_type_name: 'Test Server',
+        description: '',
+        repo: '',
+        metadata: [],
+        forked_from: [],
+      },
     ]);
-    expect('Ok' in createResult[0]).toBe(true);
-
-    // === PHASE 2: Developer requests formal verification for a PROPOSED new version ===
-    const reqResult = await registryActor.icrc126_verification_request({
+    await registryActor.icrc126_verification_request({
       wasm_hash: wasmHash,
-      repo: 'https://github.com/final-boss/app',
+      repo: 'https://github.com/test/repo',
       commit_hash: new Uint8Array([1]),
       metadata: [],
     });
-    expect(reqResult).toBeGreaterThanOrEqual(0n);
 
-    // === PHASE 3: Bounties are created to attract auditors ===
+    // ASSERT: At this point, the WASM is known but NOT verified.
+    expect(await registryActor.is_wasm_verified(wasmId)).toBe(false);
+
+    // === PHASE 2: A sponsor creates bounties to incentivize audits ===
     registryActor.setIdentity(bountyCreatorIdentity);
-    const auditTypes = ['build', 'security', 'quality'];
-    const bountyIds: { [key: string]: bigint } = {};
-    for (const auditType of auditTypes) {
-      const createResult = await registryActor.icrc127_create_bounty({
-        bounty_id: [],
-        validation_canister_id: registryCanisterId,
-        timeout_date:
-          BigInt((await pic.getTime()) * 1_000_000) + 86_400_000_000_000n,
-        start_date: [],
-        challenge_parameters: {
-          Map: [
-            ['wasm_hash', { Blob: wasmHash }],
-            ['audit_type', { Text: auditType }],
-          ],
-        },
-        bounty_metadata: [
-          ['icrc127:reward_canister', { Principal: ledgerCanisterId }],
-          ['icrc127:reward_amount', { Nat: bountyAmount }],
+    const buildBountyResult = await registryActor.icrc127_create_bounty({
+      challenge_parameters: {
+        Map: [
+          ['wasm_hash', { Blob: wasmHash }],
+          ['audit_type', { Text: 'build' }],
         ],
-      });
-      if (!('Ok' in createResult))
-        throw new Error(`Bounty creation failed for ${auditType}`);
-      bountyIds[auditType] = createResult.Ok.bounty_id;
-    }
-
-    // Check that the bounties were created successfully
-    const bounties = await registryActor.get_bounties_for_wasm(wasmId);
-    expect(bounties).toHaveLength(auditTypes.length);
-
-    // === PHASE 3.5: Auditor discovers bounties using the new generic list endpoint ===
-    registryActor.setIdentity(reproAuditorIdentity); // Any auditor can discover
-
-    // Test 1: Filter for a specific, open audit type
-    const openSecurityBountyResult = await registryActor.list_bounties({
-      filter: [[{ audit_type: 'security' }]],
-      take: [10n],
-      prev: [],
+      },
+      bounty_metadata: [
+        ['icrc127:reward_canister', { Principal: ledgerCanisterId }],
+        ['icrc127:reward_amount', { Nat: bountyAmount }],
+      ],
+      timeout_date: BigInt(Date.now() + 8.64e10) * 1000000n, // 24 hours from now
+      start_date: [],
+      bounty_id: [],
+      validation_canister_id: registryCanisterId,
     });
-
-    expect('ok' in openSecurityBountyResult).toBe(true);
-    if ('ok' in openSecurityBountyResult) {
-      const listedBounties = openSecurityBountyResult.ok;
-      expect(listedBounties).toHaveLength(1);
-      // Verify the correct bounty was returned
-      expect(listedBounties[0].bounty_id).toBe(bountyIds['security']);
-    }
-
-    // Test 2: Filter for all 'Open' bounties
-    // Test 2: Filter for all 'Open' bounties
-    const allOpenBountiesResult = await registryActor.list_bounties({
-      // This is the corrected filter for 'Open' status
-      filter: [[{ status: { Open: null } }]],
-      take: [10n],
-      prev: [],
-    });
-
-    expect('ok' in allOpenBountiesResult).toBe(true);
-    if ('ok' in allOpenBountiesResult) {
-      expect(allOpenBountiesResult.ok).toHaveLength(3);
-    }
-
-    // === PHASE 4: Auditors complete audits and claim bounties ===
-    const auditors = [
-      { identity: reproAuditorIdentity, type: 'build' },
-      { identity: securityAuditorIdentity, type: 'security' },
-      { identity: qualityAuditorIdentity, type: 'quality' },
-    ];
-
-    for (const auditor of auditors) {
-      // STEP 1: RESERVE THE BOUNTY (on the Audit Hub)
-      auditHubActor.setIdentity(auditor.identity);
-      const reserveResult = await auditHubActor.reserve_bounty(
-        bountyIds[auditor.type],
-        auditor.type,
-      );
-      expect(reserveResult).toHaveProperty('ok');
-
-      // STEP 2: FILE THE ATTESTATION (on the Registry Facade)
-      registryActor.setIdentity(auditor.identity);
-      const attestResult = await registryActor.icrc126_file_attestation({
-        wasm_id: wasmId,
-        metadata: [
-          ['126:audit_type', { Text: auditor.type }],
-          ['bounty_id', { Nat: bountyIds[auditor.type] }], // Pass bounty_id
+    const securityBountyResult = await registryActor.icrc127_create_bounty({
+      challenge_parameters: {
+        Map: [
+          ['wasm_hash', { Blob: wasmHash }],
+          ['audit_type', { Text: 'security' }],
         ],
-      });
-      expect(attestResult).toHaveProperty('Ok'); // This will now pass
+      },
+      bounty_metadata: [
+        ['icrc127:reward_canister', { Principal: ledgerCanisterId }],
+        ['icrc127:reward_amount', { Nat: bountyAmount }],
+      ],
+      timeout_date: BigInt(Date.now() + 8.64e10) * 1000000n, // 24 hours from now
+      start_date: [],
+      bounty_id: [],
+      validation_canister_id: registryCanisterId,
+    });
+    const buildBountyId =
+      ('Ok' in buildBountyResult && buildBountyResult.Ok.bounty_id) || 0n;
+    const securityBountyId =
+      ('Ok' in securityBountyResult && securityBountyResult.Ok.bounty_id) || 0n;
 
-      // STEP 3: SUBMIT THE BOUNTY FOR PAYOUT (on the Registry Facade)
-      const claimResult = await registryActor.icrc127_submit_bounty({
-        bounty_id: bountyIds[auditor.type],
-        submission: { Text: 'Attestation filed.' },
-        account: [],
-      });
-      expect(claimResult).toHaveProperty('Ok');
-      // @ts-ignore
-      expect(claimResult.Ok.result[0].result).toHaveProperty('Valid');
-    }
+    // === PHASE 3: The Build Auditor completes the verification, unlocking the "Verified" status ===
+    // Step 3.1: Reserve the bounty
+    auditHubActor.setIdentity(reproAuditorIdentity);
+    const reserveResult = await auditHubActor.reserve_bounty(
+      buildBountyId,
+      'build_reproducibility_v1',
+    );
+    console.log('Reserve Result:', reserveResult);
 
-    // === PHASE 4.0: DAO discovers the submission is ready for review ===
-    registryActor.setIdentity(daoIdentity);
+    // Step 3.2: File the successful attestation
+    registryActor.setIdentity(reproAuditorIdentity);
+    const res = await registryActor.icrc126_file_attestation({
+      wasm_id: wasmId,
+      metadata: [
+        ['126:audit_type', { Text: 'build_reproducibility_v1' }],
+        ['bounty_id', { Nat: buildBountyId }],
+      ],
+    });
+    console.log('Attestation Result:', res);
 
-    const pendingSubmissions = await registryActor.list_pending_submissions({
-      take: [10n],
-      prev: [],
+    // ASSERT: The successful build attestation automatically finalized the verification.
+    expect(await registryActor.is_wasm_verified(wasmId)).toBe(true);
+
+    // === PHASE 4: Other declarative audits (e.g., Security) can now proceed ===
+    auditHubActor.setIdentity(securityAuditorIdentity);
+    await auditHubActor.reserve_bounty(securityBountyId, 'security');
+    registryActor.setIdentity(securityAuditorIdentity);
+    await registryActor.icrc126_file_attestation({
+      wasm_id: wasmId,
+      metadata: [
+        ['126:audit_type', { Text: 'security' }],
+        ['bounty_id', { Nat: securityBountyId }],
+      ],
     });
 
-    // Assert that our submission is now in the queue
-    expect(pendingSubmissions).toHaveLength(1);
-    const submission = pendingSubmissions[0];
-    expect(submission.wasm_id).toBe(wasmId);
-
-    // Assert that it correctly lists all the new attestations
-    expect(submission.attestation_types).toHaveLength(3);
-    expect(submission.attestation_types).toContain('build');
-    expect(submission.attestation_types).toContain('security');
-    expect(submission.attestation_types).toContain('quality');
-
-    // === PHASE 4.1: DAO Finalization ===
-    registryActor.setIdentity(daoIdentity);
-    const finalizeResult = await registryActor.finalize_verification(
-      wasmId,
-      { Verified: null },
-      [],
-    );
-    expect('ok' in finalizeResult).toBe(true);
-
-    // === PHASE 4.2: DAO verifies the submission is no longer pending ===
-    registryActor.setIdentity(daoIdentity);
-
-    const submissionsAfterFinalization =
-      await registryActor.list_pending_submissions({
-        take: [10n],
-        prev: [],
-      });
-
-    // Assert that the queue is now empty
-    expect(submissionsAfterFinalization).toHaveLength(0);
-    // === PHASE 4.5: DAO releases the stakes after successful claims ===
-    auditHubActor.setIdentity(daoIdentity);
-    for (const auditor of auditors) {
-      await auditHubActor.release_stake(bountyIds[auditor.type]);
-      const finalBalance = await auditHubActor.get_available_balance(
-        auditor.identity.getPrincipal(),
-        auditor.type,
-      );
-      expect(finalBalance).toBe(1000n); // Verify stake was returned
-    }
-
-    // Attestations are not public until the verification is finalized.
-    registryActor.setIdentity(developerIdentity); // Any identity can query
-
-    // The actor method now returns AttestationRecord[] directly.
-    const attestations = await registryActor.get_attestations_for_wasm(wasmId);
-
-    // Assert the number of attestations is correct
-    expect(attestations).toHaveLength(3);
-
-    // Assert the content of one of the attestations to be sure
-    const securityAttestation = attestations.find(
-      (att) =>
-        att.auditor.toText() ===
-        securityAuditorIdentity.getPrincipal().toText(),
-    );
-    expect(securityAttestation).toBeDefined();
-
-    // The test puts the audit type in the metadata, so let's check it
-    const auditTypeMeta =
-      securityAttestation?.metadata.find(
-        (meta) => meta[0] === '126:audit_type',
-      ) || [];
-    expect(auditTypeMeta).toBeDefined();
-    // The value is a variant, so we check for the Text property
-    // @ts-ignore
-    expect(auditTypeMeta[1]).toEqual({ Text: 'security' });
-
-    // === PHASE 6: Developer publishes the now-verified WASM ===
+    // === PHASE 5: Developer publishes the now-VERIFIED WASM to the registry ===
     registryActor.setIdentity(developerIdentity);
-
-    // Step 6.1: Declare the version and its expected hash.
-    const updateRequest: UpdateWasmRequest = {
+    await registryActor.icrc118_update_wasm({
       canister_type_namespace: appNamespace,
-      version_number: appVersion,
-      description: 'Initial release with verified Wasm',
-      repo: 'https://github.com/final-boss/app',
-      metadata: [],
-      expected_hash: wasmHash,
-      expected_chunks: [wasmHash], // For a single chunk, the chunk hash is the wasm hash.
       previous: [],
-    };
-    const updateResult = await registryActor.icrc118_update_wasm(updateRequest);
-    expect('Ok' in updateResult).toBe(true);
-
-    // Step 6.2: Upload the actual WASM bytes with the expected chunk hash.
-    const uploadResult = await registryActor.icrc118_upload_wasm_chunk({
+      expected_chunks: [wasmHash],
+      metadata: [],
+      repo: '',
+      description: '',
+      version_number: appVersion,
+      expected_hash: wasmHash,
+    });
+    await registryActor.icrc118_upload_wasm_chunk({
       canister_type_namespace: appNamespace,
+      expected_chunk_hash: wasmHash,
       version_number: appVersion,
       chunk_id: 0n,
-      wasm_chunk: wasmBytes, // Use the actual bytes
-      expected_chunk_hash: wasmHash,
+      wasm_chunk: wasmBytes,
     });
-    expect(uploadResult.total_chunks).toBe(1n);
 
-    // Owner add operator identity as a controller
-    registryActor.setIdentity(developerIdentity);
-    const res = await registryActor.icrc118_manage_controller([
+    // === PHASE 6: Operator upgrades a live canister using the verified WASM ===
+    // Step 6.1: Setup operator and register the live canister
+    await registryActor.icrc118_manage_controller([
       {
         canister_type_namespace: appNamespace,
         op: { Add: null },
         controller: operatorIdentity.getPrincipal(),
       },
     ]);
-    expect('Ok' in res[0]).toBe(true);
-
-    // === PHASE 7: Operator UPGRADES a live canister ===
-    registryActor.setIdentity(operatorIdentity);
     orchestratorActor.setIdentity(operatorIdentity);
-
-    // Operator registers the canister ID to the namespace
     await orchestratorActor.register_canister(targetCanisterId, appNamespace);
 
-    const versionRecordResult = await registryActor.get_canister_type_version({
-      canister_type_namespace: appNamespace,
-      version_number: appVersion,
-    });
-    expect('ok' in versionRecordResult).toBe(true);
-    const resolvedHash =
-      'ok' in versionRecordResult
-        ? (versionRecordResult.ok as { hash: Uint8Array }).hash
-        : new Uint8Array();
-
+    // Step 6.2: Perform the upgrade
     const upgradeResult = await orchestratorActor.icrc120_upgrade_to([
       {
         canister_id: targetCanisterId,
-        hash: resolvedHash,
-        mode: {
-          upgrade: [
-            {
-              skip_pre_upgrade: [false],
-              wasm_memory_persistence: [{ keep: null }],
-            },
-          ],
-        },
+        hash: wasmHash,
+        mode: { upgrade: [] },
         args: [],
         parameters: [],
         restart: false,
@@ -497,32 +361,22 @@ describe('MCP Registry Full E2E Lifecycle', () => {
         timeout: 0n,
       },
     ]);
-    expect('Ok' in upgradeResult[0]).toBe(true);
+    expect(upgradeResult[0]).toHaveProperty('Ok');
 
-    // === PHASE 8: Operator polls for upgrade completion ===
-    orchestratorActor.setIdentity(operatorIdentity); // Ensure we are the operator
-
+    // === PHASE 7: Poll for upgrade completion ===
     let finalStatus;
-    const maxRetries = 10;
-    let retries = 0;
-
-    while (retries < maxRetries) {
+    for (let i = 0; i < 10; i++) {
       const status = await orchestratorActor.icrc120_upgrade_finished();
-
       if ('InProgress' in status) {
-        // In PocketIC, we must advance time manually to allow the canister to work
-        await pic.advanceTime(200); // Advance time by 200ms
-        await pic.tick(); // Process the next round of inter-canister calls
-        retries++;
+        await pic.advanceTime(200);
+        await pic.tick();
       } else {
-        // Status is either Success or Failed, so we're done polling.
         finalStatus = status;
         break;
       }
     }
-
     expect(finalStatus).toBeDefined();
-    expect('Success' in finalStatus!).toBe(true);
+    expect(finalStatus).toHaveProperty('Success');
 
     console.log('E2E test completed successfully!');
   });

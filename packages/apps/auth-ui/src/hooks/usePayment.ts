@@ -1,155 +1,64 @@
 import {
   approveAllowance,
-  completePaymentSetup,
   getAllowance,
   getBalance,
-  getTokenInfo,
-  TokenInfo,
+  Token,
 } from '@prometheus-protocol/ic-js';
 import { useMutation } from './useMutation';
-import { Identity } from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
-import { useQueries, useQuery } from '@tanstack/react-query';
-
-type InitialSetupInput = {
-  identity: Identity;
-  sessionId: string;
-  amount: number;
-  spenderPrincipal: Principal;
-  icrc2CanisterId: Principal;
-};
-
-export const useInitialPaymentSetupMutation = () => {
-  return useMutation<InitialSetupInput, void>({
-    mutationFn: async ({
-      identity,
-      sessionId,
-      amount,
-      spenderPrincipal,
-      icrc2CanisterId,
-    }) => {
-      // Pass the spender principal to the approve function
-      // Only attempt to set an allowance on the token canister if the
-      // user is actually requesting a non-zero allowance.
-      // This allows users with a zero balance to enter "0" to proceed
-      // with the authorization flow, intending to set a real allowance later.
-      if (amount > 0) {
-        await approveAllowance(
-          identity,
-          amount,
-          spenderPrincipal,
-          icrc2CanisterId,
-        );
-      }
-      await completePaymentSetup(identity, sessionId);
-    },
-    successMessage: 'Budget approved successfully!',
-    errorMessage: 'Failed to approve budget. Please try again.',
-    queryKeysToRefetch: [],
-  });
-};
-
-type UpdateAllowanceArgs = {
-  identity: Identity;
-  amount: number;
-  spenderPrincipal: Principal;
-  icrc2CanisterId: Principal;
-};
-
-export const useUpdateAllowanceMutation = (icrc2CanisterId: Principal) => {
-  return useMutation<UpdateAllowanceArgs, void>({
-    mutationFn: async ({
-      identity,
-      amount,
-      spenderPrincipal,
-      icrc2CanisterId,
-    }) => {
-      // Pass the spender principal to the approve function
-      await approveAllowance(
-        identity,
-        amount,
-        spenderPrincipal,
-        icrc2CanisterId,
-      );
-    },
-    successMessage: 'Allowance updated successfully!',
-    errorMessage: 'Failed to update allowance. Please try again.',
-    queryKeysToRefetch: [[icrc2CanisterId]],
-  });
-};
+import { useQuery } from '@tanstack/react-query';
+import { useInternetIdentity } from 'ic-use-internet-identity';
 
 /**
- * A query to fetch the user's ckUSDC balance.
+ * Fetches the user's balance for a specific ICRC-1 token.
+ * @returns The balance as a bigint in the token's atomic unit.
  */
-export const useBalanceQuery = (
-  identity: Identity | undefined,
-  icrc2CanisterId: Principal | undefined,
-) => {
+export const useTokenBalanceQuery = (token?: Token) => {
+  const { identity } = useInternetIdentity();
   return useQuery({
-    // The query will re-run if the user's principal changes
-    queryKey: [icrc2CanisterId, 'balance', identity?.getPrincipal().toText()],
-    queryFn: () => getBalance(identity!, icrc2CanisterId!),
-    // This query will only run if the identity object exists
-    enabled: !!identity && !!icrc2CanisterId,
-  });
-};
-
-/**
- * A query to fetch the user's current ckUSDC allowance for a specific spender.
- */
-export const useAllowanceQuery = (
-  identity: Identity | undefined,
-  spender: Principal | undefined,
-  icrc2CanisterId: Principal | undefined,
-) => {
-  return useQuery({
-    // The query will re-run if the user or the spender changes
     queryKey: [
-      icrc2CanisterId,
-      'allowance',
+      'tokenBalance',
+      identity?.getPrincipal().toText(),
+      token?.canisterId.toText(),
+    ],
+    queryFn: () => getBalance(identity!, token!),
+    enabled: !!identity && !!token,
+  });
+};
+
+/**
+ * Fetches the user's allowance for a specific spender and token.
+ * @returns The allowance as a bigint in the token's atomic unit.
+ */
+export const useTokenAllowanceQuery = (spender?: Principal, token?: Token) => {
+  const { identity } = useInternetIdentity();
+  return useQuery({
+    queryKey: [
+      'tokenAllowance',
       identity?.getPrincipal().toText(),
       spender?.toText(),
+      token?.canisterId.toText(),
     ],
-    queryFn: () => getAllowance(identity!, spender!, icrc2CanisterId!),
-    // This query will only run if all required parameters are available
-    enabled:
-      !!identity &&
-      !identity.getPrincipal().isAnonymous() &&
-      !!spender &&
-      !spender.isAnonymous() &&
-      !!icrc2CanisterId,
+    queryFn: () => getAllowance(identity!, token!, spender!),
+    enabled: !!identity && !!token && !!spender,
   });
 };
 
 /**
- * A query to fetch the metadata for the configured ICRC token.
+ * A mutation hook for approving or updating an ICRC-2 allowance.
  */
-export const useTokenInfoQuery = (
-  identity: Identity | undefined,
-  icrc2CanisterId: Principal | undefined,
-) => {
-  return useQuery<TokenInfo, Error>({
-    queryKey: [icrc2CanisterId, 'tokenInfo'], // This is global, doesn't depend on user
-    queryFn: () => getTokenInfo(identity!, icrc2CanisterId!),
-    enabled: !!identity && !!icrc2CanisterId,
-    staleTime: Infinity, // This data is static, it never needs to be refetched
+export const useUpdateAllowanceMutation = () => {
+  const { identity } = useInternetIdentity();
+  return useMutation<
+    { token: Token; spender: Principal; amount: number | string },
+    bigint
+  >({
+    mutationFn: ({ token, spender, amount }) => {
+      if (!identity) throw new Error('Identity not found');
+      return approveAllowance(identity, token, spender, amount);
+    },
+    successMessage: 'Allowance updated successfully!',
+    // Refetch balance and allowance after a successful update
+    queryKeysToRefetch: [['tokenBalance'], ['tokenAllowance']],
   });
-};
-
-/**
- * A query to fetch the metadata for a list of ICRC token canisters in parallel.
- */
-export const useTokenInfosQuery = (
-  identity: Identity | undefined,
-  tokenCanisterIds: Principal[],
-) => {
-  const queries = tokenCanisterIds.map((canisterId) => ({
-    queryKey: ['tokenInfo', canisterId.toText()],
-    queryFn: () => getTokenInfo(identity!, canisterId),
-    enabled: !!identity,
-    staleTime: Infinity, // This data is static
-  }));
-
-  // useQueries returns an array of query results
-  return useQueries({ queries });
 };

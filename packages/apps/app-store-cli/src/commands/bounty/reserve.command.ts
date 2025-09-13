@@ -52,7 +52,7 @@ export function registerReserveBountyCommand(program: Command) {
         }
 
         const auditType = getChallengeParam(
-          bounty.challenge_parameters,
+          bounty.challengeParameters as ICRC16,
           'audit_type',
         );
 

@@ -5,3 +5,4 @@ export * from './registry.api.js';
 export * from './orchestrator.api.js';
 export * from './bounties.api.js';
 export * from './leaderboard.api.js';
+export * from './audit.api.js';

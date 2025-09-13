@@ -12,7 +12,7 @@ vi.mock('../../src/identity.node.js'); // Adjust path if needed
 describe('bounty list command', () => {
   let program: Command;
 
-  // A mock bounty object matching the ProcessedBounty type from ic-js
+  // A mock bounty object matching the AuditBounty type from ic-js
   const mockBounty = {
     id: 123n,
     tokenAmount: 1_000_000n,
@@ -24,12 +24,13 @@ describe('bounty list command', () => {
     challengeParameters: {
       audit_type: 'security_v1',
       wasm_hash: 'a1b2c3d4e5f6',
+      project_name: 'Example Project',
     },
     challengePeriod: 0n,
     claimedBy: null,
     payoutTransactionId: null,
     payoutTimestamp: null,
-    // Add missing ProcessedBounty fields
+    // Add missing AuditBounty fields
     validationCanisterId: Principal.fromText('aaaaa-aa'),
     validationCallTimeout: 0n,
     payoutFee: 0n,
@@ -96,7 +97,7 @@ describe('bounty list command', () => {
 
     // Assert
     expect(api.listBounties).toHaveBeenCalledOnce();
-    const apiCallArgs = vi.mocked(api.listBounties).mock.calls[0][1];
+    const apiCallArgs = vi.mocked(api.listBounties).mock.calls[0][0];
 
     // Verify pagination
     expect(apiCallArgs.take).toBe(50n);

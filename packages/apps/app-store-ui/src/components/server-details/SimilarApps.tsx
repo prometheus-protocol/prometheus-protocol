@@ -71,7 +71,7 @@ export function SimilarApps({ currentServerId }: SimilarAppsProps) {
           return (
             <Link
               key={appWasmHash}
-              to={`/server/${appWasmHash}`} // Use the wasm hash for the link
+              to={`/apps/${appWasmHash}`} // Use the wasm hash for the link
               className="flex items-center gap-4 p-2 rounded-lg transition-colors hover:bg-muted/50 -mx-2">
               <ImageWithFallback
                 src={app.iconUrl}

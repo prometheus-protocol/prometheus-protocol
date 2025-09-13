@@ -75,6 +75,11 @@ type McpServer =
    http_request_update: (req: HttpRequest) -> (HttpResponse);
    /// Set a new owner for the canister. Only the current owner can call this.
    set_owner: (new_owner: principal) -> (Result_1);
+   transformJwksResponse:
+    (record {
+       context: blob;
+       response: HttpRequestResult;
+     }) -> (HttpRequestResult) query;
    /// Withdraw tokens from the canister's treasury to a specified destination.
    withdraw: (ledger_id: principal, amount: nat, destination: Destination) ->
     (Result);
@@ -87,6 +92,12 @@ type HttpResponse =
    streaming_strategy: opt StreamingStrategy;
    upgrade: opt bool;
  };
+type HttpRequestResult = 
+ record {
+   body: blob;
+   headers: vec HttpHeader;
+   status: nat;
+ };
 type HttpRequest = 
  record {
    body: blob;
@@ -94,6 +105,11 @@ type HttpRequest =
    headers: vec Header;
    method: text;
    url: text;
+ };
+type HttpHeader = 
+ record {
+   name: text;
+   value: text;
  };
 type Header = 
  record {

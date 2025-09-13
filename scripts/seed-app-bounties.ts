@@ -22,7 +22,7 @@ const seedBounties = [
     title: 'PMP Token Faucet',
     short_description:
       'Get PMP tokens for development of Prometheus MCP servers.',
-    reward_amount_usd: 0.0001,
+    reward_amount: 10000000n,
     reward_token: 'USDC',
     status: 'Open',
     details_markdown: `The PMP Token Faucet provides developers with the necessary tokens to build and test their applications on the Prometheus Protocol.
@@ -38,7 +38,7 @@ Click [here](https://discord.com/channels/YOUR_SERVER_ID/YOUR_CHANNEL_ID) to cla
     title: 'Implement Metrics Endpoint',
     short_description:
       'Add a Prometheus-compatible /metrics endpoint to the node.',
-    reward_amount_usd: 0.05,
+    reward_amount: 5000000n,
     reward_token: 'USDC',
     status: 'Open',
     details_markdown: `This bounty is for implementing a standard \`/metrics\` endpoint on the MCP server node that exposes key performance indicators.
@@ -59,7 +59,7 @@ Click [here](https://discord.com/channels/YOUR_SERVER_ID/YOUR_CHANNEL_ID) to cla
     title: 'Documentation Translation: Japanese',
     short_description:
       'Translate the core protocol documentation into Japanese.',
-    reward_amount_usd: 0.02,
+    reward_amount: 7500000n,
     reward_token: 'USDC',
     status: 'In Progress',
     details_markdown: `We are looking for a native Japanese speaker to translate our core technical documentation.
@@ -119,13 +119,10 @@ async function main() {
   console.log(`\n  - Creating ${bountiesToCreate.length} new bounties...`);
   const creationPromises = bountiesToCreate.map((bounty) => {
     console.log(`    - Adding: "${bounty.title}"`);
-    // Convert the human-readable USD amount to a Nat for the canister (assuming 6 decimals)
-    const rewardAmountNat = Math.round(bounty.reward_amount_usd * 1_000_000);
-
     return bountyActor.create_bounty(
       bounty.title,
       bounty.short_description,
-      rewardAmountNat,
+      bounty.reward_amount,
       bounty.reward_token,
       bounty.status,
       bounty.details_markdown,

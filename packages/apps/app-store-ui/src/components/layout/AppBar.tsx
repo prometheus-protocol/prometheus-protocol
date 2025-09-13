@@ -113,6 +113,19 @@ export function AppBar() {
                   {/* --- 3. THE CORRECT IMPLEMENTATION --- */}
                   <NavigationMenuLink
                     asChild
+                    active={pathname === '/audit-hub'}>
+                    <Link
+                      to="/audit-hub"
+                      className={cn(navigationMenuTriggerStyle(), 'text-base')}>
+                      Audit Hub
+                    </Link>
+                  </NavigationMenuLink>
+                </NavigationMenuItem>
+
+                <NavigationMenuItem>
+                  {/* --- 3. THE CORRECT IMPLEMENTATION --- */}
+                  <NavigationMenuLink
+                    asChild
                     active={pathname === '/leaderboard'}>
                     <Link
                       to="/leaderboard"
@@ -202,6 +215,12 @@ export function AppBar() {
                 className="text-lg font-medium"
                 onClick={() => setIsMobileMenuOpen(false)}>
                 App Bounties
+              </Link>
+              <Link
+                to="/audit-hub"
+                className="text-lg font-medium"
+                onClick={() => setIsMobileMenuOpen(false)}>
+                Audit Hub
               </Link>
               <Link
                 to="/leaderboard"

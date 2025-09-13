@@ -15,6 +15,12 @@ module {
     #Unranked;
   };
 
+  public type AppListingStatus = {
+    #Pending;
+    #Verified;
+    #Rejected : { reason : Text };
+  };
+
   public type AppListing = {
     id : Text; // This is the hex string of the WASM hash
     namespace : Text;
@@ -26,6 +32,7 @@ module {
     icon_url : Text;
     banner_url : Text;
     security_tier : SecurityTier;
+    status : AppListingStatus;
   };
 
   public type AppListingFilter = {
@@ -78,50 +85,65 @@ module {
     };
   };
 
-  // Helper function to determine the security tier based on a list of completed audits.
-  public func calculate_security_tier(completed_audits : [Text]) : SecurityTier {
-    // Helper to check if a specific audit is present.
+  // Get ICRC16 Blob Optional:
+  public func getICRC16BlobOptional(map : ICRC126.ICRC16Map, key : Text) : ?Blob {
+    switch (getICRC16Field(map, key)) {
+      case (null) { return null }; // Not found, return null
+      case (?(#Blob(b))) { return ?b }; // Found and is Blob, return the optional value
+      case (_) { return null }; // Found but is wrong type, return null
+    };
+  };
+
+  // getICRC16MapOptional
+  public func getICRC16MapOptional(map : ICRC126.ICRC16Map, key : Text) : ?ICRC126.ICRC16Map {
+    switch (getICRC16Field(map, key)) {
+      case (null) { return null }; // Not found, return null
+      case (?(#Map(m))) { return ?m }; // Found and is Map, return the optional value
+      case (_) { return null }; // Found but is wrong type, return null
+    };
+  };
+
+  // Helper function to determine the security tier based on a definitive verification status
+  // and a list of completed declarative audits.
+  public func calculate_security_tier(
+    is_build_verified : Bool,
+    completed_declarative_audits : [Text],
+  ) : SecurityTier {
+    // Helper to check if a specific declarative audit is present.
     func has_audit(audit_type : Text) : Bool {
-      return Option.isSome(Array.find<Text>(completed_audits, func(a) { a == audit_type }));
+      return Option.isSome(Array.find<Text>(completed_declarative_audits, func(a) { a == audit_type }));
     };
 
-    // Check for tiers in descending order of prestige.
-    // Gold: Requires everything, including a security audit.
+    // The core logic now relies on the `is_build_verified` boolean, which is the
+    // unambiguous result of the ICRC-126 verification lifecycle.
+
+    // Gold: Requires a verified build AND all key declarative audits.
     if (
+      is_build_verified and
       has_audit("app_info_v1") and
-      has_audit("build_reproducibility_v1") and
       has_audit("tools_v1") and
-      has_audit("security_v1")
+      has_audit("data_safety_v1")
     ) {
-      // `security_v1` is the key differentiator for Gold.
       return #Gold;
     };
 
-    // Silver: App info, build is reproducible, and tools are verified.
+    // Silver: Verified build, app info, and tools.
     if (
+      is_build_verified and
       has_audit("app_info_v1") and
-      has_audit("build_reproducibility_v1") and
       has_audit("tools_v1")
     ) {
       return #Silver;
     };
 
-    // Bronze: App info is present and the build is reproducible. The foundation of trust.
+    // Bronze: The foundation of trust - a verified build and basic app info.
     if (
-      has_audit("app_info_v1") and
-      has_audit("build_reproducibility_v1")
+      is_build_verified and
+      has_audit("app_info_v1")
     ) {
       return #Bronze;
     };
 
-    // If it has app_info but doesn't meet Bronze, it's Unranked.
-    // This is the "Available but not yet tiered" state you described.
-    if (has_audit("app_info_v1")) {
-      return #Unranked;
-    };
-
-    // This case should be rare, as we filter out apps without app_info, but it's a safe default.
     return #Unranked;
   };
-
 };

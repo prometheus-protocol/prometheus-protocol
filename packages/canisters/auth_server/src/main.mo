@@ -53,10 +53,6 @@ shared ({ caller = creator }) persistent actor class AuthCanister() = self {
     await Authorize.confirm_login(context, session_id, caller);
   };
 
-  public shared ({ caller }) func complete_payment_setup(session_id : Text) : async Result.Result<Null, Text> {
-    await Authorize.complete_payment_setup(context, session_id, caller);
-  };
-
   public shared ({ caller }) func complete_authorize(session_id : Text) : async Result.Result<Text, Text> {
     await Authorize.complete_authorize(context, session_id, caller);
   };

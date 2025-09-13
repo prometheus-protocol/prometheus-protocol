@@ -3,6 +3,11 @@ export const idlFactory = ({ IDL }) => {
   const Balance = IDL.Nat;
   const Result = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   const BountyId = IDL.Nat;
+  const AuditorProfile = IDL.Record({
+    'available_balances' : IDL.Vec(IDL.Tuple(TokenId, Balance)),
+    'staked_balances' : IDL.Vec(IDL.Tuple(TokenId, Balance)),
+    'reputation' : IDL.Vec(IDL.Tuple(TokenId, Balance)),
+  });
   const Timestamp = IDL.Int;
   const BountyLock = IDL.Record({
     'stake_token_id' : TokenId,
@@ -13,6 +18,11 @@ export const idlFactory = ({ IDL }) => {
   const AuditHub = IDL.Service({
     'burn_tokens' : IDL.Func([IDL.Principal, TokenId, Balance], [Result], []),
     'cleanup_expired_lock' : IDL.Func([BountyId], [Result], []),
+    'get_auditor_profile' : IDL.Func(
+        [IDL.Principal],
+        [AuditorProfile],
+        ['query'],
+      ),
     'get_available_balance' : IDL.Func(
         [IDL.Principal, TokenId],
         [Balance],

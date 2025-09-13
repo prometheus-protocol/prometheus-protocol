@@ -2,10 +2,7 @@ import type { Command } from 'commander';
 import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'js-yaml';
-import {
-  fileAttestation,
-  serializeToIcrc16Map,
-} from '@prometheus-protocol/ic-js';
+import { fileAttestation } from '@prometheus-protocol/ic-js';
 import {
   getCurrentIdentityName,
   loadDfxIdentity,
@@ -48,7 +45,6 @@ export function registerSubmitAttestationCommand(program: Command) {
         }
 
         const wasmHash = manifest.wasm_hash;
-        const onChainMetadata = serializeToIcrc16Map(manifest.metadata);
 
         const identityName = getCurrentIdentityName();
         console.log(`   🔑 Using current dfx identity: '${identityName}'`);
@@ -58,10 +54,13 @@ export function registerSubmitAttestationCommand(program: Command) {
           `   📞 Calling the registry to file attestation for bounty #${bountyId}...`,
         );
         // --- CHANGE 4: Pass the bounty_id to the library function ---
+        // wasm_id: string; // Use wasm_id (hex string) for consistency
+        // bounty_id: bigint;
+        // attestationData: AttestationData; // Accept the structured data object
         await fileAttestation(identity, {
-          wasm_hash: wasmHash,
-          metadata: onChainMetadata,
+          wasm_id: wasmHash,
           bounty_id: bountyId, // The new, required property
+          attestationData: manifest.metadata,
         });
 
         console.log(

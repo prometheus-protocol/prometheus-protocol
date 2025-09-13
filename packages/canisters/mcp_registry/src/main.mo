@@ -288,25 +288,22 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   // The new stable variable to store the final word on each wasm_id.
   stable var finalization_log = BTree.init<Text, FinalizationRecord>(null);
 
-  public shared query func is_wasm_verified(wasm_id : Text) : async Bool {
+  private func _is_wasm_verified(wasm_id : Text) : Bool {
     let final_status = BTree.get(finalization_log, Text.compare, wasm_id);
 
     switch (final_status) {
       case (null) {
         // Not yet finalized.
-        Debug.print("[DEBUG] No finalization record found for wasm_id: \"" # wasm_id # "\"");
         return false;
       };
       case (?record) {
         switch (record.outcome) {
           case (#Verified) {
             // Explicitly verified!
-            Debug.print("[DEBUG] Wasm ID \"" # wasm_id # "\" is verified.");
             return true;
           };
           case (#Rejected) {
             // Explicitly rejected.
-            Debug.print("[DEBUG] Wasm ID \"" # wasm_id # "\" is rejected.");
             return false;
           };
         };
@@ -314,74 +311,64 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
   };
 
+  public shared query func is_wasm_verified(wasm_id : Text) : async Bool {
+    _is_wasm_verified(wasm_id);
+  };
+
+  /**
+   * @notice Fetches the single most recent attestation for each audit type for a given WASM.
+   * @dev This function has been refactored to IGNORE the finalization log. In a reputation-
+   *      based system, the stake provided by a trusted auditor is the guarantee of quality,
+   *      making a secondary finalization step unnecessary. This function now returns the
+   *      latest submitted attestation for each type, making the system more responsive.
+   * @param wasm_id The hex string identifier of the WASM.
+   * @return An array containing the most recent `AttestationRecord` for each audit type.
+   */
   private func _get_attestations_for_wasm(wasm_id : Text) : [ICRC126.AttestationRecord] {
 
-    // --- Step 1: Find the timestamp of the last finalization for this WASM ID ---
-    let last_finalization_record = BTree.get(finalization_log, Text.compare, wasm_id);
-
-    let finalization_ts = switch (last_finalization_record) {
-      case (null) {
-        // This WASM has never been finalized. According to the logic, no attestations
-        // are "official" yet. Return an empty array.
-        Debug.print("[DEBUG] No finalization record found for wasm_id: \"" # wasm_id # "\"");
-        return [];
-      };
-      case (?record) {
-        // We found a finalization record, use its timestamp as our cutoff.
-        record.timestamp;
-      };
-    };
-
-    // --- Step 2: Get all audit records for the WASM ID ---
+    // --- Step 1: Get all audit records for the WASM ID ---
     let state = icrc126().state;
     let all_audit_records = switch (Map.get(state.audits, Map.thash, wasm_id)) {
       case (null) {
+        // No audits have ever been filed for this WASM. Return an empty array.
         Debug.print("[DEBUG] No audits found for wasm_id: \"" # wasm_id # "\"");
         return [];
       };
       case (?records) { records };
     };
 
-    // --- Step 3: Filter for attestations created *before or at* the finalization time ---
-    var valid_attestations = Buffer.Buffer<ICRC126.AttestationRecord>(0);
+    // --- Step 2: Find the single most recent attestation for each audit type ---
+    // We use a mutable map to track the latest attestation we've seen for each `audit_type`.
+    // This ensures that even if multiple attestations of the same type exist, only the
+    // newest one is returned.
+    var latest_by_type = Map.new<Text, ICRC126.AttestationRecord>();
+
     for (record in all_audit_records.vals()) {
       switch (record) {
         case (#Attestation(att_record)) {
-          // The core filtering logic: only include attestations "stamped" by the finalization.
-          if (att_record.timestamp <= finalization_ts) {
-            valid_attestations.add(att_record);
+          // This is an attestation record, process it.
+          let existing = Map.get(latest_by_type, Map.thash, att_record.audit_type);
+          switch (existing) {
+            case (null) {
+              // This is the first time we've seen this audit_type, so it's the latest by default.
+              Map.set(latest_by_type, Map.thash, att_record.audit_type, att_record);
+            };
+            case (?prev_att) {
+              // We've seen this type before. If the current one is newer, it replaces the old one.
+              if (att_record.timestamp > prev_att.timestamp) {
+                Map.set(latest_by_type, Map.thash, att_record.audit_type, att_record);
+              };
+            };
           };
         };
-        case (#Divergence(_)) { /* Ignore */ };
-      };
-    };
-
-    // --- Step 4: From the valid attestations, find the single most recent for each type ---
-    // We use a mutable map to track the latest attestation we've seen for each audit_type.
-    var latest_by_type = Map.new<Text, ICRC126.AttestationRecord>();
-
-    for (att in valid_attestations.vals()) {
-      let existing = Map.get(latest_by_type, Map.thash, att.audit_type);
-      switch (existing) {
-        case (null) {
-          // This is the first time we've seen this audit_type, so it's the latest by default.
-          Map.set(latest_by_type, Map.thash, att.audit_type, att);
-        };
-        case (?prev_att) {
-          // We've seen this type before. If the current one is newer, it replaces the old one.
-          if (att.timestamp > prev_att.timestamp) {
-            Map.set(latest_by_type, Map.thash, att.audit_type, att);
-          };
+        case (#Divergence(_)) {
+          // Ignore divergence records for this query.
         };
       };
     };
 
-    // The values of the map now represent the definitive, "official" set of attestations.
+    // The values of the map now represent the definitive, most up-to-date set of attestations.
     return Iter.toArray(Map.vals(latest_by_type));
-  };
-
-  public shared query func get_attestations_for_wasm(wasm_id : Text) : async [ICRC126.AttestationRecord] {
-    _get_attestations_for_wasm(wasm_id);
   };
 
   public shared query func get_bounties_for_wasm(wasm_id : Text) : async [ICRC127.Bounty] {
@@ -425,36 +412,43 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     return matching_bounties;
   };
 
-  private func has_attestation(wasm_id : Text, audit_type : Text) : Bool {
-    // 1. Get the current state from the ICRC-126 library instance.
-    let state = icrc126().state;
+  /**
+   * Checks if a valid audit submission (either an attestation or a divergence)
+   * exists for a given WASM and the bounty's required audit type.
+   *
+   * @param wasm_id The hex ID of the WASM.
+   * @param required_audit_type The audit type specified in the bounty's challenge parameters.
+   * @returns True if a valid submission is found, false otherwise.
+   */
+  private func has_valid_audit_submission(wasm_id : Text, required_audit_type : Text) : Bool {
+    let all_audits = icrc126().state.audits;
 
-    // 2. Look up the wasm_id in the `audits` map.
-    switch (Map.get(state.audits, Map.thash, wasm_id)) {
+    switch (Map.get(all_audits, Map.thash, wasm_id)) {
       case (null) {
-        // If there's no entry for this wasm_id, there are no audits.
+        // No audit records exist for this WASM at all.
         return false;
       };
-      case (?audit_records) {
-        // 3. We have an array of audits. Find one that is an Attestation of the correct type.
-        let found_match = Array.find<ICRC126.AuditRecord>(
-          audit_records,
-          func(record : ICRC126.AuditRecord) : Bool {
-            switch (record) {
-              case (#Attestation(att_record)) {
-                // This is an attestation. Check if its audit_type matches.
-                return att_record.audit_type == audit_type;
-              };
-              case (#Divergence(_)) {
-                // This is a divergence report, not an attestation. Ignore it.
-                return false;
+      case (?records) {
+        // We have records, so let's iterate through them to find a match.
+        for (record in records.vals()) {
+          switch (record) {
+            case (#Attestation(att)) {
+              // For an attestation, the audit_type must match the one required by the bounty.
+              if (att.audit_type == required_audit_type) {
+                return true; // Found a matching attestation.
               };
             };
-          },
-        );
-
-        // 4. Return true if we found a matching attestation, false otherwise.
-        return Option.isSome(found_match);
+            case (#Divergence(div)) {
+              // A divergence report is ONLY a valid submission for a 'build_reproducibility_v1' bounty.
+              // If the bounty was for a security audit, a divergence report is not a valid completion.
+              if (required_audit_type == "build_reproducibility_v1") {
+                return true; // Found a valid divergence report for a build bounty.
+              };
+            };
+          };
+        };
+        // If we loop through all records and find no match, then no valid submission exists.
+        return false;
       };
     };
   };
@@ -528,7 +522,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
               case (?wasm_hash_exists, ?audit_type_exists) {
                 // Both required parameters are present.
                 let wasm_id = Base16.encode(wasm_hash_exists);
-                if (has_attestation(wasm_id, audit_type_exists)) {
+                if (has_valid_audit_submission(wasm_id, audit_type_exists)) {
                   return {
                     result = #Valid;
                     metadata = #Map([("status", #Text("Attestation found for audit type: " # audit_type_exists))]);
@@ -629,7 +623,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
 
     switch (_credentials_canister_id) {
-      case (null) { return #Error(#Generic("Audit Hub is not configured.")) };
+      case (null) { Debug.trap("Audit Hub is not configured.") };
       case (?id) {
         let auditHub : AuditHub.Service = actor (Principal.toText(id));
         let is_authorized = await auditHub.is_bounty_ready_for_collection(bounty_id, msg.caller);
@@ -640,11 +634,61 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       };
     };
 
+    // --- NEW LOGIC: Check if this attestation finalizes a verification ---
+    // 2. Extract the audit_type from the metadata.
+    let audit_type = AppStore.getICRC16TextOptional(req.metadata, "126:audit_type");
+
+    if (audit_type == ?"build_reproducibility_v1") {
+      // 3. This is a build verification! Finalize the request as "Verified".
+      let finalization_meta : ICRC126.ICRC16Map = [
+        ("auditor", #Principal(msg.caller)),
+        ("bounty_id", #Nat(bounty_id)),
+      ];
+      ignore await _finalize_verification(req.wasm_id, #Verified, finalization_meta);
+    };
+    // --- END NEW LOGIC ---
+
     await icrc126().icrc126_file_attestation(msg.caller, req);
   };
 
   public shared (msg) func icrc126_file_divergence(req : ICRC126Service.DivergenceReportRequest) : async ICRC126Service.DivergenceResult {
-    await icrc126().icrc126_file_divergence(msg.caller, req);
+    // --- NEW: Add authorization logic, mirroring the attestation function ---
+    let metadata = switch (req.metadata) { case null []; case (?m) m };
+    let bounty_id = switch (AuditHub.get_bounty_id_from_metadata(metadata)) {
+      case (null) {
+        return #Error(#Generic("Divergence metadata must include a 'bounty_id'."));
+      };
+      case (?id) { id };
+    };
+
+    switch (_credentials_canister_id) {
+      case (null) { Debug.trap("Audit Hub is not configured.") };
+      case (?id) {
+        let auditHub : AuditHub.Service = actor (Principal.toText(id));
+        let is_authorized = await auditHub.is_bounty_ready_for_collection(bounty_id, msg.caller);
+
+        if (not is_authorized) {
+          // Note: ICRC126 DivergenceResult doesn't have an #Unauthorized variant, so we use #Generic.
+          return #Error(#Generic("Unauthorized: Caller is not the authorized claimant for this bounty."));
+        };
+      };
+    };
+    // --- END NEW AUTHORIZATION ---
+
+    // 1. Let the library file the divergence report.
+    let result = await icrc126().icrc126_file_divergence(msg.caller, req);
+
+    // --- NEW LOGIC: Finalize the request as "Rejected" ---
+    // 2. We assume any divergence report is for build reproducibility.
+    let finalization_meta : ICRC126.ICRC16Map = [
+      ("auditor", #Principal(msg.caller)),
+      ("bounty_id", #Nat(bounty_id)),
+      ("reason", #Text(req.divergence_report)),
+    ];
+    let _ = await _finalize_verification(req.wasm_id, #Rejected, finalization_meta);
+    // --- END NEW LOGIC ---
+
+    return result;
   };
 
   // --- ICRC127 Endpoints ---
@@ -657,7 +701,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     // ==========================================================================
 
     switch (_credentials_canister_id) {
-      case (null) { return #Error(#Generic("Audit Hub is not configured.")) };
+      case (null) { Debug.trap("Audit Hub is not configured.") };
       case (?id) {
         let auditHub : AuditHub.Service = actor (Principal.toText(id));
         let is_authorized = await auditHub.is_bounty_ready_for_collection(req.bounty_id, msg.caller);
@@ -749,17 +793,14 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     metadata : ICRC126.ICRC16Map;
   };
 
-  public shared (msg) func finalize_verification(
+  private func _finalize_verification(
     wasm_id : Text,
     outcome : VerificationOutcome,
     metadata : ICRC126.ICRC16Map,
-  ) : async Result.Result<Nat, Text> {
-    // 1. Authorization: Only the owner (DAO) can call this.
-    if (not _is_owner(msg.caller)) {
-      return #err("Caller is not the owner");
-    };
+  ) : async Nat {
+    // 1. Authorization check is no longer needed as this is an internal function.
 
-    // 3. Create and store the finalization record.
+    // 2. Create and store the finalization record.
     let record : FinalizationRecord = {
       outcome = outcome;
       timestamp = Time.now();
@@ -767,7 +808,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
     ignore BTree.insert(finalization_log, Text.compare, wasm_id, record);
 
-    // 4. Log the official ICRC-3 block.
+    // 3. Log the official ICRC-3 block.
     let btype = switch (outcome) {
       case (#Verified) "126verified";
       case (#Rejected) "126rejected";
@@ -781,7 +822,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       ?convertIcrc126ValueToIcrc3Value(#Map([("btype", #Text(btype))])),
     );
 
-    return #ok(trx_id);
+    return trx_id;
   };
 
   // The request type for our new custom query.
@@ -832,14 +873,19 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       take = null;
     });
 
+    Debug.print("[DEBUG] Total canister types fetched: " # debug_show (all_canister_types.size()));
+
     // 3. Pre-process and "join" data into a complete list of potential listings.
     //    This is done in memory before filtering and pagination.
     var all_listings = Buffer.Buffer<AppStore.AppListing>(all_canister_types.size());
-    for (canister_type in all_canister_types.vals()) {
+    Debug.print("[DEBUG] Processing canister types to build listings...");
+    label loopThroughApps for (canister_type in all_canister_types.vals()) {
       // a. Find the latest version for this canister type.
       if (canister_type.versions.size() > 0) {
         // Start with the first version as the potential latest.
         var latest_version = canister_type.versions[0];
+
+        Debug.print("[DEBUG] Evaluating canister type: \"" # canister_type.canister_type_namespace # "\" with " # debug_show (canister_type.versions.size()) # " versions.");
 
         // If there are more versions, iterate from the second element (index 1) to the end.
         if (canister_type.versions.size() > 1) {
@@ -851,30 +897,35 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           };
         };
 
-        // b. Get all attestations for that latest version's hash.
+        // b. Get the wasm_id and apply the verification gateway check.
         let wasm_id = Base16.encode(latest_version.calculated_hash);
+        let is_verified = _is_wasm_verified(wasm_id); // Store the result
+
+        // The gateway check remains the same: only verified apps are listed.
+        if (not is_verified) {
+          Debug.print("[DEBUG] Skipping unverified WASM: \"" # wasm_id # "\"");
+          continue loopThroughApps;
+        };
+
         let attestations_for_wasm = _get_attestations_for_wasm(wasm_id);
-
-        // c. Find the specific 'app_info_v1' attestation.
-
-        // Search backward to find the newest app_info_v1 attestation?
         let app_info_attestation = Array.find<ICRC126.AttestationRecord>(
           attestations_for_wasm,
-          func(att) {
-            att.audit_type == "app_info_v1";
-          },
+          func(att) { att.audit_type == "app_info_v1" },
         );
-
-        // d. If found, construct and add the AppListing record.
+        // --- THIS IS THE CORE LOGIC CHANGE ---
         switch (app_info_attestation) {
           case (?att) {
+            // --- PATH A: APP IS FULLY LISTED (Existing Logic) ---
+            Debug.print("[DEBUG] Found app_info_v1 attestation for WASM: \"" # wasm_id # "\"");
+            // This app has an app_info_v1 attestation.
+
             var completed_audits : [Text] = [];
             for (a in attestations_for_wasm.vals()) {
-              completed_audits := Array.append(completed_audits, [a.audit_type]);
+              if (a.audit_type != "build_reproducibility_v1") {
+                completed_audits := Array.append(completed_audits, [a.audit_type]);
+              };
             };
-
-            // Calculate the tier using our new helper function.
-            let tier = AppStore.calculate_security_tier(completed_audits);
+            let tier = AppStore.calculate_security_tier(is_verified, completed_audits);
 
             all_listings.add({
               id = wasm_id;
@@ -886,9 +937,48 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
               icon_url = AppStore.getICRC16Text(att.metadata, "icon_url");
               banner_url = AppStore.getICRC16Text(att.metadata, "banner_url");
               security_tier = tier;
+              status = #Verified; // This is a fully listed app.
             });
           };
-          case (null) {}; // Skip types that don't have an app_info attestation.
+          case (null) {
+            // --- PATH B: APP IS PENDING (New Logic) ---
+            Debug.print("[DEBUG] No app_info_v1 attestation for WASM: \"" # wasm_id # "\". Marking as Pending.");
+            // The app is verified but has NO app_info_v1 attestation.
+            // We will pull its info from the original verification request.
+
+            let verification_request = Map.get(icrc126().state.requests, Map.thash, wasm_id);
+
+            switch (verification_request) {
+              case (?req) {
+                // We found the original submission, let's extract its metadata.
+                let meta = req.metadata;
+                let visuals_map = AppStore.getICRC16MapOptional(meta, "visuals");
+
+                all_listings.add({
+                  id = wasm_id;
+                  namespace = canister_type.canister_type_namespace;
+                  name = AppStore.getICRC16Text(meta, "name");
+                  description = AppStore.getICRC16Text(meta, "description");
+                  category = AppStore.getICRC16Text(meta, "category");
+                  publisher = AppStore.getICRC16Text(meta, "publisher");
+                  icon_url = switch (visuals_map) {
+                    case (?v) { AppStore.getICRC16Text(v, "icon_url") };
+                    case (_) { "" };
+                  };
+                  banner_url = switch (visuals_map) {
+                    case (?v) { AppStore.getICRC16Text(v, "banner_url") };
+                    case (_) { "" };
+                  };
+                  security_tier = #Unranked; // Pending apps are always Unranked.
+                  status = #Pending; // This is a pending app.
+                });
+              };
+              case (null) {
+                // This is an edge case: verified, but we can't find its submission record.
+                // We simply skip it, as we have no data to display.
+              };
+            };
+          };
         };
       };
     };
@@ -1015,23 +1105,35 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     var count : Nat = 0;
     let out = Buffer.Buffer<ICRC127.Bounty>(take);
 
-    label main for (bounty in all_bounties.vals()) {
+    // Use a while loop to iterate from the last index (newest) to the first (oldest).
+    var i = all_bounties.size();
+    label collect while (i > 0) {
+      i -= 1;
+      let bounty = all_bounties[i];
+
       if (not started) {
+        // If we have a `prev` cursor, we need to find it before we start collecting.
         switch (prev) {
-          case null {};
           case (?p) {
-            // We skip items until we find the one matching `prev` (the last bounty_id of the previous page).
-            if (bounty.bounty_id == p) { started := true };
-            continue main;
+            if (bounty.bounty_id == p) {
+              // We found the last item of the previous page.
+              // We will start collecting on the *next* iteration.
+              started := true;
+            };
+            // Continue to the next iteration, skipping the current item.
+            continue collect;
+          };
+          case (null) {
+            // This case is handled by the initial `started` assignment, but included for completeness.
           };
         };
       };
 
-      // `started` is now true.
+      // `started` is now true. We can start collecting matching bounties.
       if (matchesAllFilters(bounty, filters)) {
         out.add(bounty);
         count += 1;
-        if (count >= take) break main;
+        if (count >= take) break collect; // Exit the loop once we have enough items.
       };
     };
 
@@ -1055,86 +1157,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   };
 
   /**
-   * @notice Fetches a paginated list of all WASM submissions that have new, unreviewed attestations.
-   * @param req The pagination request object.
-   * @return An array of `PendingSubmission` records.
-   */
-  public shared query func list_pending_submissions(req : PaginationRequest) : async [PendingSubmission] {
-    let take = switch (req.take) { case null 20; case (?n) Nat.min(n, 100) };
-    let prev = req.prev;
-
-    // This buffer will hold all submissions that are determined to be ready for review.
-    var submissions_to_review = Buffer.Buffer<PendingSubmission>(0);
-
-    // We must iterate through all verification requests to see which ones are pending.
-    let all_requests = icrc126().state.requests;
-
-    for ((wasm_id, request) in Map.entries(all_requests)) {
-      // 1. Get the timestamp of the last time this wasm_id was finalized by the DAO.
-      // If it has never been finalized, the timestamp is effectively 0.
-      let last_finalization_ts : Time.Time = switch (BTree.get(finalization_log, Text.compare, wasm_id)) {
-        case (null) { 0 };
-        case (?record) { record.timestamp };
-      };
-
-      // 2. Get all audit records (attestations and divergences) for this wasm_id.
-      let audit_records = switch (Map.get(icrc126().state.audits, Map.thash, wasm_id)) {
-        case (null) { [] };
-        case (?records) { records };
-      };
-
-      // 3. Find all attestations that are NEWER than the last finalization.
-      var new_attestations = Buffer.Buffer<ICRC126.AttestationRecord>(0);
-      for (record in audit_records.vals()) {
-        switch (record) {
-          case (#Attestation(att_record)) {
-            if (att_record.timestamp > last_finalization_ts) {
-              new_attestations.add(att_record);
-            };
-          };
-          case (_) { /* Ignore divergences for this query */ };
-        };
-      };
-
-      // 4. If we found any new attestations, this submission is ready for review.
-      if (new_attestations.size() > 0) {
-        // Collect the audit types of the new attestations for the response.
-        var new_att_types : [Text] = [];
-        for (att in new_attestations.vals()) {
-          new_att_types := Array.append(new_att_types, [att.audit_type]);
-        };
-
-        submissions_to_review.add({
-          wasm_id = wasm_id;
-          repo_url = request.repo;
-          commit_hash = request.commit_hash;
-          attestation_types = new_att_types;
-        });
-      };
-    };
-
-    // 5. Apply pagination to the in-memory list of reviewable submissions.
-    var started = prev == null;
-    var count : Nat = 0;
-    let out = Buffer.Buffer<PendingSubmission>(take);
-
-    label main for (sub in submissions_to_review.vals()) {
-      if (not started) {
-        switch (prev) {
-          case null {};
-          case (?p) { if (sub.wasm_id == p) { started := true }; continue main };
-        };
-      };
-
-      out.add(sub);
-      count += 1;
-      if (count >= take) break main;
-    };
-
-    return Buffer.toArray(out);
-  };
-
-  /**
    * @notice Fetches the original verification request metadata for a given WASM ID.
    * @param wasm_id The hex-encoded SHA-256 hash of the WASM.
    * @return The optional `VerificationRequest` record, which contains the repo URL and commit hash.
@@ -1150,6 +1172,64 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
 
     // 3. Return the result. `Map.get` returns an optional, which matches our function's return type.
     return result;
+  };
+
+  // A new, paginated query to find all verification requests that are waiting for a bounty.
+  public shared query func list_pending_verifications(
+    // We can add pagination later if needed. For now, we'll return all.
+  ) : async [ICRC126.VerificationRecord] {
+    var pending_requests = Buffer.Buffer<ICRC126.VerificationRecord>(0);
+    let all_requests = icrc126().state.requests;
+    let all_bounties = BTree.toValueArray(icrc127().state.bounties);
+
+    // --- NEW: Create a helper Set for fast lookups of sponsored WASM hashes ---
+    var sponsored_wasm_ids = Map.new<Text, Null>();
+    for (bounty in all_bounties.vals()) {
+      // Check if this is a build reproducibility bounty
+      switch (bounty.challenge_parameters) {
+        case (#Map(params)) {
+          let audit_type = AppStore.getICRC16TextOptional(params, "audit_type");
+          if (audit_type == ?"build_reproducibility_v1") {
+            // This is a build bounty. Add its wasm_id to our set.
+            let wasm_hash = AppStore.getICRC16BlobOptional(params, "wasm_hash");
+            switch (wasm_hash) {
+              case (?h) {
+                Map.set(sponsored_wasm_ids, Map.thash, Base16.encode(h), null);
+              };
+              case (_) {};
+            };
+          };
+        };
+        case (_) {};
+      };
+    };
+
+    for ((wasm_id, request) in Map.entries(all_requests)) {
+      // Condition 1: Check if the request has been finalized.
+      let is_finalized = BTree.get(finalization_log, Text.compare, wasm_id) != null;
+
+      // Condition 2: Check if a build bounty already exists for this wasm_id.
+      let is_sponsored = Option.isSome(Map.get(sponsored_wasm_ids, Map.thash, wasm_id));
+
+      // --- THE NEW, CORRECT LOGIC ---
+      // Only include the request if it is NOT finalized AND NOT yet sponsored.
+      if (not is_finalized and not is_sponsored) {
+        pending_requests.add(request);
+      };
+    };
+    return Buffer.toArray(pending_requests);
+  };
+
+  public shared query func get_audit_records_for_wasm(wasm_id : Text) : async [ICRC126.AuditRecord] {
+    let all_audits = icrc126().state.audits;
+
+    // Look up the wasm_id and return the array of records, or an empty array if none exist.
+    let records = switch (Map.get(all_audits, Map.thash, wasm_id)) {
+      case (null) [];
+      case (?rs) rs;
+    };
+
+    return records;
   };
 
   //------------------- SAMPLE FUNCTION -------------------//

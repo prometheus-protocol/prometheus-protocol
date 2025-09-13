@@ -21,7 +21,7 @@ const BountyListItemSkeleton = () => (
 );
 
 export const BountyBoardSkeleton = () => (
-  <div className="w-full max-w-5xl mx-auto pt-16 pb-24 animate-pulse">
+  <div className="w-full max-w-6xl mx-auto pt-16 pb-24 animate-pulse">
     {/* Header Skeleton */}
     <div className="h-4 w-1/4 bg-muted rounded mb-12" /> {/* Breadcrumbs */}
     <header className="mb-32 space-y-4">

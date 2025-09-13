@@ -26,7 +26,7 @@ shared ({ caller = deployer }) persistent actor class AppBounties() {
     id : BountyId;
     title : Text;
     short_description : Text;
-    reward_amount : Float; // Note: For production, consider using Nat to avoid float precision issues.
+    reward_amount : Nat;
     reward_token : Text;
     status : Text; // Note: For production, consider a variant type like {#Open; #InProgress; #Closed}
     details_markdown : Text;
@@ -74,7 +74,7 @@ shared ({ caller = deployer }) persistent actor class AppBounties() {
   public shared (msg) func create_bounty(
     title : Text,
     short_description : Text,
-    reward_amount : Float,
+    reward_amount : Nat,
     reward_token : Text,
     status : Text,
     details_markdown : Text,
@@ -106,7 +106,7 @@ shared ({ caller = deployer }) persistent actor class AppBounties() {
     id : BountyId,
     title : Text,
     short_description : Text,
-    reward_amount : Float,
+    reward_amount : Nat,
     reward_token : Text,
     status : Text,
     details_markdown : Text,

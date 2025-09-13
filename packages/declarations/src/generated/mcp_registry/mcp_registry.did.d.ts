@@ -15,6 +15,7 @@ export interface Action {
 export interface ActionId { 'id' : bigint, 'time' : Time }
 export interface AppListing {
   'id' : string,
+  'status' : AppListingStatus,
   'banner_url' : string,
   'publisher' : string,
   'name' : string,
@@ -34,18 +35,21 @@ export interface AppListingRequest {
 }
 export type AppListingResponse = { 'ok' : Array<AppListing> } |
   { 'err' : string };
+export type AppListingStatus = { 'Rejected' : { 'reason' : string } } |
+  { 'Verified' : null } |
+  { 'Pending' : null };
 export interface ArchivedTransactionResponse {
   'args' : Array<TransactionRange>,
   'callback' : GetTransactionsFn,
 }
 export interface AttestationRecord {
   'audit_type' : string,
-  'metadata' : ICRC16Map__5,
+  'metadata' : ICRC16Map,
   'auditor' : Principal,
   'timestamp' : Time__1,
 }
 export interface AttestationRequest {
-  'metadata' : ICRC16Map__3,
+  'metadata' : ICRC16Map__4,
   'wasm_id' : string,
 }
 export type AttestationResult = { 'Ok' : bigint } |
@@ -54,16 +58,18 @@ export type AttestationResult = { 'Ok' : bigint } |
       { 'Generic' : string } |
       { 'Unauthorized' : null }
   };
+export type AuditRecord = { 'Attestation' : AttestationRecord } |
+  { 'Divergence' : DivergenceRecord };
 export interface BlockType { 'url' : string, 'block_type' : string }
 export interface Bounty {
   'claims' : Array<ClaimRecord>,
   'created' : bigint,
   'creator' : Principal,
   'token_amount' : bigint,
-  'bounty_metadata' : ICRC16Map,
+  'bounty_metadata' : ICRC16Map__1,
   'claimed' : [] | [bigint],
   'token_canister_id' : Principal,
-  'challenge_parameters' : ICRC16,
+  'challenge_parameters' : ICRC16__1,
   'validation_call_timeout' : bigint,
   'bounty_id' : bigint,
   'validation_canister_id' : Principal,
@@ -86,7 +92,7 @@ export type BountyStatus = { 'Claimed' : null } |
 export interface BountySubmissionRequest {
   'account' : [] | [Account],
   'bounty_id' : bigint,
-  'submission' : ICRC16__1,
+  'submission' : ICRC16__2,
 }
 export type BountySubmissionResult = {
     'Ok' : { 'result' : [] | [RunBountyResult__1], 'claim_id' : bigint }
@@ -99,7 +105,7 @@ export type BountySubmissionResult = {
 export interface CanisterType {
   'canister_type_namespace' : string,
   'controllers' : Array<Principal>,
-  'metadata' : ICRC16Map__4,
+  'metadata' : ICRC16Map__5,
   'repo' : string,
   'canister_type_name' : string,
   'description' : string,
@@ -117,12 +123,12 @@ export interface ClaimRecord {
   'time_submitted' : bigint,
   'claim_id' : bigint,
   'caller' : Principal,
-  'claim_metadata' : ICRC16Map,
-  'submission' : ICRC16,
+  'claim_metadata' : ICRC16Map__1,
+  'submission' : ICRC16__1,
 }
 export interface CreateBountyRequest {
-  'bounty_metadata' : ICRC16Map__1,
-  'challenge_parameters' : ICRC16__1,
+  'bounty_metadata' : ICRC16Map__2,
+  'challenge_parameters' : ICRC16__2,
   'start_date' : [] | [bigint],
   'bounty_id' : [] | [bigint],
   'validation_canister_id' : Principal,
@@ -135,7 +141,7 @@ export type CreateBountyResult = {
 export interface CreateCanisterType {
   'canister_type_namespace' : string,
   'controllers' : [] | [Array<Principal>],
-  'metadata' : ICRC16Map__4,
+  'metadata' : ICRC16Map__5,
   'repo' : string,
   'canister_type_name' : string,
   'description' : string,
@@ -160,8 +166,14 @@ export type DeprecateResult = { 'Ok' : bigint } |
       { 'Generic' : string } |
       { 'Unauthorized' : null }
   };
+export interface DivergenceRecord {
+  'report' : string,
+  'metadata' : [] | [ICRC16Map],
+  'timestamp' : Time__1,
+  'reporter' : Principal,
+}
 export interface DivergenceReportRequest {
-  'metadata' : [] | [ICRC16Map__3],
+  'metadata' : [] | [ICRC16Map__4],
   'wasm_id' : string,
   'divergence_report' : string,
 }
@@ -231,12 +243,8 @@ export type GetWasmsFilter = { 'canister_type_namespace' : string } |
   { 'version_max' : [bigint, [] | [bigint], [] | [bigint]] } |
   { 'version_min' : [bigint, [] | [bigint], [] | [bigint]] };
 export interface ICRC118WasmRegistryCanister {
-  'finalize_verification' : ActorMethod<
-    [string, VerificationOutcome, ICRC16Map__5],
-    Result_3
-  >,
   'get_app_listings' : ActorMethod<[AppListingRequest], AppListingResponse>,
-  'get_attestations_for_wasm' : ActorMethod<[string], Array<AttestationRecord>>,
+  'get_audit_records_for_wasm' : ActorMethod<[string], Array<AuditRecord>>,
   'get_bounties_for_wasm' : ActorMethod<[string], Array<Bounty>>,
   'get_canister_type_version' : ActorMethod<
     [GetCanisterTypeVersionRequest],
@@ -306,7 +314,7 @@ export interface ICRC118WasmRegistryCanister {
     ],
     Array<Bounty>
   >,
-  'icrc127_metadata' : ActorMethod<[], ICRC16Map>,
+  'icrc127_metadata' : ActorMethod<[], ICRC16Map__1>,
   'icrc127_submit_bounty' : ActorMethod<
     [BountySubmissionRequest],
     BountySubmissionResult
@@ -318,10 +326,7 @@ export interface ICRC118WasmRegistryCanister {
   'is_controller_of_type' : ActorMethod<[string, Principal], Result_1>,
   'is_wasm_verified' : ActorMethod<[string], boolean>,
   'list_bounties' : ActorMethod<[BountyListingRequest], BountyListingResponse>,
-  'list_pending_submissions' : ActorMethod<
-    [PaginationRequest],
-    Array<PendingSubmission>
-  >,
+  'list_pending_verifications' : ActorMethod<[], Array<VerificationRecord>>,
   'set_auditor_credentials_canister_id' : ActorMethod<[Principal], Result>,
 }
 export type ICRC16 = { 'Int' : bigint } |
@@ -350,7 +355,7 @@ export type ICRC16 = { 'Int' : bigint } |
   { 'Class' : Array<ICRC16Property> };
 export type ICRC16Map = Array<[string, ICRC16]>;
 export type ICRC16Map__1 = Array<[string, ICRC16__1]>;
-export type ICRC16Map__3 = Array<[string, ICRC16__2]>;
+export type ICRC16Map__2 = Array<[string, ICRC16__2]>;
 export type ICRC16Map__4 = Array<[string, ICRC16__3]>;
 export type ICRC16Map__5 = Array<[string, ICRC16__4]>;
 export interface ICRC16Property {
@@ -379,7 +384,7 @@ export interface ICRC16Property__4 {
   'immutable' : boolean,
 }
 export type ICRC16__1 = { 'Int' : bigint } |
-  { 'Map' : ICRC16Map__1 } |
+  { 'Map' : Array<[string, ICRC16__1]> } |
   { 'Nat' : bigint } |
   { 'Set' : Array<ICRC16__1> } |
   { 'Nat16' : number } |
@@ -403,7 +408,7 @@ export type ICRC16__1 = { 'Int' : bigint } |
   { 'ValueMap' : Array<[ICRC16__1, ICRC16__1]> } |
   { 'Class' : Array<ICRC16Property__1> };
 export type ICRC16__2 = { 'Int' : bigint } |
-  { 'Map' : ICRC16Map__3 } |
+  { 'Map' : ICRC16Map__2 } |
   { 'Nat' : bigint } |
   { 'Set' : Array<ICRC16__2> } |
   { 'Nat16' : number } |
@@ -451,7 +456,7 @@ export type ICRC16__3 = { 'Int' : bigint } |
   { 'ValueMap' : Array<[ICRC16__3, ICRC16__3]> } |
   { 'Class' : Array<ICRC16Property__3> };
 export type ICRC16__4 = { 'Int' : bigint } |
-  { 'Map' : Array<[string, ICRC16__4]> } |
+  { 'Map' : ICRC16Map__5 } |
   { 'Nat' : bigint } |
   { 'Set' : Array<ICRC16__4> } |
   { 'Nat16' : number } |
@@ -487,7 +492,7 @@ export interface InitArgList {
 export type InitArgs = {};
 export type ListBountiesFilter = { 'claimed_by' : Account } |
   { 'validation_canister' : Principal } |
-  { 'metadata' : ICRC16Map__1 } |
+  { 'metadata' : ICRC16Map__2 } |
   { 'claimed' : boolean } |
   { 'created_after' : bigint } |
   { 'created_before' : bigint };
@@ -503,34 +508,22 @@ export type ManageControllerResult = { 'Ok' : bigint } |
       { 'Generic' : string } |
       { 'Unauthorized' : null }
   };
-export interface PaginationRequest {
-  'prev' : [] | [string],
-  'take' : [] | [bigint],
-}
-export interface PendingSubmission {
-  'attestation_types' : Array<string>,
-  'wasm_id' : string,
-  'commit_hash' : Uint8Array | number[],
-  'repo_url' : string,
-}
 export type Result = { 'ok' : null } |
   { 'err' : string };
 export type Result_1 = { 'ok' : boolean } |
   { 'err' : string };
 export type Result_2 = { 'ok' : Wasm } |
   { 'err' : string };
-export type Result_3 = { 'ok' : bigint } |
-  { 'err' : string };
 export interface RunBountyResult {
   'result' : { 'Invalid' : null } |
     { 'Valid' : null },
-  'metadata' : ICRC16,
+  'metadata' : ICRC16__1,
   'trx_id' : [] | [bigint],
 }
 export interface RunBountyResult__1 {
   'result' : { 'Invalid' : null } |
     { 'Valid' : null },
-  'metadata' : ICRC16__1,
+  'metadata' : ICRC16__2,
   'trx_id' : [] | [bigint],
 }
 export type SecurityTier = { 'Gold' : null } |
@@ -561,7 +554,7 @@ export interface UpdateWasmRequest {
   'canister_type_namespace' : string,
   'previous' : [] | [CanisterVersion],
   'expected_chunks' : Array<Uint8Array | number[]>,
-  'metadata' : ICRC16Map__4,
+  'metadata' : ICRC16Map__5,
   'repo' : string,
   'description' : string,
   'version_number' : [bigint, bigint, bigint],
@@ -587,10 +580,16 @@ export type Value = { 'Int' : bigint } |
   { 'Blob' : Uint8Array | number[] } |
   { 'Text' : string } |
   { 'Array' : Array<Value> };
-export type VerificationOutcome = { 'Rejected' : null } |
-  { 'Verified' : null };
+export interface VerificationRecord {
+  'requester' : Principal,
+  'metadata' : ICRC16Map,
+  'repo' : string,
+  'timestamp' : Time__1,
+  'commit_hash' : Uint8Array | number[],
+  'wasm_hash' : Uint8Array | number[],
+}
 export interface VerificationRequest {
-  'metadata' : ICRC16Map__3,
+  'metadata' : ICRC16Map__4,
   'repo' : string,
   'commit_hash' : Uint8Array | number[],
   'wasm_hash' : Uint8Array | number[],
@@ -599,7 +598,7 @@ export interface Wasm {
   'created' : bigint,
   'canister_type_namespace' : string,
   'previous' : [] | [CanisterVersion],
-  'metadata' : ICRC16Map__4,
+  'metadata' : ICRC16Map__5,
   'hash' : Uint8Array | number[],
   'repo' : string,
   'description' : string,

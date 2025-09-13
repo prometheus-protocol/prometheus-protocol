@@ -5,6 +5,7 @@ import type { IDL } from '@dfinity/candid';
 export interface AuditHub {
   'burn_tokens' : ActorMethod<[Principal, TokenId, Balance], Result>,
   'cleanup_expired_lock' : ActorMethod<[BountyId], Result>,
+  'get_auditor_profile' : ActorMethod<[Principal], AuditorProfile>,
   'get_available_balance' : ActorMethod<[Principal, TokenId], Balance>,
   'get_bounty_lock' : ActorMethod<[BountyId], [] | [BountyLock]>,
   'get_owner' : ActorMethod<[], Principal>,
@@ -19,6 +20,11 @@ export interface AuditHub {
   'reserve_bounty' : ActorMethod<[BountyId, TokenId], Result>,
   'set_stake_requirement' : ActorMethod<[TokenId, Balance], Result>,
   'transfer_ownership' : ActorMethod<[Principal], Result>,
+}
+export interface AuditorProfile {
+  'available_balances' : Array<[TokenId, Balance]>,
+  'staked_balances' : Array<[TokenId, Balance]>,
+  'reputation' : Array<[TokenId, Balance]>,
 }
 export type Balance = bigint;
 export type BountyId = bigint;

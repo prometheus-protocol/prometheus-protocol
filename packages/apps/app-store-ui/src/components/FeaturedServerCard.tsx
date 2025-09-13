@@ -11,13 +11,12 @@ interface FeaturedServerCardProps {
 
 export function FeaturedServerCard({ server }: FeaturedServerCardProps) {
   // This logic is fine, an "Unranked" tier can be considered "Coming Soon" in terms of full certification.
-  const status =
-    server.securityTier && server.securityTier !== 'Unranked'
-      ? 'Now Available'
-      : 'Coming Soon';
+  const status = server.status;
+
+  console.log('Rendering FeaturedServerCard for server:', server);
 
   return (
-    <Link to={`/server/${server.id}`} className="block group">
+    <Link to={`/apps/${server.id}`} className="block group">
       <Card className="overflow-hidden border-transparent transition-all p-0">
         <CardContent className="p-0">
           <div className="relative overflow-hidden rounded-3xl">

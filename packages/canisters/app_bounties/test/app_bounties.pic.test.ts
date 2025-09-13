@@ -62,7 +62,7 @@ describe('App Bounty Canister', () => {
       const resOldOwner = await appBountyActor.create_bounty(
         'Test',
         'Test',
-        1.0,
+        12423n,
         'ICP',
         'Open',
         '# Test',
@@ -78,7 +78,7 @@ describe('App Bounty Canister', () => {
       const resNewOwner = await appBountyActor.create_bounty(
         'Test',
         'Test',
-        1.0,
+        12423n,
         'ICP',
         'Open',
         '# Test',
@@ -92,7 +92,7 @@ describe('App Bounty Canister', () => {
       const createRes = await appBountyActor.create_bounty(
         'Test',
         'Test',
-        1.0,
+        1200n,
         'ICP',
         'Open',
         '# Test',
@@ -103,7 +103,7 @@ describe('App Bounty Canister', () => {
         0n,
         'Test',
         'Test',
-        1.0,
+        1200n,
         'ICP',
         'Open',
         '# Test',
@@ -120,7 +120,7 @@ describe('App Bounty Canister', () => {
     const bounty1Data = {
       title: 'PMP Token Faucet',
       short_description: 'Get PMP tokens for development.',
-      reward_amount: 0.0001,
+      reward_amount: 10000n,
       reward_token: 'USDC',
       status: 'Open',
       details_markdown: '### Key Features...',
@@ -219,7 +219,7 @@ describe('App Bounty Canister', () => {
       await appBountyActor.create_bounty(
         'First Bounty',
         'Oldest',
-        1.0,
+        1n,
         'ICP',
         'Open',
         '',
@@ -233,7 +233,7 @@ describe('App Bounty Canister', () => {
       await appBountyActor.create_bounty(
         'Second Bounty',
         'Newest',
-        2.0,
+        2n,
         'ICP',
         'Open',
         '',

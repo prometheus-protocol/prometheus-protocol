@@ -54,7 +54,7 @@ export const getTierInfo = (
       borderColorClass: 'border-border',
       Icon: ShieldQuestion,
       mascotText:
-        "This one's from the community and hasn't been audited by us yet.",
+        "This one's from the community and hasn't been fully audited yet.",
     };
   }
 
