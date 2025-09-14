@@ -7,12 +7,11 @@ import { OfferBanner } from '@/components/OfferBanner';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import { truncatePrincipal } from '@/lib/utils';
 import { useGetAppStoreListings } from '@/hooks/useAppStore';
-import { AppStoreListing } from '@prometheus-protocol/ic-js'; // Import the type for clarity
+import { AppStoreListing } from '@prometheus-protocol/ic-js';
 import { HomePageSkeleton } from '@/components/HomePageSkeleton';
 import { HomePageError } from '@/components/HomePageError';
 
 function HomePage() {
-  // 1. Fetch the live data from our React Query hook
   const {
     data: allServers,
     isLoading,
@@ -24,68 +23,84 @@ function HomePage() {
     ? truncatePrincipal(identity.getPrincipal().toText())
     : 'Guest';
 
-  // 2. Use `useMemo` to process the data once it's loaded.
-  // This prevents re-calculating on every render.
-  const { featuredApps, topPicks, trending, editorsChoice } = useMemo(() => {
-    // If data is not yet available, return empty arrays to prevent crashes.
-    if (!allServers || allServers.length === 0) {
+  // --- REFACTORED: Process data into meaningful, data-driven sections ---
+  const { carouselApps, goldTierApps, comingSoonApps, categorySections } =
+    useMemo(() => {
+      if (!allServers || allServers.length === 0) {
+        return {
+          carouselApps: [],
+          goldTierApps: [],
+          comingSoonApps: [],
+          categorySections: [],
+        };
+      }
+
+      // 1. Filter apps into primary groups
+      const goldApps = allServers.filter(
+        (app) =>
+          app.latestVersion.status === 'Verified' &&
+          app.latestVersion.securityTier === 'Gold',
+      );
+      const pendingApps = allServers.filter(
+        (app) => app.latestVersion.status === 'Pending',
+      );
+      const otherListedApps = allServers.filter(
+        (app) =>
+          app.latestVersion.status === 'Verified' &&
+          app.latestVersion.securityTier !== 'Gold',
+      );
+
+      // 2. Create the list for the main carousel (mix of best and newest)
+      const carouselApps = [
+        ...goldApps.slice(0, 3),
+        ...pendingApps.slice(0, 3),
+      ].sort(() => 0.5 - Math.random());
+
+      // 3. Group remaining listed apps by category
+      const categoryMap = new Map<string, AppStoreListing[]>();
+      otherListedApps.forEach((app) => {
+        const category = app.category || 'Uncategorized';
+        if (!categoryMap.has(category)) {
+          categoryMap.set(category, []);
+        }
+        categoryMap.get(category)!.push(app);
+      });
+
+      // Convert map to an array of objects for easier rendering
+      const categorySections = Array.from(categoryMap.entries()).map(
+        ([title, servers]) => ({
+          title,
+          servers,
+        }),
+      );
+
       return {
-        featuredApps: [],
-        topPicks: [],
-        trending: [],
-        editorsChoice: [],
+        carouselApps,
+        goldTierApps: goldApps,
+        comingSoonApps: pendingApps,
+        categorySections,
       };
-    }
+    }, [allServers]);
 
-    // A helper function to get a random, shuffled sample from any array.
-    const getSample = (source: AppStoreListing[], amount: number) => {
-      const shuffled = [...source].sort(() => 0.5 - Math.random());
-      return shuffled.slice(0, Math.min(amount, shuffled.length));
-    };
-
-    // --- MVP Logic for Populating UI Sections ---
-
-    // Featured Carousel: Show up to 3 of the highest-tier (Gold) apps.
-    const goldTierApps = allServers.filter(
-      (app) => app.securityTier === 'Gold',
-    );
-    const featuredApps = getSample(goldTierApps, 3);
-
-    // Editor's Choice: A random sample of high-quality (Gold or Silver) apps.
-    const highQualityApps = allServers.filter(
-      (app) => app.securityTier === 'Gold' || app.securityTier === 'Silver',
-    );
-    const editorsChoice = getSample(highQualityApps, 6);
-
-    // Top Picks & Trending: For the MVP, these are random samples from all available apps.
-    const topPicks = getSample(allServers, 6);
-    const trending = getSample(allServers, 6);
-
-    return { featuredApps, topPicks, trending, editorsChoice };
-  }, [allServers]); // This memo will only re-run when `allServers` data changes.
-
-  // 3. Handle loading and error states before rendering the main content.
-  if (isLoading) {
-    return <HomePageSkeleton />;
-  }
-
-  if (isError) {
-    return <HomePageError onRetry={refetch} />;
-  }
+  if (isLoading) return <HomePageSkeleton />;
+  if (isError) return <HomePageError onRetry={refetch} />;
 
   return (
-    <div className="w-full mx-auto">
+    <div className="w-full max-w-6xl mx-auto">
       <section className="my-16">
         <h1 className="font-header text-4xl font-bold tracking-tight mb-12 uppercase">
           Welcome {userName}
         </h1>
-        {/* 4. Pass the processed live data to the components */}
-        <FeaturedCarousel servers={trending} />
+        {carouselApps.length > 0 && <FeaturedCarousel servers={carouselApps} />}
       </section>
 
       <ValuePropBanner />
 
-      <ServerGrid title="Top Picks For You" servers={trending} />
+      {/* --- Render the new, data-driven sections --- */}
+
+      {goldTierApps.length > 0 && (
+        <ServerGrid title="Gold Tier Apps" servers={goldTierApps} />
+      )}
 
       <PromoBanner
         imageUrl="/images/wchl-banner-1920.webp"
@@ -93,9 +108,18 @@ function HomePage() {
         linkTo="https://dorahacks.io/org/3634"
       />
 
-      <ServerGrid title="Trending" servers={trending} />
+      {comingSoonApps.length > 0 && (
+        <ServerGrid title="Coming Soon" servers={comingSoonApps} />
+      )}
 
-      <ServerGrid title="Editors Choice" servers={trending} />
+      {/* Dynamically render a grid for each category */}
+      {categorySections.map((section) => (
+        <ServerGrid
+          key={section.title}
+          title={section.title}
+          servers={section.servers}
+        />
+      ))}
 
       <OfferBanner />
     </div>

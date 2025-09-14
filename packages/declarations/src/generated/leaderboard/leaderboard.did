@@ -21,6 +21,15 @@ type Leaderboard =
    get_last_updated: () -> (Time) query;
    get_owner: () -> (principal) query;
    get_server_leaderboard: () -> (vec ServerLeaderboardEntry) query;
+   /// * Retrieves the invocation counts for each tool of a specific server.
+   ///    * Data is sourced from the last cached update.
+   ///    * @param server_id The Principal of the server canister.
+   ///    * @returns An array of tool names and their invocation counts. Returns an empty array if the server is not found.
+   get_tool_invocations_for_server: (server_id: principal) ->
+    (vec record {
+           text;
+           nat;
+         }) query;
    get_user_leaderboard: () -> (vec UserLeaderboardEntry) query;
    init: (canister_id: principal) -> ();
    trigger_manual_update: () -> (Result);

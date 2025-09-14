@@ -29,7 +29,7 @@ export function FeaturedCarousel({ servers }: FeaturedCarouselProps) {
       <CarouselContent className="-ml-12">
         {servers.map((server) => (
           <CarouselItem
-            key={server.id}
+            key={server.namespace}
             className="md:basis-1/2 lg:basis-1/3 pl-12">
             <FeaturedServerCard server={server} />
           </CarouselItem>

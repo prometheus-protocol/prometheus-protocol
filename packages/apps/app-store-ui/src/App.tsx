@@ -25,6 +25,8 @@ import { CommunityPage } from './pages/CommunityPage';
 import { configure as configureIcJs } from '@prometheus-protocol/ic-js';
 import AppBountiesPage from './pages/AppBountiesPage';
 import LeaderboardPage from './pages/LeaderboardPage';
+import AuditHubPage from './pages/AuditHubPage';
+import AuditDetailsPage from './pages/AuditDetailsPage';
 
 // --- CONFIGURE THE SHARED PACKAGE ---
 // This object is created at BUILD TIME. Vite replaces each `process.env`
@@ -33,9 +35,10 @@ const canisterIds = {
   MCP_REGISTRY: process.env.CANISTER_ID_MCP_REGISTRY!,
   MCP_ORCHESTRATOR: process.env.CANISTER_ID_MCP_ORCHESTRATOR!,
   AUTH_SERVER: process.env.CANISTER_ID_AUTH_SERVER!,
-  AUDITOR_CREDENTIALS: process.env.CANISTER_ID_AUDITOR_CREDENTIALS!,
+  AUDIT_HUB: process.env.CANISTER_ID_AUDIT_HUB!,
   APP_BOUNTIES: process.env.CANISTER_ID_APP_BOUNTIES!,
   LEADERBOARD: process.env.CANISTER_ID_LEADERBOARD!,
+  USDC_LEDGER: process.env.CANISTER_ID_USDC_LEDGER!,
   // ... add all other canister IDs your app needs
 };
 
@@ -74,12 +77,23 @@ function App() {
               <Route path="/" element={<HomePage />} />
 
               {/* The details page for a specific MCP server, accessible by a slug or ID */}
-              <Route path="/server/:serverId" element={<ServerDetailsPage />} />
+              <Route path="/app/:appId" element={<ServerDetailsPage />} />
               <Route
-                path="server/:serverId/certificate"
+                path="/app/:appId/:wasmId"
+                element={<ServerDetailsPage />}
+              />
+              <Route path="/certificate/:appId" element={<CertificatePage />} />
+              <Route
+                path="/certificate/:appId/:wasmId"
                 element={<CertificatePage />}
               />
+              {/* Audit Hub Routes */}
+              <Route path="audit-hub">
+                <Route index element={<AuditHubPage />} />
+                <Route path=":auditId" element={<AuditDetailsPage />} />
+              </Route>
 
+              {/* Main pages */}
               <Route path="bounties" element={<AppBountiesPage />} />
               <Route path="leaderboard" element={<LeaderboardPage />} />
 

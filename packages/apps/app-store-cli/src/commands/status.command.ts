@@ -99,26 +99,22 @@ export function registerStatusCommand(program: Command) {
           );
         }
 
-        // ... (The detailed bounty and attestation display logic remains the same and is excellent)
         console.log(
-          `\n   Found ${status.bounties.length} tokenized bounty(s):`,
+          `\n   Found ${status.auditRecords.length} audit record(s):`,
         );
-        if (status.bounties.length > 0) {
-          status.bounties.forEach((bounty, i) => {
-            const bountyStatus = bounty.claimedTimestamp
-              ? '✅ Claimed'
-              : '🟢 Open';
-            console.log(
-              `     💰 [${i + 1}] ${bounty.tokenAmount.toLocaleString()} tokens (${bountyStatus})`,
-            );
-          });
-        } else {
-          console.log('     (None posted for this WASM hash.)');
-        }
-        console.log(`\n   Found ${status.attestations.length} attestation(s):`);
-        if (status.attestations.length > 0) {
-          status.attestations.forEach((att, i) => {
-            console.log(`     🛡️ [${i + 1}] Auditor: ${att.auditor.toText()}`);
+        if (status.auditRecords.length > 0) {
+          status.auditRecords.forEach((record, i) => {
+            // Render output differently based on the record type
+            if (record.type === 'attestation') {
+              console.log(
+                `     ✅ [${i + 1}] Attestation for '${record.audit_type}' by ${record.auditor.toText()}`,
+              );
+            } else if (record.type === 'divergence') {
+              console.log(
+                `     ❌ [${i + 1}] Divergence Reported by ${record.reporter.toText()}`,
+              );
+              console.log(`        Reason: "${record.report}"`);
+            }
           });
         } else {
           console.log(

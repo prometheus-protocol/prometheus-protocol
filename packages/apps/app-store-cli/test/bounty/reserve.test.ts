@@ -23,7 +23,7 @@ vi.mock('../../src/identity.node.js');
 describe('bounty reserve command', () => {
   let program: Command;
   const MOCK_BOUNTY_ID = 123n;
-  const MOCK_AUDIT_TYPE = 'security_v1';
+  const MOCK_AUDIT_TYPE = 'data_safety_v1';
   const MOCK_STAKE_AMOUNT = 100n;
 
   let consoleLogSpy: MockInstance;
@@ -41,8 +41,8 @@ describe('bounty reserve command', () => {
     vi.mocked(identityApi.loadDfxIdentity).mockReturnValue({} as any);
 
     vi.mocked(api.getBounty).mockResolvedValue({
-      bounty_id: MOCK_BOUNTY_ID,
-      challenge_parameters: {
+      bountyId: MOCK_BOUNTY_ID,
+      challengeParameters: {
         Map: [['audit_type', { Text: MOCK_AUDIT_TYPE }]],
       },
     } as any);

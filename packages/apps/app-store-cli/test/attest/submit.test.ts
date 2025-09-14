@@ -21,7 +21,7 @@ describe('attest submit command', () => {
   const MOCK_ATTESTATION_FILE_CONTENT = yaml.dump({
     wasm_hash: MOCK_WASM_HASH,
     metadata: {
-      audit_type: 'security_v1',
+      audit_type: 'data_safety_v1',
       report_url: 'https://example.com/report.pdf',
       score: 95,
       summary: 'The canister is well-written and secure.',
@@ -37,19 +37,6 @@ describe('attest submit command', () => {
     // Mock API and filesystem
     vi.mocked(api.fileAttestation).mockResolvedValue(undefined);
     vi.mocked(identityApi.getCurrentIdentityName).mockReturnValue('default');
-    vi.mocked(api.serializeToIcrc16Map).mockImplementation((obj) => {
-      const map = new Map<string, any>();
-      for (const [key, value] of Object.entries(obj)) {
-        if (Array.isArray(value)) {
-          map.set(key, { Array: value.map((v) => ({ Text: v })) });
-        } else if (typeof value === 'number') {
-          map.set(key, { Nat: value });
-        } else {
-          map.set(key, { Text: value });
-        }
-      }
-      return map as any;
-    });
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue(MOCK_ATTESTATION_FILE_CONTENT);
   });
@@ -59,7 +46,7 @@ describe('attest submit command', () => {
     const cliArgs = [
       'attest',
       'submit',
-      './security_v1_attestation.yml',
+      './data_safety_v1_attestation.yml',
       '--bounty-id',
       MOCK_BOUNTY_ID.toString(), // CLI args are strings
     ];
@@ -73,10 +60,14 @@ describe('attest submit command', () => {
     expect(callArgs.bounty_id).toBe(MOCK_BOUNTY_ID);
 
     // Existing assertions are still valid and important
-    expect(callArgs.wasm_hash).toBe(MOCK_WASM_HASH);
-    const metadataMap = new Map(callArgs.metadata);
-    expect(metadataMap.get('audit_type')).toEqual({ Text: 'security_v1' });
-    expect(metadataMap.get('score')).toEqual({ Nat: 95 });
+    expect(callArgs.wasm_id).toBe(MOCK_WASM_HASH);
+    expect(callArgs.attestationData).toEqual({
+      audit_type: 'data_safety_v1',
+      report_url: 'https://example.com/report.pdf',
+      score: 95,
+      summary: 'The canister is well-written and secure.',
+      issues_found: [],
+    });
   });
 
   it('should fail if the specified file does not exist', async () => {

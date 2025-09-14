@@ -1,99 +1,41 @@
 import { Identity } from '@dfinity/agent';
 import { toNullable } from '@dfinity/utils';
-import { mapTokenMetadata } from '@dfinity/ledger-icrc';
 import { Principal } from '@dfinity/principal';
 import { getIcrcActor } from '../actors.js';
-
-export interface TokenInfo {
-  canisterId: Principal;
-  name: string;
-  symbol: string;
-  decimals: number;
-}
-
-// --- Module-level Cache ---
-// MODIFIED: Use a Map to cache info for multiple tokens.
-const tokenInfoCache = new Map<string, TokenInfo>();
-
-// --- Helper Functions ---
-const convertAmountToBigInt = (amount: number, decimals: number): bigint => {
-  const [integer, fraction = ''] = String(amount).split('.');
-  const paddedFraction = fraction.padEnd(decimals, '0');
-  return BigInt(integer + paddedFraction);
-};
-
-const convertBigIntToAmount = (amount: bigint, decimals: number): number => {
-  return Number(amount) / 10 ** decimals;
-};
+import { Token } from '../tokens.js';
 
 /**
- * Fetches the ICRC token's full info (name, symbol, decimals) from its metadata.
- * Implements a Map-based cache to avoid redundant calls for multiple tokens.
+ * This module provides generic, reusable functions for interacting with any ICRC-1 or
+ * ICRC-2 compliant token canister.
+ *
+ * PHILOSOPHY:
+ * - It consumes the `Token` objects defined in the central `tokens.ts` module.
+ * - It works with atomic units (bigint) for all on-chain amounts to ensure precision.
+ * - The UI layer is responsible for converting these atomic bigints into human-readable
+ *   strings using the methods provided by the `Token` object (e.g., `token.fromAtomic()`).
  */
-export const getTokenInfo = async (
-  identity: Identity,
-  icrc2CanisterId: Principal,
-): Promise<TokenInfo> => {
-  const canisterIdText = icrc2CanisterId.toText();
-  // MODIFIED: Check the Map for a cached entry.
-  if (tokenInfoCache.has(canisterIdText)) {
-    return tokenInfoCache.get(canisterIdText)!;
-  }
 
-  const icrcActor = getIcrcActor(icrc2CanisterId, identity);
-  const metadata = await icrcActor.icrc1_metadata();
-
-  const mappedMeta = mapTokenMetadata(metadata);
-
-  if (!mappedMeta) {
-    throw new Error('Token metadata not found or invalid.');
-  }
-
-  const decimalsValue = mappedMeta['decimals'];
-  const nameValue = mappedMeta['name'];
-  const symbolValue = mappedMeta['symbol'];
-
-  if (decimalsValue === undefined || !nameValue || !symbolValue) {
-    throw new Error(
-      'Required token metadata (name, symbol, decimals) not found.',
-    );
-  }
-
-  const tokenInfo: TokenInfo = {
-    canisterId: icrc2CanisterId,
-    name: nameValue,
-    symbol: symbolValue,
-    decimals: Number(decimalsValue),
-  };
-
-  // MODIFIED: Store the result in the Map.
-  tokenInfoCache.set(canisterIdText, tokenInfo);
-  return tokenInfo;
-};
+// --- ICRC-2 (Allowance) Functions ---
 
 /**
- * Calls the icrc2_approve method on the specified ledger canister.
+ * Calls the `icrc2_approve` method on the specified ledger canister.
+ * @param amount The human-readable amount to approve (e.g., 10.5).
+ * @returns The approval transaction ID as a bigint.
  */
 export const approveAllowance = async (
   identity: Identity,
-  amount: number,
-  spenderPrincipal: Principal,
-  icrc2CanisterId: Principal,
-) => {
-  const icrcActor = getIcrcActor(icrc2CanisterId, identity);
-
-  // --- THE FIX ---
-  // MODIFIED: Dynamically fetch the decimals instead of hardcoding them.
-  const { decimals } = await getTokenInfo(identity, icrc2CanisterId);
-  const amountToApprove = convertAmountToBigInt(amount, decimals);
+  token: Token,
+  spender: Principal,
+  amount: number | string,
+): Promise<bigint> => {
+  const icrcActor = getIcrcActor(token.canisterId, identity);
+  // 2. Use the token's own method for conversion. No more redundant helpers.
+  const amountToApprove = token.toAtomic(amount);
 
   const args = {
-    spender: {
-      owner: spenderPrincipal,
-      subaccount: toNullable<Uint8Array>(),
-    },
+    spender: { owner: spender, subaccount: toNullable<Uint8Array>() },
     amount: amountToApprove,
-    fee: toNullable<bigint>(),
+    fee: toNullable<bigint>(), // Let the ledger assign the default fee
     memo: toNullable<Uint8Array>(),
     created_at_time: toNullable<bigint>(),
     from_subaccount: toNullable<Uint8Array>(),
@@ -104,47 +46,84 @@ export const approveAllowance = async (
   const result = await icrcActor.icrc2_approve(args);
 
   if ('Err' in result) {
-    throw new Error(Object.keys(result.Err)[0]);
+    throw new Error(`ICRC-2 approve failed: ${JSON.stringify(result.Err)}`);
   }
 
   return result.Ok;
 };
 
 /**
- * Fetches the user's ckUSDC balance from the ledger.
- */
-export const getBalance = async (
-  identity: Identity,
-  icrc2CanisterId: Principal,
-): Promise<number> => {
-  const icrcActor = getIcrcActor(icrc2CanisterId, identity);
-  const owner = identity.getPrincipal();
-  const { decimals } = await getTokenInfo(identity, icrc2CanisterId);
-
-  const balanceBigInt = await icrcActor.icrc1_balance_of({
-    owner,
-    subaccount: toNullable(),
-  });
-
-  return convertBigIntToAmount(balanceBigInt, decimals);
-};
-
-/**
- * Fetches the user's current ckUSDC allowance for a specific spender.
+ * Fetches the user's current allowance for a specific spender.
+ * @returns The allowance as a bigint in the token's atomic unit.
  */
 export const getAllowance = async (
   identity: Identity,
+  token: Token,
   spender: Principal,
-  icrc2CanisterId: Principal,
-): Promise<number> => {
-  const icrcActor = getIcrcActor(icrc2CanisterId, identity);
+): Promise<bigint> => {
+  const icrcActor = getIcrcActor(token.canisterId, identity);
   const owner = identity.getPrincipal();
-  const { decimals } = await getTokenInfo(identity, icrc2CanisterId);
 
   const result = await icrcActor.icrc2_allowance({
     account: { owner, subaccount: toNullable() },
     spender: { owner: spender, subaccount: toNullable() },
   });
 
-  return convertBigIntToAmount(result.allowance, decimals);
+  // 3. Return the raw bigint. The UI will format it.
+  return result.allowance;
+};
+
+// --- ICRC-1 (Core) Functions ---
+
+/**
+ * Fetches the user's balance for a given ICRC-1 token.
+ * @returns The balance as a bigint in the token's atomic unit.
+ */
+export const getBalance = async (
+  identity: Identity,
+  token: Token,
+): Promise<bigint> => {
+  const icrcActor = getIcrcActor(token.canisterId, identity);
+  const owner = identity.getPrincipal();
+
+  const balanceBigInt = await icrcActor.icrc1_balance_of({
+    owner,
+    subaccount: toNullable(),
+  });
+
+  // 4. Return the raw bigint.
+  return balanceBigInt;
+};
+
+/**
+ * Performs a generic ICRC-1 transfer.
+ * @param amount The human-readable amount to transfer (e.g., 10.5).
+ * @returns The transaction ID (`bigint`) of the successful transfer.
+ */
+export const icrc1Transfer = async (
+  identity: Identity,
+  token: Token,
+  to: Principal,
+  amount: number | string,
+): Promise<bigint> => {
+  const icrcActor = getIcrcActor(token.canisterId, identity);
+  // 5. Use the token's own method for conversion.
+  const amountToSend = token.toAtomic(amount);
+
+  const transferArgs = {
+    to: { owner: to, subaccount: toNullable<Uint8Array>() },
+    amount: amountToSend,
+    fee: toNullable<bigint>(), // Let the ledger assign the default fee
+    memo: toNullable<Uint8Array>(),
+    created_at_time: toNullable<bigint>(),
+    from_subaccount: toNullable<Uint8Array>(),
+  };
+
+  const result = await icrcActor.icrc1_transfer(transferArgs);
+
+  if ('Err' in result) {
+    throw new Error(`ICRC-1 transfer failed: ${JSON.stringify(result.Err)}`);
+  }
+
+  return result.Ok;
 };

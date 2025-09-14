@@ -13,12 +13,12 @@ export interface TierUiInfo {
 }
 
 export const getTierInfo = (
-  tier: AppStoreDetails['securityTier'],
+  tier: AppStoreDetails['latestVersion']['securityTier'],
 ): TierUiInfo => {
   if (tier === 'Gold') {
     return {
       name: 'Gold Verified',
-      description: 'Passed all available audits, including security.',
+      description: 'Passed all available audits.',
       textColorClass: 'text-primary',
       borderColorClass: 'border-primary/50',
       Icon: ShieldCheck,
@@ -54,7 +54,7 @@ export const getTierInfo = (
       borderColorClass: 'border-border',
       Icon: ShieldQuestion,
       mascotText:
-        "This one's from the community and hasn't been audited by us yet.",
+        "This one's from the community and hasn't been fully audited yet.",
     };
   }
 

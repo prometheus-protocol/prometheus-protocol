@@ -1,0 +1,56 @@
+import { getBalance, icrc1Transfer, Token } from '@prometheus-protocol/ic-js';
+import { Principal } from '@dfinity/principal';
+import { useQuery } from '@tanstack/react-query';
+import useMutation from './useMutation';
+import { useInternetIdentity } from 'ic-use-internet-identity';
+
+/**
+ * A generic React Query hook to fetch the current user's balance for any ICRC-1 token.
+ *
+ * @param token The Token object (from the token registry) for which to fetch the balance.
+ */
+export const useTokenBalance = (token: Token | undefined) => {
+  const { identity } = useInternetIdentity();
+  const principal = identity?.getPrincipal();
+
+  return useQuery({
+    // The query key includes the token's canister ID to ensure balances are cached separately.
+    queryKey: [
+      'balance',
+      identity?.getPrincipal().toText(),
+      token?.canisterId?.toText(),
+    ],
+    queryFn: async () => {
+      if (!principal || !token) {
+        throw new Error('User or token is not available.');
+      }
+      // Uses the generic `getBalance` function from the ic-js layer.
+      return getBalance(identity!, token);
+    },
+    // The query is only enabled when both the user and the token are defined.
+    enabled: !!principal && !!token,
+    // Optional: Refetch periodically to keep the balance fresh.
+    refetchInterval: 30000,
+  });
+};
+
+interface TransferArgs {
+  token: Token;
+  to: Principal;
+  amount: number;
+}
+
+export const useTransfer = () => {
+  const { identity } = useInternetIdentity();
+
+  return useMutation<TransferArgs, bigint>({
+    queryKeysToRefetch: [['balance', identity?.getPrincipal().toText()]],
+    mutationFn: async (args: TransferArgs) => {
+      if (!identity) {
+        throw new Error('User is not authenticated');
+      }
+      // Perform the transfer using the shared library function
+      return await icrc1Transfer(identity, args.token, args.to, args.amount);
+    },
+  });
+};

@@ -77,7 +77,6 @@ export default function ConnectionDetailsPage() {
         spenderPrincipal={server.service_principals[0]}
         onSuccess={() => toast.success('Allowance updated successfully!')}
         submitButtonText="Update Allowance"
-        isSetupFlow={false} // <-- Tell it this is NOT the setup flow
       />
 
       <div className="mt-12 border-t pt-6">

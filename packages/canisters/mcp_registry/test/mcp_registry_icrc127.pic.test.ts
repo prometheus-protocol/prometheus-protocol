@@ -37,7 +37,7 @@ import type { _SERVICE as AuditHubService } from '@declarations/audit_hub/audit_
 const REGISTRY_WASM_PATH = path.resolve(
   __dirname,
   '../../../../',
-  '.dfx/local/canisters/mcp_registry/mcp_registry.wasm',
+  '.dfx/local/canisters/mcp_registry/mcp_registry.wasm.gz',
 );
 const LEDGER_WASM_PATH = path.resolve(
   __dirname,
@@ -68,7 +68,7 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
   const wasmHashToVerify = new Uint8Array([10, 11, 12]);
   const wasmIdToVerify = Buffer.from(wasmHashToVerify).toString('hex');
   const bountyAmount = 500_000n;
-  const reputationTokenId = 'security_v1';
+  const reputationTokenId = 'data_safety_v1';
   const reputationStakeAmount = 100n;
 
   // Use beforeEach to get a clean state for every test

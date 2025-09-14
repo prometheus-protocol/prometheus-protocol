@@ -1,155 +1,33 @@
 import { Certificate, HttpAgent, Identity } from '@dfinity/agent';
-import {
-  getAuditHubActor,
-  getOrchestratorActor,
-  getRegistryActor,
-} from '../actors.js';
-import { AuditHub, Registry } from '@prometheus-protocol/declarations';
+import { getOrchestratorActor, getRegistryActor } from '../actors.js';
+import { Registry } from '@prometheus-protocol/declarations';
 import { Principal } from '@dfinity/principal';
 import {
   AppListing,
-  BountyListingRequest,
-  BountyStatus,
   CanisterType,
   GetCanisterTypesRequest,
   ICRC16Map,
-  PendingSubmission,
-  VerificationOutcome,
-  VerificationRequest,
 } from '@prometheus-protocol/declarations/mcp_registry/mcp_registry.did.js';
-import { calculateSecurityTier, nsToDate } from '../utils.js';
+import {
+  AppStoreDetails,
+  AppVersionDetails,
+  buildServerUrl,
+  DataSafetyPoint,
+  ServerTool,
+} from './audit.api.js';
+import {
+  processAttestation,
+  processAuditRecord,
+  processBounty,
+  processVerificationRecord,
+  processVerificationRequest,
+  uint8ArrayToHex,
+} from '../utils.js';
 import { fromNullable, toNullable } from '@dfinity/utils';
-import { deserializeFromIcrc16Map, deserializeIcrc16Value } from '../icrc16.js';
+import { canisterId } from '@prometheus-protocol/declarations/app_bounties/index.js';
+import { deserializeFromIcrc16Map } from '../icrc16.js';
 
 export type { Registry };
-
-// 1. Define a new, clean interface for a processed attestation.
-// The raw `metadata` is replaced with a simple `payload` object.
-export interface ProcessedAttestation {
-  audit_type: string;
-  timestamp: bigint;
-  auditor: Principal;
-  payload: Record<string, any>; // The deserialized metadata
-}
-
-// This is our new, clean, UI-friendly interface for a bounty.
-export interface ProcessedBounty {
-  id: bigint;
-  creator: Principal;
-  created: Date; // Converted from bigint
-  tokenAmount: bigint;
-  tokenCanisterId: Principal;
-  metadata: Record<string, any>; // Deserialized
-  challengeParameters: Record<string, any>; // Deserialized
-  validationCanisterId: Principal;
-  validationCallTimeout: bigint;
-  payoutFee: bigint;
-  claims: any[]; // Assuming ClaimRecord is not yet typed
-  claimedTimestamp?: bigint; // Unwrapped from Opt
-  claimedDate?: Date; // Unwrapped and converted
-  timeoutDate?: Date; // Unwrapped and converted
-}
-
-export interface ProcessedVerificationRequest {
-  repo: string;
-  commit_hash: string;
-  wasm_hash: string;
-  metadata: Record<string, any>; // Deserialized metadata
-}
-
-// Update the VerificationStatus interface to use our new clean type.
-export interface VerificationStatus {
-  isVerified: boolean;
-  verificationRequest: ProcessedVerificationRequest | null;
-  attestations: ProcessedAttestation[];
-  bounties: ProcessedBounty[];
-}
-
-/**
- * Fetches and PROCESSES the verification status for a given WASM hash.
- * @returns An object containing the final verification status and a list of
- *          fully deserialized attestations.
- */
-export const getVerificationStatus = async (
-  wasmId: string, // Lowercase hex string ID of the WASM
-): Promise<VerificationStatus> => {
-  const registryActor = getRegistryActor();
-
-  const [
-    isVerifiedResult,
-    verificationResult,
-    attestationsResult,
-    bountiesResult,
-  ] = await Promise.all([
-    registryActor.is_wasm_verified(wasmId),
-    registryActor.get_verification_request(wasmId),
-    registryActor.get_attestations_for_wasm(wasmId),
-    registryActor.get_bounties_for_wasm(wasmId),
-  ]);
-
-  const verificationRequest = fromNullable(verificationResult);
-
-  const processedRequest: ProcessedVerificationRequest | null =
-    verificationRequest
-      ? {
-          repo: verificationRequest.repo,
-          commit_hash: Buffer.from(verificationRequest.commit_hash).toString(
-            'hex',
-          ),
-          wasm_hash: Buffer.from(verificationRequest.wasm_hash).toString('hex'),
-          metadata: deserializeFromIcrc16Map(verificationRequest.metadata),
-        }
-      : null;
-
-  // 3. Process the attestations right here, in the API layer.
-  const processedAttestations: ProcessedAttestation[] = attestationsResult.map(
-    (att): ProcessedAttestation => ({
-      audit_type: att.audit_type,
-      timestamp: att.timestamp,
-      auditor: att.auditor,
-      // The deserialization happens here!
-      payload: deserializeFromIcrc16Map(att.metadata),
-    }),
-  );
-
-  const processedBounties: ProcessedBounty[] = bountiesResult.map(
-    (bounty): ProcessedBounty => {
-      const claimedDateNs = fromNullable(bounty.claimed_date);
-      const timeoutDateNs = fromNullable(bounty.timeout_date);
-
-      return {
-        // Map snake_case to camelCase and transform data
-        id: bounty.bounty_id,
-        creator: bounty.creator,
-        created: nsToDate(bounty.created),
-        tokenAmount: bounty.token_amount,
-        tokenCanisterId: bounty.token_canister_id,
-        validationCanisterId: bounty.validation_canister_id,
-        validationCallTimeout: bounty.validation_call_timeout,
-        payoutFee: bounty.payout_fee,
-        claims: bounty.claims, // Pass through for now
-
-        // Deserialize ICRC-16 maps
-        metadata: deserializeFromIcrc16Map(bounty.bounty_metadata),
-        challengeParameters: deserializeIcrc16Value(
-          bounty.challenge_parameters,
-        ),
-
-        // Unwrap optional values
-        claimedTimestamp: fromNullable(bounty.claimed),
-        claimedDate: claimedDateNs ? nsToDate(claimedDateNs) : undefined,
-        timeoutDate: timeoutDateNs ? nsToDate(timeoutDateNs) : undefined,
-      };
-    },
-  );
-
-  return {
-    isVerified: isVerifiedResult,
-    verificationRequest: processedRequest,
-    attestations: processedAttestations,
-    bounties: processedBounties,
-  };
-};
 
 /**
  * Submits a new WASM for verification.
@@ -161,10 +39,7 @@ export const submitVerificationRequest = async (
   args: Registry.VerificationRequest,
 ): Promise<bigint> => {
   const registryActor = getRegistryActor(identity);
-  const result = await registryActor.icrc126_verification_request({
-    ...args,
-    metadata: [], // Metadata can be added later if needed
-  });
+  const result = await registryActor.icrc126_verification_request(args);
 
   return result;
 };
@@ -373,7 +248,7 @@ export const getVersions = async (
 
   return results.map((wasm) => ({
     version: wasm.version_number.join('.'),
-    wasm_hash: Buffer.from(wasm.hash).toString('hex'),
+    wasm_hash: uint8ArrayToHex(wasm.hash as Uint8Array),
     description: wasm.description,
     date_added: new Date(Number(wasm.created / 1_000_000n)), // Convert nanoseconds to milliseconds
     is_deprecated: wasm.deprecated,
@@ -445,221 +320,6 @@ export const getControllers = async (
 
   // The result is an array of principals; convert them to text for display.
   return results[0].controllers.map((p: Principal) => p.toText());
-};
-
-export interface CreateBountyArgs {
-  wasm_hash: Uint8Array;
-  audit_type: string;
-  amount: bigint;
-  token_canister_id: Principal;
-  timeout_date: bigint; // Nanoseconds from epoch
-  validation_canister_id: Principal;
-}
-
-/**
- * Creates a new ICRC-127 tokenized bounty for a specific WASM hash and audit type.
- *
- * IMPORTANT: The caller's identity must have already called `icrc2_approve` on the
- * `token_canister_id`, granting the registry canister permission to spend `amount` + fee.
- *
- * @returns The ID of the newly created bounty.
- */
-export const createBounty = async (
-  identity: Identity,
-  args: CreateBountyArgs,
-): Promise<bigint> => {
-  const { wasm_hash, audit_type, amount, token_canister_id, timeout_date } =
-    args;
-
-  const registryActor = getRegistryActor(identity);
-
-  const request: Registry.CreateBountyRequest = {
-    bounty_id: [], // The canister will assign this.
-    validation_canister_id: args.validation_canister_id, // The registry validates its own bounties.
-    timeout_date: timeout_date,
-    start_date: [],
-    challenge_parameters: {
-      Map: [
-        // The wasm_hash must be passed as a Blob (Uint8Array).
-        ['wasm_hash', { Blob: wasm_hash }],
-        ['audit_type', { Text: audit_type }],
-      ],
-    },
-    bounty_metadata: [
-      ['icrc127:reward_canister', { Principal: token_canister_id }],
-      ['icrc127:reward_amount', { Nat: amount }],
-    ],
-  };
-
-  const result = await registryActor.icrc127_create_bounty(request);
-
-  if ('Error' in result) {
-    throw new Error(`Failed to create bounty: ${JSON.stringify(result.Error)}`);
-  }
-
-  return result.Ok.bounty_id;
-};
-
-/**
- * Fetches the full record for a single ICRC-127 bounty.
- * @param bounty_id The ID of the bounty to fetch.
- * @returns The full Bounty record, or undefined if not found.
- */
-export const getBounty = async (
-  bounty_id: bigint,
-): Promise<Registry.Bounty | undefined> => {
-  const registryActor = getRegistryActor();
-  const result = await registryActor.icrc127_get_bounty(bounty_id);
-  return fromNullable(result);
-};
-
-export const getBountyLock = async (
-  bounty_id: bigint,
-): Promise<AuditHub.BountyLock | undefined> => {
-  const auditHubActor = getAuditHubActor();
-  const result = await auditHubActor.get_bounty_lock(bounty_id);
-  return fromNullable(result);
-};
-
-/**
- * Get the required stake amount for a specific audit type from the Audit Hub.
- * @param audit_type The audit type to check (e.g., "security_v1").
- * @returns The required stake amount, or undefined if no requirement is set.
- */
-export const getStakeRequirement = async (
-  audit_type: string,
-): Promise<bigint | undefined> => {
-  const auditHubActor = getAuditHubActor();
-  const result = await auditHubActor.get_stake_requirement(audit_type);
-  return fromNullable(result);
-};
-
-export interface ReserveBountyArgs {
-  bounty_id: bigint; // The ID of the bounty to reserve
-  token_id: string; // e.g., "security_v1"
-}
-
-/**
- * Stakes reputation tokens to reserve an exclusive lock on a bounty.
- * This is the mandatory first step for an auditor before filing an attestation.
- *
- * @throws If the reservation fails (e.g., insufficient stake, already reserved).
- */
-export const reserveBounty = async (
-  identity: Identity,
-  args: ReserveBountyArgs,
-): Promise<void> => {
-  const { bounty_id, token_id } = args;
-  const auditHubActor = getAuditHubActor(identity);
-
-  const result = await auditHubActor.reserve_bounty(bounty_id, token_id);
-
-  if ('err' in result) {
-    throw new Error(`Failed to reserve bounty: ${JSON.stringify(result.err)}`);
-  }
-};
-
-export interface ClaimBountyArgs {
-  bounty_id: bigint;
-  wasm_id: string; // The lowercase hex string ID of the WASM
-}
-
-/**
- * Claims an open bounty by linking it to an existing attestation.
- * The attestation is identified by the combination of the caller's identity (the auditor)
- * and the wasm_id.
- *
- * @returns The ID of the newly created claim.
- */
-export const claimBounty = async (
-  identity: Identity,
-  args: ClaimBountyArgs,
-): Promise<bigint> => {
-  const { bounty_id, wasm_id } = args;
-  const registryActor = getRegistryActor(identity);
-
-  const request: Registry.BountySubmissionRequest = {
-    account: [
-      {
-        owner: identity.getPrincipal(),
-        subaccount: [],
-      },
-    ],
-    bounty_id: bounty_id,
-    submission: {
-      Map: [['wasm_id', { Text: wasm_id }]],
-    },
-  };
-
-  const result = await registryActor.icrc127_submit_bounty(request);
-
-  if ('Error' in result) {
-    throw new Error(`Failed to claim bounty: ${JSON.stringify(result.Error)}`);
-  }
-
-  return result.Ok.claim_id;
-};
-
-export interface FileAttestationArgs {
-  wasm_hash: string;
-  bounty_id: bigint;
-  metadata: ICRC16Map;
-}
-
-/**
- * Files a new attestation for a specific WASM hash.
- */
-export const fileAttestation = async (
-  identity: Identity,
-  args: FileAttestationArgs,
-): Promise<void> => {
-  const { wasm_hash, bounty_id, metadata } = args;
-  const registryActor = getRegistryActor(identity);
-
-  // Create a new metadata array that includes the required bounty_id.
-  // This ensures the facade check can link the attestation to the lock.
-  const result = await registryActor.icrc126_file_attestation({
-    wasm_id: wasm_hash,
-    metadata: [
-      ...metadata,
-      ['bounty_id', { Nat: bounty_id }], // Ensure the bounty_id is included
-    ],
-  });
-
-  if ('Error' in result) {
-    throw new Error(
-      `Failed to file attestation: ${JSON.stringify(result.Error)}`,
-    );
-  }
-};
-
-export interface FinalizeVerificationArgs {
-  wasm_id: string; // The lowercase hex string ID
-  outcome: VerificationOutcome;
-  metadata: ICRC16Map;
-}
-
-/**
- * Finalizes the verification status of a WASM as a DAO action.
- */
-export const finalizeVerification = async (
-  identity: Identity,
-  args: FinalizeVerificationArgs,
-): Promise<void> => {
-  const { wasm_id, outcome, metadata } = args;
-  const registryActor = getRegistryActor(identity);
-
-  const result = await registryActor.finalize_verification(
-    wasm_id,
-    outcome,
-    metadata,
-  );
-
-  if ('error' in result) {
-    throw new Error(
-      `Failed to finalize verification: ${JSON.stringify(result.error)}`,
-    );
-  }
 };
 
 export interface CreateCanisterTypeArgs {
@@ -815,206 +475,37 @@ export const getCanisterTypes = async (
     return [];
   }
 };
+// --- 1. DEFINE THE NEW, SUPERIOR TYPESCRIPT INTERFACES ---
 
-export interface ServerTool {
-  name: string;
-  description: string;
-  cost: string;
-  tokenSymbol: string;
-}
-
-export interface DataSafetyPoint {
-  title: string;
-  description: string;
-}
-
-export interface ServerSecurityIssue {
-  severity: string;
-  description: string;
-}
-
-export interface AppStoreDetails {
-  id: string;
-  name: string;
-  publisher: string;
-  serverUrl: string;
-  category: string;
-  securityTier: SecurityTier;
-  iconUrl: string;
-  bannerUrl: string;
-  galleryImages: string[];
-  description: string;
-  keyFeatures: string[];
-  whyThisApp: string;
-  tags: string[];
-  tools: ServerTool[];
-  dataSafety: {
-    description: string;
-    points: DataSafetyPoint[];
-  };
-  security: {
-    summary: string;
-    issuesFound: ServerSecurityIssue[];
-  };
-  reviews: any[]; // To be implemented later
-}
-
-/**
- * The server url is the url of the canister, with the app_info.path appended.
- * We should handle local development and mainnet URLs.
- */
-function buildServerUrl(canisterId: Principal, path: string): string {
-  const isLocal = process.env.DFX_NETWORK !== 'ic';
-  const baseUrl = isLocal
-    ? `http://localhost:4943/?canisterId=${canisterId.toText()}`
-    : `https://${canisterId.toText()}.icp0.io`;
-
-  // Create a URL object from the base URL to safely manipulate its parts.
-  const url = new URL(baseUrl);
-
-  // Set the pathname. This is the key fix.
-  // It correctly preserves the existing query string for the local environment
-  // and adds the path for the mainnet environment.
-  url.pathname = path;
-
-  return url.toString();
-}
-
-/**
- * Fetches and assembles all on-chain data for a specific WASM hash.
- * This is the primary function for the App Details page.
- * @param wasmId The lowercase hex string ID of the WASM.
- */
-export const getAppDetailsByHash = async (
-  wasmId: string,
-): Promise<AppStoreDetails> => {
-  // Initialize a complete, type-safe default object.
-  const details: AppStoreDetails = {
-    id: wasmId,
-    name: '',
-    publisher: '',
-    serverUrl: '',
-    category: '',
-    securityTier: 'Unranked', // Default to 'Unranked' if not set
-    iconUrl: '',
-    bannerUrl: '',
-    galleryImages: [],
-    description: '',
-    keyFeatures: [],
-    whyThisApp: '',
-    tags: [],
-    tools: [],
-    dataSafety: {
-      description: '',
-      points: [],
-    },
-    security: {
-      summary: '',
-      issuesFound: [],
-    },
-    reviews: [],
-  };
-
-  const registryActor = getRegistryActor();
-
-  try {
-    // 1. Fetch attestations and correctly handle the Result variant.
-    const attestationsResult =
-      await registryActor.get_attestations_for_wasm(wasmId);
-
-    const attestations = attestationsResult;
-
-    // 2. Loop through attestations and explicitly map data.
-    const completedAuditTypes: string[] = [];
-    for (const attestation of attestations) {
-      completedAuditTypes.push(attestation.audit_type);
-      const payload = deserializeFromIcrc16Map(attestation.metadata);
-
-      switch (attestation.audit_type) {
-        case 'app_info_v1':
-          console.log(
-            `Processing attestation of type ${attestation.audit_type}:`,
-            payload,
-          );
-          const serverUrl = buildServerUrl(
-            Principal.fromText(payload.canister_id),
-            payload.mcp_path || '',
-          );
-          // Explicitly assign each property with a safe fallback.
-          details.name = payload.name || '';
-          details.publisher = payload.publisher || '';
-          details.serverUrl = serverUrl;
-          details.category = payload.category || '';
-          details.iconUrl = payload.icon_url || '';
-          details.bannerUrl = payload.banner_url || '';
-          details.galleryImages = payload.gallery_images || [];
-          details.description = payload.description || '';
-          details.keyFeatures = payload.key_features || [];
-          details.whyThisApp = payload.why_this_app || '';
-          details.tags = payload.tags || [];
-          break;
-
-        case 'security_v1':
-          details.security.summary = payload.summary || '';
-          if (payload.issues_found && Array.isArray(payload.issues_found)) {
-            details.security.issuesFound = payload.issues_found;
-          }
-          break;
-
-        case 'tools_v1': // Assuming the type is 'tools_v1' from the CLI template
-          if (payload.tools && Array.isArray(payload.tools)) {
-            details.tools = payload.tools;
-          }
-          break;
-
-        case 'data_safety_v1':
-          // This was already good, but we'll ensure it's consistent.
-          details.dataSafety = {
-            description: payload.overall_description || '', // Match template key
-            points: payload.data_points || [], // Match template key
-          };
-          break;
-
-        case 'build_reproducibility_v1':
-          if (payload.status) {
-            details.dataSafety.points.push({
-              title: 'Build Reproducibility',
-              description:
-                payload.status === 'success'
-                  ? 'This app has reproducible builds.'
-                  : 'This app does not have reproducible builds.',
-            });
-          }
-          break;
-      }
-    }
-    // 3. Set the security tier based on completed audit types.
-    details.securityTier = calculateSecurityTier(completedAuditTypes);
-  } catch (e) {
-    console.error('Failed to parse attestation payload:', e);
-  }
-
-  return details;
-};
-
+// A clean enum for the security tier on the frontend.
 export type SecurityTier = 'Gold' | 'Silver' | 'Bronze' | 'Unranked';
 
-// Define the structure for the app cards on the discovery page
+// Represents the details of the latest version of an app.
+export interface AppVersionSummary {
+  wasmId: string; // The WASM Hash of this version
+  versionString: string; // e.g., "1.2.0"
+  securityTier: SecurityTier;
+  status: 'Rejected' | 'Verified' | 'Pending';
+}
+
+// The new, primary data structure for the app store's list view.
+// The `namespace` is now the stable, primary identifier.
 export interface AppStoreListing {
-  id: string; // This is the hex string of the WASM hash
+  // --- Stable App Identity ---
   namespace: string;
   name: string;
   description: string;
-  category: string; // e.g., "DeFi", "Social", etc.
-  securityTier: SecurityTier;
+  category: string;
   publisher: string;
   iconUrl: string;
   bannerUrl: string;
+
+  // --- Details of the Latest Published Version ---
+  latestVersion: AppVersionSummary;
 }
 
-function unwrapSecurityTier(
-  tierVariant: AppListing['security_tier'],
-): SecurityTier {
+// Helper function to unwrap the Motoko variant into a simple string.
+function unwrapSecurityTier(tierVariant: Registry.SecurityTier): SecurityTier {
   if ('Gold' in tierVariant) return 'Gold';
   if ('Silver' in tierVariant) return 'Silver';
   if ('Bronze' in tierVariant) return 'Bronze';
@@ -1026,186 +517,169 @@ function unwrapSecurityTier(
  * from the canister's `get_app_listings` method.
  */
 export const getAppStoreListings = async (): Promise<AppStoreListing[]> => {
-  // 1. Get the actor using the established pattern.
   const registryActor = getRegistryActor();
 
   try {
-    // 2. Call the new, powerful canister method with an empty request to get all listings.
     const result = await registryActor.get_app_listings({
       filter: [],
       prev: [],
       take: [],
     });
 
-    // 3. Handle the canister's Result<T, E> response.
     if ('err' in result) {
       console.error('Failed to fetch app listings from canister:', result.err);
-      return []; // Return empty array on canister-level error
+      return [];
     }
 
     const canisterListings: AppListing[] = result.ok || [];
 
-    // 4. Map the canister's snake_case response to our camelCase TypeScript interface.
-    // This keeps the UI layer clean and consistent.
+    // --- 2. UPDATE THE MAPPING LOGIC TO BUILD THE NEW STRUCTURE ---
     return canisterListings.map(
       (item): AppStoreListing => ({
-        id: item.id,
+        // --- Map the stable, top-level properties ---
         namespace: item.namespace,
         name: item.name,
         description: item.description,
         publisher: item.publisher,
-        iconUrl: item.icon_url, // Mapping snake_case to camelCase
-        bannerUrl: item.banner_url, // Mapping snake_case to camelCase
+        iconUrl: item.icon_url,
+        bannerUrl: item.banner_url,
         category: item.category,
-        securityTier: unwrapSecurityTier(item.security_tier),
+
+        // --- Map the nested, version-specific properties ---
+        latestVersion: {
+          wasmId: item.latest_version.wasm_id,
+          versionString: item.latest_version.version_string,
+          securityTier: unwrapSecurityTier(item.latest_version.security_tier),
+          status: unwrapVersionStatus(item.latest_version.status),
+        },
       }),
     );
   } catch (error) {
     console.error(`Error calling get_app_listings:`, error);
-    // Return an empty array on network/agent-level failure so the UI doesn't break.
     return [];
   }
 };
+// --- 1. CREATE A DEDICATED HELPER FOR MAPPING THE VERSION DETAILS ---
+// This function's only job is to convert the canister's version object to the TS version object.
 
-// 1. Define the new, more powerful filter types that match the canister.
-// Using a discriminated union in TypeScript is the perfect way to model this.
-type BountyStatusInput = 'Open' | 'Claimed';
-export type BountyFilterInput =
-  | { status: BountyStatusInput }
-  | { audit_type: string }
-  | { creator: Principal };
+function mapCanisterVersionToTS(
+  canisterVersion: Registry.AppVersionDetails, // This is the type from your .did.js file
+  serverUrl: string,
+): AppVersionDetails {
+  const principaId = fromNullable(canisterVersion.build_info.canister_id)
+    ? Principal.fromText(canisterVersion.build_info.canister_id[0]!)
+    : undefined;
 
-export interface ListBountiesRequestInput {
-  filter?: BountyFilterInput[];
-  take?: bigint;
-  prev?: bigint;
+  return {
+    wasmId: canisterVersion.wasm_id,
+    versionString: canisterVersion.version_string,
+    status: unwrapVersionStatus(canisterVersion.status),
+    securityTier: unwrapSecurityTier(canisterVersion.security_tier),
+    buildInfo: {
+      status: canisterVersion.build_info.status as
+        | 'success'
+        | 'failure'
+        | 'unknown',
+      gitCommit: fromNullable(canisterVersion.build_info.git_commit),
+      repoUrl: fromNullable(canisterVersion.build_info.repo_url),
+      canisterId: principaId,
+      failureReason: fromNullable(canisterVersion.build_info.failure_reason),
+    },
+    canisterId: principaId!,
+    serverUrl,
+    tools: canisterVersion.tools.map(deserializeFromIcrc16Map) as ServerTool[],
+    dataSafety: {
+      overallDescription: canisterVersion.data_safety.overall_description,
+      dataPoints: canisterVersion.data_safety.data_points.map(
+        deserializeFromIcrc16Map,
+      ) as DataSafetyPoint[],
+    },
+    bounties: canisterVersion.bounties.map(processBounty),
+    // Use a more generic name like `processAuditRecord` that handles both types
+    auditRecords: canisterVersion.audit_records.map(processAuditRecord),
+  };
+}
+
+// export type AppListingStatus =
+//   | { Rejected: { reason: string } }
+//   | { Verified: null }
+//   | { Pending: null };
+
+// --- 2. CREATE A DEDICATED HELPER FOR MAPPING THE VERSION SUMMARY ---
+function unwrapVersionStatus(
+  statusVariant: Registry.AppListingStatus,
+): 'Rejected' | 'Verified' | 'Pending' {
+  if ('Rejected' in statusVariant) return 'Rejected';
+  if ('Verified' in statusVariant) return 'Verified';
+  return 'Pending';
+}
+
+// This function maps the canister's version summary to our TS version summary.
+function mapCanisterVersionSummaryToTS(
+  canisterSummary: Registry.AppVersionSummary, // Type from .did.js
+): AppVersionSummary {
+  return {
+    wasmId: canisterSummary.wasm_id,
+    versionString: canisterSummary.version_string,
+    securityTier: unwrapSecurityTier(canisterSummary.security_tier),
+    status: unwrapVersionStatus(canisterSummary.status),
+  };
 }
 
 /**
- * Request parameters for the new list_bounties canister endpoint.
+ * Fetches and assembles all on-chain data for a specific app using its stable namespace.
+ * This is the new, primary function for the App Details page.
+ * @param namespace The reverse-DNS style namespace of the app (e.g., "com.wallet.infinity").
  */
-export interface ListBountiesRequest {
-  filter?: BountyFilterInput[];
-  take?: bigint;
-  prev?: bigint; // The bounty_id of the last item from the previous page
-}
+export const getAppDetailsByNamespace = async (
+  namespace: string,
+  wasmId?: string,
+): Promise<AppStoreDetails | null> => {
+  const registryActor = getRegistryActor();
 
-/**
- * Fetches a paginated and filtered list of all bounties from the registry.
- * This function processes the raw canister data into a clean, developer-friendly format.
- * @param identity The identity to use for the call (can be anonymous).
- * @param request The filter and pagination options for the query.
- */
-export const listBounties = async (
-  identity: Identity,
-  request: ListBountiesRequest,
-): Promise<ProcessedBounty[]> => {
-  const registryActor = getRegistryActor(identity);
   try {
-    // 2. Transform the user-friendly request object into the format Candid expects.
-    const requestFilters =
-      request.filter?.map((f) => {
-        if ('status' in f) {
-          // We explicitly create the correct object shape in each branch.
-          // The compiler can now correctly infer the type.
-          let statusVariant;
-          if (f.status === 'Open') {
-            statusVariant = { Open: null };
-          } else {
-            // It must be 'Claimed'
-            statusVariant = { Claimed: null };
-          }
-          return { status: statusVariant };
-        }
-        if ('audit_type' in f) {
-          return { audit_type: f.audit_type };
-        }
-        if ('creator' in f) {
-          return { creator: f.creator };
-        }
-        throw new Error(`Invalid filter provided: ${JSON.stringify(f)}`);
-      }) || [];
+    const result = await registryActor.get_app_details_by_namespace(
+      namespace,
+      toNullable(wasmId),
+    );
 
-    const candidRequest: BountyListingRequest = {
-      filter: toNullable(requestFilters),
-      take: toNullable(request.take),
-      prev: toNullable(request.prev),
-    };
-
-    // 3. Call the new canister endpoint.
-    const result = await registryActor.list_bounties(candidRequest);
-
-    // 4. Handle the Result<> type returned by the canister.
     if ('err' in result) {
-      // If the canister returns an error, throw it to be caught by the catch block.
-      throw new Error(`Canister returned an error: ${result.err}`);
+      console.error(
+        `Failed to fetch details for namespace "${namespace}":`,
+        result.err,
+      );
+      return null;
     }
-    const rawBounties = result.ok;
 
-    // 5. The processing logic remains the same, but now operates on the successful result.
-    return rawBounties.map((bounty): ProcessedBounty => {
-      const claimedDateNs = fromNullable(bounty.claimed_date);
-      const timeoutDateNs = fromNullable(bounty.timeout_date);
+    const canisterDetails = result.ok;
 
-      return {
-        id: bounty.bounty_id,
-        creator: bounty.creator,
-        created: nsToDate(bounty.created),
-        tokenAmount: bounty.token_amount,
-        tokenCanisterId: bounty.token_canister_id,
-        validationCanisterId: bounty.validation_canister_id,
-        validationCallTimeout: bounty.validation_call_timeout,
-        payoutFee: bounty.payout_fee,
-        claims: bounty.claims,
-        metadata: deserializeFromIcrc16Map(bounty.bounty_metadata),
-        challengeParameters: deserializeIcrc16Value(
-          bounty.challenge_parameters,
-        ),
-        claimedTimestamp: fromNullable(bounty.claimed),
-        claimedDate: claimedDateNs ? nsToDate(claimedDateNs) : undefined,
-        timeoutDate: timeoutDateNs ? nsToDate(timeoutDateNs) : undefined,
-      };
-    });
-  } catch (error) {
-    console.error('Error fetching bounties:', error);
-    return [];
-  }
-};
+    // --- 3. THE MAIN FUNCTION IS NOW CLEAN, SIMPLE, AND DECLARATIVE ---
+    return {
+      // --- A. Populate the Stable, Top-Level App Identity ---
+      namespace: canisterDetails.namespace,
+      name: canisterDetails.name,
+      publisher: canisterDetails.publisher,
+      category: canisterDetails.category,
+      iconUrl: canisterDetails.icon_url,
+      bannerUrl: canisterDetails.banner_url,
+      galleryImages: canisterDetails.gallery_images,
+      description: canisterDetails.description,
+      keyFeatures: canisterDetails.key_features,
+      whyThisApp: canisterDetails.why_this_app,
+      tags: canisterDetails.tags,
+      reviews: [], // Placeholder for reviews
 
-// 2. Define the user-friendly request object for our function.
-export interface ListSubmissionsRequest {
-  take?: bigint;
-  prev?: string; // The wasm_id of the last item from the previous page
-}
-
-/**
- * Fetches a paginated list of all WASM submissions that are ready for DAO review.
- * @param identity The identity to use for the call (can be anonymous).
- * @param request The pagination options for the query.
- */
-export const listPendingSubmissions = async (
-  identity: Identity,
-  request: ListSubmissionsRequest,
-): Promise<PendingSubmission[]> => {
-  const registryActor = getRegistryActor(identity);
-  try {
-    // 3. Transform the user-friendly request into the format Candid expects.
-    //    Optional values are wrapped in an array: [] for null, [value] for some.
-    const candidRequest = {
-      take: toNullable(request.take),
-      prev: toNullable(request.prev),
+      // --- B. Delegate all complex mapping to our new helper functions ---
+      latestVersion: mapCanisterVersionToTS(
+        canisterDetails.latest_version,
+        buildServerUrl(canisterDetails.canister_id, canisterDetails.mcp_path),
+      ),
+      allVersions: canisterDetails.all_versions.map(
+        mapCanisterVersionSummaryToTS,
+      ),
     };
-
-    // 4. Call the new canister endpoint.
-    const submissions =
-      await registryActor.list_pending_submissions(candidRequest);
-
-    // 5. The return type from the canister already matches our desired interface,
-    //    so we can return it directly. No complex processing is needed.
-    return submissions;
   } catch (error) {
-    console.error('Error fetching pending submissions:', error);
-    // Return an empty array on failure to prevent the CLI from crashing.
-    return [];
+    console.error(`Error calling get_app_details_by_namespace:`, error);
+    return null;
   }
 };

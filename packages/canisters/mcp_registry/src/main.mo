@@ -26,6 +26,7 @@ import Text "mo:base/Text";
 import Base16 "mo:base16/Base16";
 import ICRC2 "mo:icrc2-types";
 import Map "mo:map/Map";
+import Order "mo:base/Order";
 
 import AppStore "AppStore";
 import AuditHub "AuditHub";
@@ -288,25 +289,22 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   // The new stable variable to store the final word on each wasm_id.
   stable var finalization_log = BTree.init<Text, FinalizationRecord>(null);
 
-  public shared query func is_wasm_verified(wasm_id : Text) : async Bool {
+  private func _is_wasm_verified(wasm_id : Text) : Bool {
     let final_status = BTree.get(finalization_log, Text.compare, wasm_id);
 
     switch (final_status) {
       case (null) {
         // Not yet finalized.
-        Debug.print("[DEBUG] No finalization record found for wasm_id: \"" # wasm_id # "\"");
         return false;
       };
       case (?record) {
         switch (record.outcome) {
           case (#Verified) {
             // Explicitly verified!
-            Debug.print("[DEBUG] Wasm ID \"" # wasm_id # "\" is verified.");
             return true;
           };
           case (#Rejected) {
             // Explicitly rejected.
-            Debug.print("[DEBUG] Wasm ID \"" # wasm_id # "\" is rejected.");
             return false;
           };
         };
@@ -314,77 +312,67 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
   };
 
+  public shared query func is_wasm_verified(wasm_id : Text) : async Bool {
+    _is_wasm_verified(wasm_id);
+  };
+
+  /**
+   * @notice Fetches the single most recent attestation for each audit type for a given WASM.
+   * @dev This function has been refactored to IGNORE the finalization log. In a reputation-
+   *      based system, the stake provided by a trusted auditor is the guarantee of quality,
+   *      making a secondary finalization step unnecessary. This function now returns the
+   *      latest submitted attestation for each type, making the system more responsive.
+   * @param wasm_id The hex string identifier of the WASM.
+   * @return An array containing the most recent `AttestationRecord` for each audit type.
+   */
   private func _get_attestations_for_wasm(wasm_id : Text) : [ICRC126.AttestationRecord] {
 
-    // --- Step 1: Find the timestamp of the last finalization for this WASM ID ---
-    let last_finalization_record = BTree.get(finalization_log, Text.compare, wasm_id);
-
-    let finalization_ts = switch (last_finalization_record) {
-      case (null) {
-        // This WASM has never been finalized. According to the logic, no attestations
-        // are "official" yet. Return an empty array.
-        Debug.print("[DEBUG] No finalization record found for wasm_id: \"" # wasm_id # "\"");
-        return [];
-      };
-      case (?record) {
-        // We found a finalization record, use its timestamp as our cutoff.
-        record.timestamp;
-      };
-    };
-
-    // --- Step 2: Get all audit records for the WASM ID ---
+    // --- Step 1: Get all audit records for the WASM ID ---
     let state = icrc126().state;
     let all_audit_records = switch (Map.get(state.audits, Map.thash, wasm_id)) {
       case (null) {
+        // No audits have ever been filed for this WASM. Return an empty array.
         Debug.print("[DEBUG] No audits found for wasm_id: \"" # wasm_id # "\"");
         return [];
       };
       case (?records) { records };
     };
 
-    // --- Step 3: Filter for attestations created *before or at* the finalization time ---
-    var valid_attestations = Buffer.Buffer<ICRC126.AttestationRecord>(0);
+    // --- Step 2: Find the single most recent attestation for each audit type ---
+    // We use a mutable map to track the latest attestation we've seen for each `audit_type`.
+    // This ensures that even if multiple attestations of the same type exist, only the
+    // newest one is returned.
+    var latest_by_type = Map.new<Text, ICRC126.AttestationRecord>();
+
     for (record in all_audit_records.vals()) {
       switch (record) {
         case (#Attestation(att_record)) {
-          // The core filtering logic: only include attestations "stamped" by the finalization.
-          if (att_record.timestamp <= finalization_ts) {
-            valid_attestations.add(att_record);
+          // This is an attestation record, process it.
+          let existing = Map.get(latest_by_type, Map.thash, att_record.audit_type);
+          switch (existing) {
+            case (null) {
+              // This is the first time we've seen this audit_type, so it's the latest by default.
+              Map.set(latest_by_type, Map.thash, att_record.audit_type, att_record);
+            };
+            case (?prev_att) {
+              // We've seen this type before. If the current one is newer, it replaces the old one.
+              if (att_record.timestamp > prev_att.timestamp) {
+                Map.set(latest_by_type, Map.thash, att_record.audit_type, att_record);
+              };
+            };
           };
         };
-        case (#Divergence(_)) { /* Ignore */ };
-      };
-    };
-
-    // --- Step 4: From the valid attestations, find the single most recent for each type ---
-    // We use a mutable map to track the latest attestation we've seen for each audit_type.
-    var latest_by_type = Map.new<Text, ICRC126.AttestationRecord>();
-
-    for (att in valid_attestations.vals()) {
-      let existing = Map.get(latest_by_type, Map.thash, att.audit_type);
-      switch (existing) {
-        case (null) {
-          // This is the first time we've seen this audit_type, so it's the latest by default.
-          Map.set(latest_by_type, Map.thash, att.audit_type, att);
-        };
-        case (?prev_att) {
-          // We've seen this type before. If the current one is newer, it replaces the old one.
-          if (att.timestamp > prev_att.timestamp) {
-            Map.set(latest_by_type, Map.thash, att.audit_type, att);
-          };
+        case (#Divergence(_)) {
+          // Ignore divergence records for this query.
         };
       };
     };
 
-    // The values of the map now represent the definitive, "official" set of attestations.
+    // The values of the map now represent the definitive, most up-to-date set of attestations.
     return Iter.toArray(Map.vals(latest_by_type));
   };
 
-  public shared query func get_attestations_for_wasm(wasm_id : Text) : async [ICRC126.AttestationRecord] {
-    _get_attestations_for_wasm(wasm_id);
-  };
-
-  public shared query func get_bounties_for_wasm(wasm_id : Text) : async [ICRC127.Bounty] {
+  private func _get_bounties_for_wasm(wasm_id : Text) : [ICRC127.Bounty] {
     let state = icrc127().state;
     var matching_bounties : [ICRC127.Bounty] = [];
 
@@ -425,36 +413,47 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     return matching_bounties;
   };
 
-  private func has_attestation(wasm_id : Text, audit_type : Text) : Bool {
-    // 1. Get the current state from the ICRC-126 library instance.
-    let state = icrc126().state;
+  public shared query func get_bounties_for_wasm(wasm_id : Text) : async [ICRC127.Bounty] {
+    return _get_bounties_for_wasm(wasm_id);
+  };
 
-    // 2. Look up the wasm_id in the `audits` map.
-    switch (Map.get(state.audits, Map.thash, wasm_id)) {
+  /**
+   * Checks if a valid audit submission (either an attestation or a divergence)
+   * exists for a given WASM and the bounty's required audit type.
+   *
+   * @param wasm_id The hex ID of the WASM.
+   * @param required_audit_type The audit type specified in the bounty's challenge parameters.
+   * @returns True if a valid submission is found, false otherwise.
+   */
+  private func has_valid_audit_submission(wasm_id : Text, required_audit_type : Text) : Bool {
+    let all_audits = icrc126().state.audits;
+
+    switch (Map.get(all_audits, Map.thash, wasm_id)) {
       case (null) {
-        // If there's no entry for this wasm_id, there are no audits.
+        // No audit records exist for this WASM at all.
         return false;
       };
-      case (?audit_records) {
-        // 3. We have an array of audits. Find one that is an Attestation of the correct type.
-        let found_match = Array.find<ICRC126.AuditRecord>(
-          audit_records,
-          func(record : ICRC126.AuditRecord) : Bool {
-            switch (record) {
-              case (#Attestation(att_record)) {
-                // This is an attestation. Check if its audit_type matches.
-                return att_record.audit_type == audit_type;
-              };
-              case (#Divergence(_)) {
-                // This is a divergence report, not an attestation. Ignore it.
-                return false;
+      case (?records) {
+        // We have records, so let's iterate through them to find a match.
+        for (record in records.vals()) {
+          switch (record) {
+            case (#Attestation(att)) {
+              // For an attestation, the audit_type must match the one required by the bounty.
+              if (att.audit_type == required_audit_type) {
+                return true; // Found a matching attestation.
               };
             };
-          },
-        );
-
-        // 4. Return true if we found a matching attestation, false otherwise.
-        return Option.isSome(found_match);
+            case (#Divergence(div)) {
+              // A divergence report is ONLY a valid submission for a 'build_reproducibility_v1' bounty.
+              // If the bounty was for a security audit, a divergence report is not a valid completion.
+              if (required_audit_type == "build_reproducibility_v1") {
+                return true; // Found a valid divergence report for a build bounty.
+              };
+            };
+          };
+        };
+        // If we loop through all records and find no match, then no valid submission exists.
+        return false;
       };
     };
   };
@@ -528,7 +527,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
               case (?wasm_hash_exists, ?audit_type_exists) {
                 // Both required parameters are present.
                 let wasm_id = Base16.encode(wasm_hash_exists);
-                if (has_attestation(wasm_id, audit_type_exists)) {
+                if (has_valid_audit_submission(wasm_id, audit_type_exists)) {
                   return {
                     result = #Valid;
                     metadata = #Map([("status", #Text("Attestation found for audit type: " # audit_type_exists))]);
@@ -629,7 +628,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
 
     switch (_credentials_canister_id) {
-      case (null) { return #Error(#Generic("Audit Hub is not configured.")) };
+      case (null) { Debug.trap("Audit Hub is not configured.") };
       case (?id) {
         let auditHub : AuditHub.Service = actor (Principal.toText(id));
         let is_authorized = await auditHub.is_bounty_ready_for_collection(bounty_id, msg.caller);
@@ -640,11 +639,61 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       };
     };
 
+    // --- NEW LOGIC: Check if this attestation finalizes a verification ---
+    // 2. Extract the audit_type from the metadata.
+    let audit_type = AppStore.getICRC16TextOptional(req.metadata, "126:audit_type");
+
+    if (audit_type == ?"build_reproducibility_v1") {
+      // 3. This is a build verification! Finalize the request as "Verified".
+      let finalization_meta : ICRC126.ICRC16Map = [
+        ("auditor", #Principal(msg.caller)),
+        ("bounty_id", #Nat(bounty_id)),
+      ];
+      ignore await _finalize_verification(req.wasm_id, #Verified, finalization_meta);
+    };
+    // --- END NEW LOGIC ---
+
     await icrc126().icrc126_file_attestation(msg.caller, req);
   };
 
   public shared (msg) func icrc126_file_divergence(req : ICRC126Service.DivergenceReportRequest) : async ICRC126Service.DivergenceResult {
-    await icrc126().icrc126_file_divergence(msg.caller, req);
+    // --- NEW: Add authorization logic, mirroring the attestation function ---
+    let metadata = switch (req.metadata) { case null []; case (?m) m };
+    let bounty_id = switch (AuditHub.get_bounty_id_from_metadata(metadata)) {
+      case (null) {
+        return #Error(#Generic("Divergence metadata must include a 'bounty_id'."));
+      };
+      case (?id) { id };
+    };
+
+    switch (_credentials_canister_id) {
+      case (null) { Debug.trap("Audit Hub is not configured.") };
+      case (?id) {
+        let auditHub : AuditHub.Service = actor (Principal.toText(id));
+        let is_authorized = await auditHub.is_bounty_ready_for_collection(bounty_id, msg.caller);
+
+        if (not is_authorized) {
+          // Note: ICRC126 DivergenceResult doesn't have an #Unauthorized variant, so we use #Generic.
+          return #Error(#Generic("Unauthorized: Caller is not the authorized claimant for this bounty."));
+        };
+      };
+    };
+    // --- END NEW AUTHORIZATION ---
+
+    // 1. Let the library file the divergence report.
+    let result = await icrc126().icrc126_file_divergence(msg.caller, req);
+
+    // --- NEW LOGIC: Finalize the request as "Rejected" ---
+    // 2. We assume any divergence report is for build reproducibility.
+    let finalization_meta : ICRC126.ICRC16Map = [
+      ("auditor", #Principal(msg.caller)),
+      ("bounty_id", #Nat(bounty_id)),
+      ("reason", #Text(req.divergence_report)),
+    ];
+    let _ = await _finalize_verification(req.wasm_id, #Rejected, finalization_meta);
+    // --- END NEW LOGIC ---
+
+    return result;
   };
 
   // --- ICRC127 Endpoints ---
@@ -657,7 +706,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     // ==========================================================================
 
     switch (_credentials_canister_id) {
-      case (null) { return #Error(#Generic("Audit Hub is not configured.")) };
+      case (null) { Debug.trap("Audit Hub is not configured.") };
       case (?id) {
         let auditHub : AuditHub.Service = actor (Principal.toText(id));
         let is_authorized = await auditHub.is_bounty_ready_for_collection(req.bounty_id, msg.caller);
@@ -749,17 +798,14 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     metadata : ICRC126.ICRC16Map;
   };
 
-  public shared (msg) func finalize_verification(
+  private func _finalize_verification(
     wasm_id : Text,
     outcome : VerificationOutcome,
     metadata : ICRC126.ICRC16Map,
-  ) : async Result.Result<Nat, Text> {
-    // 1. Authorization: Only the owner (DAO) can call this.
-    if (not _is_owner(msg.caller)) {
-      return #err("Caller is not the owner");
-    };
+  ) : async Nat {
+    // 1. Authorization check is no longer needed as this is an internal function.
 
-    // 3. Create and store the finalization record.
+    // 2. Create and store the finalization record.
     let record : FinalizationRecord = {
       outcome = outcome;
       timestamp = Time.now();
@@ -767,7 +813,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
     ignore BTree.insert(finalization_log, Text.compare, wasm_id, record);
 
-    // 4. Log the official ICRC-3 block.
+    // 3. Log the official ICRC-3 block.
     let btype = switch (outcome) {
       case (#Verified) "126verified";
       case (#Rejected) "126rejected";
@@ -781,7 +827,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       ?convertIcrc126ValueToIcrc3Value(#Map([("btype", #Text(btype))])),
     );
 
-    return #ok(trx_id);
+    return trx_id;
   };
 
   // The request type for our new custom query.
@@ -819,131 +865,416 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
   };
 
-  public query func get_app_listings(req : AppStore.AppListingRequest) : async AppStore.AppListingResponse {
-    // 1. Handle optional arguments, mirroring the reference implementation.
-    let filters = switch (req.filter) { case null []; case (?fs) fs };
-    let take = switch (req.take) { case null 20; case (?n) Nat.min(n, 100) }; // Default 20, max 100.
-    let prev = req.prev;
+  // --- PRIVATE HELPER: Translates AppStore filters to Registry filters ---
+  private func _translate_filters(filters : [AppStore.AppListingFilter]) : [Service.GetCanisterTypesFilter] {
+    var out = Buffer.Buffer<Service.GetCanisterTypesFilter>(filters.size());
+    for (f in filters.vals()) {
+      switch (f) {
+        case (#namespace(ns)) { out.add(#namespace(ns)) };
+        case (#publisher(pub)) {
+          // Note: The registry doesn't filter by publisher directly.
+          // This is a limitation we accept for now to gain performance.
+          // A future version of the registry could add this capability.
+        };
+        case (#name(_)) {
+          // The registry also doesn't filter by app name.
+        };
+      };
+    };
+    return Buffer.toArray(out);
+  };
 
-    // 2. Fetch ALL canister types. This is the base dataset.
-    let all_canister_types = icrc118wasmregistry().icrc118_get_canister_types({
-      filter = [];
-      prev = null;
-      take = null;
+  /**
+   * Converts a (major, minor, patch) version tuple into a standard "1.2.3" string format.
+   */
+  private func _format_version_number(version_tuple : (Nat, Nat, Nat)) : Text {
+    let (major, minor, patch) = version_tuple;
+    return Nat.toText(major) # "." # Nat.toText(minor) # "." # Nat.toText(patch);
+  };
+
+  // --- PRIVATE HELPER: Encapsulates the logic for building a single listing ---
+  // This takes a CanisterType and returns a fully formed AppListing, or null if it shouldn't be listed.
+  private func _build_listing_for_canister_type(canister_type : ICRC118WasmRegistry.CanisterType) : ?AppStore.AppListing {
+    // 1. Find the latest version for this canister type.
+    if (canister_type.versions.size() == 0) {
+      return null; // No versions, so nothing to list.
+    };
+
+    var latest_version = canister_type.versions[0];
+    if (canister_type.versions.size() > 1) {
+      for (i in Iter.range(1, canister_type.versions.size() - 1)) {
+        if (ICRC118WasmRegistry.canisterVersionCompare(canister_type.versions[i], latest_version) == #greater) {
+          latest_version := canister_type.versions[i];
+        };
+      };
+    };
+
+    // 2. Get the wasm_id and apply the verification gateway check.
+    let wasm_id = Base16.encode(latest_version.calculated_hash);
+    if (not _is_wasm_verified(wasm_id)) {
+      return null; // The latest version is not verified, so we don't list the app.
+    };
+
+    // 3. Determine status (Pending vs. Verified) and build the listing object.
+    let audit_records = _get_audit_records_for_wasm(wasm_id);
+    let app_info_attestation = Array.find<ICRC126.AuditRecord>(
+      audit_records,
+      func(rec) {
+        switch (rec) {
+          case (#Attestation(att)) { att.audit_type == "app_info_v1" };
+          case (_) { false };
+        };
+      },
+    );
+
+    // --- 4. Restructure the return object based on status ---
+    switch (app_info_attestation) {
+      case (?#Attestation(att)) {
+        // --- PATH A: APP IS FULLY LISTED ---
+        let completed_audits = AppStore.get_completed_audit_types(audit_records);
+        let tier = AppStore.calculate_security_tier(true, completed_audits);
+
+        return ?{
+          // Stable app identity from the attestation
+          namespace = canister_type.canister_type_namespace;
+          name = AppStore.getICRC16Text(att.metadata, "name");
+          description = AppStore.getICRC16Text(att.metadata, "description");
+          category = AppStore.getICRC16Text(att.metadata, "category");
+          publisher = AppStore.getICRC16Text(att.metadata, "publisher");
+          icon_url = AppStore.getICRC16Text(att.metadata, "icon_url");
+          banner_url = AppStore.getICRC16Text(att.metadata, "banner_url");
+
+          // Nested object with version-specific details
+          latest_version = {
+            wasm_id = wasm_id;
+            version_string = _format_version_number(latest_version.version_number);
+            security_tier = tier;
+            status = #Verified;
+          };
+        };
+      };
+      case (_) {
+        // --- PATH B: APP IS PENDING ---
+        let verification_request = Map.get(icrc126().state.requests, Map.thash, wasm_id);
+        switch (verification_request) {
+          case (?req) {
+            let meta = req.metadata;
+            let visuals_map = AppStore.getICRC16MapOptional(meta, "visuals");
+            return ?{
+              // Stable app identity from the verification request
+              namespace = canister_type.canister_type_namespace;
+              name = AppStore.getICRC16Text(meta, "name");
+              description = AppStore.getICRC16Text(meta, "description");
+              category = AppStore.getICRC16Text(meta, "category");
+              publisher = AppStore.getICRC16Text(meta, "publisher");
+              icon_url = switch (visuals_map) {
+                case (?v) { AppStore.getICRC16Text(v, "icon_url") };
+                case (_) { "" };
+              };
+              banner_url = switch (visuals_map) {
+                case (?v) { AppStore.getICRC16Text(v, "banner_url") };
+                case (_) { "" };
+              };
+
+              // Nested object with version-specific details
+              latest_version = {
+                wasm_id = wasm_id;
+                version_string = _format_version_number(latest_version.version_number);
+                security_tier = #Unranked;
+                status = #Pending;
+              };
+            };
+          };
+          case (null) { return null };
+        };
+      };
+    };
+  };
+
+  // --- THE REFACTORED PUBLIC FUNCTION ---
+  public query func get_app_listings(req : AppStore.AppListingRequest) : async AppStore.AppListingResponse {
+    // 1. Translate AppStore filters to the underlying Registry's filter format.
+    let registry_filters = switch (req.filter) {
+      case (?exists) { _translate_filters(exists) };
+      case (null) { [] };
+    };
+
+    // 2. Delegate filtering and pagination to the ICRC-118 registry canister.
+    //    This is the core performance improvement. We only fetch the small slice of data we need.
+    let paginated_canister_types = icrc118wasmregistry().icrc118_get_canister_types({
+      filter = registry_filters;
+      prev = req.prev;
+      take = req.take;
     });
 
-    // 3. Pre-process and "join" data into a complete list of potential listings.
-    //    This is done in memory before filtering and pagination.
-    var all_listings = Buffer.Buffer<AppStore.AppListing>(all_canister_types.size());
-    for (canister_type in all_canister_types.vals()) {
-      // a. Find the latest version for this canister type.
-      if (canister_type.versions.size() > 0) {
-        // Start with the first version as the potential latest.
-        var latest_version = canister_type.versions[0];
+    // 3. Create a buffer for the final, enriched AppListing objects.
+    //    Its size is bounded by the `take` parameter, preventing large memory allocations.
+    var out = Buffer.Buffer<AppStore.AppListing>(paginated_canister_types.size());
 
-        // If there are more versions, iterate from the second element (index 1) to the end.
-        if (canister_type.versions.size() > 1) {
-          // Use Iter.range to create an iterator of indices from 1 to size-1.
-          for (i in Iter.range(1, canister_type.versions.size() - 1)) {
-            if (ICRC118WasmRegistry.canisterVersionCompare(canister_type.versions[i], latest_version) == #greater) {
-              latest_version := canister_type.versions[i];
-            };
-          };
+    // 4. Iterate over the SMALL, pre-filtered list to enrich the data.
+    for (canister_type in paginated_canister_types.vals()) {
+      switch (_build_listing_for_canister_type(canister_type)) {
+        case (?listing) {
+          // The helper function successfully built a listing. Add it to our results.
+          out.add(listing);
         };
+        case (null) {
+          // The helper returned null (e.g., latest version not verified).
+          // We simply skip it and move to the next one.
+        };
+      };
+    };
 
-        // b. Get all attestations for that latest version's hash.
-        let wasm_id = Base16.encode(latest_version.calculated_hash);
-        let attestations_for_wasm = _get_attestations_for_wasm(wasm_id);
+    // 5. Return the final, enriched list.
+    return #ok(Buffer.toArray(out));
+  };
 
-        // c. Find the specific 'app_info_v1' attestation.
+  // Assembles the BuildInfo object by looking for a build attestation or divergence report.
+  private func _build_build_info(records : [ICRC126.AuditRecord]) : AppStore.BuildInfo {
 
-        // Search backward to find the newest app_info_v1 attestation?
-        let app_info_attestation = Array.find<ICRC126.AttestationRecord>(
-          attestations_for_wasm,
-          func(att) {
-            att.audit_type == "app_info_v1";
-          },
+    let build_att = _find_attestation_by_type(records, "build_reproducibility_v1");
+    switch (build_att) {
+      case (?att) {
+        return {
+          status = "success";
+          git_commit = AppStore.getICRC16TextOptional(att.metadata, "git_commit");
+          repo_url = AppStore.getICRC16TextOptional(att.metadata, "repo_url");
+          canister_id = AppStore.getICRC16TextOptional(att.metadata, "canister_id");
+          failure_reason = null;
+        };
+      };
+      case (null) {
+        /* continue to check for divergence */
+      };
+    };
+
+    let divergence = Array.find<ICRC126.AuditRecord>(records, func(r) { switch (r) { case (#Divergence(_)) true; case (_) false } });
+    switch (divergence) {
+      case (?exists) {
+        let div = switch (exists) {
+          case (#Divergence(d)) d;
+          case (_) Debug.trap("impossible");
+        };
+        return {
+          status = "failure";
+          git_commit = null;
+          repo_url = null;
+          canister_id = null;
+          failure_reason = ?div.report;
+        };
+      };
+      case (null) { /* continue to default return */ };
+    };
+
+    return {
+      status = "unknown";
+      git_commit = null;
+      repo_url = null;
+      canister_id = null;
+      failure_reason = null;
+    };
+  };
+
+  // Extracts the list of tools from the 'tools_v1' attestation.
+  private func _get_tools_from_records(records : [ICRC126.AuditRecord]) : [ICRC126.ICRC16Map] {
+    switch (_find_attestation_by_type(records, "tools_v1")) {
+      case (?att) { AppStore.getICRC16ArrayOfMaps(att.metadata, "tools") };
+      case (null) { [] };
+    };
+  };
+
+  // Extracts and assembles the DataSafetyInfo object.
+  private func _get_data_safety_from_records(records : [ICRC126.AuditRecord]) : AppStore.DataSafetyInfo {
+    switch (_find_attestation_by_type(records, "data_safety_v1")) {
+      case (?att) {
+        return {
+          overall_description = AppStore.getICRC16Text(att.metadata, "overall_description");
+          data_points = AppStore.getICRC16ArrayOfMaps(att.metadata, "data_points");
+        };
+      };
+      case (null) {
+        return { overall_description = ""; data_points = [] };
+      };
+    };
+  };
+
+  // Finds a specific attestation by its type from a list of audit records.
+  private func _find_attestation_by_type(records : [ICRC126.AuditRecord], audit_type : Text) : ?ICRC126.AttestationRecord {
+    let found = Array.find<ICRC126.AuditRecord>(
+      records,
+      func(rec) {
+        switch (rec) {
+          case (#Attestation(att)) { att.audit_type == audit_type };
+          case (_) { false };
+        };
+      },
+    );
+    switch (found) {
+      case (?#Attestation(att)) { return ?att };
+      case (_) { return null };
+    };
+  };
+
+  /**
+   * Fetches and assembles all data for an app's detail page using its stable namespace.
+   * This is the single, powerful query the frontend needs.
+   */
+  public query func get_app_details_by_namespace(
+    namespace : Text,
+    opt_wasm_id : ?Text,
+  ) : async Result.Result<AppStore.AppDetailsResponse, AppStore.AppStoreError> {
+
+    // 1. Find the canister type by its namespace.
+    let req : Service.GetCanisterTypesRequest = {
+      filter = [#namespace(namespace)];
+      prev = null;
+      take = ?1; // We only expect one canister type per namespace.
+    };
+    let canister_types = icrc118wasmregistry().icrc118_get_canister_types(req);
+    if (canister_types.size() == 0) {
+      return #err(#NotFound("Canister type not found for the given namespace"));
+    };
+
+    let canister_type = canister_types[0];
+
+    // Define a comparison function for descending order (newest first).
+    func compareVersionsDesc(a : ICRC118WasmRegistry.CanisterVersion, b : ICRC118WasmRegistry.CanisterVersion) : Order.Order {
+      switch (ICRC118WasmRegistry.canisterVersionCompare(a, b)) {
+        case (#less) { #greater }; // a < b, so move a after b
+        case (#greater) { #less }; // a > b, so move a before b
+        case (#equal) { #equal };
+      };
+    };
+    var sorted_versions = Array.sort<ICRC118WasmRegistry.CanisterVersion>(canister_type.versions, compareVersionsDesc);
+
+    // --- 3. THE FIX: Determine which version to load ---
+    let version_to_load_record = switch (opt_wasm_id) {
+      case (?wasm_id_hex) {
+        Debug.print("WASM ID specified in request: " # wasm_id_hex);
+        // A specific version was requested. Find it.
+        let wasm_hash = Base16.decode(wasm_id_hex);
+        let found = Array.find<ICRC118WasmRegistry.CanisterVersion>(
+          sorted_versions,
+          func(v) { ?v.calculated_hash == wasm_hash },
         );
 
-        // d. If found, construct and add the AppListing record.
-        switch (app_info_attestation) {
-          case (?att) {
-            var completed_audits : [Text] = [];
-            for (a in attestations_for_wasm.vals()) {
-              completed_audits := Array.append(completed_audits, [a.audit_type]);
-            };
+        Debug.print("Requested wasm_id: " # wasm_id_hex);
+        switch (found) {
+          case (?v) { v };
+          case (null) {
+            return #err(#NotFound("Specific version hash not found"));
+          };
+        };
+      };
+      case (null) {
+        // No specific version was requested. Default to the latest.
+        sorted_versions[0];
+      };
+    };
 
-            // Calculate the tier using our new helper function.
-            let tier = AppStore.calculate_security_tier(completed_audits);
+    // --- 4. From now on, use `version_to_load_record` instead of `latest_version_record` ---
+    let wasm_id_to_load = Base16.encode(version_to_load_record.calculated_hash);
 
-            all_listings.add({
-              id = wasm_id;
-              namespace = canister_type.canister_type_namespace;
-              name = AppStore.getICRC16Text(att.metadata, "name");
-              description = AppStore.getICRC16Text(att.metadata, "description");
-              category = AppStore.getICRC16Text(att.metadata, "category");
-              publisher = AppStore.getICRC16Text(att.metadata, "publisher");
-              icon_url = AppStore.getICRC16Text(att.metadata, "icon_url");
-              banner_url = AppStore.getICRC16Text(att.metadata, "banner_url");
-              security_tier = tier;
+    // 3. Fetch all data for the LATEST version in parallel.
+    let latest_audit_records = _get_audit_records_for_wasm(wasm_id_to_load);
+    let latest_bounties = _get_bounties_for_wasm(wasm_id_to_load);
+
+    // 4. Build the `all_versions` summary list.
+    var all_versions_summary = Buffer.Buffer<AppStore.AppVersionSummary>(canister_type.versions.size());
+    for (version_record in sorted_versions.vals()) {
+      let wasm_id = Base16.encode(version_record.calculated_hash);
+      let is_verified = _is_wasm_verified(wasm_id);
+      if (is_verified) {
+        let records = _get_audit_records_for_wasm(wasm_id);
+        let completed_audits = AppStore.get_completed_audit_types(records);
+        all_versions_summary.add({
+          wasm_id = wasm_id;
+          version_string = _format_version_number(version_record.version_number);
+          security_tier = AppStore.calculate_security_tier(true, completed_audits);
+          status = #Verified;
+        });
+      };
+    };
+
+    // 5. Assemble the detailed object for the LATEST version.
+    let latest_build_info = _build_build_info(latest_audit_records);
+    let latest_version_details : AppStore.AppVersionDetails = {
+      wasm_id = wasm_id_to_load;
+      version_string = _format_version_number(version_to_load_record.version_number);
+      status = #Verified; // If we got this far, it must be at least Pending/Verified
+      security_tier = AppStore.calculate_security_tier(true, AppStore.get_completed_audit_types(latest_audit_records));
+      build_info = latest_build_info;
+      canister_id = latest_build_info.canister_id;
+      tools = _get_tools_from_records(latest_audit_records);
+      data_safety = _get_data_safety_from_records(latest_audit_records);
+      bounties = latest_bounties;
+      audit_records = latest_audit_records;
+    };
+
+    // 6. Assemble the stable, top-level app information.
+    //    This comes from the app_info attestation, with a fallback to the verification request.
+    let app_info_att = _find_attestation_by_type(latest_audit_records, "app_info_v1");
+    switch (app_info_att) {
+      case (?att) {
+        // Path A: Fully listed app, use attestation as source of truth.
+        return #ok({
+          namespace = namespace;
+          name = AppStore.getICRC16Text(att.metadata, "name");
+          mcp_path = AppStore.getICRC16Text(att.metadata, "mcp_path");
+          canister_id = AppStore.getICRC16Principal(att.metadata, "canister_id");
+          publisher = AppStore.getICRC16Text(att.metadata, "publisher");
+          category = AppStore.getICRC16Text(att.metadata, "category");
+          icon_url = AppStore.getICRC16Text(att.metadata, "icon_url");
+          banner_url = AppStore.getICRC16Text(att.metadata, "banner_url");
+          gallery_images = AppStore.getICRC16TextArray(att.metadata, "gallery_images");
+          description = AppStore.getICRC16Text(att.metadata, "description");
+          key_features = AppStore.getICRC16TextArray(att.metadata, "key_features");
+          why_this_app = AppStore.getICRC16Text(att.metadata, "why_this_app");
+          tags = AppStore.getICRC16TextArray(att.metadata, "tags");
+          latest_version = latest_version_details;
+          all_versions = Buffer.toArray(all_versions_summary);
+        });
+      };
+      case (null) {
+        // Path B: Pending app, use original verification request as source of truth.
+        let verification_request = _get_verification_request(wasm_id_to_load);
+        switch (verification_request) {
+          case (?req) {
+            let meta = req.metadata;
+            let visuals_map = AppStore.getICRC16MapOptional(meta, "visuals");
+            return #ok({
+              namespace = namespace;
+              name = AppStore.getICRC16Text(meta, "name");
+              mcp_path = AppStore.getICRC16Text(meta, "mcp_path");
+              canister_id = AppStore.getICRC16Principal(meta, "canister_id");
+              publisher = AppStore.getICRC16Text(meta, "publisher");
+              category = AppStore.getICRC16Text(meta, "category");
+              description = AppStore.getICRC16Text(meta, "description");
+              key_features = AppStore.getICRC16TextArray(meta, "key_features");
+              why_this_app = AppStore.getICRC16Text(meta, "why_this_app");
+              tags = AppStore.getICRC16TextArray(meta, "tags");
+              icon_url = switch (visuals_map) {
+                case (?v) { AppStore.getICRC16Text(v, "icon_url") };
+                case (_) { "" };
+              };
+              banner_url = switch (visuals_map) {
+                case (?v) { AppStore.getICRC16Text(v, "banner_url") };
+                case (_) { "" };
+              };
+              gallery_images = switch (visuals_map) {
+                case (?v) { AppStore.getICRC16TextArray(v, "gallery_images") };
+                case (_) { [] };
+              };
+              latest_version = { latest_version_details with status = #Pending };
+              all_versions = Buffer.toArray(all_versions_summary);
             });
           };
-          case (null) {}; // Skip types that don't have an app_info attestation.
-        };
-      };
-    };
-
-    // --- 3. REVISED FILTERING LOGIC ---
-    // This function now correctly handles an array of filter variants.
-    // An AppListing must match ALL filters in the array to be included.
-    func matchesAllFilters(listing : AppStore.AppListing, filters : [AppStore.AppListingFilter]) : Bool {
-      if (filters.size() == 0) return true;
-
-      // Iterate through each filter variant provided in the request.
-      label filterLoop for (f in filters.vals()) {
-        switch (f) {
-          case (#namespace(nsFilter)) {
-            if (listing.namespace != nsFilter) return false;
-          };
-          case (#publisher(pubFilter)) {
-            if (listing.publisher != pubFilter) return false;
-          };
-          case (#name(nameFilter)) {
-            if (listing.name != nameFilter) return false;
+          case (null) {
+            return #err(#NotFound("Verification request not found for pending app"));
           };
         };
       };
-      // If the listing survived all filters, it's a match.
-      return true;
     };
-
-    // 5. Apply pagination and filtering to the in-memory list.
-    var started = prev == null;
-    var count : Nat = 0;
-    let out = Buffer.Buffer<AppStore.AppListing>(take);
-
-    label main for (listing in all_listings.vals()) {
-      if (not started) {
-        switch prev {
-          case null {}; // Should be handled by `started` initialization.
-          case (?p) {
-            // We skip all items until we find the one matching `prev`.
-            // The next item after `prev` will be the first one included.
-            if (listing.namespace == p) { started := true };
-            continue main;
-          };
-        };
-      };
-
-      // `started` is now true.
-      if (matchesAllFilters(listing, filters)) {
-        out.add(listing);
-        count += 1;
-        if (count >= take) break main;
-      };
-    };
-
-    return #ok(Buffer.toArray(out));
   };
 
   /**
@@ -1015,23 +1346,35 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     var count : Nat = 0;
     let out = Buffer.Buffer<ICRC127.Bounty>(take);
 
-    label main for (bounty in all_bounties.vals()) {
+    // Use a while loop to iterate from the last index (newest) to the first (oldest).
+    var i = all_bounties.size();
+    label collect while (i > 0) {
+      i -= 1;
+      let bounty = all_bounties[i];
+
       if (not started) {
+        // If we have a `prev` cursor, we need to find it before we start collecting.
         switch (prev) {
-          case null {};
           case (?p) {
-            // We skip items until we find the one matching `prev` (the last bounty_id of the previous page).
-            if (bounty.bounty_id == p) { started := true };
-            continue main;
+            if (bounty.bounty_id == p) {
+              // We found the last item of the previous page.
+              // We will start collecting on the *next* iteration.
+              started := true;
+            };
+            // Continue to the next iteration, skipping the current item.
+            continue collect;
+          };
+          case (null) {
+            // This case is handled by the initial `started` assignment, but included for completeness.
           };
         };
       };
 
-      // `started` is now true.
+      // `started` is now true. We can start collecting matching bounties.
       if (matchesAllFilters(bounty, filters)) {
         out.add(bounty);
         count += 1;
-        if (count >= take) break main;
+        if (count >= take) break collect; // Exit the loop once we have enough items.
       };
     };
 
@@ -1054,84 +1397,9 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     prev : ?Text; // The wasm_id of the last item from the previous page.
   };
 
-  /**
-   * @notice Fetches a paginated list of all WASM submissions that have new, unreviewed attestations.
-   * @param req The pagination request object.
-   * @return An array of `PendingSubmission` records.
-   */
-  public shared query func list_pending_submissions(req : PaginationRequest) : async [PendingSubmission] {
-    let take = switch (req.take) { case null 20; case (?n) Nat.min(n, 100) };
-    let prev = req.prev;
-
-    // This buffer will hold all submissions that are determined to be ready for review.
-    var submissions_to_review = Buffer.Buffer<PendingSubmission>(0);
-
-    // We must iterate through all verification requests to see which ones are pending.
+  private func _get_verification_request(wasm_id : Text) : ?ICRC126Service.VerificationRequest {
     let all_requests = icrc126().state.requests;
-
-    for ((wasm_id, request) in Map.entries(all_requests)) {
-      // 1. Get the timestamp of the last time this wasm_id was finalized by the DAO.
-      // If it has never been finalized, the timestamp is effectively 0.
-      let last_finalization_ts : Time.Time = switch (BTree.get(finalization_log, Text.compare, wasm_id)) {
-        case (null) { 0 };
-        case (?record) { record.timestamp };
-      };
-
-      // 2. Get all audit records (attestations and divergences) for this wasm_id.
-      let audit_records = switch (Map.get(icrc126().state.audits, Map.thash, wasm_id)) {
-        case (null) { [] };
-        case (?records) { records };
-      };
-
-      // 3. Find all attestations that are NEWER than the last finalization.
-      var new_attestations = Buffer.Buffer<ICRC126.AttestationRecord>(0);
-      for (record in audit_records.vals()) {
-        switch (record) {
-          case (#Attestation(att_record)) {
-            if (att_record.timestamp > last_finalization_ts) {
-              new_attestations.add(att_record);
-            };
-          };
-          case (_) { /* Ignore divergences for this query */ };
-        };
-      };
-
-      // 4. If we found any new attestations, this submission is ready for review.
-      if (new_attestations.size() > 0) {
-        // Collect the audit types of the new attestations for the response.
-        var new_att_types : [Text] = [];
-        for (att in new_attestations.vals()) {
-          new_att_types := Array.append(new_att_types, [att.audit_type]);
-        };
-
-        submissions_to_review.add({
-          wasm_id = wasm_id;
-          repo_url = request.repo;
-          commit_hash = request.commit_hash;
-          attestation_types = new_att_types;
-        });
-      };
-    };
-
-    // 5. Apply pagination to the in-memory list of reviewable submissions.
-    var started = prev == null;
-    var count : Nat = 0;
-    let out = Buffer.Buffer<PendingSubmission>(take);
-
-    label main for (sub in submissions_to_review.vals()) {
-      if (not started) {
-        switch (prev) {
-          case null {};
-          case (?p) { if (sub.wasm_id == p) { started := true }; continue main };
-        };
-      };
-
-      out.add(sub);
-      count += 1;
-      if (count >= take) break main;
-    };
-
-    return Buffer.toArray(out);
+    Map.get(all_requests, Map.thash, wasm_id);
   };
 
   /**
@@ -1141,15 +1409,69 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
    *         Returns `null` if no request is found for the given ID.
    */
   public shared query func get_verification_request(wasm_id : Text) : async ?ICRC126Service.VerificationRequest {
-    // 1. Access the `requests` map from the ICRC-126 library's state.
+    _get_verification_request(wasm_id);
+  };
+
+  // A new, paginated query to find all verification requests that are waiting for a bounty.
+  public shared query func list_pending_verifications(
+    // We can add pagination later if needed. For now, we'll return all.
+  ) : async [ICRC126.VerificationRecord] {
+    var pending_requests = Buffer.Buffer<ICRC126.VerificationRecord>(0);
     let all_requests = icrc126().state.requests;
+    let all_bounties = BTree.toValueArray(icrc127().state.bounties);
 
-    // 2. Perform a direct lookup using the wasm_id as the key.
-    //    This is highly efficient as it's a hash map lookup.
-    let result = Map.get(all_requests, Map.thash, wasm_id);
+    // --- NEW: Create a helper Set for fast lookups of sponsored WASM hashes ---
+    var sponsored_wasm_ids = Map.new<Text, Null>();
+    for (bounty in all_bounties.vals()) {
+      // Check if this is a build reproducibility bounty
+      switch (bounty.challenge_parameters) {
+        case (#Map(params)) {
+          let audit_type = AppStore.getICRC16TextOptional(params, "audit_type");
+          if (audit_type == ?"build_reproducibility_v1") {
+            // This is a build bounty. Add its wasm_id to our set.
+            let wasm_hash = AppStore.getICRC16BlobOptional(params, "wasm_hash");
+            switch (wasm_hash) {
+              case (?h) {
+                Map.set(sponsored_wasm_ids, Map.thash, Base16.encode(h), null);
+              };
+              case (_) {};
+            };
+          };
+        };
+        case (_) {};
+      };
+    };
 
-    // 3. Return the result. `Map.get` returns an optional, which matches our function's return type.
-    return result;
+    for ((wasm_id, request) in Map.entries(all_requests)) {
+      // Condition 1: Check if the request has been finalized.
+      let is_finalized = BTree.get(finalization_log, Text.compare, wasm_id) != null;
+
+      // Condition 2: Check if a build bounty already exists for this wasm_id.
+      let is_sponsored = Option.isSome(Map.get(sponsored_wasm_ids, Map.thash, wasm_id));
+
+      // --- THE NEW, CORRECT LOGIC ---
+      // Only include the request if it is NOT finalized AND NOT yet sponsored.
+      if (not is_finalized and not is_sponsored) {
+        pending_requests.add(request);
+      };
+    };
+    return Buffer.toArray(pending_requests);
+  };
+
+  private func _get_audit_records_for_wasm(wasm_id : Text) : [ICRC126.AuditRecord] {
+    let all_audits = icrc126().state.audits;
+
+    // Look up the wasm_id and return the array of records, or an empty array if none exist.
+    let records = switch (Map.get(all_audits, Map.thash, wasm_id)) {
+      case (null) [];
+      case (?rs) rs;
+    };
+
+    return records;
+  };
+
+  public shared query func get_audit_records_for_wasm(wasm_id : Text) : async [ICRC126.AuditRecord] {
+    _get_audit_records_for_wasm(wasm_id);
   };
 
   //------------------- SAMPLE FUNCTION -------------------//

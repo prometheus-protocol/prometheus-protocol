@@ -54,13 +54,6 @@ export const executeFullLoginFlow = async (scope: string, clientId: string) => {
   if ('err' in confirmResult)
     throw new Error(`confirm_login failed: ${confirmResult.err}`);
 
-  // 2b. Handle payment setup if required
-  if ('setup' in confirmResult.ok.next_step) {
-    const setupResult = await endUserActor.complete_payment_setup(sessionId);
-    if ('err' in setupResult)
-      throw new Error(`complete_payment_setup failed: ${setupResult.err}`);
-  }
-
   // 2c. Complete the final authorization step
   const completeAuthResult = await endUserActor.complete_authorize(sessionId);
   if ('err' in completeAuthResult)

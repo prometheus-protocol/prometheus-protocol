@@ -1,4 +1,12 @@
 import { ImageWithFallback } from '../ui/image-with-fallback';
+// --- 1. Import the Carousel components ---
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from '@/components/ui/carousel';
 
 interface MediaGalleryProps {
   images: string[];
@@ -6,25 +14,38 @@ interface MediaGalleryProps {
 }
 
 export function MediaGallery({ images, appName }: MediaGalleryProps) {
-  // In a real app, you might have a placeholder if there are no images.
   if (!images || images.length === 0) {
     return null;
   }
 
-  // We'll feature the first image. The rest could be thumbnails.
-  const featureImage = images[0];
-
   return (
     <section>
-      {/* The overflow-hidden is crucial for containing the hover effect */}
-      <div className="overflow-hidden rounded-2xl">
-        <ImageWithFallback
-          src={featureImage}
-          alt={`Screenshot of ${appName}`}
-          className="aspect-[16/10] w-full object-cover transition-transform duration-300 ease-in-out hover:scale-105"
-        />
-      </div>
-      {/* You could map over the rest of the images here to create thumbnails */}
+      {/* --- 2. Replace the single image with the Carousel component --- */}
+      <Carousel
+        opts={{
+          align: 'start',
+          loop: true,
+        }}
+        // Autoplay is omitted for a better user experience in a gallery
+        className="w-full">
+        <CarouselContent className="-ml-4">
+          {images.map((image, index) => (
+            <CarouselItem key={image + index} className="pl-4">
+              {/* Wrapping in a link allows opening the image in a new tab */}
+              <a href={image} target="_blank" rel="noopener noreferrer">
+                <ImageWithFallback
+                  src={image}
+                  alt={`Screenshot ${index + 1} of ${appName}`}
+                  className="aspect-video w-full rounded-xl object-cover transition-opacity hover:opacity-90"
+                />
+              </a>
+            </CarouselItem>
+          ))}
+        </CarouselContent>
+        {/* --- 3. Add responsive navigation arrows --- */}
+        <CarouselPrevious className="hidden md:flex" />
+        <CarouselNext className="hidden md:flex" />
+      </Carousel>
     </section>
   );
 }

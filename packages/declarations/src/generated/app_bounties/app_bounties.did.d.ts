@@ -4,7 +4,7 @@ import type { IDL } from '@dfinity/candid';
 
 export interface AppBounties {
   'create_bounty' : ActorMethod<
-    [string, string, number, string, string, string],
+    [string, string, bigint, string, string, string],
     Result_1
   >,
   'delete_bounty' : ActorMethod<[BountyId], Result>,
@@ -13,7 +13,7 @@ export interface AppBounties {
   'get_owner' : ActorMethod<[], Principal>,
   'transfer_ownership' : ActorMethod<[Principal], Result>,
   'update_bounty' : ActorMethod<
-    [BountyId, string, string, number, string, string, string],
+    [BountyId, string, string, bigint, string, string, string],
     Result
   >,
 }
@@ -22,7 +22,7 @@ export interface Bounty {
   'status' : string,
   'title' : string,
   'reward_token' : string,
-  'reward_amount' : number,
+  'reward_amount' : bigint,
   'short_description' : string,
   'created_at' : Timestamp,
   'details_markdown' : string,

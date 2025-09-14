@@ -7,7 +7,7 @@ import { ImageWithFallback } from '@/components/ui/image-with-fallback';
 
 interface SimilarAppsProps {
   // The ID is the hex string of the current app's WASM hash
-  currentServerId: string;
+  currentServerNamespace: string;
 }
 
 // A simple skeleton for the sidebar
@@ -33,25 +33,38 @@ const SimilarAppsSkeleton = () => (
     </div>
   </div>
 );
-
-export function SimilarApps({ currentServerId }: SimilarAppsProps) {
-  // 1. Fetch the master list of all apps. This will likely be cached by React Query.
+export function SimilarApps({ currentServerNamespace }: SimilarAppsProps) {
   const { data: allApps, isLoading, isError } = useGetAppStoreListings();
 
-  // 2. Use `useMemo` to efficiently calculate the list of similar apps.
+  // --- 2. THE LOGIC IS NOW SMARTER AND USES THE NEW SCHEMA ---
   const similarApps = useMemo(() => {
-    if (!allApps) return [];
+    if (!allApps || allApps.length < 2) return [];
 
-    // Filter out the current app and take the first 3 results.
-    return allApps.filter((app) => app.id !== currentServerId).slice(0, 3);
-  }, [allApps, currentServerId]); // Recalculate only when the data or current server changes.
+    // First, find the current app to determine its category.
+    const currentApp = allApps.find(
+      (app) => app.namespace === currentServerNamespace,
+    );
 
-  // 3. Handle loading, error, and empty states.
+    // If for some reason the current app isn't in the list, fall back to showing any other apps.
+    if (!currentApp) {
+      return allApps
+        .filter((app) => app.namespace !== currentServerNamespace)
+        .slice(0, 3);
+    }
+
+    // A much better UX: "Similar" means "in the same category".
+    return allApps
+      .filter(
+        (app) =>
+          app.category === currentApp.category &&
+          app.namespace !== currentServerNamespace, // Exclude the current app itself
+      )
+      .slice(0, 3); // Take the top 3 matches.
+  }, [allApps, currentServerNamespace]);
+
   if (isLoading) {
     return <SimilarAppsSkeleton />;
   }
-
-  // Don't render the section if the fetch failed or if there are no similar apps to show.
   if (isError || similarApps.length === 0) {
     return null;
   }
@@ -63,18 +76,19 @@ export function SimilarApps({ currentServerId }: SimilarAppsProps) {
       </h2>
       <div className="space-y-2">
         {similarApps.map((app) => {
-          // 4. Get dynamic tier info and the correct link URL from the live data.
-          const tierInfo = getTierInfo(app.securityTier);
-          const appWasmHash = app.id; // This is the unique identifier for the app
-          const isCertified = app.securityTier !== 'Unranked';
+          // --- 3. THE RENDER LOGIC NOW ACCESSES THE NESTED `latestVersion` OBJECT ---
+          const { latestVersion } = app;
+          const tierInfo = getTierInfo(latestVersion.securityTier);
+          const isCertified = latestVersion.securityTier !== 'Unranked';
 
           return (
             <Link
-              key={appWasmHash}
-              to={`/server/${appWasmHash}`} // Use the wasm hash for the link
+              // Use the stable namespace for the React key and the URL.
+              key={app.namespace}
+              to={`/app/${app.namespace}`}
               className="flex items-center gap-4 p-2 rounded-lg transition-colors hover:bg-muted/50 -mx-2">
               <ImageWithFallback
-                src={app.iconUrl}
+                src={app.iconUrl} // This is a stable, top-level property.
                 alt={app.name}
                 className="w-12 h-12 rounded-lg object-cover"
               />

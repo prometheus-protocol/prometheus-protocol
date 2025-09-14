@@ -15,11 +15,9 @@ import { Input } from '@/components/ui/input';
 import { Loader2 } from 'lucide-react';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import {
-  useAllowanceQuery,
-  useBalanceQuery,
+  useTokenAllowanceQuery,
+  useTokenBalanceQuery,
   useUpdateAllowanceMutation,
-  useInitialPaymentSetupMutation,
-  useTokenInfosQuery,
 } from '@/hooks/usePayment';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -31,8 +29,8 @@ import {
 } from '@/components/ui/select';
 import { Principal } from '@dfinity/principal';
 import { Label } from '@/components/ui/label';
-import { isDefined } from '@/lib/utils';
 import { Auth } from '@prometheus-protocol/declarations';
+import { Tokens } from '@prometheus-protocol/ic-js';
 
 const formSchema = z.object({
   budget: z.coerce
@@ -45,8 +43,7 @@ interface AllowanceManagerProps {
   spenderPrincipal: Principal;
   onSuccess: () => void;
   submitButtonText: string;
-  isSetupFlow: boolean;
-  sessionId?: string; // Optional, only needed for setup flow
+  // isSetupFlow and sessionId can be kept if the setup flow is still needed
 }
 
 export function AllowanceManager({
@@ -54,107 +51,88 @@ export function AllowanceManager({
   spenderPrincipal,
   onSuccess,
   submitButtonText,
-  isSetupFlow,
-  sessionId,
 }: AllowanceManagerProps) {
   const { identity } = useInternetIdentity();
-  const [selectedTokenId, setSelectedTokenId] = useState<string | undefined>(
-    resourceServer.accepted_payment_canisters[0]?.toText(),
-  );
-  const selectedTokenPrincipal = useMemo(
-    () => (selectedTokenId ? Principal.fromText(selectedTokenId) : undefined),
-    [selectedTokenId],
-  );
 
-  const tokenInfoResults = useTokenInfosQuery(
-    identity,
-    resourceServer.accepted_payment_canisters,
-  );
-  const isTokenInfoLoading = tokenInfoResults.some((r) => r.isLoading);
-  const tokenInfos = useMemo(
-    () => tokenInfoResults.map((r) => r.data).filter(isDefined),
-    [tokenInfoResults],
-  );
-  const selectedTokenInfo = tokenInfos.find(
-    (t) => t?.canisterId.toText() === selectedTokenId,
-  );
-
-  const { data: balance, isLoading: isBalanceLoading } = useBalanceQuery(
-    identity,
-    selectedTokenPrincipal,
-  );
-  const { data: currentAllowance, isLoading: isAllowanceLoading } =
-    useAllowanceQuery(identity, spenderPrincipal, selectedTokenPrincipal);
-
-  const { mutate: initialSetup, isPending: isSettingUp } =
-    useInitialPaymentSetupMutation();
-  const { mutate: updateAllowance, isPending: isUpdating } =
-    useUpdateAllowanceMutation(
-      selectedTokenPrincipal ?? Principal.fromText('aaaaa-aa'),
+  // 2. Get the list of available tokens by filtering our central registry
+  const availableTokens = useMemo(() => {
+    const acceptedCanisterIds = new Set(
+      resourceServer.accepted_payment_canisters.map((p) => p.toText()),
     );
+    return Object.values(Tokens).filter((token) =>
+      acceptedCanisterIds.has(token.canisterId.toText()),
+    );
+  }, [resourceServer]);
+
+  // 3. Manage state using the token's unique symbol
+  const [selectedTokenSymbol, setSelectedTokenSymbol] = useState<
+    string | undefined
+  >(availableTokens[0]?.symbol);
+  const selectedToken = useMemo(
+    () => availableTokens.find((t) => t.symbol === selectedTokenSymbol),
+    [availableTokens, selectedTokenSymbol],
+  );
+
+  // 4. Use the new, refactored hooks that accept a Token object
+  const { data: balance, isLoading: isBalanceLoading } =
+    useTokenBalanceQuery(selectedToken);
+  const { data: currentAllowance, isLoading: isAllowanceLoading } =
+    useTokenAllowanceQuery(spenderPrincipal, selectedToken);
+
+  const { mutate: updateAllowance, isPending } = useUpdateAllowanceMutation();
 
   const form = useForm<z.input<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: { budget: 0 },
   });
 
+  // 5. Update the form value using the token's fromAtomic method
   useEffect(() => {
-    if (currentAllowance !== undefined) {
-      form.reset({ budget: currentAllowance });
+    if (currentAllowance !== undefined && selectedToken) {
+      form.reset({
+        budget: Number(selectedToken.fromAtomic(currentAllowance)),
+      });
     }
-  }, [currentAllowance, form]);
+  }, [currentAllowance, selectedToken, form]);
 
   function onSubmit(values: z.infer<typeof formSchema>) {
-    if (!identity || !spenderPrincipal || !selectedTokenPrincipal) return;
+    if (!identity || !spenderPrincipal || !selectedToken) return;
 
-    if (isSetupFlow) {
-      // In the setup flow, we need the session ID and call the initial setup mutation.
-      if (!sessionId) {
-        console.error('Session ID is required for setup flow.');
-        return;
-      }
-      initialSetup(
-        {
-          identity,
-          sessionId,
-          amount: values.budget,
-          spenderPrincipal,
-          icrc2CanisterId: selectedTokenPrincipal,
-        },
-        { onSuccess },
-      );
-    } else {
-      // In the management flow, we just update the allowance.
-      updateAllowance(
-        {
-          identity,
-          amount: values.budget,
-          spenderPrincipal,
-          icrc2CanisterId: selectedTokenPrincipal,
-        },
-        { onSuccess },
-      );
+    // If the new allowance is the same as the current one, do nothing
+    if (
+      currentAllowance !== undefined &&
+      Number(selectedToken.fromAtomic(currentAllowance)) === values.budget
+    ) {
+      onSuccess();
+      return;
     }
+
+    // The management flow is now much cleaner
+    updateAllowance(
+      {
+        token: selectedToken,
+        spender: spenderPrincipal,
+        amount: values.budget,
+      },
+      { onSuccess },
+    );
   }
 
-  const isLoading =
-    isTokenInfoLoading || isBalanceLoading || isAllowanceLoading;
-
-  const isPending = isSettingUp || isUpdating;
+  const isLoading = isBalanceLoading || isAllowanceLoading;
 
   return (
     <div className="space-y-8">
       <div className="space-y-2">
         <Label>Payment Token</Label>
-        <Select onValueChange={setSelectedTokenId} value={selectedTokenId}>
+        <Select
+          onValueChange={setSelectedTokenSymbol}
+          value={selectedTokenSymbol}>
           <SelectTrigger>
             <SelectValue placeholder="Select a payment token..." />
           </SelectTrigger>
           <SelectContent>
-            {tokenInfos.map((token) => (
-              <SelectItem
-                key={token.canisterId.toText()}
-                value={token.canisterId.toText()}>
+            {availableTokens.map((token) => (
+              <SelectItem key={token.symbol} value={token.symbol}>
                 {token.name} ({token.symbol})
               </SelectItem>
             ))}
@@ -175,9 +153,7 @@ export function AllowanceManager({
               name="budget"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>
-                    New Allowance ({selectedTokenInfo?.symbol})
-                  </FormLabel>
+                  <FormLabel>New Allowance ({selectedToken?.symbol})</FormLabel>
                   <FormControl>
                     <Input
                       type="number"
@@ -191,8 +167,11 @@ export function AllowanceManager({
                     />
                   </FormControl>
                   <FormDescription>
-                    Your balance: {balance?.toFixed(2) ?? '...'}{' '}
-                    {selectedTokenInfo?.symbol}
+                    {/* 6. Display the balance using the token's fromAtomic method */}
+                    Your balance:{' '}
+                    {balance !== undefined && selectedToken
+                      ? `${selectedToken.fromAtomic(balance)} ${selectedToken.symbol}`
+                      : '...'}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

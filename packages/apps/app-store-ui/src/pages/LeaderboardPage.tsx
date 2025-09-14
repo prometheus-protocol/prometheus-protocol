@@ -73,7 +73,7 @@ const LeaderboardPodium = ({
           </h3>
         </div>
         <img
-          src={`https://api.dicebear.com/8.x/pixel-art/svg?seed=${entry.user.toText()}`}
+          src={`https://api.dicebear.com/8.x/adventurer/svg?seed=${entry.user.toText()}`}
           alt="Avatar"
           className="w-20 h-20 rounded-full mb-4 bg-gray-800 p-1"
         />
@@ -122,7 +122,7 @@ const LeaderboardList = ({
         type === 'user'
           ? (entry as Leaderboard.UserLeaderboardEntry).user
           : (entry as Leaderboard.ServerLeaderboardEntry).server;
-      const avatarType = type === 'user' ? 'pixel-art' : 'bottts-neutral';
+      const avatarType = type === 'user' ? 'adventurer' : 'bottts';
       return (
         <div
           key={entry.rank}
@@ -132,7 +132,7 @@ const LeaderboardList = ({
           </div>
           <div className="col-span-6 flex items-center gap-4">
             <img
-              src={`https://api.dicebear.com/8.x/${avatarType}/svg?seed=${principal}`}
+              src={`https://api.dicebear.com/9.x/${avatarType}/svg?seed=${principal}`}
               alt="Avatar"
               className="w-10 h-10 rounded-full bg-gray-800 p-1"
             />
@@ -166,7 +166,7 @@ const LeaderboardCtaBanner = () => (
 );
 
 const LeaderboardSkeleton = () => (
-  <div className="w-full max-w-5xl mx-auto pt-12 pb-24 animate-pulse">
+  <div className="w-full max-w-6xl mx-auto pt-12 pb-24 animate-pulse">
     <div className="h-4 w-1/3 bg-muted rounded mb-8" />
     <div className="h-10 w-1/2 bg-muted rounded mb-16" />
     <div className="h-10 w-full md:w-[400px] bg-muted rounded-lg mb-8" />
@@ -181,7 +181,7 @@ const LeaderboardSkeleton = () => (
 // --- 1. NEW ERROR COMPONENT ---
 // This can be moved to its own file if you prefer.
 const LeaderboardError = ({ onRetry }: { onRetry: () => void }) => (
-  <div className="w-full max-w-5xl mx-auto pt-12 pb-24 flex flex-col items-center justify-center text-center text-gray-400">
+  <div className="w-full max-w-6xl mx-auto pt-12 pb-24 flex flex-col items-center justify-center text-center text-gray-400">
     <AlertTriangle className="h-12 w-12 text-red-500 mb-4" />
     <h2 className="text-2xl font-bold text-white mb-2">
       Failed to Load Leaderboard
@@ -250,7 +250,7 @@ export default function LeaderboardPage() {
   const visibleServers = allServers.slice(0, visibleServerCount);
 
   return (
-    <div className="w-full max-w-5xl mx-auto pt-12 pb-24 text-gray-300">
+    <div className="w-full max-w-6xl mx-auto pt-12 pb-24 text-gray-300">
       <nav className="text-sm text-muted-foreground mb-8">
         <Link to="/" className="hover:underline">
           Home

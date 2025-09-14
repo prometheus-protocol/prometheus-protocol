@@ -14,7 +14,7 @@ export function ServerGrid({ title, servers }: ServerGridProps) {
       </h2>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-8 gap-y-6">
         {servers.map((server) => (
-          <ServerCard key={server.id} server={server} />
+          <ServerCard key={server.namespace} app={server} />
         ))}
       </div>
     </section>

@@ -12,6 +12,7 @@ import Json "mo:json";
 import AuthCleanup "mo:mcp-motoko-sdk/auth/Cleanup";
 import AuthState "mo:mcp-motoko-sdk/auth/State";
 import AuthTypes "mo:mcp-motoko-sdk/auth/Types";
+import ApiKey "mo:mcp-motoko-sdk/auth/ApiKey";
 import Mcp "mo:mcp-motoko-sdk/mcp/Mcp";
 import McpTypes "mo:mcp-motoko-sdk/mcp/Types";
 import HttpHandler "mo:mcp-motoko-sdk/mcp/HttpHandler";
@@ -20,6 +21,7 @@ import State "mo:mcp-motoko-sdk/mcp/State";
 import Payments "mo:mcp-motoko-sdk/mcp/Payments";
 import HttpAssets "mo:mcp-motoko-sdk/mcp/HttpAssets";
 import SrvTypes "mo:mcp-motoko-sdk/server/Types";
+import Beacon "mo:mcp-motoko-sdk/mcp/Beacon";
 
 import IC "mo:ic";
 
@@ -49,36 +51,44 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
   // See the README for more details.
   // =================================================================================
 
-  transient let authContext : ?AuthTypes.AuthContext = null;
+  // transient let authContext : ?AuthTypes.AuthContext = null;
 
   // --- UNCOMMENT THIS BLOCK TO ENABLE AUTHENTICATION ---
 
-  // let issuerUrl = "https://bfggx-7yaaa-aaaai-q32gq-cai.icp0.io";
-  // let allowanceUrl = "https://bmfnl-jqaaa-aaaai-q32ha-cai.icp0.io";
-  // let requiredScopes = ["openid"];
+  let issuerUrl = "https://bfggx-7yaaa-aaaai-q32gq-cai.icp0.io";
+  let allowanceUrl = "https://bmfnl-jqaaa-aaaai-q32ha-cai.icp0.io";
+  let requiredScopes = ["openid"];
 
-  // //function to transform the response for jwks client
-  // public query func transformJwksResponse({
-  //   context : Blob;
-  //   response : IC.HttpRequestResult;
-  // }) : async IC.HttpRequestResult {
-  //   {
-  //     response with headers = []; // not intersted in the headers
-  //   };
-  // };
+  //function to transform the response for jwks client
+  public query func transformJwksResponse({
+    context : Blob;
+    response : IC.HttpRequestResult;
+  }) : async IC.HttpRequestResult {
+    {
+      response with headers = []; // not intersted in the headers
+    };
+  };
 
-  // // Initialize the auth context with the issuer URL and required scopes.
-  // transient let authContext : ?AuthTypes.AuthContext = ?AuthState.init(
-  //   Principal.fromActor(self),
-  //   issuerUrl,
-  //   requiredScopes,
-  //   transformJwksResponse,
-  // );
+  // Initialize the auth context with the issuer URL and required scopes.
+  transient let authContext : ?AuthTypes.AuthContext = ?AuthState.init(
+    Principal.fromActor(self),
+    owner,
+    issuerUrl,
+    requiredScopes,
+    transformJwksResponse,
+  );
+
+  let beaconCanisterId = Principal.fromText("vu5yx-eh777-77774-qaaga-cai");
+  transient let beaconContext : Beacon.BeaconContext = Beacon.init(
+    beaconCanisterId, // Public beacon canister ID
+    ?60, // Send a beacon every minute
+  );
 
   // --- END OF AUTHENTICATION BLOCK ---
 
   // --- Cleanup Timers ---
   Cleanup.startCleanupTimer<system>(appContext);
+  Beacon.startTimer<system>(beaconContext);
 
   // The AuthCleanup timer only needs to run if authentication is enabled.
   switch (authContext) {
@@ -143,11 +153,13 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
     };
 
     // The human-readable report.
-    let report = "The weather in " # location # " is sunny.";
+    let report = "The weather in " # location # " is extra sunny.";
 
     // Build the structured JSON payload that matches our outputSchema.
     let structuredPayload = Json.obj([("report", Json.str(report))]);
     let stringified = Json.stringify(structuredPayload, null);
+
+    Debug.print("getWeatherTool called for location: " # location);
 
     // Return the full, compliant result.
     cb(#ok({ content = [#text({ text = stringified })]; isError = false; structuredContent = ?structuredPayload }));
@@ -156,8 +168,8 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
   // --- 3. CONFIGURE THE SDK ---
   transient let mcpConfig : McpTypes.McpConfig = {
     self = Principal.fromActor(self);
-    allowanceUrl = null; // No allowance URL needed for free tools.
-    // allowanceUrl = ?allowanceUrl; // Uncomment this line if using paid tools.
+    // allowanceUrl = null; // No allowance URL needed for free tools.
+    allowanceUrl = ?allowanceUrl; // Uncomment this line if using paid tools.
     serverInfo = {
       name = "full-onchain-mcp-server";
       title = "Full On-chain MCP Server";
@@ -171,6 +183,7 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
     toolImplementations = [
       ("get_weather", getWeatherTool),
     ];
+    beacon = ?beaconContext;
   };
 
   // --- 4. CREATE THE SERVER LOGIC ---
@@ -322,6 +335,33 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
   // ==================================================================================================
   // PUBLIC METHOD (The Test Harness Entry Point)
   // ==================================================================================================
+
+  /**
+   * Creates a new API key. Only the owner can call this.
+   * @param label A human-readable name for the key.
+   * @param principal The principal this key will act on behalf of.
+   * @param scopes The permissions granted to this key.
+   * @returns The raw, unhashed API key. THIS IS THE ONLY TIME IT WILL BE VISIBLE.
+   */
+  public shared (msg) func create_api_key(name : Text, principal : Principal, scopes : [Text]) : async Text {
+    switch (authContext) {
+      case (null) {
+        Debug.trap("Authentication is not enabled on this canister.");
+      };
+      case (?ctx) {
+        if (msg.caller != owner) {
+          Debug.trap("Only the owner can create API keys.");
+        };
+        return await ApiKey.create_api_key({
+          ctx = ctx;
+          caller = msg.caller;
+          name = name;
+          principal = principal;
+          scopes = scopes;
+        });
+      };
+    };
+  };
 
   /**
   * This function is called by the test suite. It instantiates an actor

@@ -8,10 +8,6 @@ import {
   getBountyLock,
   BountyFilterInput,
 } from '@prometheus-protocol/ic-js';
-import {
-  loadDfxIdentity,
-  getCurrentIdentityName,
-} from '../../identity.node.js';
 
 export function registerListBountiesCommand(program: Command) {
   program
@@ -20,7 +16,7 @@ export function registerListBountiesCommand(program: Command) {
     .option('--status <status>', "Filter by status ('Open' or 'Claimed')")
     .option(
       '--audit-type <type>',
-      'Filter by a specific audit type (e.g., security_v1)',
+      'Filter by a specific audit type (e.g., data_safety_v1)',
     )
     .option(
       '--creator <principal>',
@@ -35,8 +31,6 @@ export function registerListBountiesCommand(program: Command) {
       console.log('🔎 Fetching available bounties...');
 
       try {
-        const identity = loadDfxIdentity(getCurrentIdentityName());
-
         const filters: BountyFilterInput[] = [];
         if (options.status) {
           if (options.status !== 'Open' && options.status !== 'Claimed') {
@@ -51,7 +45,7 @@ export function registerListBountiesCommand(program: Command) {
           filters.push({ creator: Principal.fromText(options.creator) });
         }
 
-        const bounties = await listBounties(identity, {
+        const bounties = await listBounties({
           filter: filters.length > 0 ? filters : undefined,
           take: options.limit ? BigInt(options.limit) : undefined,
           prev: options.prev ? BigInt(options.prev) : undefined,
@@ -65,7 +59,7 @@ export function registerListBountiesCommand(program: Command) {
         // --- CHANGE 2: Fetch lock statuses for all bounties in parallel ---
         console.log('   Checking reservation statuses...');
         const lockStatuses = await Promise.all(
-          bounties.map((b) => getBountyLock(b.id.toString())),
+          bounties.map((b) => getBountyLock(b.id)),
         );
 
         // --- CHANGE 3: Update the formatting logic to include the new status ---

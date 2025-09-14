@@ -14,11 +14,27 @@ type BountyLock =
  };
 type BountyId = nat;
 type Balance = nat;
+type AuditorProfile = 
+ record {
+   available_balances: vec record {
+                             TokenId;
+                             Balance;
+                           };
+   reputation: vec record {
+                     TokenId;
+                     Balance;
+                   };
+   staked_balances: vec record {
+                          TokenId;
+                          Balance;
+                        };
+ };
 type AuditHub = 
  service {
    burn_tokens: (auditor: principal, token_id: TokenId, amount: Balance) ->
     (Result);
    cleanup_expired_lock: (bounty_id: BountyId) -> (Result);
+   get_auditor_profile: (auditor: principal) -> (AuditorProfile) query;
    get_available_balance: (auditor: principal, token_id: TokenId) ->
     (Balance) query;
    get_bounty_lock: (bounty_id: BountyId) -> (opt BountyLock) query;

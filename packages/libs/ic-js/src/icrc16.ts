@@ -27,7 +27,7 @@ export function serializeIcrc16Value(value: any): ICRC16 {
   if (value instanceof Principal) {
     return { Principal: value };
   }
-  if (value instanceof Uint8Array || value instanceof Buffer) {
+  if (value instanceof Uint8Array) {
     return { Blob: Array.from(value) };
   }
   if (Array.isArray(value)) {
