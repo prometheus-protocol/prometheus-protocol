@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, Coins } from 'lucide-react';
+import { ShieldCheck, Coins, Usb } from 'lucide-react';
 import { MediaGallery } from './MediaGallery';
 import { getTierInfo } from '@/lib/get-tier-info';
 import { cn } from '@/lib/utils';
@@ -156,7 +156,8 @@ export function ServerHeader({
                   size="lg"
                   className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold min-w-[150px]"
                   onClick={onInstallClick}>
-                  Install
+                  <Usb />
+                  Connect
                 </Button>
                 <Button
                   onClick={handleViewCertClick}
