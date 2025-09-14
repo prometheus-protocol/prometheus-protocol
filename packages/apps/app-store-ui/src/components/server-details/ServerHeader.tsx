@@ -22,7 +22,6 @@ export function ServerHeader({
   const { latestVersion } = server;
   const tierInfo = getTierInfo(latestVersion.securityTier);
   const navigate = useNavigate();
-  console.log('latestVersion', latestVersion);
 
   const handleViewCertClick = () => {
     // The absolute latest version is always the first in the sorted `allVersions` array.

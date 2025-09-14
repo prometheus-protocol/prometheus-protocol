@@ -168,26 +168,26 @@ export function CertificatePage() {
               </div>
               <div className="space-y-3 mb-12 font-mono text-md">
                 {buildInfo?.canisterId && (
-                  <p>
-                    Canister ID:{' '}
+                  <div>
+                    <p>Canister ID: </p>
                     <p className="text-muted-foreground break-words">
                       {buildInfo.canisterId.toText()}
                     </p>
-                  </p>
+                  </div>
                 )}
-                <p>
-                  Wasm Hash:{' '}
+                <div>
+                  <p>Wasm Hash: </p>
                   <p className="text-muted-foreground break-words">
                     {latestVersion.wasmId}
                   </p>
-                </p>
+                </div>
                 {buildInfo?.gitCommit && (
-                  <p>
-                    Git Commit:{' '}
+                  <div>
+                    <p>Git Commit: </p>
                     <p className="text-muted-foreground break-words">
                       {buildInfo.gitCommit}
                     </p>
-                  </p>
+                  </div>
                 )}
                 {buildInfo?.repoUrl && buildInfo.gitCommit && (
                   <a

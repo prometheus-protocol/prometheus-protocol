@@ -32,14 +32,12 @@ export const useGetAppDetailsByNamespace = (
   namespace: string | undefined, // Renamed from appId
   wasmId?: string,
 ) => {
-  console.log('Hook called with:', { namespace, wasmId });
   return useQuery<AppStoreDetails>({
     queryKey: ['appDetails', namespace, wasmId], // The key correctly uses both
     queryFn: async () => {
       if (!namespace) {
         throw new Error('Namespace not available');
       }
-      console.log('FETCHING new data for:', { namespace, wasmId });
       const res = await getAppDetailsByNamespace(namespace, wasmId);
       if (!res) {
         throw new Error('App details not found');

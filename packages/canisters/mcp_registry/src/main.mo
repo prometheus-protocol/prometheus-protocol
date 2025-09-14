@@ -1221,7 +1221,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           namespace = namespace;
           name = AppStore.getICRC16Text(att.metadata, "name");
           mcp_path = AppStore.getICRC16Text(att.metadata, "mcp_path");
-          canister_id = AppStore.getICRC16Principal(att.metadata, "canister_id");
+          canister_id = Principal.fromText(AppStore.getICRC16Text(att.metadata, "canister_id"));
           publisher = AppStore.getICRC16Text(att.metadata, "publisher");
           category = AppStore.getICRC16Text(att.metadata, "category");
           icon_url = AppStore.getICRC16Text(att.metadata, "icon_url");
@@ -1246,7 +1246,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
               namespace = namespace;
               name = AppStore.getICRC16Text(meta, "name");
               mcp_path = AppStore.getICRC16Text(meta, "mcp_path");
-              canister_id = AppStore.getICRC16Principal(meta, "canister_id");
+              canister_id = Principal.fromText(AppStore.getICRC16Text(meta, "canister_id"));
               publisher = AppStore.getICRC16Text(meta, "publisher");
               category = AppStore.getICRC16Text(meta, "category");
               description = AppStore.getICRC16Text(meta, "description");

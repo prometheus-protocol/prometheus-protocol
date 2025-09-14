@@ -566,7 +566,7 @@ function mapCanisterVersionToTS(
   canisterVersion: Registry.AppVersionDetails, // This is the type from your .did.js file
   serverUrl: string,
 ): AppVersionDetails {
-  const principaId = fromNullable(canisterVersion.build_info.canister_id)
+  const canisterId = fromNullable(canisterVersion.build_info.canister_id)
     ? Principal.fromText(canisterVersion.build_info.canister_id[0]!)
     : undefined;
 
@@ -582,10 +582,10 @@ function mapCanisterVersionToTS(
         | 'unknown',
       gitCommit: fromNullable(canisterVersion.build_info.git_commit),
       repoUrl: fromNullable(canisterVersion.build_info.repo_url),
-      canisterId: principaId,
+      canisterId: canisterId,
       failureReason: fromNullable(canisterVersion.build_info.failure_reason),
     },
-    canisterId: principaId!,
+    canisterId: canisterId!,
     serverUrl,
     tools: canisterVersion.tools.map(deserializeFromIcrc16Map) as ServerTool[],
     dataSafety: {

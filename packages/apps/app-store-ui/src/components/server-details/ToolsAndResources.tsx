@@ -37,8 +37,6 @@ export function ToolsAndResources({
   const principal = canisterId;
   const { data: invocationCounts } = useGetToolInvocations(principal);
 
-  console.log('Invocation Counts:', tools);
-
   const renderContent = () => {
     // 4. Implement the new 3-state logic
     if (hasTools) {
