@@ -36,7 +36,7 @@ import { createHash } from 'node:crypto';
 const REGISTRY_WASM_PATH = path.resolve(
   __dirname,
   '../../../../',
-  '.dfx/local/canisters/mcp_registry/mcp_registry.wasm',
+  '.dfx/local/canisters/mcp_registry/mcp_registry.wasm.gz',
 );
 const ORCHESTRATOR_WASM_PATH = path.resolve(
   __dirname,

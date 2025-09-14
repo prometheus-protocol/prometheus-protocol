@@ -1,27 +1,14 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import {
-  BadgeCheck,
-  PackageCheckIcon,
-  Info,
-  AlertTriangle,
-  Hourglass,
-  FileCode,
-  Github,
-  ToolCase,
-} from 'lucide-react';
+import { BadgeCheck, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CertificateSummaryCard } from '@/components/CertificateSummaryCard';
-import { useGetAppDetails } from '@/hooks/useAppStore';
+import { useGetAppDetailsByNamespace } from '@/hooks/useAppStore';
 import { getTierInfo } from '@/lib/get-tier-info';
-import { cn, truncatePrincipal } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import {
-  AttestationData,
-  AuditBounty,
   CORE_AUDIT_TYPES,
-  ProcessedAttestation,
   ProcessedAuditRecord,
-  Registry,
   Tokens,
 } from '@prometheus-protocol/ic-js';
 import NotFoundPage from './NotFoundPage';
@@ -35,44 +22,6 @@ import { CreateBountyDialog } from '@/components/server-details/CreateBountyDial
 import { CoreAuditStatusCard } from '@/components/server-details/CoreAuditStatusCard';
 
 // --- CONSTANTS & HELPERS ---
-
-const getAuditDisplayInfo = (auditType: string) => {
-  switch (auditType) {
-    case 'app_info_v1':
-      return {
-        name: 'Application Info',
-        icon: <Info className="h-8 w-8 text-primary" />,
-        missingIcon: <Info className="h-8 w-8 text-muted-foreground" />,
-      };
-    case 'build_reproducibility_v1':
-      return {
-        name: 'Build Reproducibility',
-        icon: <PackageCheckIcon className="h-8 w-8 text-primary" />,
-        missingIcon: (
-          <PackageCheckIcon className="h-8 w-8 text-muted-foreground" />
-        ),
-      };
-    case 'data_safety_v1':
-      return {
-        name: 'Data Safety',
-        icon: <BadgeCheck className="h-8 w-8 text-primary" />,
-        missingIcon: <BadgeCheck className="h-8 w-8 text-muted-foreground" />,
-      };
-    case 'tools_v1':
-      return {
-        name: 'Tool Info',
-        icon: <ToolCase className="h-8 w-8 text-primary" />,
-        missingIcon: <ToolCase className="h-8 w-8 text-muted-foreground" />,
-      };
-    default:
-      return {
-        name: auditType,
-        icon: <FileCode className="h-8 w-8 text-primary" />,
-        missingIcon: <FileCode className="h-8 w-8 text-muted-foreground" />,
-      };
-  }
-};
-
 const backgroundSvg = `url('/images/certificate.svg')`;
 
 // --- HELPER COMPONENTS ---
@@ -120,125 +69,32 @@ const CertificatePageError = ({ onRetry }: { onRetry: () => void }) => (
   </div>
 );
 
-// --- NEW CoreAttestationCard Component ---
-
-interface CoreAttestationCardProps {
-  auditType: string;
-  attestation?: ProcessedAttestation;
-  bounty?: AuditBounty;
-  appId: string;
-}
-
-function CoreAttestationCard({
-  auditType,
-  attestation,
-  bounty,
-  appId,
-}: CoreAttestationCardProps) {
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const displayInfo = getAuditDisplayInfo(auditType);
-  const paymentToken = Tokens.USDC;
-
-  if (attestation) {
-    const certifiedOn = new Date(
-      Number(attestation.timestamp / 1_000_000n),
-    ).toLocaleDateString();
-    return (
-      <div className="flex items-start gap-4 p-4 border rounded-lg bg-muted/30">
-        <div className="flex items-start gap-4">
-          <div className="flex-shrink-0 mt-1">{displayInfo.icon}</div>
-          <div className="flex-grow">
-            <p className="text-lg font-semibold">{displayInfo.name}</p>
-            <p className="text-sm font-mono text-muted-foreground">
-              Certified by:{' '}
-              <span className="text-foreground">
-                {truncatePrincipal(attestation.auditor.toText())}
-              </span>
-            </p>
-            <p className="text-sm font-mono text-muted-foreground">
-              Certified on:{' '}
-              <span className="text-foreground">{certifiedOn}</span>
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (bounty) {
-    return (
-      <div className="flex items-start gap-4 p-4 border rounded-lg bg-muted/30">
-        <div className="flex-shrink-0 mt-1">
-          <Hourglass className="h-8 w-8 text-muted-foreground" />
-        </div>
-        <div className="flex-grow">
-          <p className="text-lg font-semibold">{displayInfo.name}</p>
-          <p className="text-sm text-muted-foreground mb-2">
-            A bounty of{' '}
-            <span className="font-bold text-foreground">
-              {paymentToken.fromAtomic(bounty.tokenAmount)}{' '}
-              {paymentToken.symbol}
-            </span>{' '}
-            is available.
-          </p>
-          <Button size="sm" variant="secondary" asChild>
-            <Link to={`/audit-hub/${bounty.id.toString()}`}>View Bounty</Link>
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <>
-      <div className="flex items-start gap-4 p-4 border rounded-lg bg-muted/30">
-        <div className="flex-shrink-0 mt-1">{displayInfo.missingIcon}</div>
-        <div className="flex-grow">
-          <p className="text-lg font-semibold text-muted-foreground">
-            {displayInfo.name}
-          </p>
-          <p className="text-sm text-muted-foreground mb-2">
-            This attestation is missing.
-          </p>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => setIsDialogOpen(true)}>
-            Sponsor Bounty
-          </Button>
-        </div>
-      </div>
-      <CreateBountyDialog
-        isOpen={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
-        appId={appId}
-        auditType={auditType}
-        paymentToken={paymentToken}
-      />
-    </>
-  );
-}
-
 // --- MAIN CertificatePage Component ---
 
 export function CertificatePage() {
-  const { appId } = useParams<{ appId: string }>();
+  const { appId, wasmId } = useParams<{
+    appId: string;
+    wasmId?: string;
+  }>();
+
   const {
     data: appDetails,
     isLoading,
     isError,
     refetch,
-  } = useGetAppDetails(appId);
+  } = useGetAppDetailsByNamespace(appId, wasmId);
+
   const [sponsoringAuditType, setSponsoringAuditType] = useState<string | null>(
     null,
   );
-  const buildInfo = appDetails?.buildInfo;
 
   if (isLoading) return <CertificatePageSkeleton />;
   if (isError) return <CertificatePageError onRetry={refetch} />;
   if (!appDetails) return <NotFoundPage />;
 
-  const tierInfo = getTierInfo(appDetails.securityTier);
+  const { latestVersion } = appDetails;
+  const tierInfo = getTierInfo(latestVersion.securityTier);
+  const buildInfo = latestVersion.buildInfo;
 
   return (
     <>
@@ -255,7 +111,7 @@ export function CertificatePage() {
             Home
           </Link>
           <span className="mx-2">/</span>
-          <Link to={`/apps/${appId}`} className="hover:underline">
+          <Link to={`/app/${appDetails.namespace}`} className="hover:underline">
             App Info
           </Link>
           <span className="mx-2">/</span>
@@ -267,7 +123,7 @@ export function CertificatePage() {
             <div className="lg:col-span-2">
               <h1 className="text-4xl font-bold tracking-tight flex items-center gap-3 mb-12">
                 {appDetails.name}
-                {appDetails.securityTier !== 'Unranked' && (
+                {latestVersion.securityTier !== 'Unranked' && (
                   <BadgeCheck className="h-8 w-8 text-primary" />
                 )}
               </h1>
@@ -275,22 +131,19 @@ export function CertificatePage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 mb-12">
                 {CORE_AUDIT_TYPES.map((auditType) => {
-                  // Find the corresponding record and bounty for this audit type.
-                  const record = appDetails.auditRecords.find(
+                  const record = latestVersion.auditRecords.find(
                     (rec: ProcessedAuditRecord) => {
                       if (rec.type === 'attestation')
                         return rec.audit_type === auditType;
-                      // A divergence only counts for the build audit
                       if (rec.type === 'divergence')
                         return auditType === 'build_reproducibility_v1';
                       return false;
                     },
                   );
-                  const bounty = appDetails.bounties.find(
+                  const bounty = latestVersion.bounties.find(
                     (b) => b.challengeParameters.audit_type === auditType,
                   );
 
-                  // Determine the status based on the data we found.
                   let status:
                     | 'success'
                     | 'failure'
@@ -307,38 +160,40 @@ export function CertificatePage() {
                       status={status}
                       record={record}
                       bounty={bounty}
-                      appId={appDetails.id}
+                      appId={latestVersion.wasmId}
                       onSponsorClick={() => setSponsoringAuditType(auditType)}
                     />
                   );
                 })}
               </div>
-              {/* --- 3. USE THE SIMPLIFIED buildInfo OBJECT --- */}
-              <div className="space-y-2 mb-12 font-mono text-md">
+              <div className="space-y-3 mb-12 font-mono text-md">
                 {buildInfo?.canisterId && (
                   <p>
                     Canister ID:{' '}
-                    <span className="text-muted-foreground break-words">
-                      {buildInfo.canisterId}
-                    </span>
+                    <p className="text-muted-foreground break-words">
+                      {buildInfo.canisterId.toText()}
+                    </p>
                   </p>
                 )}
                 <p>
                   Wasm Hash:{' '}
-                  <span className="text-muted-foreground break-words">
-                    {appId}
-                  </span>
+                  <p className="text-muted-foreground break-words">
+                    {latestVersion.wasmId}
+                  </p>
                 </p>
                 {buildInfo?.gitCommit && (
                   <p>
                     Git Commit:{' '}
-                    <span className="text-muted-foreground break-words">
+                    <p className="text-muted-foreground break-words">
                       {buildInfo.gitCommit}
-                    </span>
+                    </p>
                   </p>
                 )}
                 {buildInfo?.repoUrl && buildInfo.gitCommit && (
                   <a
+                    className="inline-flex items-center text-sm text-primary hover:underline mt-2"
+                    target="_blank"
+                    rel="noopener noreferrer"
                     href={`${buildInfo.repoUrl}/commit/${buildInfo.gitCommit}`}>
                     View Commit on GitHub
                   </a>
@@ -405,12 +260,11 @@ export function CertificatePage() {
         </div>
       </div>
 
-      {/* --- 3. Render the Dialog, controlled by our new state --- */}
       <CreateBountyDialog
         isOpen={!!sponsoringAuditType}
         onOpenChange={(open) => !open && setSponsoringAuditType(null)}
-        appId={appDetails.id}
-        auditType={sponsoringAuditType ?? ''} // Pass the currently selected audit type
+        appId={latestVersion.wasmId}
+        auditType={sponsoringAuditType ?? ''}
         paymentToken={Tokens.USDC}
       />
     </>

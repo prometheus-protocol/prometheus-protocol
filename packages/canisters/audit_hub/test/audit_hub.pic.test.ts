@@ -46,11 +46,11 @@ describe('Audit Hub Canister', () => {
     it('should initially report zero balances for an auditor', async () => {
       const available = await auditHubActor.get_available_balance(
         auditor1Identity.getPrincipal(),
-        'security_v1',
+        'data_safety_v1',
       );
       const staked = await auditHubActor.get_staked_balance(
         auditor1Identity.getPrincipal(),
-        'security_v1',
+        'data_safety_v1',
       );
       expect(available).toBe(0n);
       expect(staked).toBe(0n);
@@ -60,7 +60,7 @@ describe('Audit Hub Canister', () => {
       auditHubActor.setIdentity(randomUserIdentity);
       const res = await auditHubActor.mint_tokens(
         auditor1Identity.getPrincipal(),
-        'security_v1',
+        'data_safety_v1',
         100n,
       );
       expect(res).toHaveProperty('err');
@@ -72,13 +72,13 @@ describe('Audit Hub Canister', () => {
       auditHubActor.setIdentity(daoIdentity);
       await auditHubActor.mint_tokens(
         auditor1Identity.getPrincipal(),
-        'security_v1',
+        'data_safety_v1',
         100n,
       );
 
       const available = await auditHubActor.get_available_balance(
         auditor1Identity.getPrincipal(),
-        'security_v1',
+        'data_safety_v1',
       );
       expect(available).toBe(100n);
 
@@ -94,25 +94,25 @@ describe('Audit Hub Canister', () => {
       auditHubActor.setIdentity(daoIdentity);
       await auditHubActor.mint_tokens(
         auditor1Identity.getPrincipal(),
-        'security_v1',
+        'data_safety_v1',
         100n,
       );
       expect(
         await auditHubActor.get_available_balance(
           auditor1Identity.getPrincipal(),
-          'security_v1',
+          'data_safety_v1',
         ),
       ).toBe(100n);
 
       await auditHubActor.burn_tokens(
         auditor1Identity.getPrincipal(),
-        'security_v1',
+        'data_safety_v1',
         40n,
       );
       expect(
         await auditHubActor.get_available_balance(
           auditor1Identity.getPrincipal(),
-          'security_v1',
+          'data_safety_v1',
         ),
       ).toBe(60n);
     });
@@ -147,7 +147,7 @@ describe('Audit Hub Canister', () => {
 
     it('should allow the DAO to set and get stake requirements', async () => {
       auditHubActor.setIdentity(daoIdentity);
-      const tokenId = 'security_v1';
+      const tokenId = 'data_safety_v1';
       const stakeAmount = 100n;
 
       // Initially, it should be null
@@ -178,7 +178,7 @@ describe('Audit Hub Canister', () => {
   // --- Suite 2: Bounty Locking & Staking Lifecycle ---
   describe('Bounty Locking & Staking Lifecycle', () => {
     const BOUNTY_ID = 1n; // Using a fixed bounty ID for simplicity
-    const TOKEN_ID = 'security_v1';
+    const TOKEN_ID = 'data_safety_v1';
     const STAKE_AMOUNT = 50n; // This is now the configured requirement
 
     beforeEach(async () => {
@@ -363,7 +363,7 @@ describe('Audit Hub Canister', () => {
       auditHubActor.setIdentity(daoIdentity);
       await auditHubActor.mint_tokens(
         auditor1Identity.getPrincipal(),
-        'security_v1',
+        'data_safety_v1',
         10n,
       );
       await auditHubActor.mint_tokens(
@@ -395,7 +395,7 @@ describe('Audit Hub Canister', () => {
       };
 
       const expectedBalances = [
-        ['security_v1', 10n],
+        ['data_safety_v1', 10n],
         ['tools_v1', 5n],
       ].sort(sortByName);
 
@@ -409,10 +409,10 @@ describe('Audit Hub Canister', () => {
     it('should return a complete profile with available, staked, and reputation balances', async () => {
       // Setup: Configure stake requirements and mint various tokens
       auditHubActor.setIdentity(daoIdentity);
-      await auditHubActor.set_stake_requirement('security_v1', 10n);
+      await auditHubActor.set_stake_requirement('data_safety_v1', 10n);
       await auditHubActor.mint_tokens(
         auditor1Identity.getPrincipal(),
-        'security_v1',
+        'data_safety_v1',
         25n, // Will have 15n left after staking
       );
       await auditHubActor.mint_tokens(
@@ -423,7 +423,7 @@ describe('Audit Hub Canister', () => {
 
       // Action 1: Auditor stakes some tokens
       auditHubActor.setIdentity(auditor1Identity);
-      await auditHubActor.reserve_bounty(1n, 'security_v1');
+      await auditHubActor.reserve_bounty(1n, 'data_safety_v1');
 
       // Action 2: Fetch the profile
       const profileResult = await auditHubActor.get_auditor_profile(
@@ -445,11 +445,11 @@ describe('Audit Hub Canister', () => {
       };
 
       const expectedAvailable = [
-        ['security_v1', 15n],
+        ['data_safety_v1', 15n],
         ['tools_v1', 5n],
       ].sort(sortByName);
 
-      const expectedStaked = [['security_v1', 10n]].sort(sortByName);
+      const expectedStaked = [['data_safety_v1', 10n]].sort(sortByName);
 
       expect(profile?.available_balances.sort(sortByName)).toEqual(
         expectedAvailable,

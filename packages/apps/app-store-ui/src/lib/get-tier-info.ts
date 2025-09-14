@@ -18,7 +18,7 @@ export const getTierInfo = (
   if (tier === 'Gold') {
     return {
       name: 'Gold Verified',
-      description: 'Passed all available audits, including security.',
+      description: 'Passed all available audits.',
       textColorClass: 'text-primary',
       borderColorClass: 'border-primary/50',
       Icon: ShieldCheck,

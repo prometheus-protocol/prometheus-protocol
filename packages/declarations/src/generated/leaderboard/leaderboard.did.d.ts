@@ -6,6 +6,10 @@ export interface Leaderboard {
   'get_last_updated' : ActorMethod<[], Time>,
   'get_owner' : ActorMethod<[], Principal>,
   'get_server_leaderboard' : ActorMethod<[], Array<ServerLeaderboardEntry>>,
+  'get_tool_invocations_for_server' : ActorMethod<
+    [Principal],
+    Array<[string, bigint]>
+  >,
   'get_user_leaderboard' : ActorMethod<[], Array<UserLeaderboardEntry>>,
   'init' : ActorMethod<[Principal], undefined>,
   'trigger_manual_update' : ActorMethod<[], Result>,

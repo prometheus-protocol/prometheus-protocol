@@ -34,6 +34,7 @@ export interface HttpResponse {
 }
 export interface McpServer {
   'call_tracker' : ActorMethod<[Principal, UsageStats], Result_2>,
+  'create_api_key' : ActorMethod<[string, Principal, Array<string>], string>,
   'get_owner' : ActorMethod<[], Principal>,
   'get_treasury_balance' : ActorMethod<[Principal], bigint>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,

@@ -77,9 +77,16 @@ function App() {
               <Route path="/" element={<HomePage />} />
 
               {/* The details page for a specific MCP server, accessible by a slug or ID */}
-              <Route path="/apps/:appId" element={<ServerDetailsPage />} />
+              <Route path="/app/:appId" element={<ServerDetailsPage />} />
+              <Route
+                path="/app/:appId/:wasmId"
+                element={<ServerDetailsPage />}
+              />
               <Route path="/certificate/:appId" element={<CertificatePage />} />
-
+              <Route
+                path="/certificate/:appId/:wasmId"
+                element={<CertificatePage />}
+              />
               {/* Audit Hub Routes */}
               <Route path="audit-hub">
                 <Route index element={<AuditHubPage />} />

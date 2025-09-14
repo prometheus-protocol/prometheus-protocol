@@ -26,6 +26,7 @@ import Text "mo:base/Text";
 import Base16 "mo:base16/Base16";
 import ICRC2 "mo:icrc2-types";
 import Map "mo:map/Map";
+import Order "mo:base/Order";
 
 import AppStore "AppStore";
 import AuditHub "AuditHub";
@@ -371,7 +372,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     return Iter.toArray(Map.vals(latest_by_type));
   };
 
-  public shared query func get_bounties_for_wasm(wasm_id : Text) : async [ICRC127.Bounty] {
+  private func _get_bounties_for_wasm(wasm_id : Text) : [ICRC127.Bounty] {
     let state = icrc127().state;
     var matching_bounties : [ICRC127.Bounty] = [];
 
@@ -410,6 +411,10 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
 
     return matching_bounties;
+  };
+
+  public shared query func get_bounties_for_wasm(wasm_id : Text) : async [ICRC127.Bounty] {
+    return _get_bounties_for_wasm(wasm_id);
   };
 
   /**
@@ -860,180 +865,416 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
   };
 
-  public query func get_app_listings(req : AppStore.AppListingRequest) : async AppStore.AppListingResponse {
-    // 1. Handle optional arguments, mirroring the reference implementation.
-    let filters = switch (req.filter) { case null []; case (?fs) fs };
-    let take = switch (req.take) { case null 20; case (?n) Nat.min(n, 100) }; // Default 20, max 100.
-    let prev = req.prev;
+  // --- PRIVATE HELPER: Translates AppStore filters to Registry filters ---
+  private func _translate_filters(filters : [AppStore.AppListingFilter]) : [Service.GetCanisterTypesFilter] {
+    var out = Buffer.Buffer<Service.GetCanisterTypesFilter>(filters.size());
+    for (f in filters.vals()) {
+      switch (f) {
+        case (#namespace(ns)) { out.add(#namespace(ns)) };
+        case (#publisher(pub)) {
+          // Note: The registry doesn't filter by publisher directly.
+          // This is a limitation we accept for now to gain performance.
+          // A future version of the registry could add this capability.
+        };
+        case (#name(_)) {
+          // The registry also doesn't filter by app name.
+        };
+      };
+    };
+    return Buffer.toArray(out);
+  };
 
-    // 2. Fetch ALL canister types. This is the base dataset.
-    let all_canister_types = icrc118wasmregistry().icrc118_get_canister_types({
-      filter = [];
-      prev = null;
-      take = null;
-    });
+  /**
+   * Converts a (major, minor, patch) version tuple into a standard "1.2.3" string format.
+   */
+  private func _format_version_number(version_tuple : (Nat, Nat, Nat)) : Text {
+    let (major, minor, patch) = version_tuple;
+    return Nat.toText(major) # "." # Nat.toText(minor) # "." # Nat.toText(patch);
+  };
 
-    Debug.print("[DEBUG] Total canister types fetched: " # debug_show (all_canister_types.size()));
+  // --- PRIVATE HELPER: Encapsulates the logic for building a single listing ---
+  // This takes a CanisterType and returns a fully formed AppListing, or null if it shouldn't be listed.
+  private func _build_listing_for_canister_type(canister_type : ICRC118WasmRegistry.CanisterType) : ?AppStore.AppListing {
+    // 1. Find the latest version for this canister type.
+    if (canister_type.versions.size() == 0) {
+      return null; // No versions, so nothing to list.
+    };
 
-    // 3. Pre-process and "join" data into a complete list of potential listings.
-    //    This is done in memory before filtering and pagination.
-    var all_listings = Buffer.Buffer<AppStore.AppListing>(all_canister_types.size());
-    Debug.print("[DEBUG] Processing canister types to build listings...");
-    label loopThroughApps for (canister_type in all_canister_types.vals()) {
-      // a. Find the latest version for this canister type.
-      if (canister_type.versions.size() > 0) {
-        // Start with the first version as the potential latest.
-        var latest_version = canister_type.versions[0];
+    var latest_version = canister_type.versions[0];
+    if (canister_type.versions.size() > 1) {
+      for (i in Iter.range(1, canister_type.versions.size() - 1)) {
+        if (ICRC118WasmRegistry.canisterVersionCompare(canister_type.versions[i], latest_version) == #greater) {
+          latest_version := canister_type.versions[i];
+        };
+      };
+    };
 
-        Debug.print("[DEBUG] Evaluating canister type: \"" # canister_type.canister_type_namespace # "\" with " # debug_show (canister_type.versions.size()) # " versions.");
+    // 2. Get the wasm_id and apply the verification gateway check.
+    let wasm_id = Base16.encode(latest_version.calculated_hash);
+    if (not _is_wasm_verified(wasm_id)) {
+      return null; // The latest version is not verified, so we don't list the app.
+    };
 
-        // If there are more versions, iterate from the second element (index 1) to the end.
-        if (canister_type.versions.size() > 1) {
-          // Use Iter.range to create an iterator of indices from 1 to size-1.
-          for (i in Iter.range(1, canister_type.versions.size() - 1)) {
-            if (ICRC118WasmRegistry.canisterVersionCompare(canister_type.versions[i], latest_version) == #greater) {
-              latest_version := canister_type.versions[i];
-            };
+    // 3. Determine status (Pending vs. Verified) and build the listing object.
+    let audit_records = _get_audit_records_for_wasm(wasm_id);
+    let app_info_attestation = Array.find<ICRC126.AuditRecord>(
+      audit_records,
+      func(rec) {
+        switch (rec) {
+          case (#Attestation(att)) { att.audit_type == "app_info_v1" };
+          case (_) { false };
+        };
+      },
+    );
+
+    // --- 4. Restructure the return object based on status ---
+    switch (app_info_attestation) {
+      case (?#Attestation(att)) {
+        // --- PATH A: APP IS FULLY LISTED ---
+        let completed_audits = AppStore.get_completed_audit_types(audit_records);
+        let tier = AppStore.calculate_security_tier(true, completed_audits);
+
+        return ?{
+          // Stable app identity from the attestation
+          namespace = canister_type.canister_type_namespace;
+          name = AppStore.getICRC16Text(att.metadata, "name");
+          description = AppStore.getICRC16Text(att.metadata, "description");
+          category = AppStore.getICRC16Text(att.metadata, "category");
+          publisher = AppStore.getICRC16Text(att.metadata, "publisher");
+          icon_url = AppStore.getICRC16Text(att.metadata, "icon_url");
+          banner_url = AppStore.getICRC16Text(att.metadata, "banner_url");
+
+          // Nested object with version-specific details
+          latest_version = {
+            wasm_id = wasm_id;
+            version_string = _format_version_number(latest_version.version_number);
+            security_tier = tier;
+            status = #Verified;
           };
         };
+      };
+      case (_) {
+        // --- PATH B: APP IS PENDING ---
+        let verification_request = Map.get(icrc126().state.requests, Map.thash, wasm_id);
+        switch (verification_request) {
+          case (?req) {
+            let meta = req.metadata;
+            let visuals_map = AppStore.getICRC16MapOptional(meta, "visuals");
+            return ?{
+              // Stable app identity from the verification request
+              namespace = canister_type.canister_type_namespace;
+              name = AppStore.getICRC16Text(meta, "name");
+              description = AppStore.getICRC16Text(meta, "description");
+              category = AppStore.getICRC16Text(meta, "category");
+              publisher = AppStore.getICRC16Text(meta, "publisher");
+              icon_url = switch (visuals_map) {
+                case (?v) { AppStore.getICRC16Text(v, "icon_url") };
+                case (_) { "" };
+              };
+              banner_url = switch (visuals_map) {
+                case (?v) { AppStore.getICRC16Text(v, "banner_url") };
+                case (_) { "" };
+              };
 
-        // b. Get the wasm_id and apply the verification gateway check.
-        let wasm_id = Base16.encode(latest_version.calculated_hash);
-        let is_verified = _is_wasm_verified(wasm_id); // Store the result
-
-        // The gateway check remains the same: only verified apps are listed.
-        if (not is_verified) {
-          Debug.print("[DEBUG] Skipping unverified WASM: \"" # wasm_id # "\"");
-          continue loopThroughApps;
-        };
-
-        let attestations_for_wasm = _get_attestations_for_wasm(wasm_id);
-        let app_info_attestation = Array.find<ICRC126.AttestationRecord>(
-          attestations_for_wasm,
-          func(att) { att.audit_type == "app_info_v1" },
-        );
-        // --- THIS IS THE CORE LOGIC CHANGE ---
-        switch (app_info_attestation) {
-          case (?att) {
-            // --- PATH A: APP IS FULLY LISTED (Existing Logic) ---
-            Debug.print("[DEBUG] Found app_info_v1 attestation for WASM: \"" # wasm_id # "\"");
-            // This app has an app_info_v1 attestation.
-
-            var completed_audits : [Text] = [];
-            for (a in attestations_for_wasm.vals()) {
-              if (a.audit_type != "build_reproducibility_v1") {
-                completed_audits := Array.append(completed_audits, [a.audit_type]);
+              // Nested object with version-specific details
+              latest_version = {
+                wasm_id = wasm_id;
+                version_string = _format_version_number(latest_version.version_number);
+                security_tier = #Unranked;
+                status = #Pending;
               };
             };
-            let tier = AppStore.calculate_security_tier(is_verified, completed_audits);
+          };
+          case (null) { return null };
+        };
+      };
+    };
+  };
 
-            all_listings.add({
-              id = wasm_id;
-              namespace = canister_type.canister_type_namespace;
-              name = AppStore.getICRC16Text(att.metadata, "name");
-              description = AppStore.getICRC16Text(att.metadata, "description");
-              category = AppStore.getICRC16Text(att.metadata, "category");
-              publisher = AppStore.getICRC16Text(att.metadata, "publisher");
-              icon_url = AppStore.getICRC16Text(att.metadata, "icon_url");
-              banner_url = AppStore.getICRC16Text(att.metadata, "banner_url");
-              security_tier = tier;
-              status = #Verified; // This is a fully listed app.
+  // --- THE REFACTORED PUBLIC FUNCTION ---
+  public query func get_app_listings(req : AppStore.AppListingRequest) : async AppStore.AppListingResponse {
+    // 1. Translate AppStore filters to the underlying Registry's filter format.
+    let registry_filters = switch (req.filter) {
+      case (?exists) { _translate_filters(exists) };
+      case (null) { [] };
+    };
+
+    // 2. Delegate filtering and pagination to the ICRC-118 registry canister.
+    //    This is the core performance improvement. We only fetch the small slice of data we need.
+    let paginated_canister_types = icrc118wasmregistry().icrc118_get_canister_types({
+      filter = registry_filters;
+      prev = req.prev;
+      take = req.take;
+    });
+
+    // 3. Create a buffer for the final, enriched AppListing objects.
+    //    Its size is bounded by the `take` parameter, preventing large memory allocations.
+    var out = Buffer.Buffer<AppStore.AppListing>(paginated_canister_types.size());
+
+    // 4. Iterate over the SMALL, pre-filtered list to enrich the data.
+    for (canister_type in paginated_canister_types.vals()) {
+      switch (_build_listing_for_canister_type(canister_type)) {
+        case (?listing) {
+          // The helper function successfully built a listing. Add it to our results.
+          out.add(listing);
+        };
+        case (null) {
+          // The helper returned null (e.g., latest version not verified).
+          // We simply skip it and move to the next one.
+        };
+      };
+    };
+
+    // 5. Return the final, enriched list.
+    return #ok(Buffer.toArray(out));
+  };
+
+  // Assembles the BuildInfo object by looking for a build attestation or divergence report.
+  private func _build_build_info(records : [ICRC126.AuditRecord]) : AppStore.BuildInfo {
+
+    let build_att = _find_attestation_by_type(records, "build_reproducibility_v1");
+    switch (build_att) {
+      case (?att) {
+        return {
+          status = "success";
+          git_commit = AppStore.getICRC16TextOptional(att.metadata, "git_commit");
+          repo_url = AppStore.getICRC16TextOptional(att.metadata, "repo_url");
+          canister_id = AppStore.getICRC16TextOptional(att.metadata, "canister_id");
+          failure_reason = null;
+        };
+      };
+      case (null) {
+        /* continue to check for divergence */
+      };
+    };
+
+    let divergence = Array.find<ICRC126.AuditRecord>(records, func(r) { switch (r) { case (#Divergence(_)) true; case (_) false } });
+    switch (divergence) {
+      case (?exists) {
+        let div = switch (exists) {
+          case (#Divergence(d)) d;
+          case (_) Debug.trap("impossible");
+        };
+        return {
+          status = "failure";
+          git_commit = null;
+          repo_url = null;
+          canister_id = null;
+          failure_reason = ?div.report;
+        };
+      };
+      case (null) { /* continue to default return */ };
+    };
+
+    return {
+      status = "unknown";
+      git_commit = null;
+      repo_url = null;
+      canister_id = null;
+      failure_reason = null;
+    };
+  };
+
+  // Extracts the list of tools from the 'tools_v1' attestation.
+  private func _get_tools_from_records(records : [ICRC126.AuditRecord]) : [ICRC126.ICRC16Map] {
+    switch (_find_attestation_by_type(records, "tools_v1")) {
+      case (?att) { AppStore.getICRC16ArrayOfMaps(att.metadata, "tools") };
+      case (null) { [] };
+    };
+  };
+
+  // Extracts and assembles the DataSafetyInfo object.
+  private func _get_data_safety_from_records(records : [ICRC126.AuditRecord]) : AppStore.DataSafetyInfo {
+    switch (_find_attestation_by_type(records, "data_safety_v1")) {
+      case (?att) {
+        return {
+          overall_description = AppStore.getICRC16Text(att.metadata, "overall_description");
+          data_points = AppStore.getICRC16ArrayOfMaps(att.metadata, "data_points");
+        };
+      };
+      case (null) {
+        return { overall_description = ""; data_points = [] };
+      };
+    };
+  };
+
+  // Finds a specific attestation by its type from a list of audit records.
+  private func _find_attestation_by_type(records : [ICRC126.AuditRecord], audit_type : Text) : ?ICRC126.AttestationRecord {
+    let found = Array.find<ICRC126.AuditRecord>(
+      records,
+      func(rec) {
+        switch (rec) {
+          case (#Attestation(att)) { att.audit_type == audit_type };
+          case (_) { false };
+        };
+      },
+    );
+    switch (found) {
+      case (?#Attestation(att)) { return ?att };
+      case (_) { return null };
+    };
+  };
+
+  /**
+   * Fetches and assembles all data for an app's detail page using its stable namespace.
+   * This is the single, powerful query the frontend needs.
+   */
+  public query func get_app_details_by_namespace(
+    namespace : Text,
+    opt_wasm_id : ?Text,
+  ) : async Result.Result<AppStore.AppDetailsResponse, AppStore.AppStoreError> {
+
+    // 1. Find the canister type by its namespace.
+    let req : Service.GetCanisterTypesRequest = {
+      filter = [#namespace(namespace)];
+      prev = null;
+      take = ?1; // We only expect one canister type per namespace.
+    };
+    let canister_types = icrc118wasmregistry().icrc118_get_canister_types(req);
+    if (canister_types.size() == 0) {
+      return #err(#NotFound("Canister type not found for the given namespace"));
+    };
+
+    let canister_type = canister_types[0];
+
+    // Define a comparison function for descending order (newest first).
+    func compareVersionsDesc(a : ICRC118WasmRegistry.CanisterVersion, b : ICRC118WasmRegistry.CanisterVersion) : Order.Order {
+      switch (ICRC118WasmRegistry.canisterVersionCompare(a, b)) {
+        case (#less) { #greater }; // a < b, so move a after b
+        case (#greater) { #less }; // a > b, so move a before b
+        case (#equal) { #equal };
+      };
+    };
+    var sorted_versions = Array.sort<ICRC118WasmRegistry.CanisterVersion>(canister_type.versions, compareVersionsDesc);
+
+    // --- 3. THE FIX: Determine which version to load ---
+    let version_to_load_record = switch (opt_wasm_id) {
+      case (?wasm_id_hex) {
+        Debug.print("WASM ID specified in request: " # wasm_id_hex);
+        // A specific version was requested. Find it.
+        let wasm_hash = Base16.decode(wasm_id_hex);
+        let found = Array.find<ICRC118WasmRegistry.CanisterVersion>(
+          sorted_versions,
+          func(v) { ?v.calculated_hash == wasm_hash },
+        );
+
+        Debug.print("Requested wasm_id: " # wasm_id_hex);
+        switch (found) {
+          case (?v) { v };
+          case (null) {
+            return #err(#NotFound("Specific version hash not found"));
+          };
+        };
+      };
+      case (null) {
+        // No specific version was requested. Default to the latest.
+        sorted_versions[0];
+      };
+    };
+
+    // --- 4. From now on, use `version_to_load_record` instead of `latest_version_record` ---
+    let wasm_id_to_load = Base16.encode(version_to_load_record.calculated_hash);
+
+    // 3. Fetch all data for the LATEST version in parallel.
+    let latest_audit_records = _get_audit_records_for_wasm(wasm_id_to_load);
+    let latest_bounties = _get_bounties_for_wasm(wasm_id_to_load);
+
+    // 4. Build the `all_versions` summary list.
+    var all_versions_summary = Buffer.Buffer<AppStore.AppVersionSummary>(canister_type.versions.size());
+    for (version_record in sorted_versions.vals()) {
+      let wasm_id = Base16.encode(version_record.calculated_hash);
+      let is_verified = _is_wasm_verified(wasm_id);
+      if (is_verified) {
+        let records = _get_audit_records_for_wasm(wasm_id);
+        let completed_audits = AppStore.get_completed_audit_types(records);
+        all_versions_summary.add({
+          wasm_id = wasm_id;
+          version_string = _format_version_number(version_record.version_number);
+          security_tier = AppStore.calculate_security_tier(true, completed_audits);
+          status = #Verified;
+        });
+      };
+    };
+
+    // 5. Assemble the detailed object for the LATEST version.
+    let latest_build_info = _build_build_info(latest_audit_records);
+    let latest_version_details : AppStore.AppVersionDetails = {
+      wasm_id = wasm_id_to_load;
+      version_string = _format_version_number(version_to_load_record.version_number);
+      status = #Verified; // If we got this far, it must be at least Pending/Verified
+      security_tier = AppStore.calculate_security_tier(true, AppStore.get_completed_audit_types(latest_audit_records));
+      build_info = latest_build_info;
+      canister_id = latest_build_info.canister_id;
+      tools = _get_tools_from_records(latest_audit_records);
+      data_safety = _get_data_safety_from_records(latest_audit_records);
+      bounties = latest_bounties;
+      audit_records = latest_audit_records;
+    };
+
+    // 6. Assemble the stable, top-level app information.
+    //    This comes from the app_info attestation, with a fallback to the verification request.
+    let app_info_att = _find_attestation_by_type(latest_audit_records, "app_info_v1");
+    switch (app_info_att) {
+      case (?att) {
+        // Path A: Fully listed app, use attestation as source of truth.
+        return #ok({
+          namespace = namespace;
+          name = AppStore.getICRC16Text(att.metadata, "name");
+          mcp_path = AppStore.getICRC16Text(att.metadata, "mcp_path");
+          canister_id = AppStore.getICRC16Principal(att.metadata, "canister_id");
+          publisher = AppStore.getICRC16Text(att.metadata, "publisher");
+          category = AppStore.getICRC16Text(att.metadata, "category");
+          icon_url = AppStore.getICRC16Text(att.metadata, "icon_url");
+          banner_url = AppStore.getICRC16Text(att.metadata, "banner_url");
+          gallery_images = AppStore.getICRC16TextArray(att.metadata, "gallery_images");
+          description = AppStore.getICRC16Text(att.metadata, "description");
+          key_features = AppStore.getICRC16TextArray(att.metadata, "key_features");
+          why_this_app = AppStore.getICRC16Text(att.metadata, "why_this_app");
+          tags = AppStore.getICRC16TextArray(att.metadata, "tags");
+          latest_version = latest_version_details;
+          all_versions = Buffer.toArray(all_versions_summary);
+        });
+      };
+      case (null) {
+        // Path B: Pending app, use original verification request as source of truth.
+        let verification_request = _get_verification_request(wasm_id_to_load);
+        switch (verification_request) {
+          case (?req) {
+            let meta = req.metadata;
+            let visuals_map = AppStore.getICRC16MapOptional(meta, "visuals");
+            return #ok({
+              namespace = namespace;
+              name = AppStore.getICRC16Text(meta, "name");
+              mcp_path = AppStore.getICRC16Text(meta, "mcp_path");
+              canister_id = AppStore.getICRC16Principal(meta, "canister_id");
+              publisher = AppStore.getICRC16Text(meta, "publisher");
+              category = AppStore.getICRC16Text(meta, "category");
+              description = AppStore.getICRC16Text(meta, "description");
+              key_features = AppStore.getICRC16TextArray(meta, "key_features");
+              why_this_app = AppStore.getICRC16Text(meta, "why_this_app");
+              tags = AppStore.getICRC16TextArray(meta, "tags");
+              icon_url = switch (visuals_map) {
+                case (?v) { AppStore.getICRC16Text(v, "icon_url") };
+                case (_) { "" };
+              };
+              banner_url = switch (visuals_map) {
+                case (?v) { AppStore.getICRC16Text(v, "banner_url") };
+                case (_) { "" };
+              };
+              gallery_images = switch (visuals_map) {
+                case (?v) { AppStore.getICRC16TextArray(v, "gallery_images") };
+                case (_) { [] };
+              };
+              latest_version = { latest_version_details with status = #Pending };
+              all_versions = Buffer.toArray(all_versions_summary);
             });
           };
           case (null) {
-            // --- PATH B: APP IS PENDING (New Logic) ---
-            Debug.print("[DEBUG] No app_info_v1 attestation for WASM: \"" # wasm_id # "\". Marking as Pending.");
-            // The app is verified but has NO app_info_v1 attestation.
-            // We will pull its info from the original verification request.
-
-            let verification_request = Map.get(icrc126().state.requests, Map.thash, wasm_id);
-
-            switch (verification_request) {
-              case (?req) {
-                // We found the original submission, let's extract its metadata.
-                let meta = req.metadata;
-                let visuals_map = AppStore.getICRC16MapOptional(meta, "visuals");
-
-                all_listings.add({
-                  id = wasm_id;
-                  namespace = canister_type.canister_type_namespace;
-                  name = AppStore.getICRC16Text(meta, "name");
-                  description = AppStore.getICRC16Text(meta, "description");
-                  category = AppStore.getICRC16Text(meta, "category");
-                  publisher = AppStore.getICRC16Text(meta, "publisher");
-                  icon_url = switch (visuals_map) {
-                    case (?v) { AppStore.getICRC16Text(v, "icon_url") };
-                    case (_) { "" };
-                  };
-                  banner_url = switch (visuals_map) {
-                    case (?v) { AppStore.getICRC16Text(v, "banner_url") };
-                    case (_) { "" };
-                  };
-                  security_tier = #Unranked; // Pending apps are always Unranked.
-                  status = #Pending; // This is a pending app.
-                });
-              };
-              case (null) {
-                // This is an edge case: verified, but we can't find its submission record.
-                // We simply skip it, as we have no data to display.
-              };
-            };
+            return #err(#NotFound("Verification request not found for pending app"));
           };
         };
       };
     };
-
-    // --- 3. REVISED FILTERING LOGIC ---
-    // This function now correctly handles an array of filter variants.
-    // An AppListing must match ALL filters in the array to be included.
-    func matchesAllFilters(listing : AppStore.AppListing, filters : [AppStore.AppListingFilter]) : Bool {
-      if (filters.size() == 0) return true;
-
-      // Iterate through each filter variant provided in the request.
-      label filterLoop for (f in filters.vals()) {
-        switch (f) {
-          case (#namespace(nsFilter)) {
-            if (listing.namespace != nsFilter) return false;
-          };
-          case (#publisher(pubFilter)) {
-            if (listing.publisher != pubFilter) return false;
-          };
-          case (#name(nameFilter)) {
-            if (listing.name != nameFilter) return false;
-          };
-        };
-      };
-      // If the listing survived all filters, it's a match.
-      return true;
-    };
-
-    // 5. Apply pagination and filtering to the in-memory list.
-    var started = prev == null;
-    var count : Nat = 0;
-    let out = Buffer.Buffer<AppStore.AppListing>(take);
-
-    label main for (listing in all_listings.vals()) {
-      if (not started) {
-        switch prev {
-          case null {}; // Should be handled by `started` initialization.
-          case (?p) {
-            // We skip all items until we find the one matching `prev`.
-            // The next item after `prev` will be the first one included.
-            if (listing.namespace == p) { started := true };
-            continue main;
-          };
-        };
-      };
-
-      // `started` is now true.
-      if (matchesAllFilters(listing, filters)) {
-        out.add(listing);
-        count += 1;
-        if (count >= take) break main;
-      };
-    };
-
-    return #ok(Buffer.toArray(out));
   };
 
   /**
@@ -1156,6 +1397,11 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     prev : ?Text; // The wasm_id of the last item from the previous page.
   };
 
+  private func _get_verification_request(wasm_id : Text) : ?ICRC126Service.VerificationRequest {
+    let all_requests = icrc126().state.requests;
+    Map.get(all_requests, Map.thash, wasm_id);
+  };
+
   /**
    * @notice Fetches the original verification request metadata for a given WASM ID.
    * @param wasm_id The hex-encoded SHA-256 hash of the WASM.
@@ -1163,15 +1409,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
    *         Returns `null` if no request is found for the given ID.
    */
   public shared query func get_verification_request(wasm_id : Text) : async ?ICRC126Service.VerificationRequest {
-    // 1. Access the `requests` map from the ICRC-126 library's state.
-    let all_requests = icrc126().state.requests;
-
-    // 2. Perform a direct lookup using the wasm_id as the key.
-    //    This is highly efficient as it's a hash map lookup.
-    let result = Map.get(all_requests, Map.thash, wasm_id);
-
-    // 3. Return the result. `Map.get` returns an optional, which matches our function's return type.
-    return result;
+    _get_verification_request(wasm_id);
   };
 
   // A new, paginated query to find all verification requests that are waiting for a bounty.
@@ -1220,7 +1458,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     return Buffer.toArray(pending_requests);
   };
 
-  public shared query func get_audit_records_for_wasm(wasm_id : Text) : async [ICRC126.AuditRecord] {
+  private func _get_audit_records_for_wasm(wasm_id : Text) : [ICRC126.AuditRecord] {
     let all_audits = icrc126().state.audits;
 
     // Look up the wasm_id and return the array of records, or an empty array if none exist.
@@ -1230,6 +1468,10 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
 
     return records;
+  };
+
+  public shared query func get_audit_records_for_wasm(wasm_id : Text) : async [ICRC126.AuditRecord] {
+    _get_audit_records_for_wasm(wasm_id);
   };
 
   //------------------- SAMPLE FUNCTION -------------------//

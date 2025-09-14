@@ -12,6 +12,7 @@ import Json "mo:json";
 import AuthCleanup "mo:mcp-motoko-sdk/auth/Cleanup";
 import AuthState "mo:mcp-motoko-sdk/auth/State";
 import AuthTypes "mo:mcp-motoko-sdk/auth/Types";
+import ApiKey "mo:mcp-motoko-sdk/auth/ApiKey";
 import Mcp "mo:mcp-motoko-sdk/mcp/Mcp";
 import McpTypes "mo:mcp-motoko-sdk/mcp/Types";
 import HttpHandler "mo:mcp-motoko-sdk/mcp/HttpHandler";
@@ -20,6 +21,7 @@ import State "mo:mcp-motoko-sdk/mcp/State";
 import Payments "mo:mcp-motoko-sdk/mcp/Payments";
 import HttpAssets "mo:mcp-motoko-sdk/mcp/HttpAssets";
 import SrvTypes "mo:mcp-motoko-sdk/server/Types";
+import Beacon "mo:mcp-motoko-sdk/mcp/Beacon";
 
 import IC "mo:ic";
 
@@ -70,15 +72,23 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
   // Initialize the auth context with the issuer URL and required scopes.
   transient let authContext : ?AuthTypes.AuthContext = ?AuthState.init(
     Principal.fromActor(self),
+    owner,
     issuerUrl,
     requiredScopes,
     transformJwksResponse,
+  );
+
+  let beaconCanisterId = Principal.fromText("vu5yx-eh777-77774-qaaga-cai");
+  transient let beaconContext : Beacon.BeaconContext = Beacon.init(
+    beaconCanisterId, // Public beacon canister ID
+    ?60, // Send a beacon every minute
   );
 
   // --- END OF AUTHENTICATION BLOCK ---
 
   // --- Cleanup Timers ---
   Cleanup.startCleanupTimer<system>(appContext);
+  Beacon.startTimer<system>(beaconContext);
 
   // The AuthCleanup timer only needs to run if authentication is enabled.
   switch (authContext) {
@@ -149,6 +159,8 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
     let structuredPayload = Json.obj([("report", Json.str(report))]);
     let stringified = Json.stringify(structuredPayload, null);
 
+    Debug.print("getWeatherTool called for location: " # location);
+
     // Return the full, compliant result.
     cb(#ok({ content = [#text({ text = stringified })]; isError = false; structuredContent = ?structuredPayload }));
   };
@@ -171,6 +183,7 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
     toolImplementations = [
       ("get_weather", getWeatherTool),
     ];
+    beacon = ?beaconContext;
   };
 
   // --- 4. CREATE THE SERVER LOGIC ---
@@ -322,6 +335,33 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
   // ==================================================================================================
   // PUBLIC METHOD (The Test Harness Entry Point)
   // ==================================================================================================
+
+  /**
+   * Creates a new API key. Only the owner can call this.
+   * @param label A human-readable name for the key.
+   * @param principal The principal this key will act on behalf of.
+   * @param scopes The permissions granted to this key.
+   * @returns The raw, unhashed API key. THIS IS THE ONLY TIME IT WILL BE VISIBLE.
+   */
+  public shared (msg) func create_api_key(name : Text, principal : Principal, scopes : [Text]) : async Text {
+    switch (authContext) {
+      case (null) {
+        Debug.trap("Authentication is not enabled on this canister.");
+      };
+      case (?ctx) {
+        if (msg.caller != owner) {
+          Debug.trap("Only the owner can create API keys.");
+        };
+        return await ApiKey.create_api_key({
+          ctx = ctx;
+          caller = msg.caller;
+          name = name;
+          principal = principal;
+          scopes = scopes;
+        });
+      };
+    };
+  };
 
   /**
   * This function is called by the test suite. It instantiates an actor

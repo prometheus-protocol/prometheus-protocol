@@ -23,7 +23,7 @@ vi.mock('../../src/identity.node.js');
 describe('bounty reserve command', () => {
   let program: Command;
   const MOCK_BOUNTY_ID = 123n;
-  const MOCK_AUDIT_TYPE = 'security_v1';
+  const MOCK_AUDIT_TYPE = 'data_safety_v1';
   const MOCK_STAKE_AMOUNT = 100n;
 
   let consoleLogSpy: MockInstance;

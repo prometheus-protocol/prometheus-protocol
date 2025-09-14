@@ -76,6 +76,11 @@ export const idlFactory = ({ IDL }) => {
   const Result = IDL.Variant({ 'ok' : IDL.Nat, 'err' : TreasuryError });
   const McpServer = IDL.Service({
     'call_tracker' : IDL.Func([IDL.Principal, UsageStats], [Result_2], []),
+    'create_api_key' : IDL.Func(
+        [IDL.Text, IDL.Principal, IDL.Vec(IDL.Text)],
+        [IDL.Text],
+        [],
+      ),
     'get_owner' : IDL.Func([], [IDL.Principal], ['query']),
     'get_treasury_balance' : IDL.Func([IDL.Principal], [IDL.Nat], []),
     'http_request' : IDL.Func([HttpRequest], [HttpResponse], ['query']),

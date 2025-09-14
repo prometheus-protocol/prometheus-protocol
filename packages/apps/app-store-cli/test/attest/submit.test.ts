@@ -21,7 +21,7 @@ describe('attest submit command', () => {
   const MOCK_ATTESTATION_FILE_CONTENT = yaml.dump({
     wasm_hash: MOCK_WASM_HASH,
     metadata: {
-      audit_type: 'security_v1',
+      audit_type: 'data_safety_v1',
       report_url: 'https://example.com/report.pdf',
       score: 95,
       summary: 'The canister is well-written and secure.',
@@ -46,7 +46,7 @@ describe('attest submit command', () => {
     const cliArgs = [
       'attest',
       'submit',
-      './security_v1_attestation.yml',
+      './data_safety_v1_attestation.yml',
       '--bounty-id',
       MOCK_BOUNTY_ID.toString(), // CLI args are strings
     ];
@@ -62,7 +62,7 @@ describe('attest submit command', () => {
     // Existing assertions are still valid and important
     expect(callArgs.wasm_id).toBe(MOCK_WASM_HASH);
     expect(callArgs.attestationData).toEqual({
-      audit_type: 'security_v1',
+      audit_type: 'data_safety_v1',
       report_url: 'https://example.com/report.pdf',
       score: 95,
       summary: 'The canister is well-written and secure.',

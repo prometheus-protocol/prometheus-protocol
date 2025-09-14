@@ -19,6 +19,7 @@ import {
   hexToUint8Array,
   nsToDate,
   processAttestation,
+  processAuditRecord,
   processBounty,
   processVerificationRecord,
   processVerificationRequest,
@@ -187,34 +188,8 @@ export const getVerificationStatus = async (
 
   // --- 2. Process the audit records using a type guard ---
   // The result is now an array of our discriminated union type.
-  const processedAuditRecords: ProcessedAuditRecord[] = auditRecordsResult.map(
-    (record): ProcessedAuditRecord => {
-      // This is the crucial type guard. We check which variant the record is.
-      if ('Attestation' in record) {
-        const att = record.Attestation;
-        return {
-          type: 'attestation',
-          auditor: att.auditor,
-          audit_type: att.audit_type,
-          timestamp: att.timestamp,
-          metadata: deserializeFromIcrc16Map(att.metadata),
-        };
-      } else {
-        // 'Divergence' in record
-        const div = record.Divergence;
-        return {
-          type: 'divergence',
-          reporter: div.reporter,
-          report: div.report,
-          timestamp: div.timestamp,
-          metadata:
-            div.metadata.length > 0
-              ? deserializeFromIcrc16Map(div.metadata[0]!)
-              : {},
-        };
-      }
-    },
-  );
+  const processedAuditRecords: ProcessedAuditRecord[] =
+    auditRecordsResult.map(processAuditRecord);
 
   const processedBounties: AuditBounty[] = bountiesResult.map(processBounty);
 
@@ -292,10 +267,11 @@ export interface AppInfoAttestationData {
 }
 
 // Define the structure of attestation data for type safety
-export interface SecurityAttestationData {
-  '126:audit_type': 'security_v1';
+export interface DataSafetyAttestationData {
+  '126:audit_type': 'data_safety_v1';
   summary: string;
-  issues_found: { severity: string; description: string }[];
+  overall_description: string;
+  data_points: { category: string; description: string; title: string }[];
 }
 
 export interface ToolsAttestationData {
@@ -313,16 +289,16 @@ export interface BuildReproducibilityAttestationData {
 
 export type AttestationData =
   | AppInfoAttestationData
-  | SecurityAttestationData
+  | DataSafetyAttestationData
   | ToolsAttestationData
   | BuildReproducibilityAttestationData
   | Record<string, unknown>; // Fallback for unknown types
 
 // Define the core audits that determine security tiers.
 export const CORE_AUDIT_TYPES = [
-  'tools_v1',
   'build_reproducibility_v1',
   'app_info_v1',
+  'tools_v1',
   'data_safety_v1',
 ];
 
@@ -488,7 +464,7 @@ export const getBountyLock = async (
 
 /**
  * Get the required stake amount for a specific audit type from the Audit Hub.
- * @param audit_type The audit type to check (e.g., "security_v1").
+ * @param audit_type The audit type to check (e.g., "app_info_v1").
  * @returns The required stake amount, or undefined if no requirement is set.
  */
 export const getStakeRequirement = async (
@@ -501,7 +477,7 @@ export const getStakeRequirement = async (
 
 export interface ReserveBountyArgs {
   bounty_id: bigint; // The ID of the bounty to reserve
-  token_id: string; // e.g., "security_v1"
+  token_id: string; // e.g., "app_info_v1"
 }
 
 /**
@@ -604,7 +580,7 @@ export const fileAttestation = async (
  * The server url is the url of the canister, with the app_info.path appended.
  * We should handle local development and mainnet URLs.
  */
-function buildServerUrl(canisterId: Principal, path: string): string {
+export function buildServerUrl(canisterId: Principal, path: string): string {
   const isLocal = process.env.DFX_NETWORK !== 'ic';
   const baseUrl = isLocal
     ? `http://localhost:4943/?canisterId=${canisterId.toText()}`
@@ -623,23 +599,53 @@ function buildServerUrl(canisterId: Principal, path: string): string {
 
 export interface BuildInfo {
   status: 'success' | 'failure' | 'unknown';
-  gitCommit: string | null;
-  repoUrl: string | null;
-  canisterId: string | null;
-  failureReason: string | null;
+  gitCommit?: string;
+  repoUrl?: string;
+  canisterId?: Principal;
+  failureReason?: string;
 }
 
 export type AuditResults =
   | { type: 'success'; data: Record<string, any> }
   | { type: 'failure'; reason: string };
 
+export type DataSafetyInfo = {
+  overallDescription: string;
+  dataPoints: DataSafetyPoint[];
+};
+
+// A lightweight summary of a single version, used for the version history dropdown.
+export interface AppVersionSummary {
+  wasmId: string;
+  versionString: string;
+  securityTier: SecurityTier;
+  status: 'Rejected' | 'Verified' | 'Pending';
+}
+
+// A comprehensive object containing all details for a single, specific version.
+export interface AppVersionDetails {
+  wasmId: string;
+  versionString: string;
+  status: 'Rejected' | 'Verified' | 'Pending';
+  securityTier: SecurityTier;
+  buildInfo: BuildInfo;
+  canisterId: Principal;
+  serverUrl: string;
+  tools: ServerTool[];
+  dataSafety: DataSafetyInfo;
+  bounties: AuditBounty[];
+  auditRecords: ProcessedAuditRecord[];
+  results?: AuditResults;
+}
+
+// The new, primary data structure for the App Details page.
 export interface AppStoreDetails {
-  id: string;
+  // --- Stable App Identity ---
+  // These properties describe the app as a whole and rarely change.
+  namespace: string; // The new, stable, primary identifier.
   name: string;
   publisher: string;
-  serverUrl: string;
   category: string;
-  securityTier: SecurityTier;
   iconUrl: string;
   bannerUrl: string;
   galleryImages: string[];
@@ -647,251 +653,15 @@ export interface AppStoreDetails {
   keyFeatures: string[];
   whyThisApp: string;
   tags: string[];
-  tools: ServerTool[];
-  dataSafety: {
-    description: string;
-    points: DataSafetyPoint[];
-  };
-  security: {
-    summary: string;
-    issuesFound: ServerSecurityIssue[];
-  };
-  reviews: any[]; // To be implemented later
-  bounties: AuditBounty[];
-  auditRecords: ProcessedAuditRecord[];
-  results?: AuditResults;
-  buildInfo: BuildInfo;
-  status: 'Now Available' | 'Coming Soon';
+  reviews: any[]; // Reviews are for the app, not a specific version.
+
+  // --- Version-Specific Information ---
+  // This object contains the full details for the version being viewed (e.g., the latest).
+  latestVersion: AppVersionDetails;
+
+  // A list of all other available versions to populate the version selector dropdown.
+  allVersions: AppVersionSummary[];
 }
-
-/**
- * Fetches and assembles all on-chain data for a specific WASM hash.
- * This is the primary function for the App Details page.
- * @param wasmId The lowercase hex string ID of the WASM.
- */
-export const getAppDetailsByHash = async (
-  wasmId: string,
-): Promise<AppStoreDetails> => {
-  // Initialize a complete, type-safe default object.
-  const details: AppStoreDetails = {
-    id: wasmId,
-    name: '',
-    publisher: '',
-    serverUrl: '',
-    category: '',
-    securityTier: 'Unranked', // Default to 'Unranked' if not set
-    iconUrl: '',
-    bannerUrl: '',
-    galleryImages: [],
-    description: '',
-    keyFeatures: [],
-    whyThisApp: '',
-    tags: [],
-    tools: [],
-    dataSafety: {
-      description: '',
-      points: [],
-    },
-    security: {
-      summary: '',
-      issuesFound: [],
-    },
-    reviews: [],
-    bounties: [],
-    auditRecords: [],
-    results: undefined,
-    buildInfo: {
-      // Initialize with default values
-      status: 'unknown',
-      gitCommit: null,
-      repoUrl: null,
-      canisterId: null,
-      failureReason: null,
-    },
-    status: 'Coming Soon', // Default to 'Coming Soon'
-  };
-
-  const registryActor = getRegistryActor();
-
-  try {
-    // 1. Fetch all necessary data in parallel, including the definitive verification status.
-    const [
-      isVerifiedResult,
-      auditRecordsResult,
-      bountiesResult,
-      verificationRequestResult,
-    ] = await Promise.all([
-      registryActor.is_wasm_verified(wasmId),
-      getAuditRecordsForWasm(wasmId),
-      registryActor.get_bounties_for_wasm(wasmId),
-      registryActor.get_verification_request(wasmId),
-    ]);
-
-    details.bounties = bountiesResult.map(processBounty);
-    const allAuditRecords = auditRecordsResult; // This now contains both types
-
-    // 2. Find and process the specific Build Reproducibility record first.
-    const buildRecord = allAuditRecords.find(
-      (record) =>
-        (record.type === 'attestation' &&
-          record.audit_type === 'build_reproducibility_v1') ||
-        record.type === 'divergence', // In our system, divergence is only for build failures
-    );
-
-    if (buildRecord) {
-      if (buildRecord.type === 'attestation') {
-        const payload = buildRecord.metadata;
-        details.buildInfo = {
-          status: 'success',
-          gitCommit: payload.git_commit || null,
-          repoUrl: payload.repo_url || null,
-          canisterId: payload.canister_id || null,
-          failureReason: null,
-        };
-      } else {
-        // It's a divergence record
-        details.buildInfo = {
-          status: 'failure',
-          // For now, we get the reason. We can enrich this later if needed.
-          failureReason: buildRecord.report,
-          gitCommit: null, // Not available in divergence report
-          repoUrl: null, // Not available in divergence report
-          canisterId: null, // Not available in divergence report
-        };
-      }
-    }
-
-    // 3. Process all OTHER (declarative) attestations to populate app info.
-    const declarativeAttestations = allAuditRecords.filter(
-      (record): record is ProcessedAttestationRecord =>
-        record.type === 'attestation' &&
-        record.audit_type !== 'build_reproducibility_v1',
-    );
-
-    const appInfoAttestation = declarativeAttestations.find(
-      (att) => att.audit_type === 'app_info_v1',
-    );
-
-    if (appInfoAttestation) {
-      // --- PATH A: APP IS FULLY LISTED ---
-      // We have an app_info_v1 attestation, so it's the source of truth.
-      const payload = appInfoAttestation.metadata;
-      const serverUrl = buildServerUrl(
-        Principal.fromText(payload.canister_id),
-        payload.mcp_path || '',
-      );
-      details.name = payload.name || '';
-      details.publisher = payload.publisher || '';
-      details.serverUrl = serverUrl;
-      details.category = payload.category || '';
-      details.iconUrl = payload.icon_url || '';
-      details.bannerUrl = payload.banner_url || '';
-      details.galleryImages = payload.gallery_images || [];
-      details.description = payload.description || '';
-      details.keyFeatures = payload.key_features || [];
-      details.whyThisApp = payload.why_this_app || '';
-      details.tags = payload.tags || [];
-      details.status = 'Now Available';
-      details.auditRecords = allAuditRecords;
-    } else {
-      // --- PATH B: APP IS PENDING ---
-      // No app_info_v1 attestation found. Fall back to the verification request metadata.
-      const verificationRequest = fromNullable(verificationRequestResult);
-      if (verificationRequest) {
-        const payload =
-          processVerificationRequest(verificationRequest).metadata;
-        const serverUrl = buildServerUrl(
-          Principal.fromText(payload.canister_id),
-          payload.mcp_path || '',
-        );
-        details.name = payload.name || '';
-        details.publisher = payload.publisher || '';
-        details.serverUrl = serverUrl;
-        details.category = payload.category || 'Coming Soon';
-        details.description = payload.description || '';
-        details.whyThisApp = payload.why_this_app || '';
-        details.keyFeatures = payload.key_features || [];
-        details.tags = payload.tags || [];
-        // Visuals are nested in the verification request
-        details.iconUrl = payload.visuals?.icon_url || '';
-        details.bannerUrl = payload.visuals?.banner_url || '';
-        details.galleryImages = payload.visuals?.gallery_images || [];
-        details.status = 'Coming Soon';
-        details.auditRecords = allAuditRecords;
-      }
-    }
-
-    // 2. Loop through attestations and explicitly map data.
-    for (const attestation of declarativeAttestations) {
-      const payload = attestation.metadata;
-
-      switch (attestation.audit_type) {
-        case 'app_info_v1':
-          console.log(
-            `Processing attestation of type ${attestation.audit_type}:`,
-            payload,
-          );
-          const serverUrl = buildServerUrl(
-            Principal.fromText(payload.canister_id),
-            payload.mcp_path || '',
-          );
-          // Explicitly assign each property with a safe fallback.
-          details.name = payload.name || '';
-          details.publisher = payload.publisher || '';
-          details.serverUrl = serverUrl;
-          details.category = payload.category || '';
-          details.iconUrl = payload.icon_url || '';
-          details.bannerUrl = payload.banner_url || '';
-          details.galleryImages = payload.gallery_images || [];
-          details.description = payload.description || '';
-          details.keyFeatures = payload.key_features || [];
-          details.whyThisApp = payload.why_this_app || '';
-          details.tags = payload.tags || [];
-          break;
-
-        case 'security_v1':
-          details.security.summary = payload.summary || '';
-          if (payload.issues_found && Array.isArray(payload.issues_found)) {
-            details.security.issuesFound = payload.issues_found;
-          }
-          break;
-
-        case 'tools_v1': // Assuming the type is 'tools_v1' from the CLI template
-          if (payload.tools && Array.isArray(payload.tools)) {
-            details.tools = payload.tools;
-          }
-          break;
-
-        case 'data_safety_v1':
-          // This was already good, but we'll ensure it's consistent.
-          details.dataSafety = {
-            description: payload.overall_description || '', // Match template key
-            points: payload.data_points || [], // Match template key
-          };
-          break;
-
-        case 'build_reproducibility_v1':
-          details.buildInfo = {
-            status: payload.status || 'unknown',
-            gitCommit: payload.git_commit || null,
-            repoUrl: payload.repo_url || null,
-            canisterId: payload.canister_id || null,
-            failureReason: payload.failure_reason || null,
-          };
-          break;
-      }
-    }
-    // 3. Set the security tier based on completed audit types.
-    details.securityTier = calculateSecurityTier(
-      isVerifiedResult,
-      declarativeAttestations.map((a) => a.audit_type),
-    );
-  } catch (e) {
-    console.error('Failed to parse attestation payload:', e);
-  }
-
-  return details;
-};
 
 // 1. Define the new, more powerful filter types that match the canister.
 // Using a discriminated union in TypeScript is the perfect way to model this.
@@ -972,7 +742,7 @@ export const listBounties = async (
 
 /** Fetches the reputation token balance for the caller's identity.
  * @param identity The identity of the caller.
- * @param token_id The ID of the reputation token (e.g., "security_v1").
+ * @param token_id The ID of the reputation token (e.g., "app_info_v1").
  * @returns The available balance of the specified reputation token.
  */
 export const getReputationBalance = async (

@@ -21,6 +21,7 @@ import {
   PackageCheckIcon,
   BadgeCheck,
   ToolCase,
+  BookLock,
 } from 'lucide-react';
 import { truncatePrincipal } from '@/lib/utils';
 import { TransferDialog } from './TransferDialog';
@@ -48,7 +49,7 @@ export const getReputationDisplayInfo = (auditType: string) => {
     case 'data_safety_v1':
       return {
         name: 'Data Safety',
-        icon: <BadgeCheck className="h-4 w-4 text-muted-foreground" />,
+        icon: <BookLock className="h-4 w-4 text-muted-foreground" />,
       };
     case 'tools_v1':
       return {

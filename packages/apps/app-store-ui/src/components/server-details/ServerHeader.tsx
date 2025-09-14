@@ -1,17 +1,17 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ShieldCheck, Coins } from 'lucide-react'; // Import Coins icon for sponsoring
+import { ShieldCheck, Coins } from 'lucide-react';
 import { MediaGallery } from './MediaGallery';
 import { getTierInfo } from '@/lib/get-tier-info';
 import { cn } from '@/lib/utils';
 import { AppStoreDetails } from '@prometheus-protocol/ic-js';
 import { ImageWithFallback } from '@/components/ui/image-with-fallback';
+import { VersionSelector } from './VersionSelector';
 
-// --- 1. Update the props to accept the new sponsor click handler ---
 interface ServerHeaderProps {
   server: AppStoreDetails;
   onInstallClick: () => void;
-  onSponsorClick: () => void; // New prop for the sponsor action
+  onSponsorClick: () => void;
 }
 
 export function ServerHeader({
@@ -19,11 +19,25 @@ export function ServerHeader({
   onInstallClick,
   onSponsorClick,
 }: ServerHeaderProps) {
-  const tierInfo = getTierInfo(server.securityTier);
+  const { latestVersion } = server;
+  const tierInfo = getTierInfo(latestVersion.securityTier);
   const navigate = useNavigate();
+  console.log('latestVersion', latestVersion);
 
   const handleViewCertClick = () => {
-    navigate(`/certificate/${server.id}`);
+    // The absolute latest version is always the first in the sorted `allVersions` array.
+    const latestWasmId = server.allVersions[0]?.wasmId;
+
+    // Check if the version we are currently viewing is the latest one.
+    const isViewingLatest = latestVersion.wasmId === latestWasmId;
+
+    if (isViewingLatest) {
+      // If it's the latest, use the clean, canonical URL without a hash.
+      navigate(`/certificate/${server.namespace}`);
+    } else {
+      // If it's an older version, we MUST include its specific wasmId in the URL.
+      navigate(`/certificate/${server.namespace}/${latestVersion.wasmId}`);
+    }
   };
 
   return (
@@ -39,12 +53,11 @@ export function ServerHeader({
         <div className="lg:col-span-3">
           <h1 className="text-4xl font-bold tracking-tight">{server.name}</h1>
 
-          {/* --- 2. CONDITIONAL UI BLOCK STARTS HERE --- */}
-          {server.status === 'Coming Soon' ? (
+          {/* Check the status from the nested latestVersion object */}
+          {latestVersion.status === 'Pending' ? (
             // --- UI for PENDING apps ---
             <>
               <div className="mt-10 flex flex-wrap items-center gap-y-6 gap-x-6">
-                {/* Publisher Info (remains the same) */}
                 <div className="flex gap-4 items-start">
                   <ImageWithFallback
                     src={server.iconUrl}
@@ -61,7 +74,6 @@ export function ServerHeader({
                   </div>
                 </div>
                 <div className="hidden h-12 w-px bg-border sm:block" />
-                {/* "Build Verified" Info Block (replaces Security Tier) */}
                 <div className="flex items-start gap-4">
                   <div className="border border-green-700/50 w-11 h-11 rounded-md flex items-center justify-center">
                     <ShieldCheck className="w-8 h-8 text-green-400" />
@@ -82,15 +94,14 @@ export function ServerHeader({
                 <Button
                   size="lg"
                   className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold min-w-[150px]"
-                  onClick={onSponsorClick} // <-- Use the new prop
-                >
+                  onClick={onSponsorClick}>
                   <Coins className="mr-2 h-5 w-5" />
                   Sponsor Listing
                 </Button>
               </div>
             </>
           ) : (
-            // --- UI for LISTED apps (Your Original Code) ---
+            // --- UI for LISTED apps ---
             <>
               <div className="mt-10 flex flex-wrap items-center gap-y-6 gap-x-6">
                 <div className="flex gap-4 items-start">
@@ -118,14 +129,29 @@ export function ServerHeader({
                   <div>
                     <span className="text-md font-bold">{tierInfo.name}</span>
                     <Link
-                      to={`/certificate/${server.id}`}
+                      to={`/certificate/${server.namespace}`}
                       className="text-xs text-muted-foreground italic hover:underline">
                       <p>{tierInfo.description}</p>
                     </Link>
                   </div>
                 </div>
               </div>
-              <div className="mt-12 flex items-center gap-4">
+
+              {/* --- VERSION SELECTOR INTEGRATION --- */}
+              <div className="mt-8">
+                <label className="text-sm font-medium text-muted-foreground">
+                  Version
+                </label>
+                <div className="mt-2">
+                  <VersionSelector
+                    allVersions={server.allVersions}
+                    currentVersionWasmId={latestVersion.wasmId}
+                    namespace={server.namespace}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-12 flex items-center gap-4 flex-wrap">
                 <Button
                   size="lg"
                   className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold min-w-[150px]"

@@ -11,6 +11,7 @@
     "mcp_registry": {
       "main": "packages/canisters/mcp_registry/src/main.mo",
       "type": "motoko",
+      "gzip": true,
       "declarations": {
         "output": "packages/declarations/src/generated/mcp_registry",
         "node_compatibility": true

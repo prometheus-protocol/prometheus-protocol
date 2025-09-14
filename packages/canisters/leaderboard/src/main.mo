@@ -59,6 +59,7 @@ shared ({ caller = deployer }) persistent actor class Leaderboard() {
   // Store the pre-computed, sorted leaderboards for fast queries.
   var user_leaderboard : [UserLeaderboardEntry] = [];
   var server_leaderboard : [ServerLeaderboardEntry] = [];
+  var server_metrics_cache = Map.new<Principal, ServerMetricsShared>();
 
   var last_updated : Time.Time = 0;
   let UPDATE_INTERVAL_NS : Nat = 3_600 * 1_000_000_000; // 1 hour
@@ -96,6 +97,9 @@ shared ({ caller = deployer }) persistent actor class Leaderboard() {
     };
 
     let all_metrics_result : [(Principal, ServerMetricsShared)] = await usage_canister.get_all_server_metrics();
+
+    // Cache the raw metrics for potential future use
+    server_metrics_cache := Map.fromIter(all_metrics_result.vals(), Map.phash);
 
     // --- 1. Calculate Server Leaderboard ---
     var servers_unsorted = Array.map<(Principal, ServerMetricsShared), (Principal, Nat)>(
@@ -167,6 +171,26 @@ shared ({ caller = deployer }) persistent actor class Leaderboard() {
 
   public shared query func get_last_updated() : async Time.Time {
     return last_updated;
+  };
+
+  /**
+   * Retrieves the invocation counts for each tool of a specific server.
+   * Data is sourced from the last cached update.
+   * @param server_id The Principal of the server canister.
+   * @returns An array of tool names and their invocation counts. Returns an empty array if the server is not found.
+   */
+  public shared query func get_tool_invocations_for_server(server_id : Principal) : async [(Text, Nat)] {
+    switch (Map.get(server_metrics_cache, Map.phash, server_id)) {
+      case (?metrics) {
+        // We found the metrics for this server, return the tool invocation data.
+        return metrics.invocations_by_tool;
+      };
+      case (null) {
+        // The server was not found in our cache (e.g., it's new or has no usage).
+        // Return an empty array for a consistent frontend experience.
+        return [];
+      };
+    };
   };
 
   // ==================================================================================

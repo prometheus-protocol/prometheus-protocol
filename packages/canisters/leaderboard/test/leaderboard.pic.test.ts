@@ -103,8 +103,8 @@ describe('Leaderboard Aggregator Canister', () => {
 
     // Approve the dummy server Wasm in the tracker
     trackerActor.setIdentity(ADMIN_IDENTITY);
-    const approvalRes =
-      await trackerActor.add_approved_wasm_hash(serverWasmHash);
+    const serverHashId = Buffer.from(serverWasmHash).toString('hex');
+    const approvalRes = await trackerActor.add_approved_wasm_hash(serverHashId);
     expect(approvalRes).toEqual({ ok: null });
 
     // Deploy Server A
@@ -200,7 +200,8 @@ describe('Leaderboard Aggregator Canister', () => {
     const wasm = await readFile(MCP_SERVER_DUMMY_WASM_PATH);
     const serverWasmHash = sha256(wasm);
     trackerActor.setIdentity(ADMIN_IDENTITY);
-    await trackerActor.add_approved_wasm_hash(serverWasmHash);
+    const serverHashId = Buffer.from(serverWasmHash).toString('hex');
+    await trackerActor.add_approved_wasm_hash(serverHashId);
 
     const serverFixture = await pic.setupCanister<MCPService>({
       idlFactory: serverIdl,

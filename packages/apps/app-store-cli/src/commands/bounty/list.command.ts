@@ -16,7 +16,7 @@ export function registerListBountiesCommand(program: Command) {
     .option('--status <status>', "Filter by status ('Open' or 'Claimed')")
     .option(
       '--audit-type <type>',
-      'Filter by a specific audit type (e.g., security_v1)',
+      'Filter by a specific audit type (e.g., data_safety_v1)',
     )
     .option(
       '--creator <principal>',

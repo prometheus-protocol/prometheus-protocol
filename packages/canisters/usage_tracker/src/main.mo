@@ -150,21 +150,19 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   };
 
   /// Adds a Wasm hash to the allowlist of approved servers.
-  public shared (msg) func add_approved_wasm_hash(hash : Blob) : async Result.Result<(), Text> {
+  public shared (msg) func add_approved_wasm_hash(wasm_id : Text) : async Result.Result<(), Text> {
     if (not is_admin(msg.caller)) {
       return #err("Unauthorized: Only the admin can add a Wasm hash.");
     };
-    let wasm_id = Base16.encode(hash);
     Map.set(approved_wasm_hashes, Map.thash, wasm_id, null);
     return #ok(());
   };
 
   /// Removes a Wasm hash from the allowlist.
-  public shared (msg) func remove_approved_wasm_hash(hash : Blob) : async Result.Result<(), Text> {
+  public shared (msg) func remove_approved_wasm_hash(wasm_id : Text) : async Result.Result<(), Text> {
     if (not is_admin(msg.caller)) {
       return #err("Unauthorized: Only the admin can remove a Wasm hash.");
     };
-    let wasm_id = Base16.encode(hash);
     Map.delete(approved_wasm_hashes, Map.thash, wasm_id);
     return #ok(());
   };
@@ -187,6 +185,8 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
       num_requested_changes = null;
     });
 
+    Debug.print("UsageTracker: Retrieved canister status for " # Principal.toText(caller));
+
     let wasm_hash = switch (status_result.module_hash) {
       case (null) {
         return #err("Could not retrieve Wasm hash for the calling canister.");
@@ -194,11 +194,15 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
       case (?hash) { hash };
     };
 
+    Debug.print("UsageTracker: Calling canister Wasm hash is " # Base16.encode(wasm_hash));
+
     // 2. Verify the Wasm hash is on the allowlist.
     let wasm_id = Base16.encode(wasm_hash);
     if (Option.isNull(Map.get(approved_wasm_hashes, Map.thash, wasm_id))) {
       return #err("Wasm hash not approved. The canister is not authorized to submit logs.");
     };
+
+    Debug.print("UsageTracker: Wasm hash approved. Processing log entry.");
 
     // 3. If authorized, create and store the log entry.
     let new_log : LogEntry = {
@@ -207,6 +211,8 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
       stats = stats;
     };
     Vector.add(logs, new_log);
+
+    Debug.print("UsageTracker: Log entry added. Total logs stored: " # debug_show (Vector.size(logs)));
 
     // 4. Update the aggregated metrics for the UI.
     update_metrics(caller, stats);
@@ -278,8 +284,7 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   };
 
   /// Checks if a given Wasm hash is on the allowlist.
-  public shared query func is_wasm_hash_approved(hash : Blob) : async Bool {
-    let wasm_id = Base16.encode(hash);
+  public shared query func is_wasm_hash_approved(wasm_id : Text) : async Bool {
     return Option.isSome(Map.get(approved_wasm_hashes, Map.thash, wasm_id));
   };
 

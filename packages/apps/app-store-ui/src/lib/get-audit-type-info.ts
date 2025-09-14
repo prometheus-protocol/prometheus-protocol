@@ -28,12 +28,6 @@ const auditTypeMap: Record<string, AuditTypeInfo> = {
       "Confirms the accuracy of the app's name, description, and publisher details.",
     Icon: Info,
   },
-  security_v1: {
-    title: 'Security Audit',
-    description:
-      "A comprehensive review of the application's code for security vulnerabilities.",
-    Icon: Shield,
-  },
   tools_v1: {
     title: 'Tools & Dependencies',
     description:

@@ -28,16 +28,6 @@ export const idlFactory = ({ IDL }) => {
     'expectedExecutionTime' : Time,
     'lastExecutionTime' : Time,
   });
-  const AppListingFilter = IDL.Variant({
-    'publisher' : IDL.Text,
-    'name' : IDL.Text,
-    'namespace' : IDL.Text,
-  });
-  const AppListingRequest = IDL.Record({
-    'prev' : IDL.Opt(IDL.Text),
-    'take' : IDL.Opt(IDL.Nat),
-    'filter' : IDL.Opt(IDL.Vec(AppListingFilter)),
-  });
   const AppListingStatus = IDL.Variant({
     'Rejected' : IDL.Record({ 'reason' : IDL.Text }),
     'Verified' : IDL.Null,
@@ -49,21 +39,11 @@ export const idlFactory = ({ IDL }) => {
     'Unranked' : IDL.Null,
     'Silver' : IDL.Null,
   });
-  const AppListing = IDL.Record({
-    'id' : IDL.Text,
+  const AppVersionSummary = IDL.Record({
     'status' : AppListingStatus,
-    'banner_url' : IDL.Text,
-    'publisher' : IDL.Text,
-    'name' : IDL.Text,
-    'description' : IDL.Text,
-    'icon_url' : IDL.Text,
     'security_tier' : SecurityTier,
-    'category' : IDL.Text,
-    'namespace' : IDL.Text,
-  });
-  const AppListingResponse = IDL.Variant({
-    'ok' : IDL.Vec(AppListing),
-    'err' : IDL.Text,
+    'wasm_id' : IDL.Text,
+    'version_string' : IDL.Text,
   });
   const ICRC16Property = IDL.Record({
     'value' : ICRC16,
@@ -99,23 +79,6 @@ export const idlFactory = ({ IDL }) => {
     })
   );
   const ICRC16Map = IDL.Vec(IDL.Tuple(IDL.Text, ICRC16));
-  const Time__1 = IDL.Int;
-  const AttestationRecord = IDL.Record({
-    'audit_type' : IDL.Text,
-    'metadata' : ICRC16Map,
-    'auditor' : IDL.Principal,
-    'timestamp' : Time__1,
-  });
-  const DivergenceRecord = IDL.Record({
-    'report' : IDL.Text,
-    'metadata' : IDL.Opt(ICRC16Map),
-    'timestamp' : Time__1,
-    'reporter' : IDL.Principal,
-  });
-  const AuditRecord = IDL.Variant({
-    'Attestation' : AttestationRecord,
-    'Divergence' : DivergenceRecord,
-  });
   const ICRC16Property__1 = IDL.Record({
     'value' : ICRC16__1,
     'name' : IDL.Text,
@@ -183,6 +146,95 @@ export const idlFactory = ({ IDL }) => {
     'claimed_date' : IDL.Opt(IDL.Nat),
     'timeout_date' : IDL.Opt(IDL.Nat),
     'payout_fee' : IDL.Nat,
+  });
+  const Time__1 = IDL.Int;
+  const AttestationRecord = IDL.Record({
+    'audit_type' : IDL.Text,
+    'metadata' : ICRC16Map,
+    'auditor' : IDL.Principal,
+    'timestamp' : Time__1,
+  });
+  const DivergenceRecord = IDL.Record({
+    'report' : IDL.Text,
+    'metadata' : IDL.Opt(ICRC16Map),
+    'timestamp' : Time__1,
+    'reporter' : IDL.Principal,
+  });
+  const AuditRecord = IDL.Variant({
+    'Attestation' : AttestationRecord,
+    'Divergence' : DivergenceRecord,
+  });
+  const BuildInfo = IDL.Record({
+    'git_commit' : IDL.Opt(IDL.Text),
+    'status' : IDL.Text,
+    'failure_reason' : IDL.Opt(IDL.Text),
+    'canister_id' : IDL.Opt(IDL.Text),
+    'repo_url' : IDL.Opt(IDL.Text),
+  });
+  const DataSafetyInfo = IDL.Record({
+    'overall_description' : IDL.Text,
+    'data_points' : IDL.Vec(ICRC16Map),
+  });
+  const AppVersionDetails = IDL.Record({
+    'status' : AppListingStatus,
+    'tools' : IDL.Vec(ICRC16Map),
+    'canister_id' : IDL.Opt(IDL.Text),
+    'bounties' : IDL.Vec(Bounty),
+    'security_tier' : SecurityTier,
+    'wasm_id' : IDL.Text,
+    'audit_records' : IDL.Vec(AuditRecord),
+    'version_string' : IDL.Text,
+    'build_info' : BuildInfo,
+    'data_safety' : DataSafetyInfo,
+  });
+  const AppDetailsResponse = IDL.Record({
+    'gallery_images' : IDL.Vec(IDL.Text),
+    'mcp_path' : IDL.Text,
+    'banner_url' : IDL.Text,
+    'publisher' : IDL.Text,
+    'name' : IDL.Text,
+    'tags' : IDL.Vec(IDL.Text),
+    'canister_id' : IDL.Principal,
+    'why_this_app' : IDL.Text,
+    'description' : IDL.Text,
+    'icon_url' : IDL.Text,
+    'all_versions' : IDL.Vec(AppVersionSummary),
+    'key_features' : IDL.Vec(IDL.Text),
+    'category' : IDL.Text,
+    'latest_version' : AppVersionDetails,
+    'namespace' : IDL.Text,
+  });
+  const AppStoreError = IDL.Variant({
+    'NotFound' : IDL.Text,
+    'InternalError' : IDL.Text,
+  });
+  const Result_3 = IDL.Variant({
+    'ok' : AppDetailsResponse,
+    'err' : AppStoreError,
+  });
+  const AppListingFilter = IDL.Variant({
+    'publisher' : IDL.Text,
+    'name' : IDL.Text,
+    'namespace' : IDL.Text,
+  });
+  const AppListingRequest = IDL.Record({
+    'prev' : IDL.Opt(IDL.Text),
+    'take' : IDL.Opt(IDL.Nat),
+    'filter' : IDL.Opt(IDL.Vec(AppListingFilter)),
+  });
+  const AppListing = IDL.Record({
+    'banner_url' : IDL.Text,
+    'publisher' : IDL.Text,
+    'name' : IDL.Text,
+    'description' : IDL.Text,
+    'icon_url' : IDL.Text,
+    'category' : IDL.Text,
+    'latest_version' : AppVersionSummary,
+    'namespace' : IDL.Text,
+  });
+  const AppListingResponse = IDL.Variant({
+    'ok' : IDL.Vec(AppListing),
+    'err' : IDL.Text,
   });
   const GetCanisterTypeVersionRequest = IDL.Record({
     'canister_type_namespace' : IDL.Text,
@@ -600,6 +652,11 @@ export const idlFactory = ({ IDL }) => {
   });
   const Result = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   const ICRC118WasmRegistryCanister = IDL.Service({
+    'get_app_details_by_namespace' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Text)],
+        [Result_3],
+        ['query'],
+      ),
     'get_app_listings' : IDL.Func(
         [AppListingRequest],
         [AppListingResponse],

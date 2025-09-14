@@ -19,6 +19,11 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(ServerLeaderboardEntry)],
         ['query'],
       ),
+    'get_tool_invocations_for_server' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))],
+        ['query'],
+      ),
     'get_user_leaderboard' : IDL.Func(
         [],
         [IDL.Vec(UserLeaderboardEntry)],

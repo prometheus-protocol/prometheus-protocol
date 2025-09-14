@@ -23,7 +23,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const Result_1 = IDL.Variant({ 'ok' : IDL.Vec(LogEntry), 'err' : IDL.Text });
   const UsageTracker = IDL.Service({
-    'add_approved_wasm_hash' : IDL.Func([IDL.Vec(IDL.Nat8)], [Result], []),
+    'add_approved_wasm_hash' : IDL.Func([IDL.Text], [Result], []),
     'get_admin' : IDL.Func([], [IDL.Principal], ['query']),
     'get_all_server_metrics' : IDL.Func(
         [],
@@ -37,13 +37,9 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'get_payout_canister' : IDL.Func([], [IDL.Opt(IDL.Principal)], ['query']),
-    'is_wasm_hash_approved' : IDL.Func(
-        [IDL.Vec(IDL.Nat8)],
-        [IDL.Bool],
-        ['query'],
-      ),
+    'is_wasm_hash_approved' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'log_call' : IDL.Func([UsageStats], [Result], []),
-    'remove_approved_wasm_hash' : IDL.Func([IDL.Vec(IDL.Nat8)], [Result], []),
+    'remove_approved_wasm_hash' : IDL.Func([IDL.Text], [Result], []),
     'seed_log' : IDL.Func([IDL.Principal, UsageStats], [Result], []),
     'set_payout_canister' : IDL.Func([IDL.Principal], [Result], []),
     'transfer_admin' : IDL.Func([IDL.Principal], [Result], []),

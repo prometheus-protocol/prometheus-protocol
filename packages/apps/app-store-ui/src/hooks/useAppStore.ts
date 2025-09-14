@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import {
   getAppStoreListings,
-  getAppDetailsByHash,
   AppStoreListing,
   AppStoreDetails,
   VerificationStatus,
   getVerificationStatus,
+  getAppDetailsByNamespace,
 } from '@prometheus-protocol/ic-js';
 
 /**
@@ -24,25 +24,29 @@ export const useGetAppStoreListings = () => {
 };
 
 /**
- * React Query hook to fetch the full details for a single app version,
- * identified by its WASM hash.
- * @param wasmId The WASM hash of the app version as a hex string.
+ * React Query hook to fetch detailed info for a single app by its WASM hash.
+ * This is used for the App Details page.
+ * @param appId The appId is the namespace string of the app.
  */
-export const useGetAppDetails = (wasmId: string | undefined) => {
+export const useGetAppDetailsByNamespace = (
+  namespace: string | undefined, // Renamed from appId
+  wasmId?: string,
+) => {
+  console.log('Hook called with:', { namespace, wasmId });
   return useQuery<AppStoreDetails>({
-    // The query key includes the specific hash to ensure uniqueness per app details page.
-    queryKey: ['appDetails', wasmId],
+    queryKey: ['appDetails', namespace, wasmId], // The key correctly uses both
     queryFn: async () => {
-      if (!wasmId) {
-        throw new Error('WASM hash not available');
+      if (!namespace) {
+        throw new Error('Namespace not available');
       }
-      // Call the API to get
-      const res = await getAppDetailsByHash(wasmId);
-      console.log('App details fetched:', res);
+      console.log('FETCHING new data for:', { namespace, wasmId });
+      const res = await getAppDetailsByNamespace(namespace, wasmId);
+      if (!res) {
+        throw new Error('App details not found');
+      }
       return res;
     },
-    // The query should only run when we have both a hash to look up.
-    enabled: !!wasmId,
+    enabled: !!namespace,
   });
 };
 

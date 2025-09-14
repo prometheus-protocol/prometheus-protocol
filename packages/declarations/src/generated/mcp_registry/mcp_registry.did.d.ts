@@ -13,16 +13,31 @@ export interface Action {
   'retries' : bigint,
 }
 export interface ActionId { 'id' : bigint, 'time' : Time }
+export interface AppDetailsResponse {
+  'gallery_images' : Array<string>,
+  'mcp_path' : string,
+  'banner_url' : string,
+  'publisher' : string,
+  'name' : string,
+  'tags' : Array<string>,
+  'canister_id' : Principal,
+  'why_this_app' : string,
+  'description' : string,
+  'icon_url' : string,
+  'all_versions' : Array<AppVersionSummary>,
+  'key_features' : Array<string>,
+  'category' : string,
+  'latest_version' : AppVersionDetails,
+  'namespace' : string,
+}
 export interface AppListing {
-  'id' : string,
-  'status' : AppListingStatus,
   'banner_url' : string,
   'publisher' : string,
   'name' : string,
   'description' : string,
   'icon_url' : string,
-  'security_tier' : SecurityTier,
   'category' : string,
+  'latest_version' : AppVersionSummary,
   'namespace' : string,
 }
 export type AppListingFilter = { 'publisher' : string } |
@@ -38,6 +53,26 @@ export type AppListingResponse = { 'ok' : Array<AppListing> } |
 export type AppListingStatus = { 'Rejected' : { 'reason' : string } } |
   { 'Verified' : null } |
   { 'Pending' : null };
+export type AppStoreError = { 'NotFound' : string } |
+  { 'InternalError' : string };
+export interface AppVersionDetails {
+  'status' : AppListingStatus,
+  'tools' : Array<ICRC16Map>,
+  'canister_id' : [] | [string],
+  'bounties' : Array<Bounty>,
+  'security_tier' : SecurityTier,
+  'wasm_id' : string,
+  'audit_records' : Array<AuditRecord>,
+  'version_string' : string,
+  'build_info' : BuildInfo,
+  'data_safety' : DataSafetyInfo,
+}
+export interface AppVersionSummary {
+  'status' : AppListingStatus,
+  'security_tier' : SecurityTier,
+  'wasm_id' : string,
+  'version_string' : string,
+}
 export interface ArchivedTransactionResponse {
   'args' : Array<TransactionRange>,
   'callback' : GetTransactionsFn,
@@ -102,6 +137,13 @@ export type BountySubmissionResult = {
       { 'NoMatch' : null } |
       { 'PayoutFailed' : TransferError }
   };
+export interface BuildInfo {
+  'git_commit' : [] | [string],
+  'status' : string,
+  'failure_reason' : [] | [string],
+  'canister_id' : [] | [string],
+  'repo_url' : [] | [string],
+}
 export interface CanisterType {
   'canister_type_namespace' : string,
   'controllers' : Array<Principal>,
@@ -152,6 +194,10 @@ export type CreateCanisterTypeResult = { 'Ok' : bigint } |
 export interface DataCertificate {
   'certificate' : Uint8Array | number[],
   'hash_tree' : Uint8Array | number[],
+}
+export interface DataSafetyInfo {
+  'overall_description' : string,
+  'data_points' : Array<ICRC16Map>,
 }
 export interface DeprecateRequest {
   'canister_type_namespace' : string,
@@ -243,6 +289,10 @@ export type GetWasmsFilter = { 'canister_type_namespace' : string } |
   { 'version_max' : [bigint, [] | [bigint], [] | [bigint]] } |
   { 'version_min' : [bigint, [] | [bigint], [] | [bigint]] };
 export interface ICRC118WasmRegistryCanister {
+  'get_app_details_by_namespace' : ActorMethod<
+    [string, [] | [string]],
+    Result_3
+  >,
   'get_app_listings' : ActorMethod<[AppListingRequest], AppListingResponse>,
   'get_audit_records_for_wasm' : ActorMethod<[string], Array<AuditRecord>>,
   'get_bounties_for_wasm' : ActorMethod<[string], Array<Bounty>>,
@@ -514,6 +564,8 @@ export type Result_1 = { 'ok' : boolean } |
   { 'err' : string };
 export type Result_2 = { 'ok' : Wasm } |
   { 'err' : string };
+export type Result_3 = { 'ok' : AppDetailsResponse } |
+  { 'err' : AppStoreError };
 export interface RunBountyResult {
   'result' : { 'Invalid' : null } |
     { 'Valid' : null },

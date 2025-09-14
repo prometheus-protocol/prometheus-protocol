@@ -98,7 +98,8 @@ describe('Usage Tracker Canister (Wasm Hash Allowlist)', () => {
     it("should ACCEPT a log after the canister's Wasm hash is added to the allowlist", async () => {
       // Step 1: Admin adds the server's Wasm hash to the allowlist
       trackerActor.setIdentity(ADMIN_IDENTITY);
-      await trackerActor.add_approved_wasm_hash(serverWasmHash);
+      const serverHashId = Buffer.from(serverWasmHash).toString('hex');
+      await trackerActor.add_approved_wasm_hash(serverHashId);
 
       // Step 2: The server canister calls the tracker
       // This should now succeed
@@ -128,8 +129,9 @@ describe('Usage Tracker Canister (Wasm Hash Allowlist)', () => {
     it('should REJECT a log from a canister after its Wasm hash is removed', async () => {
       // Add and then remove the hash
       trackerActor.setIdentity(ADMIN_IDENTITY);
-      await trackerActor.add_approved_wasm_hash(serverWasmHash);
-      await trackerActor.remove_approved_wasm_hash(serverWasmHash);
+      const serverHashId = Buffer.from(serverWasmHash).toString('hex');
+      await trackerActor.add_approved_wasm_hash(serverHashId);
+      await trackerActor.remove_approved_wasm_hash(serverHashId);
 
       const res = await serverActor.call_tracker(trackerCanisterId, {
         start_timestamp_ns: 0n,
@@ -173,7 +175,8 @@ describe('Usage Tracker Canister (Wasm Hash Allowlist)', () => {
     it('should return correct server metrics after a log has been processed', async () => {
       // ARRANGE: Approve the server and have it log some data.
       trackerActor.setIdentity(ADMIN_IDENTITY);
-      await trackerActor.add_approved_wasm_hash(serverWasmHash);
+      const serverHashId = Buffer.from(serverWasmHash).toString('hex');
+      await trackerActor.add_approved_wasm_hash(serverHashId);
 
       const userPrincipal = Principal.fromText('ryjl3-tyaaa-aaaaa-aaaba-cai');
       const toolId = 'example_tool';

@@ -14,7 +14,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() {
   // == TYPES & CONSTANTS
   // ==================================================================================
 
-  // A unique identifier for a reputation token type (e.g., "security_v1").
+  // A unique identifier for a reputation token type (e.g., "data_safety_v1").
   public type TokenId = Text;
 
   // A unique identifier for a bounty, matching the ID from the ICRC-127 canister.

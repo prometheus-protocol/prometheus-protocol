@@ -2,17 +2,12 @@ import { useState } from 'react';
 import { Lock, Hourglass } from 'lucide-react';
 import { Button } from '../ui/button';
 import { CreateBountyDialog } from './CreateBountyDialog';
-import { AuditBounty, Token } from '@prometheus-protocol/ic-js';
+import { AuditBounty, DataSafetyInfo, Token } from '@prometheus-protocol/ic-js';
 import { Link } from 'react-router-dom';
-
-interface SafetyInfo {
-  description: string;
-  points: { title: string; description: string }[];
-}
 
 // 1. Update the props to include bounty, appId, and paymentToken
 interface DataSafetySectionProps {
-  safetyInfo: SafetyInfo;
+  safetyInfo: DataSafetyInfo;
   bounty?: AuditBounty;
   appId: string;
   paymentToken: Token;
@@ -26,7 +21,7 @@ export function DataSafetySection({
 }: DataSafetySectionProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const hasData =
-    safetyInfo && safetyInfo.points && safetyInfo.points.length > 0;
+    safetyInfo && safetyInfo.dataPoints && safetyInfo.dataPoints.length > 0;
   const hasBounty = !!bounty;
   const auditType = 'data_safety_v1';
 
@@ -36,10 +31,12 @@ export function DataSafetySection({
       // STATE 1: Attestation is complete. Show the full details.
       return (
         <>
-          <p className="text-muted-foreground mb-6">{safetyInfo.description}</p>
+          <p className="text-muted-foreground mb-6">
+            {safetyInfo.overallDescription}
+          </p>
           <div className="border border-border rounded-lg p-6 space-y-4">
             <ul className="list-disc list-inside space-y-3">
-              {safetyInfo.points.map((point, index) => (
+              {safetyInfo.dataPoints.map((point, index) => (
                 <li key={index}>
                   <span className="font-semibold">{point.title}:</span>{' '}
                   <span className="text-muted-foreground">
@@ -48,10 +45,12 @@ export function DataSafetySection({
                 </li>
               ))}
             </ul>
-            <p className="text-sm text-muted-foreground pt-2">
-              Prometheus Protocol is designed with privacy by default—giving you
-              full control, visibility, and peace of mind.
-            </p>
+            <div className="border-t border-gray-800 pt-4 mt-6">
+              <p className="text-xs text-muted-foreground italic">
+                The data safety practices listed above have been attested to by
+                an independent auditor based on the developer's claims.
+              </p>
+            </div>
           </div>
         </>
       );

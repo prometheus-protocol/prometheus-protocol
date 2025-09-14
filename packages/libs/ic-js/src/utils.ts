@@ -1,5 +1,6 @@
 import {
   AttestationRecord,
+  AuditRecord,
   Bounty,
   VerificationRecord,
   VerificationRequest,
@@ -7,6 +8,7 @@ import {
 import {
   AuditBounty,
   ProcessedAttestation,
+  ProcessedAuditRecord,
   ProcessedVerificationRecord,
   ProcessedVerificationRequest,
 } from './api';
@@ -127,6 +129,44 @@ export function processVerificationRequest(
   };
 
   return processedRequest;
+}
+
+export function processToolInvocation(request: [string, bigint]): {
+  toolName: string;
+  invocationCount: bigint;
+} {
+  const [toolName, invocations] = request;
+  return {
+    toolName,
+    invocationCount: invocations,
+  };
+}
+
+export function processAuditRecord(record: AuditRecord): ProcessedAuditRecord {
+  // This is the crucial type guard. We check which variant the record is.
+  if ('Attestation' in record) {
+    const att = record.Attestation;
+    return {
+      type: 'attestation',
+      auditor: att.auditor,
+      audit_type: att.audit_type,
+      timestamp: att.timestamp,
+      metadata: deserializeFromIcrc16Map(att.metadata),
+    };
+  } else {
+    // 'Divergence' in record
+    const div = record.Divergence;
+    return {
+      type: 'divergence',
+      reporter: div.reporter,
+      report: div.report,
+      timestamp: div.timestamp,
+      metadata:
+        div.metadata.length > 0
+          ? deserializeFromIcrc16Map(div.metadata[0]!)
+          : {},
+    };
+  }
 }
 
 /**

@@ -62,6 +62,13 @@ type McpServer =
    ///   * for the UsageTracker and calls its `log_call` method.
    call_tracker: (tracker_canister_id: principal, stats: UsageStats) ->
     (Result_2);
+   /// * Creates a new API key. Only the owner can call this.
+   ///    * @param label A human-readable name for the key.
+   ///    * @param principal The principal this key will act on behalf of.
+   ///    * @param scopes The permissions granted to this key.
+   ///    * @returns The raw, unhashed API key. THIS IS THE ONLY TIME IT WILL BE VISIBLE.
+   create_api_key: (name: text, "principal": principal, scopes: vec text) ->
+    (text);
    /// Get the current owner of the canister.
    get_owner: () -> (principal) query;
    /// Get the canister's balance of a specific ICRC-1 token.

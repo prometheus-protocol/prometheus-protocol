@@ -28,7 +28,7 @@ export interface UsageStats {
   'activity' : Array<CallerActivity>,
 }
 export interface UsageTracker {
-  'add_approved_wasm_hash' : ActorMethod<[Uint8Array | number[]], Result>,
+  'add_approved_wasm_hash' : ActorMethod<[string], Result>,
   'get_admin' : ActorMethod<[], Principal>,
   'get_all_server_metrics' : ActorMethod<
     [],
@@ -40,9 +40,9 @@ export interface UsageTracker {
     [] | [ServerMetricsShared]
   >,
   'get_payout_canister' : ActorMethod<[], [] | [Principal]>,
-  'is_wasm_hash_approved' : ActorMethod<[Uint8Array | number[]], boolean>,
+  'is_wasm_hash_approved' : ActorMethod<[string], boolean>,
   'log_call' : ActorMethod<[UsageStats], Result>,
-  'remove_approved_wasm_hash' : ActorMethod<[Uint8Array | number[]], Result>,
+  'remove_approved_wasm_hash' : ActorMethod<[string], Result>,
   'seed_log' : ActorMethod<[Principal, UsageStats], Result>,
   'set_payout_canister' : ActorMethod<[Principal], Result>,
   'transfer_admin' : ActorMethod<[Principal], Result>,

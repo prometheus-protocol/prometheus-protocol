@@ -11,12 +11,12 @@ import {
   AppInfoAttestationData,
   AuditBountyWithDetails,
   BuildReproducibilityAttestationData,
-  SecurityAttestationData,
+  DataSafetyAttestationData,
   ToolsAttestationData,
 } from '@prometheus-protocol/ic-js';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import { AppInfoAttestation } from './results/AppInfoAttestation';
-import { SecurityAttestation } from './results/SecurityAttestation';
+import { DataSafetyAttestation } from './results/DataSafetyAttestation';
 import { ToolsAttestation } from './results/ToolsAttestation';
 import { BuildReproducibilityAttestation } from './results/BuildReproducibilityAttestation';
 import { ToolsAttestationForm } from './forms/ToolsAttestationForm';
@@ -25,6 +25,7 @@ import { useGetReputationBalance } from '@/hooks/useAuditBounties';
 import { AppInfoAttestationForm } from './forms/AppInfoAttestationForm';
 import { BuildReproducibilityAttestationForm } from './forms/BuildReproducibilityAttestationForm';
 import { DivergenceReport } from './results/DivergenceReport';
+import { DataSafetyAttestationForm } from './forms/DataSafetyAttestationForm';
 
 // --- 1. EXTRACT REUSABLE SECTIONS INTO THEIR OWN COMPONENTS ---
 const InstructionsSection = ({ hasStake }: { hasStake: boolean }) => {
@@ -104,6 +105,8 @@ const AttestationForm = ({ audit }: { audit: AuditBountyWithDetails }) => {
       return <ToolsAttestationForm audit={audit} />;
     case 'build_reproducibility_v1':
       return <BuildReproducibilityAttestationForm audit={audit} />;
+    case 'data_safety_v1':
+      return <DataSafetyAttestationForm audit={audit} />;
     default:
       return (
         <p>Attestation form for {audit.auditType} is not yet implemented.</p>
@@ -138,9 +141,9 @@ export const AuditContent = ({ audit }: { audit: AuditBountyWithDetails }) => {
         switch (auditType) {
           case 'app_info_v1':
             return <AppInfoAttestation data={data as AppInfoAttestationData} />;
-          case 'security_v1':
+          case 'data_safety_v1':
             return (
-              <SecurityAttestation data={data as SecurityAttestationData} />
+              <DataSafetyAttestation data={data as DataSafetyAttestationData} />
             );
           case 'tools_v1':
             return <ToolsAttestation data={data as ToolsAttestationData} />;

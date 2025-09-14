@@ -38,7 +38,7 @@ const ORCHESTRATOR_WASM_PATH = path.resolve(
 const REGISTRY_WASM_PATH = path.resolve(
   __dirname,
   '../../../../',
-  '.dfx/local/canisters/mcp_registry/mcp_registry.wasm',
+  '.dfx/local/canisters/mcp_registry/mcp_registry.wasm.gz',
 );
 const AUDIT_HUB_WASM_PATH = path.resolve(
   __dirname,

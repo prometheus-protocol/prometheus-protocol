@@ -94,13 +94,13 @@ This example shows the complete journey, using the correct invocation for each r
 
 #### 2. Sponsor Creates a Bounty (standalone)
 
-- `npx @prometheus-protocol/app-store-cli bounty create 100000000 <token-canister-id> --wasm-id <wasm_id> --audit-type security_v1`
+- `npx @prometheus-protocol/app-store-cli bounty create 100000000 <token-canister-id> --wasm-id <wasm_id> --audit-type data_safety_v1`
 
 #### 3. Auditor Discovers and Completes the Audit (standalone)
 
 - Discover work: `npx @prometheus-protocol/app-store-cli bounty list`
 - **Reserve the bounty:** `npx @prometheus-protocol/app-store-cli bounty reserve <bounty_id>`
-- Generate template: `npx @prometheus-protocol/app-store-cli attest generate --type security_v1`
+- Generate template: `npx @prometheus-protocol/app-store-cli attest generate --type data_safety_v1`
 - **Edit the generated `attestation.yml`** with your findings.
 - Submit work for the bounty: `npx @prometheus-protocol/app-store-cli attest submit attestation.yml --bounty-id <bounty_id>`
 - Get paid: `npx @prometheus-protocol/app-store-cli bounty claim <bounty_id>`

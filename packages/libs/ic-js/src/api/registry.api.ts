@@ -8,8 +8,24 @@ import {
   GetCanisterTypesRequest,
   ICRC16Map,
 } from '@prometheus-protocol/declarations/mcp_registry/mcp_registry.did.js';
-import { SecurityTier } from './audit.api.js';
-import { uint8ArrayToHex } from '../utils.js';
+import {
+  AppStoreDetails,
+  AppVersionDetails,
+  buildServerUrl,
+  DataSafetyPoint,
+  ServerTool,
+} from './audit.api.js';
+import {
+  processAttestation,
+  processAuditRecord,
+  processBounty,
+  processVerificationRecord,
+  processVerificationRequest,
+  uint8ArrayToHex,
+} from '../utils.js';
+import { fromNullable, toNullable } from '@dfinity/utils';
+import { canisterId } from '@prometheus-protocol/declarations/app_bounties/index.js';
+import { deserializeFromIcrc16Map } from '../icrc16.js';
 
 export type { Registry };
 
@@ -459,24 +475,37 @@ export const getCanisterTypes = async (
     return [];
   }
 };
+// --- 1. DEFINE THE NEW, SUPERIOR TYPESCRIPT INTERFACES ---
 
-// Define the structure for the app cards on the discovery page
+// A clean enum for the security tier on the frontend.
+export type SecurityTier = 'Gold' | 'Silver' | 'Bronze' | 'Unranked';
+
+// Represents the details of the latest version of an app.
+export interface AppVersionSummary {
+  wasmId: string; // The WASM Hash of this version
+  versionString: string; // e.g., "1.2.0"
+  securityTier: SecurityTier;
+  status: 'Rejected' | 'Verified' | 'Pending';
+}
+
+// The new, primary data structure for the app store's list view.
+// The `namespace` is now the stable, primary identifier.
 export interface AppStoreListing {
-  id: string; // This is the hex string of the WASM hash
+  // --- Stable App Identity ---
   namespace: string;
   name: string;
   description: string;
-  category: string; // e.g., "DeFi", "Social", etc.
-  securityTier: SecurityTier;
+  category: string;
   publisher: string;
   iconUrl: string;
   bannerUrl: string;
-  status: 'Now Available' | 'Coming Soon';
+
+  // --- Details of the Latest Published Version ---
+  latestVersion: AppVersionSummary;
 }
 
-function unwrapSecurityTier(
-  tierVariant: AppListing['security_tier'],
-): SecurityTier {
+// Helper function to unwrap the Motoko variant into a simple string.
+function unwrapSecurityTier(tierVariant: Registry.SecurityTier): SecurityTier {
   if ('Gold' in tierVariant) return 'Gold';
   if ('Silver' in tierVariant) return 'Silver';
   if ('Bronze' in tierVariant) return 'Bronze';
@@ -488,49 +517,169 @@ function unwrapSecurityTier(
  * from the canister's `get_app_listings` method.
  */
 export const getAppStoreListings = async (): Promise<AppStoreListing[]> => {
-  // 1. Get the actor using the established pattern.
   const registryActor = getRegistryActor();
 
   try {
-    // 2. Call the new, powerful canister method with an empty request to get all listings.
     const result = await registryActor.get_app_listings({
       filter: [],
       prev: [],
       take: [],
     });
 
-    // 3. Handle the canister's Result<T, E> response.
     if ('err' in result) {
       console.error('Failed to fetch app listings from canister:', result.err);
-      return []; // Return empty array on canister-level error
+      return [];
     }
 
     const canisterListings: AppListing[] = result.ok || [];
 
-    // 4. Map the canister's snake_case response to our camelCase TypeScript interface.
-    // This keeps the UI layer clean and consistent.
+    // --- 2. UPDATE THE MAPPING LOGIC TO BUILD THE NEW STRUCTURE ---
     return canisterListings.map(
       (item): AppStoreListing => ({
-        id: item.id,
+        // --- Map the stable, top-level properties ---
         namespace: item.namespace,
         name: item.name,
         description: item.description,
         publisher: item.publisher,
-        iconUrl: item.icon_url, // Mapping snake_case to camelCase
-        bannerUrl: item.banner_url, // Mapping snake_case to camelCase
+        iconUrl: item.icon_url,
+        bannerUrl: item.banner_url,
         category: item.category,
-        securityTier: unwrapSecurityTier(item.security_tier),
-        status:
-          'Pending' in item.status
-            ? 'Coming Soon'
-            : 'Verified' in item.status
-              ? 'Now Available'
-              : 'Coming Soon',
+
+        // --- Map the nested, version-specific properties ---
+        latestVersion: {
+          wasmId: item.latest_version.wasm_id,
+          versionString: item.latest_version.version_string,
+          securityTier: unwrapSecurityTier(item.latest_version.security_tier),
+          status: unwrapVersionStatus(item.latest_version.status),
+        },
       }),
     );
   } catch (error) {
     console.error(`Error calling get_app_listings:`, error);
-    // Return an empty array on network/agent-level failure so the UI doesn't break.
     return [];
+  }
+};
+// --- 1. CREATE A DEDICATED HELPER FOR MAPPING THE VERSION DETAILS ---
+// This function's only job is to convert the canister's version object to the TS version object.
+
+function mapCanisterVersionToTS(
+  canisterVersion: Registry.AppVersionDetails, // This is the type from your .did.js file
+  serverUrl: string,
+): AppVersionDetails {
+  const principaId = fromNullable(canisterVersion.build_info.canister_id)
+    ? Principal.fromText(canisterVersion.build_info.canister_id[0]!)
+    : undefined;
+
+  return {
+    wasmId: canisterVersion.wasm_id,
+    versionString: canisterVersion.version_string,
+    status: unwrapVersionStatus(canisterVersion.status),
+    securityTier: unwrapSecurityTier(canisterVersion.security_tier),
+    buildInfo: {
+      status: canisterVersion.build_info.status as
+        | 'success'
+        | 'failure'
+        | 'unknown',
+      gitCommit: fromNullable(canisterVersion.build_info.git_commit),
+      repoUrl: fromNullable(canisterVersion.build_info.repo_url),
+      canisterId: principaId,
+      failureReason: fromNullable(canisterVersion.build_info.failure_reason),
+    },
+    canisterId: principaId!,
+    serverUrl,
+    tools: canisterVersion.tools.map(deserializeFromIcrc16Map) as ServerTool[],
+    dataSafety: {
+      overallDescription: canisterVersion.data_safety.overall_description,
+      dataPoints: canisterVersion.data_safety.data_points.map(
+        deserializeFromIcrc16Map,
+      ) as DataSafetyPoint[],
+    },
+    bounties: canisterVersion.bounties.map(processBounty),
+    // Use a more generic name like `processAuditRecord` that handles both types
+    auditRecords: canisterVersion.audit_records.map(processAuditRecord),
+  };
+}
+
+// export type AppListingStatus =
+//   | { Rejected: { reason: string } }
+//   | { Verified: null }
+//   | { Pending: null };
+
+// --- 2. CREATE A DEDICATED HELPER FOR MAPPING THE VERSION SUMMARY ---
+function unwrapVersionStatus(
+  statusVariant: Registry.AppListingStatus,
+): 'Rejected' | 'Verified' | 'Pending' {
+  if ('Rejected' in statusVariant) return 'Rejected';
+  if ('Verified' in statusVariant) return 'Verified';
+  return 'Pending';
+}
+
+// This function maps the canister's version summary to our TS version summary.
+function mapCanisterVersionSummaryToTS(
+  canisterSummary: Registry.AppVersionSummary, // Type from .did.js
+): AppVersionSummary {
+  return {
+    wasmId: canisterSummary.wasm_id,
+    versionString: canisterSummary.version_string,
+    securityTier: unwrapSecurityTier(canisterSummary.security_tier),
+    status: unwrapVersionStatus(canisterSummary.status),
+  };
+}
+
+/**
+ * Fetches and assembles all on-chain data for a specific app using its stable namespace.
+ * This is the new, primary function for the App Details page.
+ * @param namespace The reverse-DNS style namespace of the app (e.g., "com.wallet.infinity").
+ */
+export const getAppDetailsByNamespace = async (
+  namespace: string,
+  wasmId?: string,
+): Promise<AppStoreDetails | null> => {
+  const registryActor = getRegistryActor();
+
+  try {
+    const result = await registryActor.get_app_details_by_namespace(
+      namespace,
+      toNullable(wasmId),
+    );
+
+    if ('err' in result) {
+      console.error(
+        `Failed to fetch details for namespace "${namespace}":`,
+        result.err,
+      );
+      return null;
+    }
+
+    const canisterDetails = result.ok;
+
+    // --- 3. THE MAIN FUNCTION IS NOW CLEAN, SIMPLE, AND DECLARATIVE ---
+    return {
+      // --- A. Populate the Stable, Top-Level App Identity ---
+      namespace: canisterDetails.namespace,
+      name: canisterDetails.name,
+      publisher: canisterDetails.publisher,
+      category: canisterDetails.category,
+      iconUrl: canisterDetails.icon_url,
+      bannerUrl: canisterDetails.banner_url,
+      galleryImages: canisterDetails.gallery_images,
+      description: canisterDetails.description,
+      keyFeatures: canisterDetails.key_features,
+      whyThisApp: canisterDetails.why_this_app,
+      tags: canisterDetails.tags,
+      reviews: [], // Placeholder for reviews
+
+      // --- B. Delegate all complex mapping to our new helper functions ---
+      latestVersion: mapCanisterVersionToTS(
+        canisterDetails.latest_version,
+        buildServerUrl(canisterDetails.canister_id, canisterDetails.mcp_path),
+      ),
+      allVersions: canisterDetails.all_versions.map(
+        mapCanisterVersionSummaryToTS,
+      ),
+    };
+  } catch (error) {
+    console.error(`Error calling get_app_details_by_namespace:`, error);
+    return null;
   }
 };

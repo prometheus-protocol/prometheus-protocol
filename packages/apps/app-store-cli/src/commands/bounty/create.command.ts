@@ -23,7 +23,7 @@ export function registerCreateBountyCommand(program: Command) {
     )
     .requiredOption(
       '--audit-type <string>',
-      'The specific audit being requested (e.g., "security_v1").',
+      'The specific audit being requested (e.g., "data_safety_v1").',
     )
     .option(
       '--timeout-days <number>',

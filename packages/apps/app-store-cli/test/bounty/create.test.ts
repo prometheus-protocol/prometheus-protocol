@@ -58,7 +58,7 @@ describe('bounty create command', () => {
     '10.5',
     'USDC',
     '--audit-type',
-    'security_v1',
+    'data_safety_v1',
     '--wasm-id',
     MOCK_WASM_ID,
   ];
@@ -79,7 +79,7 @@ describe('bounty create command', () => {
 
     const createArgs = vi.mocked(api.createBounty).mock.calls[0][1];
     expect(createArgs.wasm_id).toBe(MOCK_WASM_ID);
-    expect(createArgs.audit_type).toBe('security_v1');
+    expect(createArgs.audit_type).toBe('data_safety_v1');
     expect(createArgs.amount).toBe(10500000n);
     expect(createArgs.token).toEqual(MOCK_USDC_TOKEN);
 
@@ -131,7 +131,7 @@ describe('bounty create command', () => {
       '10',
       'USDC', // Use a VALID symbol
       '--audit-type',
-      'security_v1',
+      'data_safety_v1',
       '--wasm-id',
       'not-a-valid-hash', // Invalid wasm-id
     ];
@@ -156,7 +156,7 @@ describe('bounty create command', () => {
       '10',
       'INVALID_TOKEN', // Invalid symbol
       '--audit-type',
-      'security_v1',
+      'data_safety_v1',
       '--wasm-id',
       MOCK_WASM_ID,
     ];

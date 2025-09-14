@@ -22,7 +22,7 @@ describe('bounty list command', () => {
     created: new Date(),
     tokenCanisterId: Principal.fromText('aaaaa-aa'),
     challengeParameters: {
-      audit_type: 'security_v1',
+      audit_type: 'data_safety_v1',
       wasm_hash: 'a1b2c3d4e5f6',
       project_name: 'Example Project',
     },
@@ -67,7 +67,7 @@ describe('bounty list command', () => {
       expect.objectContaining({
         'Bounty ID': 123n,
         Status: '🟢 Open',
-        'Audit Type': 'security_v1',
+        'Audit Type': 'data_safety_v1',
       }),
     );
 

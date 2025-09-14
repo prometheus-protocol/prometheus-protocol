@@ -1,7 +1,7 @@
 type UsageTracker = 
  service {
    /// Adds a Wasm hash to the allowlist of approved servers.
-   add_approved_wasm_hash: (hash: blob) -> (Result);
+   add_approved_wasm_hash: (wasm_id: text) -> (Result);
    /// Returns the current admin principal.
    get_admin: () -> (principal) query;
    /// Returns the aggregated metrics for all servers.
@@ -20,12 +20,12 @@ type UsageTracker =
    /// Returns the current payout canister principal.
    get_payout_canister: () -> (opt principal) query;
    /// Checks if a given Wasm hash is on the allowlist.
-   is_wasm_hash_approved: (hash: blob) -> (bool) query;
+   is_wasm_hash_approved: (wasm_id: text) -> (bool) query;
    /// * The primary entry point for MCP servers to submit their usage statistics.
    ///     * This method performs an inter-canister call to verify the caller's Wasm hash against the allowlist.
    log_call: (stats: UsageStats) -> (Result);
    /// Removes a Wasm hash from the allowlist.
-   remove_approved_wasm_hash: (hash: blob) -> (Result);
+   remove_approved_wasm_hash: (wasm_id: text) -> (Result);
    /// * [ADMIN-ONLY] A backdoor for seeding local development data.
    ///     * Bypasses the Wasm hash check but requires the caller to be the admin.
    ///     * Allows logging usage on behalf of any server principal.

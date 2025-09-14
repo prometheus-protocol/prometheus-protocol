@@ -11,12 +11,12 @@ interface FeaturedServerCardProps {
 
 export function FeaturedServerCard({ server }: FeaturedServerCardProps) {
   // This logic is fine, an "Unranked" tier can be considered "Coming Soon" in terms of full certification.
-  const status = server.status;
+  const status = server.latestVersion.status;
 
   console.log('Rendering FeaturedServerCard for server:', server);
 
   return (
-    <Link to={`/apps/${server.id}`} className="block group">
+    <Link to={`/app/${server.namespace}`} className="block group">
       <Card className="overflow-hidden border-transparent transition-all p-0">
         <CardContent className="p-0">
           <div className="relative overflow-hidden rounded-3xl">
@@ -46,7 +46,7 @@ export function FeaturedServerCard({ server }: FeaturedServerCardProps) {
               <p className="text-sm text-muted-foreground">{server.category}</p>
             </div>
             <Button variant="secondary" size="sm">
-              {status === 'Now Available' ? 'Install' : 'Details'}
+              {status === 'Verified' ? 'Install' : 'Details'}
             </Button>
           </div>
         </CardContent>

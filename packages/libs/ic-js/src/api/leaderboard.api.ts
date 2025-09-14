@@ -3,6 +3,8 @@
 import { Identity } from '@dfinity/agent';
 import { getLeaderboardActor } from '../actors.js';
 import { Leaderboard } from '@prometheus-protocol/declarations';
+import { Principal } from '@dfinity/principal';
+import { processToolInvocation } from '../utils.js';
 
 export type { Leaderboard };
 
@@ -60,4 +62,29 @@ export const triggerManualUpdate = async (
   if ('err' in result) {
     throw new Error(`Failed to trigger update: ${result.err}`);
   }
+};
+
+// Define the shape of the returned data
+export interface ToolInvocationRecord {
+  toolName: string;
+  count: bigint;
+}
+
+/**
+ * Fetches the invocation counts for all tools of a specific server canister.
+ * @param canisterId The Principal of the server canister.
+ * @returns A map of tool names to their invocation counts.
+ */
+export const getToolInvocationsForServer = async (
+  canisterId: Principal,
+): Promise<Map<string, bigint>> => {
+  const actor = getLeaderboardActor();
+  const records = await actor.get_tool_invocations_for_server(canisterId);
+
+  const invocationMap = new Map<string, bigint>();
+  for (const [toolName, count] of records) {
+    invocationMap.set(toolName, count);
+  }
+
+  return invocationMap;
 };

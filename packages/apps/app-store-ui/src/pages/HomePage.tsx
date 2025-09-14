@@ -37,13 +37,17 @@ function HomePage() {
 
       // 1. Filter apps into primary groups
       const goldApps = allServers.filter(
-        (app) => app.status === 'Now Available' && app.securityTier === 'Gold',
+        (app) =>
+          app.latestVersion.status === 'Verified' &&
+          app.latestVersion.securityTier === 'Gold',
       );
       const pendingApps = allServers.filter(
-        (app) => app.status === 'Coming Soon',
+        (app) => app.latestVersion.status === 'Pending',
       );
       const otherListedApps = allServers.filter(
-        (app) => app.status === 'Now Available' && app.securityTier !== 'Gold',
+        (app) =>
+          app.latestVersion.status === 'Verified' &&
+          app.latestVersion.securityTier !== 'Gold',
       );
 
       // 2. Create the list for the main carousel (mix of best and newest)

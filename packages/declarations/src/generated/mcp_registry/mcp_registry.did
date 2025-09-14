@@ -153,6 +153,11 @@ type RunBountyResult =
            };
    trx_id: opt nat;
  };
+type Result_3 = 
+ variant {
+   err: AppStoreError;
+   ok: AppDetailsResponse;
+ };
 type Result_2 = 
  variant {
    err: text;
@@ -423,6 +428,10 @@ type ICRC16 =
  };
 type ICRC118WasmRegistryCanister = 
  service {
+   /// * Fetches and assembles all data for an app's detail page using its stable namespace.
+   ///    * This is the single, powerful query the frontend needs.
+   get_app_details_by_namespace: (namespace: text, opt_wasm_id: opt text) ->
+    (Result_3) query;
    get_app_listings: (req: AppListingRequest) -> (AppListingResponse) query;
    get_audit_records_for_wasm: (wasm_id: text) -> (vec AuditRecord) query;
    get_bounties_for_wasm: (wasm_id: text) -> (vec Bounty) query;
@@ -633,6 +642,11 @@ type DeprecateRequest =
                      nat;
                    };
  };
+type DataSafetyInfo = 
+ record {
+   data_points: vec ICRC16Map;
+   overall_description: text;
+ };
 type DataCertificate = 
  record {
    certificate: blob;
@@ -706,6 +720,14 @@ type CanisterType =
    metadata: ICRC16Map__5;
    repo: text;
    versions: vec CanisterVersion;
+ };
+type BuildInfo = 
+ record {
+   canister_id: opt text;
+   failure_reason: opt text;
+   git_commit: opt text;
+   repo_url: opt text;
+   status: text;
  };
 type BountySubmissionResult = 
  variant {
@@ -800,6 +822,31 @@ type ArchivedTransactionResponse =
    args: vec TransactionRange;
    callback: GetTransactionsFn;
  };
+type AppVersionSummary = 
+ record {
+   security_tier: SecurityTier;
+   status: AppListingStatus;
+   version_string: text;
+   wasm_id: text;
+ };
+type AppVersionDetails = 
+ record {
+   audit_records: vec AuditRecord;
+   bounties: vec Bounty;
+   build_info: BuildInfo;
+   canister_id: opt text;
+   data_safety: DataSafetyInfo;
+   security_tier: SecurityTier;
+   status: AppListingStatus;
+   tools: vec ICRC16Map;
+   version_string: text;
+   wasm_id: text;
+ };
+type AppStoreError = 
+ variant {
+   InternalError: text;
+   NotFound: text;
+ };
 type AppListingStatus = 
  variant {
    Pending;
@@ -829,12 +876,28 @@ type AppListing =
    category: text;
    description: text;
    icon_url: text;
-   id: text;
+   latest_version: AppVersionSummary;
    name: text;
    namespace: text;
    publisher: text;
-   security_tier: SecurityTier;
-   status: AppListingStatus;
+ };
+type AppDetailsResponse = 
+ record {
+   all_versions: vec AppVersionSummary;
+   banner_url: text;
+   canister_id: principal;
+   category: text;
+   description: text;
+   gallery_images: vec text;
+   icon_url: text;
+   key_features: vec text;
+   latest_version: AppVersionDetails;
+   mcp_path: text;
+   name: text;
+   namespace: text;
+   publisher: text;
+   tags: vec text;
+   why_this_app: text;
  };
 type ActionId = 
  record {

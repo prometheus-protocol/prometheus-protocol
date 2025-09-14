@@ -11,11 +11,11 @@ interface AppCardProps {
 }
 
 export function ServerCard({ app }: AppCardProps) {
-  const tierInfo = getTierInfo(app.securityTier);
+  const tierInfo = getTierInfo(app.latestVersion.securityTier);
 
   return (
     <Link
-      to={`/apps/${app.id}`}
+      to={`/app/${app.namespace}`}
       className="flex items-center gap-4 p-3 rounded-2xl hover:bg-accent transition-colors group border border-transparent hover:border-primary/20">
       <ImageWithFallback
         src={app.iconUrl}
@@ -30,7 +30,7 @@ export function ServerCard({ app }: AppCardProps) {
 
         {/* 2. Use a proper, contextual status badge */}
         <div className="mt-1.5">
-          {app.status === 'Coming Soon' ? (
+          {app.latestVersion.status === 'Pending' ? (
             // --- Badge for PENDING apps ---
             <Badge
               variant="secondary"
