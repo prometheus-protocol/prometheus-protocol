@@ -51,12 +51,11 @@ export function OpenBountiesTab() {
       </div>
       <div className="space-y-3">
         <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-2 text-gray-500 font-semibold uppercase text-sm">
-          <div className="col-span-1">Audit ID</div>
+          <div className="col-span-2">Audit ID</div>
           <div className="col-span-3">Audit Type</div>
           <div className="col-span-3">WASM</div>
           <div className="col-span-2 text-right">Reward</div>
           <div className="col-span-2 text-center">Status</div>
-          <div className="col-span-1 text-right">Action</div>
         </div>
         {filteredAudits.length > 0 ? (
           filteredAudits.map((audit: AuditBounty) => (

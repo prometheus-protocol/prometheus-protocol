@@ -235,7 +235,7 @@ export function CertificatePage() {
             </div>
           </div>
 
-          <Accordion
+          {/* <Accordion
             type="multiple"
             className="w-full border border-primary/60 divide-y divide-primary/60">
             <AccordionItem value="dependencies" className="px-4">
@@ -256,7 +256,7 @@ export function CertificatePage() {
                 version lineage will be displayed here.
               </AccordionContent>
             </AccordionItem>
-          </Accordion>
+          </Accordion> */}
         </div>
       </div>
 

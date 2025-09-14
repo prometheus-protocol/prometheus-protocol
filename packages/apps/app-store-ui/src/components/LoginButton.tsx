@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { truncatePrincipal } from '@/lib/utils';
 import { TransferDialog } from './TransferDialog';
-import { useTokenBalance } from '@/hooks/usePayment';
+import { useGetTokenBalance } from '@/hooks/usePayment';
 import { Tokens } from '@prometheus-protocol/ic-js';
 import { useAuditorProfile } from '@/hooks/useAuditBounties';
 import { ReputationBar } from './ReputationBar';
@@ -67,7 +67,7 @@ export const getReputationDisplayInfo = (auditType: string) => {
 export function LoginButton() {
   const { identity, login, clear, loginStatus } = useInternetIdentity();
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
-  const { data: usdcBalance, isLoading: isBalanceLoading } = useTokenBalance(
+  const { data: usdcBalance, isLoading: isBalanceLoading } = useGetTokenBalance(
     Tokens.USDC,
   );
   const { data: profile, isLoading: isProfileLoading } = useAuditorProfile();

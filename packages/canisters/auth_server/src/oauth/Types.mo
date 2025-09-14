@@ -23,6 +23,7 @@ module {
     //            "write:files" -> "Allows the app to create and modify your files." }
     scopes : [(Text, Text)];
     accepted_payment_canisters : [Principal]; // List of icrc2 canisters that this server accepts.
+    frontend_host : ?Text; // Optional custom frontend host for login redirects.
   };
 
   public type PublicResourceServer = {
@@ -33,6 +34,7 @@ module {
     scopes : [(Text, Text)];
     accepted_payment_canisters : [Principal];
     service_principals : [Principal]; // List of trusted backend server identities.
+    frontend_host : ?Text; // Optional custom frontend host for login redirects.
   };
 
   public type RegisterResourceServerArgs = {
@@ -42,6 +44,7 @@ module {
     initial_service_principal : Principal;
     scopes : [(Text, Text)]; // A map of supported scopes to their descriptions
     accepted_payment_canisters : [Principal]; // List of icrc2 canisters that this server accepts.
+    frontend_host : ?Text; // Optional custom frontend host for login redirects.
   };
 
   public type UpdateResourceServerArgs = {
@@ -52,6 +55,7 @@ module {
     service_principals : ?[Principal];
     scopes : ?[(Text, Text)];
     accepted_payment_canisters : ?[Principal];
+    frontend_host : ?Text; // Optional custom frontend host for login redirects.
   };
 
   // Represents a registered application (a resource server).

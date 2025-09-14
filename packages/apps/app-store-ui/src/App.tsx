@@ -27,6 +27,11 @@ import AppBountiesPage from './pages/AppBountiesPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import AuditHubPage from './pages/AuditHubPage';
 import AuditDetailsPage from './pages/AuditDetailsPage';
+import LoginPage from './pages/LoginPage';
+import SetupPage from './pages/SetupPage';
+import ConsentPage from './pages/ConsentPage';
+import ConnectionsPage from './pages/ConnectionsPage';
+import { OAuthLayout } from './components/layout/OAuthLayout';
 
 // --- CONFIGURE THE SHARED PACKAGE ---
 // This object is created at BUILD TIME. Vite replaces each `process.env`
@@ -70,6 +75,12 @@ function App() {
         <BrowserRouter>
           <ScrollToTop />
           <Routes>
+            {/* OAuth flow routes */}
+            <Route path="/oauth" element={<OAuthLayout />}>
+              <Route path="login" element={<LoginPage />} />
+              <Route path="setup" element={<SetupPage />} />
+              <Route path="consent" element={<ConsentPage />} />
+            </Route>
             {/* --- Public Routes using the Main Layout --- */}
             {/* All public-facing pages will share a common layout (e.g., Header, Footer) */}
             <Route element={<MainLayout />}>
@@ -122,6 +133,7 @@ function App() {
               }>
               {/* Add more protected routes here, e.g., managing a specific submission */}
               {/* <Route path="/dashboard/server/:id/manage" element={<ManageSubmissionPage />} /> */}
+              <Route path="connections" element={<ConnectionsPage />} />
             </Route>
 
             {/* A catch-all for any undefined routes */}

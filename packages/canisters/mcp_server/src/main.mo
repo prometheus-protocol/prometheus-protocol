@@ -56,7 +56,7 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
   // --- UNCOMMENT THIS BLOCK TO ENABLE AUTHENTICATION ---
 
   let issuerUrl = "https://bfggx-7yaaa-aaaai-q32gq-cai.icp0.io";
-  let allowanceUrl = "https://bmfnl-jqaaa-aaaai-q32ha-cai.icp0.io";
+  let allowanceUrl = "https://prometheusprotocol.org/connections";
   let requiredScopes = ["openid"];
 
   //function to transform the response for jwks client
@@ -77,6 +77,9 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
     requiredScopes,
     transformJwksResponse,
   );
+
+  // Initialize the auth context with the issuer URL and required scopes.
+  // transient let authContext : ?AuthTypes.AuthContext = ?AuthState.initApiKey(owner);
 
   let beaconCanisterId = Principal.fromText("vu5yx-eh777-77774-qaaga-cai");
   transient let beaconContext : Beacon.BeaconContext = Beacon.init(
@@ -352,13 +355,13 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
         if (msg.caller != owner) {
           Debug.trap("Only the owner can create API keys.");
         };
-        return await ApiKey.create_api_key({
-          ctx = ctx;
-          caller = msg.caller;
-          name = name;
-          principal = principal;
-          scopes = scopes;
-        });
+        return await ApiKey.create_api_key(
+          ctx,
+          msg.caller,
+          name,
+          principal,
+          scopes,
+        );
       };
     };
   };

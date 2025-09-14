@@ -44,7 +44,7 @@ export default function SetupPage() {
       : undefined;
 
   const handleSuccess = () => {
-    navigate(`/consent?session_id=${sessionId}`, { state });
+    navigate(`/oauth/consent?session_id=${sessionId}`, { state });
   };
 
   const isLoading = isSessionLoading || !resourceServer || !spenderPrincipal;

@@ -33,72 +33,65 @@ export const AuditHubListItem = ({ audit }: { audit: AuditBounty }) => {
 
   return (
     <div className="border border-gray-700 rounded-lg hover:border-primary transition-colors">
-      {/* --- DESKTOP VIEW --- */}
-      <div className="hidden md:grid grid-cols-12 gap-4 items-center px-4 py-4">
-        <div className="col-span-1 flex items-center gap-3">
-          {getProjectIcon(auditType)}
-          <span className="font-semibold text-white">
-            {audit.id.toString()}
-          </span>
-        </div>
-        <div className="col-span-3 text-gray-400">{auditType}</div>
-        <div className="col-span-3 font-mono">{projectName}</div>
-        <div className="col-span-2 flex items-center justify-end gap-2 font-mono text-white">
-          ${Tokens.USDC.fromAtomic(audit.tokenAmount)} <Token className="h-5" />
-        </div>
-        <div className="col-span-2 text-center">
-          <span className={`font-semibold ${getStatusColor(status)}`}>
-            {status}
-          </span>
-        </div>
-        <div className="col-span-1 text-right">
-          <Link
-            to={`/audit-hub/${audit.id}`}
-            className="text-primary hover:underline font-semibold px-2">
-            View
-          </Link>
-        </div>
-      </div>
-      {/* --- MOBILE VIEW --- */}
-      {/* This view is visible by default and hidden on medium screens and up */}
-      <div className="md:hidden p-4">
-        <div className="flex justify-between items-start mb-4">
-          <div className="flex items-center gap-3">
+      <Link to={`/audit-hub/${audit.id}`}>
+        {/* --- DESKTOP VIEW --- */}
+        <div className="hidden md:grid grid-cols-12 gap-4 items-center px-4 py-4">
+          <div className="col-span-2 flex items-center gap-3">
             {getProjectIcon(auditType)}
-            <span className="font-semibold text-white text-lg">{audit.id}</span>
+            <span className="font-semibold text-white">
+              {audit.id.toString()}
+            </span>
           </div>
-          <Link
-            to={`/audit-hub/${audit.id}`}
-            className="text-primary hover:underline font-semibold">
-            View
-          </Link>
-        </div>
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <div className="text-gray-500 uppercase text-xs font-semibold mb-1">
-              Audit Type
-            </div>
-            <div className="text-gray-300">{auditType}</div>
+          <div className="col-span-3 text-gray-400">{auditType}</div>
+          <div className="col-span-3 font-mono">{projectName}</div>
+          <div className="col-span-2 flex items-center justify-end gap-2 font-mono text-white">
+            ${Tokens.USDC.fromAtomic(audit.tokenAmount)}{' '}
+            <Token className="h-5" />
           </div>
-          <div className="text-right">
-            <div className="text-gray-500 uppercase text-xs font-semibold mb-1">
-              Status
-            </div>
-            <div className={`font-semibold ${getStatusColor(status)}`}>
+          <div className="col-span-2 text-center">
+            <span className={`font-semibold ${getStatusColor(status)}`}>
               {status}
+            </span>
+          </div>
+        </div>
+        {/* --- MOBILE VIEW --- */}
+        {/* This view is visible by default and hidden on medium screens and up */}
+        <div className="md:hidden p-4">
+          <div className="flex justify-between items-start mb-4">
+            <div className="flex items-center gap-3">
+              {getProjectIcon(auditType)}
+              <span className="font-semibold text-white text-lg">
+                {audit.id}
+              </span>
             </div>
           </div>
-          <div className="col-span-2">
-            <div className="text-gray-500 uppercase text-xs font-semibold mb-1">
-              Reward
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <div className="text-gray-500 uppercase text-xs font-semibold mb-1">
+                Audit Type
+              </div>
+              <div className="text-gray-300">{auditType}</div>
             </div>
-            <div className="flex items-center gap-2 font-mono text-white">
-              ${Tokens.USDC.fromAtomic(audit.tokenAmount)}
-              <Token className="h-5" />
+            <div className="text-right">
+              <div className="text-gray-500 uppercase text-xs font-semibold mb-1">
+                Status
+              </div>
+              <div className={`font-semibold ${getStatusColor(status)}`}>
+                {status}
+              </div>
+            </div>
+            <div className="col-span-2">
+              <div className="text-gray-500 uppercase text-xs font-semibold mb-1">
+                Reward
+              </div>
+              <div className="flex items-center gap-2 font-mono text-white">
+                ${Tokens.USDC.fromAtomic(audit.tokenAmount)}
+                <Token className="h-5" />
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </Link>
     </div>
   );
 };

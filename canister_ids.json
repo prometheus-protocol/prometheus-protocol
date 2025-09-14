@@ -2,7 +2,7 @@
   "app_bounties": {
     "ic": "jld6p-yqaaa-aaaai-q33ra-cai"
   },
-  "app_store_ui": {
+  "old_app_store_ui": {
     "ic": "jfbth-daaaa-aaaai-q33qa-cai"
   },
   "audit_hub": {
@@ -29,7 +29,7 @@
   "mcp_server": {
     "ic": "jcavt-oyaaa-aaaai-q33qq-cai"
   },
-  "old_app_store_ui": {
+  "app_store_ui": {
     "ic": "gyeil-qyaaa-aaaai-q32uq-cai"
   },
   "usage_tracker": {
