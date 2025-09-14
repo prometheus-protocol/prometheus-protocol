@@ -13,7 +13,7 @@ export interface TierUiInfo {
 }
 
 export const getTierInfo = (
-  tier: AppStoreDetails['securityTier'],
+  tier: AppStoreDetails['latestVersion']['securityTier'],
 ): TierUiInfo => {
   if (tier === 'Gold') {
     return {

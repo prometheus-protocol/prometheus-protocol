@@ -224,7 +224,7 @@ function InstallDialogContent({ server }: { server: AppStoreDetails }) {
           )}
 
           <CodeBlock
-            code={activeSetup.code(configKey, server.serverUrl)}
+            code={activeSetup.code(configKey, server.latestVersion.serverUrl)}
             filename={activeSetup.filename}
           />
         </div>

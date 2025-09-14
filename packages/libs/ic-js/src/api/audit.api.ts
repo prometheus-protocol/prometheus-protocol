@@ -10,28 +10,23 @@ import { getAuditHubActor, getRegistryActor } from '../actors.js';
 import { AuditHub, Registry } from '@prometheus-protocol/declarations';
 import { Principal } from '@dfinity/principal';
 import {
-  AttestationRecord,
   BountyListingRequest,
   ICRC16Map,
 } from '@prometheus-protocol/declarations/mcp_registry/mcp_registry.did.js';
 import {
-  calculateSecurityTier,
   hexToUint8Array,
   nsToDate,
-  processAttestation,
   processAuditRecord,
   processBounty,
   processVerificationRecord,
   processVerificationRequest,
+  SecurityTier,
   uint8ArrayToHex,
 } from '../utils.js';
 import { fromNullable, toNullable } from '@dfinity/utils';
-import {
-  deserializeFromIcrc16Map,
-  deserializeIcrc16Value,
-  serializeToIcrc16Map,
-} from '../icrc16.js';
+import { deserializeFromIcrc16Map, serializeToIcrc16Map } from '../icrc16.js';
 import { Token } from '../tokens.js';
+import { AppVersionSummary } from './registry.api.js';
 
 // --- TYPES ---
 
@@ -103,8 +98,6 @@ export interface VerificationStatus {
   auditRecords: ProcessedAuditRecord[];
   bounties: AuditBounty[];
 }
-
-export type SecurityTier = 'Gold' | 'Silver' | 'Bronze' | 'Unranked';
 
 export interface ServerTool {
   name: string;
@@ -613,14 +606,6 @@ export type DataSafetyInfo = {
   overallDescription: string;
   dataPoints: DataSafetyPoint[];
 };
-
-// A lightweight summary of a single version, used for the version history dropdown.
-export interface AppVersionSummary {
-  wasmId: string;
-  versionString: string;
-  securityTier: SecurityTier;
-  status: 'Rejected' | 'Verified' | 'Pending';
-}
 
 // A comprehensive object containing all details for a single, specific version.
 export interface AppVersionDetails {
