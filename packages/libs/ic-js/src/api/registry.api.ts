@@ -19,6 +19,7 @@ import {
   processAttestation,
   processAuditRecord,
   processBounty,
+  processServerTool,
   processVerificationRecord,
   processVerificationRequest,
   uint8ArrayToHex,
@@ -587,7 +588,7 @@ function mapCanisterVersionToTS(
     },
     canisterId: canisterId!,
     serverUrl,
-    tools: canisterVersion.tools.map(deserializeFromIcrc16Map) as ServerTool[],
+    tools: canisterVersion.tools.map(processServerTool),
     dataSafety: {
       overallDescription: canisterVersion.data_safety.overall_description,
       dataPoints: canisterVersion.data_safety.data_points.map(

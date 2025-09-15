@@ -340,28 +340,51 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
   // ==================================================================================================
 
   /**
-   * Creates a new API key. Only the owner can call this.
-   * @param label A human-readable name for the key.
-   * @param principal The principal this key will act on behalf of.
-   * @param scopes The permissions granted to this key.
+   * Creates a new API key. This API key is linked to the caller's principal.
+   * @param name A human-readable name for the key.
    * @returns The raw, unhashed API key. THIS IS THE ONLY TIME IT WILL BE VISIBLE.
    */
-  public shared (msg) func create_api_key(name : Text, principal : Principal, scopes : [Text]) : async Text {
+  public shared (msg) func create_my_api_key(name : Text, scopes : [Text]) : async Text {
     switch (authContext) {
       case (null) {
         Debug.trap("Authentication is not enabled on this canister.");
       };
       case (?ctx) {
-        if (msg.caller != owner) {
-          Debug.trap("Only the owner can create API keys.");
-        };
-        return await ApiKey.create_api_key(
+        return await ApiKey.create_my_api_key(
           ctx,
           msg.caller,
           name,
-          principal,
           scopes,
         );
+      };
+    };
+  };
+
+  /** Revoke (delete) an API key owned by the caller.
+   * @param key_id The ID of the key to revoke.
+   * @returns True if the key was found and revoked, false otherwise.
+   */
+  public shared (msg) func revoke_my_api_key(key_id : Text) : async () {
+    switch (authContext) {
+      case (null) {
+        Debug.trap("Authentication is not enabled on this canister.");
+      };
+      case (?ctx) {
+        return ApiKey.revoke_my_api_key(ctx, msg.caller, key_id);
+      };
+    };
+  };
+
+  /** List all API keys owned by the caller.
+   * @returns A list of API key metadata (but not the raw keys).
+   */
+  public query (msg) func list_my_api_keys() : async [AuthTypes.ApiKeyMetadata] {
+    switch (authContext) {
+      case (null) {
+        Debug.trap("Authentication is not enabled on this canister.");
+      };
+      case (?ctx) {
+        return ApiKey.list_my_api_keys(ctx, msg.caller);
       };
     };
   };

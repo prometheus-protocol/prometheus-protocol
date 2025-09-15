@@ -9,11 +9,14 @@ interface FeaturedServerCardProps {
   server: AppStoreListing;
 }
 
+const statusMap: Record<string, string> = {
+  Pending: 'Coming Soon',
+  Verified: 'Recommended',
+};
+
 export function FeaturedServerCard({ server }: FeaturedServerCardProps) {
   // This logic is fine, an "Unranked" tier can be considered "Coming Soon" in terms of full certification.
   const status = server.latestVersion.status;
-
-  console.log('Rendering FeaturedServerCard for server:', server);
 
   return (
     <Link to={`/app/${server.namespace}`} className="block group">
@@ -31,7 +34,7 @@ export function FeaturedServerCard({ server }: FeaturedServerCardProps) {
               "
             />
             <PromoBadge className="md:py-2 md:px-4 md:text-xs">
-              {status}
+              {statusMap[status] ?? status}
             </PromoBadge>
           </div>
           <div className="py-4 flex items-start gap-3 bg-card">
@@ -46,7 +49,7 @@ export function FeaturedServerCard({ server }: FeaturedServerCardProps) {
               <p className="text-sm text-muted-foreground">{server.category}</p>
             </div>
             <Button variant="secondary" size="sm">
-              {status === 'Verified' ? 'Install' : 'Details'}
+              {status === 'Verified' ? 'Connect' : 'Details'}
             </Button>
           </div>
         </CardContent>

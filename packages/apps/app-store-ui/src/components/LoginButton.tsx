@@ -194,8 +194,7 @@ export function LoginButton() {
                 return (
                   <DropdownMenuItem
                     key={auditType}
-                    disabled
-                    className="opacity-100 focus:bg-transparent cursor-default flex flex-col items-start gap-1">
+                    className="opacity-100 focus:bg-transparent cursor-default flex flex-col items-start gap-1 my-1">
                     {/* Row 1: Icon and Name */}
                     <div className="flex items-center gap-1">
                       {displayInfo.icon}

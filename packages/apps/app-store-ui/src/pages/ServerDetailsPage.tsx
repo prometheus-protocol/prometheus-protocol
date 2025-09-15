@@ -25,6 +25,8 @@ import {
 import { useState } from 'react';
 import { Tokens } from '@prometheus-protocol/ic-js';
 import { CreateBountyDialog } from '@/components/server-details/CreateBountyDialog';
+import { AccessAndBilling } from '@/components/server-details/AccessAndBilling';
+import { useInternetIdentity } from 'ic-use-internet-identity';
 
 // --- NEW High-Fidelity Skeleton Component ---
 const ServerDetailsSkeleton = () => (
@@ -85,6 +87,7 @@ const ServerDetailsError = ({ onRetry }: { onRetry: () => void }) => (
 export default function ServerDetailsPage() {
   // --- 2. USE `namespace` FROM THE URL, NOT `appId` ---
   const { appId, wasmId } = useParams<{ appId: string; wasmId?: string }>();
+  const { identity } = useInternetIdentity();
   const [isBountyDialogOpen, setIsBountyDialogOpen] = useState(false);
   const [dialogState, setDialogState] = useState<
     'closed' | 'install' | 'confirm'
@@ -129,6 +132,8 @@ export default function ServerDetailsPage() {
     (bounty) => bounty.challengeParameters.audit_type === 'data_safety_v1',
   );
 
+  const acceptsPayments = latestVersion.tools.some((tool) => !!tool.cost);
+
   return (
     <>
       <div className="w-full max-w-6xl mx-auto pt-12 pb-32">
@@ -143,6 +148,9 @@ export default function ServerDetailsPage() {
 
         <div className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-x-16 gap-y-8">
           <main className="lg:col-span-2 space-y-16 mt-8">
+            {/* Conditionally render the new container component */}
+            <AccessAndBilling latestVersion={latestVersion} />
+
             <AboutSection server={server} />
 
             {/* Conditional rendering now correctly checks the nested status. */}

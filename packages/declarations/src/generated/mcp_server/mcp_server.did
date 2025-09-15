@@ -62,13 +62,10 @@ type McpServer =
    ///   * for the UsageTracker and calls its `log_call` method.
    call_tracker: (tracker_canister_id: principal, stats: UsageStats) ->
     (Result_2);
-   /// * Creates a new API key. Only the owner can call this.
-   ///    * @param label A human-readable name for the key.
-   ///    * @param principal The principal this key will act on behalf of.
-   ///    * @param scopes The permissions granted to this key.
+   /// * Creates a new API key. This API key is linked to the caller's principal.
+   ///    * @param name A human-readable name for the key.
    ///    * @returns The raw, unhashed API key. THIS IS THE ONLY TIME IT WILL BE VISIBLE.
-   create_api_key: (name: text, "principal": principal, scopes: vec text) ->
-    (text);
+   create_my_api_key: (name: text, scopes: vec text) -> (text);
    /// Get the current owner of the canister.
    get_owner: () -> (principal) query;
    /// Get the canister's balance of a specific ICRC-1 token.
@@ -80,6 +77,13 @@ type McpServer =
     (opt StreamingCallbackResponse) query;
    /// Handle incoming HTTP requests that modify state (e.g., POST).
    http_request_update: (req: HttpRequest) -> (HttpResponse);
+   /// List all API keys owned by the caller.
+   ///    * @returns A list of API key metadata (but not the raw keys).
+   list_my_api_keys: () -> (vec ApiKeyMetadata) query;
+   /// Revoke (delete) an API key owned by the caller.
+   ///    * @param key_id The ID of the key to revoke.
+   ///    * @returns True if the key was found and revoked, false otherwise.
+   revoke_my_api_key: (key_id: text) -> ();
    /// Set a new owner for the canister. Only the current owner can call this.
    set_owner: (new_owner: principal) -> (Result_1);
    transformJwksResponse:
@@ -123,6 +127,7 @@ type Header =
    text;
    text;
  };
+type HashedApiKey = text;
 type Destination = 
  record {
    owner: principal;
@@ -133,5 +138,17 @@ type CallerActivity =
    call_count: nat;
    caller: principal;
    tool_id: text;
+ };
+type ApiKeyMetadata = 
+ record {
+   hashed_key: HashedApiKey;
+   info: ApiKeyInfo;
+ };
+type ApiKeyInfo = 
+ record {
+   created: Time;
+   name: text;
+   "principal": principal;
+   scopes: vec text;
  };
 service : () -> McpServer

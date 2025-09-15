@@ -22,7 +22,7 @@ export const useGetTokenBalance = (token: Token | undefined) => {
   return useQuery({
     // The query key includes the token's canister ID to ensure balances are cached separately.
     queryKey: [
-      'balance',
+      'tokenBalance',
       identity?.getPrincipal().toText(),
       token?.canisterId?.toText(),
     ],
@@ -50,7 +50,7 @@ export const useTransfer = () => {
   const { identity } = useInternetIdentity();
 
   return useMutation<TransferArgs, bigint>({
-    queryKeysToRefetch: [['balance', identity?.getPrincipal().toText()]],
+    queryKeysToRefetch: [['tokenBalance', identity?.getPrincipal().toText()]],
     mutationFn: async (args: TransferArgs) => {
       if (!identity) {
         throw new Error('User is not authenticated');

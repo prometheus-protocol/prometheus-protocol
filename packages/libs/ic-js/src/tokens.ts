@@ -83,7 +83,7 @@ const USDC_CANISTER_ID =
  * The centralized, exported registry of all supported tokens.
  * Each token object is enhanced with its own `toAtomic` and `fromAtomic` methods.
  */
-export const Tokens = {
+export const Tokens: Record<string, Token> = {
   USDC: createToken({
     canisterId: Principal.fromText(USDC_CANISTER_ID),
     name: 'USD Coin',

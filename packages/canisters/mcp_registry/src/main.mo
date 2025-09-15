@@ -1455,7 +1455,26 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
         pending_requests.add(request);
       };
     };
-    return Buffer.toArray(pending_requests);
+
+    var pending_array = Buffer.toArray(pending_requests);
+
+    // --- Step 3: Define a custom comparison function for sorting ---
+    // This function will sort records by their timestamp in descending order (newest first).
+    func compareRecords(a : ICRC126.VerificationRecord, b : ICRC126.VerificationRecord) : Order.Order {
+      if (a.timestamp > b.timestamp) {
+        return #less; // a is newer, so it should come first
+      } else if (a.timestamp < b.timestamp) {
+        return #greater; // b is newer, so it should come first
+      } else {
+        return #equal; // timestamps are equal
+      };
+    };
+
+    // --- Step 4: Sort the array in-place using the comparison function ---
+    pending_array := Array.sort<ICRC126.VerificationRecord>(pending_array, compareRecords);
+
+    // --- Step 5: Return the now-sorted array ---
+    return pending_array;
   };
 
   private func _get_audit_records_for_wasm(wasm_id : Text) : [ICRC126.AuditRecord] {

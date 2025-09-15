@@ -2,6 +2,7 @@ import {
   AttestationRecord,
   AuditRecord,
   Bounty,
+  ICRC16Map,
   VerificationRecord,
   VerificationRequest,
 } from '@prometheus-protocol/declarations/mcp_registry/mcp_registry.did.js';
@@ -11,6 +12,7 @@ import {
   ProcessedAuditRecord,
   ProcessedVerificationRecord,
   ProcessedVerificationRequest,
+  ServerTool,
 } from './api';
 import { fromNullable } from '@dfinity/utils';
 import { deserializeFromIcrc16Map, deserializeIcrc16Value } from './index.js';
@@ -139,6 +141,16 @@ export function processToolInvocation(request: [string, bigint]): {
   return {
     toolName,
     invocationCount: invocations,
+  };
+}
+
+export function processServerTool(request: ICRC16Map): ServerTool {
+  const { name, description, token, cost } = deserializeFromIcrc16Map(request);
+  return {
+    name,
+    description,
+    tokenSymbol: token,
+    cost,
   };
 }
 

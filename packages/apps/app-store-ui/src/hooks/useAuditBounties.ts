@@ -292,7 +292,8 @@ export const useSponsorBounty = () => {
       // Calculate the required amounts in atomic units
       const bountyAtomic = paymentToken.toAtomic(amount);
       const payoutFee = paymentToken.fee; // The fee for the final payout
-      const amountToApprove = bountyAtomic + BigInt(payoutFee);
+      const amountToApprove =
+        bountyAtomic + BigInt(paymentToken.fee) + BigInt(payoutFee);
 
       // 1. Check current allowance
       setStatus('Checking allowance...');

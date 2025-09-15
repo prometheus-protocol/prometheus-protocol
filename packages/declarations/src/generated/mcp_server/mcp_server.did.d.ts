@@ -2,6 +2,16 @@ import type { Principal } from '@dfinity/principal';
 import type { ActorMethod } from '@dfinity/agent';
 import type { IDL } from '@dfinity/candid';
 
+export interface ApiKeyInfo {
+  'created' : Time,
+  'principal' : Principal,
+  'scopes' : Array<string>,
+  'name' : string,
+}
+export interface ApiKeyMetadata {
+  'info' : ApiKeyInfo,
+  'hashed_key' : HashedApiKey,
+}
 export interface CallerActivity {
   'call_count' : bigint,
   'tool_id' : string,
@@ -11,6 +21,7 @@ export interface Destination {
   'owner' : Principal,
   'subaccount' : [] | [Subaccount],
 }
+export type HashedApiKey = string;
 export type Header = [string, string];
 export interface HttpHeader { 'value' : string, 'name' : string }
 export interface HttpRequest {
@@ -34,7 +45,7 @@ export interface HttpResponse {
 }
 export interface McpServer {
   'call_tracker' : ActorMethod<[Principal, UsageStats], Result_2>,
-  'create_api_key' : ActorMethod<[string, Principal, Array<string>], string>,
+  'create_my_api_key' : ActorMethod<[string, Array<string>], string>,
   'get_owner' : ActorMethod<[], Principal>,
   'get_treasury_balance' : ActorMethod<[Principal], bigint>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
@@ -43,6 +54,8 @@ export interface McpServer {
     [] | [StreamingCallbackResponse]
   >,
   'http_request_update' : ActorMethod<[HttpRequest], HttpResponse>,
+  'list_my_api_keys' : ActorMethod<[], Array<ApiKeyMetadata>>,
+  'revoke_my_api_key' : ActorMethod<[string], undefined>,
   'set_owner' : ActorMethod<[Principal], Result_1>,
   'transformJwksResponse' : ActorMethod<
     [{ 'context' : Uint8Array | number[], 'response' : HttpRequestResult }],
