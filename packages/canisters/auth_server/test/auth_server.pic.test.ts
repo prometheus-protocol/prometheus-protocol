@@ -103,6 +103,7 @@ describe('Auth Server Canister (Isolated Tests)', () => {
       accepted_payment_canisters: [
         Principal.fromText('aaaaa-aa'), // Replace with actual ICRC2 canister ID
       ],
+      frontend_host: toNullable('http://localhost:3000'),
     });
     if ('err' in rsResult)
       throw new Error('Global setup failed to register RS');
@@ -179,6 +180,7 @@ describe('Auth Server Canister (Isolated Tests)', () => {
         initial_service_principal: Principal.fromText('aaaaa-aa'),
         scopes: [['read', 'Read access']],
         accepted_payment_canisters: [],
+        frontend_host: toNullable('http://localhost:3000'),
       });
 
       if ('err' in result) throw new Error(`Failed to register: ${result.err}`);
@@ -204,6 +206,7 @@ describe('Auth Server Canister (Isolated Tests)', () => {
         scopes: toNullable([['write', 'Write access']]),
         service_principals: toNullable([]),
         accepted_payment_canisters: toNullable([]),
+        frontend_host: toNullable('http://localhost:4000'),
       };
 
       // Act
@@ -229,6 +232,7 @@ describe('Auth Server Canister (Isolated Tests)', () => {
         scopes: toNullable(),
         service_principals: toNullable(),
         accepted_payment_canisters: toNullable(),
+        frontend_host: toNullable(),
       };
 
       // Act
@@ -546,6 +550,7 @@ describe('Auth Server Canister (Isolated Tests)', () => {
         initial_service_principal: Principal.fromText('aaaaa-aa'),
         scopes: [['openid', '...']],
         accepted_payment_canisters: [],
+        frontend_host: toNullable('http://localhost:3000'),
       });
       if ('err' in rsResult) {
         throw new Error(

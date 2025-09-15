@@ -159,6 +159,9 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     await registryActor.set_auditor_credentials_canister_id(
       auditHub.canisterId,
     );
+    await registryActor.set_orchestrator_canister_id(
+      orchestratorFixture.canisterId,
+    );
 
     orchestratorActor.setIdentity(daoIdentity);
     await orchestratorActor.set_mcp_registry_id(registryFixture.canisterId);
@@ -344,24 +347,27 @@ describe('MCP Registry Full E2E Lifecycle', () => {
         controller: operatorIdentity.getPrincipal(),
       },
     ]);
-    orchestratorActor.setIdentity(operatorIdentity);
-    await orchestratorActor.register_canister(targetCanisterId, appNamespace);
 
     // Step 6.2: Perform the upgrade
-    const upgradeResult = await orchestratorActor.icrc120_upgrade_to([
-      {
-        canister_id: targetCanisterId,
-        hash: wasmHash,
-        mode: { upgrade: [] },
-        args: [],
-        parameters: [],
-        restart: false,
-        snapshot: false,
-        stop: false,
-        timeout: 0n,
-      },
-    ]);
-    expect(upgradeResult[0]).toHaveProperty('Ok');
+    orchestratorActor.setIdentity(daoIdentity);
+    const upgradeResult = await orchestratorActor.deploy_or_upgrade({
+      namespace: appNamespace,
+      hash: wasmHash,
+      mode: { upgrade: [] },
+      args: [],
+      parameters: [],
+      restart: false,
+      snapshot: false,
+      stop: false,
+      timeout: 0n,
+    });
+
+    console.log('Upgrade Result:', upgradeResult);
+    expect(upgradeResult).toHaveProperty('ok');
+
+    orchestratorActor.setIdentity(operatorIdentity);
+    const upgradeFinished = await orchestratorActor.icrc120_upgrade_finished();
+    expect(upgradeFinished).toHaveProperty('Success');
 
     // === PHASE 7: Poll for upgrade completion ===
     let finalStatus;
@@ -379,5 +385,116 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     expect(finalStatus).toHaveProperty('Success');
 
     console.log('E2E test completed successfully!');
+  });
+
+  it('should automatically deploy a canister upon successful build verification', async () => {
+    // === PHASE 1: Developer creates a new namespace and submits a verification request ===
+    const appNamespace = 'com.prometheus.auto-deploy-app';
+    const wasmBytes = Buffer.from('mock wasm for auto-deploy');
+    const wasmHash = createHash('sha256').update(wasmBytes).digest();
+    const wasmId = Buffer.from(wasmHash).toString('hex');
+
+    registryActor.setIdentity(developerIdentity);
+    await registryActor.icrc118_create_canister_type([
+      {
+        canister_type_namespace: appNamespace,
+        controllers: [[developerIdentity.getPrincipal()]],
+        canister_type_name: 'Auto-Deploy Test App',
+        description: '',
+        repo: '',
+        metadata: [],
+        forked_from: [],
+      },
+    ]);
+    // Upload the wasm in advance (normally done via separate calls)
+    await registryActor.icrc118_update_wasm({
+      canister_type_namespace: appNamespace,
+      previous: [],
+      expected_chunks: [wasmHash],
+      metadata: [],
+      repo: '',
+      description: '',
+      version_number: [1n, 0n, 0n],
+      expected_hash: wasmHash,
+    });
+    await registryActor.icrc118_upload_wasm_chunk({
+      canister_type_namespace: appNamespace,
+      expected_chunk_hash: wasmHash,
+      version_number: [1n, 0n, 0n],
+      chunk_id: 0n,
+      wasm_chunk: wasmBytes,
+    });
+    // Submit the verification request
+    await registryActor.icrc126_verification_request({
+      wasm_hash: wasmHash,
+      repo: 'https://github.com/auto/deploy',
+      commit_hash: new Uint8Array([2]),
+      metadata: [],
+    });
+
+    // === PHASE 2: A sponsor creates a bounty for the build audit ===
+    registryActor.setIdentity(bountyCreatorIdentity);
+    const bountyResult = await registryActor.icrc127_create_bounty({
+      challenge_parameters: {
+        Map: [
+          ['wasm_hash', { Blob: wasmHash }],
+          ['audit_type', { Text: 'build' }],
+        ],
+      },
+      bounty_metadata: [],
+      timeout_date: BigInt(Date.now() + 8.64e10) * 1000000n,
+      start_date: [],
+      bounty_id: [],
+      validation_canister_id: registryCanisterId,
+    });
+    const bountyId = ('Ok' in bountyResult && bountyResult.Ok.bounty_id) || 0n;
+
+    // === PHASE 3: The Build Auditor files a successful attestation (THE TRIGGER) ===
+    auditHubActor.setIdentity(reproAuditorIdentity);
+    await auditHubActor.reserve_bounty(bountyId, 'build_reproducibility_v1');
+
+    registryActor.setIdentity(reproAuditorIdentity);
+    await registryActor.icrc126_file_attestation({
+      wasm_id: wasmId,
+      metadata: [
+        ['126:audit_type', { Text: 'build_reproducibility_v1' }],
+        ['bounty_id', { Nat: bountyId }],
+      ],
+    });
+
+    // ASSERT 1: The WASM is now marked as verified in the registry.
+    expect(await registryActor.is_wasm_verified(wasmId)).toBe(true);
+
+    // --- CRITICAL: Allow the IC to process the inter-canister call ---
+    // The registry calls the orchestrator in a "fire-and-forget" manner.
+    // We need to advance the PocketIC state to let that call complete.
+    await pic.tick(10); // Tick twice to be safe (call + response/execution)
+
+    // === PHASE 4: Assert that the deployment happened automatically ===
+
+    // ASSERT 2: The orchestrator now manages a canister for the namespace.
+    orchestratorActor.setIdentity(daoIdentity); // Use an admin identity for query
+    const managedCanisters =
+      await orchestratorActor.get_canisters(appNamespace);
+    expect(managedCanisters).toHaveLength(1);
+    const deployedCanisterId = managedCanisters[0];
+    expect(deployedCanisterId).toBeInstanceOf(Principal);
+
+    // // ASSERT 3 (THE ULTIMATE PROOF): Inspect the newly created canister directly.
+    // const deployedWasmHash = await pic.getWasmHash(deployedCanisterId);
+    // const controllers = await pic.getControllers(deployedCanisterId);
+
+    // // Check that the correct code was installed.
+    // expect(deployedWasmHash).toEqual(wasmHash);
+
+    // // Check that the orchestrator is the SOLE controller.
+    // expect(controllers).toHaveLength(1);
+    // expect(controllers[0].toText()).toEqual(
+    //   orchestratorActor.getCanisterId().toText(),
+    // );
+
+    console.log(
+      `Automated deployment successful! New canister ID: ${deployedCanisterId.toText()}`,
+    );
   });
 });

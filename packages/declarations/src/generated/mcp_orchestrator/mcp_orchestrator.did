@@ -123,6 +123,11 @@ type RevertSnapshotError =
    TooManyRequests;
    Unauthorized;
  };
+type Result_1 = 
+ variant {
+   err: text;
+   ok: principal;
+ };
 type Result = 
  variant {
    err: text;
@@ -149,6 +154,11 @@ type OrchestrationEvent =
    id: nat;
    timestamp: nat;
  };
+type InternalDeployRequest = 
+ record {
+   hash: blob;
+   namespace: text;
+ };
 type InitArgs = record {};
 type InitArgList = 
  record {
@@ -164,12 +174,53 @@ type InitArgList =
    nextActionId: nat;
    nextCycleActionId: opt nat;
  };
+type ICRC16__1 = 
+ variant {
+   Array: vec ICRC16__1;
+   Blob: blob;
+   Bool: bool;
+   Bytes: vec nat8;
+   Class: vec ICRC16Property__1;
+   Float: float64;
+   Floats: vec float64;
+   Int: int;
+   Int16: int16;
+   Int32: int32;
+   Int64: int64;
+   Int8: int8;
+   Map: ICRC16Map__1;
+   Nat: nat;
+   Nat16: nat16;
+   Nat32: nat32;
+   Nat64: nat64;
+   Nat8: nat8;
+   Nats: vec nat;
+   Option: opt ICRC16__1;
+   Principal: principal;
+   Set: vec ICRC16__1;
+   Text: text;
+   ValueMap: vec record {
+                   ICRC16__1;
+                   ICRC16__1;
+                 };
+ };
+type ICRC16Property__1 = 
+ record {
+   immutable: bool;
+   name: text;
+   value: ICRC16__1;
+ };
 type ICRC16Property = 
  record {
    immutable: bool;
    name: text;
    value: ICRC16;
  };
+type ICRC16Map__1 = 
+ vec record {
+       text;
+       ICRC16__1;
+     };
 type ICRC16Map = 
  vec record {
        text;
@@ -210,6 +261,8 @@ type ICRC16 =
  };
 type ICRC120Canister = 
  service {
+   /// * The primary entry point for developers.
+   deploy_or_upgrade: (request: DeployOrUpgradeRequest) -> (Result_1);
    get_canisters: (namespace: text) -> (vec principal) query;
    get_tip: () -> (Tip) query;
    hello: () -> (text);
@@ -239,7 +292,8 @@ type ICRC120Canister =
    icrc3_get_blocks: (args: GetBlocksArgs) -> (GetBlocksResult) query;
    icrc3_get_tip_certificate: () -> (opt DataCertificate) query;
    icrc3_supported_block_types: () -> (vec BlockType) query;
-   register_canister: (canister_id: principal, namespace: text) -> (Result);
+   /// * [INTERNAL] A privileged endpoint for the MCP Registry.
+   internal_deploy_or_upgrade: (request: InternalDeployRequest) -> ();
    set_mcp_registry_id: (registryId: principal) -> (Result);
  };
 type GetTransactionsResult = 
@@ -278,6 +332,21 @@ type GetArchivesResultItem =
  };
 type GetArchivesResult = vec GetArchivesResultItem;
 type GetArchivesArgs = record {from: opt principal;};
+type DeployOrUpgradeRequest = 
+ record {
+   args: blob;
+   hash: blob;
+   mode: canister_install_mode;
+   namespace: text;
+   parameters: opt vec record {
+                         text;
+                         ICRC16__1;
+                       };
+   restart: bool;
+   snapshot: bool;
+   stop: bool;
+   timeout: nat;
+ };
 type DataCertificate = 
  record {
    certificate: blob;

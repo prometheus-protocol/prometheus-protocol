@@ -14,6 +14,7 @@ import {
   type _SERVICE as RegistryService,
 } from '@declarations/mcp_registry/mcp_registry.did.js';
 import {
+  DeployOrUpgradeRequest,
   idlFactory as orchestratorIdlFactory,
   init as orchestratorInit,
   type _SERVICE as OrchestratorService,
@@ -188,10 +189,6 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       },
     ]);
     orchestratorActor.setIdentity(developerIdentity);
-    await orchestratorActor.register_canister(
-      targetCanisterId,
-      secureNamespace,
-    );
 
     // --- Upload two WASM versions to the registry ---
     const wasmBytes = fs.readFileSync(DUMMY_UPGRADE_WASM_PATH);
@@ -381,9 +378,9 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
     }
 
     // Now, perform the upgrade
-    orchestratorActor.setIdentity(developerIdentity);
-    const upgradeRequest: UpgradeToRequest = {
-      canister_id: targetCanisterId,
+    orchestratorActor.setIdentity(daoIdentity);
+    const upgradeRequest: DeployOrUpgradeRequest = {
+      namespace: secureNamespace,
       hash: verifiedWasmHash,
       mode: { install: null },
       args: [],
@@ -393,7 +390,12 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       timeout: 10_000n,
       parameters: [],
     };
-    const result = await orchestratorActor.icrc120_upgrade_to([upgradeRequest]);
-    expect(result[0]).toHaveProperty('Ok');
+    const result = await orchestratorActor.deploy_or_upgrade(upgradeRequest);
+    expect(result).toHaveProperty('ok');
+
+    // Poll for canister to be responsive
+    orchestratorActor.setIdentity(developerIdentity);
+    const res = await orchestratorActor.icrc120_upgrade_finished();
+    expect(res).toHaveProperty('Success');
   });
 });

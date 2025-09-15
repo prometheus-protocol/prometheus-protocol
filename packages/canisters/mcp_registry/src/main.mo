@@ -31,6 +31,7 @@ import Order "mo:base/Order";
 import AppStore "AppStore";
 import AuditHub "AuditHub";
 import Bounty "Bounty";
+import Orchestrator "Orchestrator";
 
 import ICRC118WasmRegistry "../../../../libs/icrc118/src";
 import Service "../../../../libs/icrc118/src/service";
@@ -53,6 +54,12 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   let thisPrincipal = Principal.fromActor(this);
   stable var _owner = deployer.caller;
   stable var _credentials_canister_id : ?Principal = null;
+  stable var _orchestrator_canister_id : ?Principal = null;
+
+  // --- NEW: A reverse-lookup index to find a namespace from a wasm_id ---
+  // Key: wasm_id (hex string)
+  // Value: namespace (Text)
+  stable var wasm_to_namespace_map = BTree.init<Text, Text>(null);
 
   let initManager = ClassPlus.ClassPlusInitializationManager(_owner, thisPrincipal, true);
   let icrc118wasmregistryInitArgs = do ? { args!.icrc118wasmregistryArgs! };
@@ -235,6 +242,16 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
 
     _credentials_canister_id := ?canister_id;
+    return #ok(());
+  };
+
+  public shared ({ caller }) func set_orchestrator_canister_id(canister_id : Principal) : async Result.Result<(), Text> {
+    if (caller != _owner) { return #err("Caller is not the owner") };
+    if (_orchestrator_canister_id != null) {
+      return #err("Orchestrator Canister ID has already been set");
+    };
+
+    _orchestrator_canister_id := ?canister_id;
     return #ok(());
   };
 
@@ -591,7 +608,23 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   };
 
   public shared (msg) func icrc118_update_wasm(req : Service.UpdateWasmRequest) : async Service.UpdateWasmResult {
-    await* icrc118wasmregistry().icrc118_update_wasm(msg.caller, req);
+    // First, delegate the core logic to the underlying library.
+    let result = await* icrc118wasmregistry().icrc118_update_wasm(msg.caller, req);
+
+    // --- NEW: If the update was successful, populate our reverse index ---
+    switch (result) {
+      case (#Ok(_)) {
+        // The library has successfully associated the wasm with the namespace.
+        // Now, we store this relationship in our fast lookup map.
+        let wasm_id = Base16.encode(req.expected_hash);
+        ignore BTree.insert(wasm_to_namespace_map, Text.compare, wasm_id, req.canister_type_namespace);
+      };
+      case (#Err(_)) {
+        // The update failed, so we do nothing.
+      };
+    };
+
+    return result;
   };
 
   public shared (msg) func icrc118_upload_wasm_chunk(req : Service.UploadRequest) : async Service.UploadResponse {
@@ -826,6 +859,60 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       convertIcrc126ValueToIcrc3Value(#Map(tx)),
       ?convertIcrc126ValueToIcrc3Value(#Map([("btype", #Text(btype))])),
     );
+
+    // --- 4. REFACTORED: Automated Deployment Trigger ---
+    if (outcome == #Verified) {
+      switch (_orchestrator_canister_id) {
+        case (?orc_id) {
+          // --- a. Find the namespace using our new reverse index ---
+          let namespace_opt = BTree.get(wasm_to_namespace_map, Text.compare, wasm_id);
+
+          switch (namespace_opt) {
+            case (?namespace) {
+              // We found the namespace! Now we can proceed.
+              Debug.print("WASM " # wasm_id # " verified for namespace " # namespace # ". Triggering auto-deployment...");
+
+              // --- b. Find the developer's principal from the original request ---
+              let request_record_opt = _get_verification_request(wasm_id);
+              switch (request_record_opt) {
+                case (?request_record) {
+
+                  // --- c. Decode wasm_id and construct the request ---
+                  let wasm_hash : Blob = switch (Base16.decode(wasm_id)) {
+                    case (?b) { b };
+                    case (null) { return trx_id; /* Should not happen */ };
+                  };
+
+                  let deploy_request : Orchestrator.InternalDeployRequest = {
+                    namespace = namespace;
+                    hash = wasm_hash;
+                  };
+
+                  // --- d. Make the "fire-and-forget" call ---
+                  try {
+                    let orchestrator : Orchestrator.Service = actor (Principal.toText(orc_id));
+                    ignore orchestrator.internal_deploy_or_upgrade(deploy_request);
+                  } catch (e) {
+                    Debug.print("Error calling orchestrator: " # Error.message(e));
+                  };
+                };
+                case (null) {
+                  Debug.print("Auto-deploy failed: Could not find original verification request for wasm_id " # wasm_id);
+                };
+              };
+            };
+            case (null) {
+              // This is a valid scenario: the WASM was verified *before* a developer
+              // published it to a namespace. No deployment can happen yet.
+              Debug.print("WASM " # wasm_id # " verified, but not yet published to a namespace. Skipping auto-deployment.");
+            };
+          };
+        };
+        case (null) {
+          Debug.print("WASM " # wasm_id # " verified, but no orchestrator is configured.");
+        };
+      };
+    };
 
     return trx_id;
   };

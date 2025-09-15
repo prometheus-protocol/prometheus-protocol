@@ -815,6 +815,7 @@ export const idlFactory = ({ IDL }) => {
         [Result],
         [],
       ),
+    'set_orchestrator_canister_id' : IDL.Func([IDL.Principal], [Result], []),
   });
   return ICRC118WasmRegistryCanister;
 };

@@ -46,6 +46,17 @@ export interface DataCertificate {
   'certificate' : Uint8Array | number[],
   'hash_tree' : Uint8Array | number[],
 }
+export interface DeployOrUpgradeRequest {
+  'snapshot' : boolean,
+  'args' : Uint8Array | number[],
+  'hash' : Uint8Array | number[],
+  'mode' : canister_install_mode,
+  'stop' : boolean,
+  'parameters' : [] | [Array<[string, ICRC16__1]>],
+  'restart' : boolean,
+  'timeout' : bigint,
+  'namespace' : string,
+}
 export interface GetArchivesArgs { 'from' : [] | [Principal] }
 export type GetArchivesResult = Array<GetArchivesResultItem>;
 export interface GetArchivesResultItem {
@@ -75,6 +86,7 @@ export interface GetTransactionsResult {
   'archived_blocks' : Array<ArchivedTransactionResponse>,
 }
 export interface ICRC120Canister {
+  'deploy_or_upgrade' : ActorMethod<[DeployOrUpgradeRequest], Result_1>,
   'get_canisters' : ActorMethod<[string], Array<Principal>>,
   'get_tip' : ActorMethod<[], Tip>,
   'hello' : ActorMethod<[], string>,
@@ -122,7 +134,10 @@ export interface ICRC120Canister {
   'icrc3_get_blocks' : ActorMethod<[GetBlocksArgs], GetBlocksResult>,
   'icrc3_get_tip_certificate' : ActorMethod<[], [] | [DataCertificate]>,
   'icrc3_supported_block_types' : ActorMethod<[], Array<BlockType>>,
-  'register_canister' : ActorMethod<[Principal, string], Result>,
+  'internal_deploy_or_upgrade' : ActorMethod<
+    [InternalDeployRequest],
+    undefined
+  >,
   'set_mcp_registry_id' : ActorMethod<[Principal], Result>,
 }
 export type ICRC16 = { 'Int' : bigint } |
@@ -150,11 +165,41 @@ export type ICRC16 = { 'Int' : bigint } |
   { 'ValueMap' : Array<[ICRC16, ICRC16]> } |
   { 'Class' : Array<ICRC16Property> };
 export type ICRC16Map = Array<[string, ICRC16]>;
+export type ICRC16Map__1 = Array<[string, ICRC16__1]>;
 export interface ICRC16Property {
   'value' : ICRC16,
   'name' : string,
   'immutable' : boolean,
 }
+export interface ICRC16Property__1 {
+  'value' : ICRC16__1,
+  'name' : string,
+  'immutable' : boolean,
+}
+export type ICRC16__1 = { 'Int' : bigint } |
+  { 'Map' : ICRC16Map__1 } |
+  { 'Nat' : bigint } |
+  { 'Set' : Array<ICRC16__1> } |
+  { 'Nat16' : number } |
+  { 'Nat32' : number } |
+  { 'Nat64' : bigint } |
+  { 'Blob' : Uint8Array | number[] } |
+  { 'Bool' : boolean } |
+  { 'Int8' : number } |
+  { 'Nat8' : number } |
+  { 'Nats' : Array<bigint> } |
+  { 'Text' : string } |
+  { 'Bytes' : Uint8Array | number[] } |
+  { 'Int16' : number } |
+  { 'Int32' : number } |
+  { 'Int64' : bigint } |
+  { 'Option' : [] | [ICRC16__1] } |
+  { 'Floats' : Array<number> } |
+  { 'Float' : number } |
+  { 'Principal' : Principal } |
+  { 'Array' : Array<ICRC16__1> } |
+  { 'ValueMap' : Array<[ICRC16__1, ICRC16__1]> } |
+  { 'Class' : Array<ICRC16Property__1> };
 export interface InitArgList {
   'nextCycleActionId' : [] | [bigint],
   'maxExecutions' : [] | [bigint],
@@ -166,6 +211,10 @@ export interface InitArgList {
   'lastExecutionTime' : Time,
 }
 export type InitArgs = {};
+export interface InternalDeployRequest {
+  'hash' : Uint8Array | number[],
+  'namespace' : string,
+}
 export interface OrchestrationEvent {
   'id' : bigint,
   'canister_id' : Principal,
@@ -184,6 +233,8 @@ export type OrchestrationEventType = { 'upgrade_initiated' : null } |
   { 'snapshot_created' : null } |
   { 'canister_stopped' : null };
 export type Result = { 'ok' : null } |
+  { 'err' : string };
+export type Result_1 = { 'ok' : Principal } |
   { 'err' : string };
 export type RevertSnapshotError = { 'TooManyRequests' : null } |
   { 'NotFound' : null } |

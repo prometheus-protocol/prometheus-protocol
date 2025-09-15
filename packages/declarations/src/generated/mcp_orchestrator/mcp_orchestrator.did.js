@@ -1,6 +1,7 @@
 export const idlFactory = ({ IDL }) => {
   const ArchivedTransactionResponse = IDL.Rec();
   const ICRC16 = IDL.Rec();
+  const ICRC16__1 = IDL.Rec();
   const Value = IDL.Rec();
   const InitArgs = IDL.Record({});
   const Time = IDL.Nat;
@@ -21,6 +22,64 @@ export const idlFactory = ({ IDL }) => {
     'expectedExecutionTime' : Time,
     'lastExecutionTime' : Time,
   });
+  const canister_install_mode = IDL.Variant({
+    'reinstall' : IDL.Null,
+    'upgrade' : IDL.Opt(
+      IDL.Record({
+        'wasm_memory_persistence' : IDL.Opt(
+          IDL.Variant({ 'keep' : IDL.Null, 'replace' : IDL.Null })
+        ),
+        'skip_pre_upgrade' : IDL.Opt(IDL.Bool),
+      })
+    ),
+    'install' : IDL.Null,
+  });
+  const ICRC16Map__1 = IDL.Vec(IDL.Tuple(IDL.Text, ICRC16__1));
+  const ICRC16Property__1 = IDL.Record({
+    'value' : ICRC16__1,
+    'name' : IDL.Text,
+    'immutable' : IDL.Bool,
+  });
+  ICRC16__1.fill(
+    IDL.Variant({
+      'Int' : IDL.Int,
+      'Map' : ICRC16Map__1,
+      'Nat' : IDL.Nat,
+      'Set' : IDL.Vec(ICRC16__1),
+      'Nat16' : IDL.Nat16,
+      'Nat32' : IDL.Nat32,
+      'Nat64' : IDL.Nat64,
+      'Blob' : IDL.Vec(IDL.Nat8),
+      'Bool' : IDL.Bool,
+      'Int8' : IDL.Int8,
+      'Nat8' : IDL.Nat8,
+      'Nats' : IDL.Vec(IDL.Nat),
+      'Text' : IDL.Text,
+      'Bytes' : IDL.Vec(IDL.Nat8),
+      'Int16' : IDL.Int16,
+      'Int32' : IDL.Int32,
+      'Int64' : IDL.Int64,
+      'Option' : IDL.Opt(ICRC16__1),
+      'Floats' : IDL.Vec(IDL.Float64),
+      'Float' : IDL.Float64,
+      'Principal' : IDL.Principal,
+      'Array' : IDL.Vec(ICRC16__1),
+      'ValueMap' : IDL.Vec(IDL.Tuple(ICRC16__1, ICRC16__1)),
+      'Class' : IDL.Vec(ICRC16Property__1),
+    })
+  );
+  const DeployOrUpgradeRequest = IDL.Record({
+    'snapshot' : IDL.Bool,
+    'args' : IDL.Vec(IDL.Nat8),
+    'hash' : IDL.Vec(IDL.Nat8),
+    'mode' : canister_install_mode,
+    'stop' : IDL.Bool,
+    'parameters' : IDL.Opt(IDL.Vec(IDL.Tuple(IDL.Text, ICRC16__1))),
+    'restart' : IDL.Bool,
+    'timeout' : IDL.Nat,
+    'namespace' : IDL.Text,
+  });
+  const Result_1 = IDL.Variant({ 'ok' : IDL.Principal, 'err' : IDL.Text });
   const Tip = IDL.Record({
     'last_block_index' : IDL.Vec(IDL.Nat8),
     'hash_tree' : IDL.Vec(IDL.Nat8),
@@ -171,18 +230,6 @@ export const idlFactory = ({ IDL }) => {
     'Success' : IDL.Nat,
     'InProgress' : IDL.Nat,
   });
-  const canister_install_mode = IDL.Variant({
-    'reinstall' : IDL.Null,
-    'upgrade' : IDL.Opt(
-      IDL.Record({
-        'wasm_memory_persistence' : IDL.Opt(
-          IDL.Variant({ 'keep' : IDL.Null, 'replace' : IDL.Null })
-        ),
-        'skip_pre_upgrade' : IDL.Opt(IDL.Bool),
-      })
-    ),
-    'install' : IDL.Null,
-  });
   const UpgradeToRequest = IDL.Record({
     'snapshot' : IDL.Bool,
     'args' : IDL.Vec(IDL.Nat8),
@@ -253,8 +300,13 @@ export const idlFactory = ({ IDL }) => {
     'hash_tree' : IDL.Vec(IDL.Nat8),
   });
   const BlockType = IDL.Record({ 'url' : IDL.Text, 'block_type' : IDL.Text });
+  const InternalDeployRequest = IDL.Record({
+    'hash' : IDL.Vec(IDL.Nat8),
+    'namespace' : IDL.Text,
+  });
   const Result = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   const ICRC120Canister = IDL.Service({
+    'deploy_or_upgrade' : IDL.Func([DeployOrUpgradeRequest], [Result_1], []),
     'get_canisters' : IDL.Func([IDL.Text], [IDL.Vec(IDL.Principal)], ['query']),
     'get_tip' : IDL.Func([], [Tip], ['query']),
     'hello' : IDL.Func([], [IDL.Text], []),
@@ -326,7 +378,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(BlockType)],
         ['query'],
       ),
-    'register_canister' : IDL.Func([IDL.Principal, IDL.Text], [Result], []),
+    'internal_deploy_or_upgrade' : IDL.Func([InternalDeployRequest], [], []),
     'set_mcp_registry_id' : IDL.Func([IDL.Principal], [Result], []),
   });
   return ICRC120Canister;

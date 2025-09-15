@@ -493,6 +493,7 @@ type ICRC118WasmRegistryCanister =
     (BountyListingResponse) query;
    list_pending_verifications: () -> (vec VerificationRecord) query;
    set_auditor_credentials_canister_id: (canister_id: principal) -> (Result);
+   set_orchestrator_canister_id: (canister_id: principal) -> (Result);
  };
 type GetWasmsFilter = 
  variant {
