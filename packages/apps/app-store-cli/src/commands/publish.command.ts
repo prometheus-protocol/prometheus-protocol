@@ -4,87 +4,77 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import yaml from 'js-yaml';
 import {
+  createCanisterType,
+  submitVerificationRequest,
   updateWasm,
   uploadWasmChunk,
   VersionTuple,
+  serializeToIcrc16Map,
 } from '@prometheus-protocol/ic-js';
 import { getCurrentIdentityName, loadDfxIdentity } from '../identity.node.js';
 
-const CHUNK_SIZE = 1.9 * 1024 * 1024;
+const CHUNK_SIZE = 1.9 * 1024 * 1024; // 1.9MB chunk size
 
+// The manifest now contains all necessary information for the unified command.
 interface Manifest {
-  // 1. Standardize on 'namespace' for consistency with all other commands.
   namespace: string;
   submission: {
     repo_url: string;
     wasm_path: string;
+    git_commit: string;
+    name: string;
+    description: string;
+    [key: string]: any; // Allow other metadata
   };
 }
 
 export function registerPublishCommand(program: Command) {
   program
-    // 2. Use a required positional argument for the version.
     .command('publish <version>')
-    .description('Publishes and uploads a new WASM version to the registry.')
-    // 3. The action now receives the version string directly.
-    .action(async (version) => {
+    .description(
+      'Submits a WASM for verification and publishes it to the registry.',
+    )
+    .action(async (version: string) => {
       const configPath = path.join(process.cwd(), 'prometheus.yml');
       if (!fs.existsSync(configPath)) {
         console.error(
-          '❌ Error: `prometheus.yml` not found. Please run this command in a project directory.',
+          '❌ Error: `prometheus.yml` not found. Please run `app-store init` first.',
         );
         return;
       }
 
-      console.log(`\n📦 Publishing version ${version} from manifest...`);
+      console.log(
+        `\n🚀 Publishing version ${version} from manifest to the App Store...`,
+      );
 
       try {
         const manifest = yaml.load(
           fs.readFileSync(configPath, 'utf-8'),
         ) as Manifest;
 
-        // 4. Update validation to use the standardized 'namespace' key.
-        if (!manifest.namespace) {
+        // --- 1. VALIDATE MANIFEST ---
+        if (
+          !manifest.namespace ||
+          !manifest.submission?.repo_url ||
+          !manifest.submission?.wasm_path ||
+          !manifest.submission?.git_commit ||
+          !manifest.submission?.name ||
+          !manifest.submission?.description
+        ) {
           console.error(
-            '❌ Error: Manifest is incomplete. `namespace` is missing.',
-          );
-          return;
-        }
-        if (!manifest.submission?.repo_url || !manifest.submission?.wasm_path) {
-          console.error(
-            '❌ Error: Manifest is incomplete. `submission.repo_url` or `submission.wasm_path` is missing.',
+            '❌ Error: Manifest is incomplete. Please ensure `namespace`, `repo_url`, `wasm_path`, `git_commit`, `name`, and `description` are all set.',
           );
           return;
         }
 
-        const namespace = manifest.namespace;
         const wasmPath = path.resolve(
           process.cwd(),
           manifest.submission.wasm_path,
         );
-
         if (!fs.existsSync(wasmPath)) {
           console.error(`❌ Error: WASM file not found at path: ${wasmPath}`);
           return;
         }
-
-        // --- PREPARE ALL DATA BEFORE ANY API CALLS ---
-        console.log('   🔬 Analyzing WASM and preparing for upload...');
-        const wasmBuffer = fs.readFileSync(wasmPath);
-        const totalWasmHash = crypto
-          .createHash('sha256')
-          .update(wasmBuffer)
-          .digest();
-
-        const chunks: Buffer[] = [];
-        const chunkHashes: Buffer[] = [];
-        for (let i = 0; i < wasmBuffer.length; i += CHUNK_SIZE) {
-          const chunk = wasmBuffer.slice(i, i + CHUNK_SIZE);
-          chunks.push(chunk);
-          chunkHashes.push(crypto.createHash('sha256').update(chunk).digest());
-        }
-        console.log(`   Computed Total Hash: ${totalWasmHash.toString('hex')}`);
-        console.log(`   WASM will be split into ${chunks.length} chunk(s).`);
 
         const versionParts = version.split('.').map(BigInt);
         if (versionParts.length !== 3) {
@@ -98,22 +88,76 @@ export function registerPublishCommand(program: Command) {
           versionParts[2],
         ];
 
+        // --- 2. PREPARE ALL DATA LOCALLY ---
+        console.log('\n   [1/5] 🔬 Analyzing local files and metadata...');
+        const wasmBuffer = fs.readFileSync(wasmPath);
+        const totalWasmHash = crypto
+          .createHash('sha256')
+          .update(wasmBuffer)
+          .digest();
+
+        const chunks: Buffer[] = [];
+        const chunkHashes: Buffer[] = [];
+        for (let i = 0; i < wasmBuffer.length; i += CHUNK_SIZE) {
+          const chunk = wasmBuffer.slice(i, i + CHUNK_SIZE);
+          chunks.push(chunk);
+          chunkHashes.push(crypto.createHash('sha256').update(chunk).digest());
+        }
+        console.log(`   Computed WASM Hash: ${totalWasmHash.toString('hex')}`);
+
         const currentIdentityName = getCurrentIdentityName();
+        console.log(
+          `   🔑 Using current dfx identity: '${currentIdentityName}'`,
+        );
         const identity = loadDfxIdentity(currentIdentityName);
 
-        // --- PHASE 1: REGISTER THE WASM ---
+        // --- 3. ENSURE CANISTER TYPE EXISTS (Idempotent) ---
+        console.log(
+          '\n   [2/5] 🔗 Ensuring app namespace is registered on-chain...',
+        );
+        const status = await createCanisterType(identity, {
+          namespace: manifest.namespace,
+          name: manifest.submission.name,
+          description: manifest.submission.description,
+          repo_url: manifest.submission.repo_url,
+        });
+        console.log(
+          status === 'created'
+            ? '   ✅ Success! App namespace registered for the first time.'
+            : '   ℹ️  App namespace already exists. Proceeding...',
+        );
+
+        // --- 4. SUBMIT VERIFICATION REQUEST (Idempotent) ---
+        console.log('\n   [3/5] 📝 Submitting verification request...');
+        const commitHash = Buffer.from(
+          manifest.submission.git_commit.trim(),
+          'hex',
+        );
+        const metadataPayload: Record<string, any> = { ...manifest.submission };
+        delete metadataPayload.repo_url;
+        delete metadataPayload.wasm_path;
+        delete metadataPayload.git_commit;
+
+        await submitVerificationRequest(identity, {
+          wasm_hash: totalWasmHash,
+          repo: manifest.submission.repo_url,
+          commit_hash: new Uint8Array(commitHash),
+          metadata: serializeToIcrc16Map(metadataPayload),
+        });
+        console.log('   ✅ Verification request submitted successfully.');
+
+        // --- 5. PUBLISH WASM (Idempotent) ---
+        console.log('\n   [4/5] 📦 Registering WASM version...');
         try {
-          console.log(
-            '\n   📞 Registering new WASM version with the canister...',
-          );
+          console.log(versionTuple);
           await updateWasm(identity, {
-            namespace: namespace,
+            namespace: manifest.namespace,
             version: versionTuple,
             wasm_hash: totalWasmHash,
             chunk_hashes: chunkHashes,
             repo_url: manifest.submission.repo_url,
           });
-          console.log('   ✅ Registration successful.');
+          console.log('   ✅ Version registration successful.');
         } catch (error: any) {
           if (error.message?.includes('NonDeprecatedWasmFound')) {
             console.log(
@@ -124,12 +168,11 @@ export function registerPublishCommand(program: Command) {
           }
         }
 
-        // --- PHASE 2: UPLOAD CHUNKS ---
-        console.log('\n   📤 Uploading WASM chunks...');
+        console.log('\n   [5/5] 📤 Uploading WASM chunks...');
         for (let i = 0; i < chunks.length; i++) {
           console.log(`      Uploading chunk ${i + 1} of ${chunks.length}...`);
           await uploadWasmChunk(identity, {
-            namespace: namespace,
+            namespace: manifest.namespace,
             version: versionTuple,
             chunk_bytes: chunks[i],
             chunk_index: BigInt(i),
@@ -138,12 +181,15 @@ export function registerPublishCommand(program: Command) {
         }
         console.log('   ✅ All chunks uploaded successfully.');
 
+        // --- FINAL SUCCESS MESSAGE ---
         console.log(
-          `\n🎉 Success! Version ${version} for namespace ${namespace} has been published.`,
+          `\n🎉 Success! Version ${version} for '${manifest.namespace}' has been published.`,
         );
-        // 5. Add a helpful next step for the user.
         console.log(
-          `   You can verify by running: app-store version list ${namespace}`,
+          '   An auditor can now perform the build reproducibility audit.',
+        );
+        console.log(
+          '   Once verified, your canister will be deployed automatically.',
         );
       } catch (error) {
         console.error('\n❌ Operation failed:');

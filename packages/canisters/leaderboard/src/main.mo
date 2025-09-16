@@ -25,7 +25,7 @@ shared ({ caller = deployer }) persistent actor class Leaderboard() {
 
   // This is the expected interface of the UsageTracker canister.
   type UsageTracker = actor {
-    get_all_server_metrics : shared query () -> async [(Principal, ServerMetricsShared)];
+    get_all_server_metrics : shared query () -> async [(Text, ServerMetricsShared)];
   };
 
   // The public-facing data structure from the UsageTracker.
@@ -44,7 +44,7 @@ shared ({ caller = deployer }) persistent actor class Leaderboard() {
 
   public type ServerLeaderboardEntry = {
     rank : Nat;
-    server : Principal;
+    server : Text;
     total_invocations : Nat;
   };
 
@@ -59,7 +59,7 @@ shared ({ caller = deployer }) persistent actor class Leaderboard() {
   // Store the pre-computed, sorted leaderboards for fast queries.
   var user_leaderboard : [UserLeaderboardEntry] = [];
   var server_leaderboard : [ServerLeaderboardEntry] = [];
-  var server_metrics_cache = Map.new<Principal, ServerMetricsShared>();
+  var server_metrics_cache = Map.new<Text, ServerMetricsShared>();
 
   var last_updated : Time.Time = 0;
   let UPDATE_INTERVAL_NS : Nat = 3_600 * 1_000_000_000; // 1 hour
@@ -96,13 +96,13 @@ shared ({ caller = deployer }) persistent actor class Leaderboard() {
       };
     };
 
-    let all_metrics_result : [(Principal, ServerMetricsShared)] = await usage_canister.get_all_server_metrics();
+    let all_metrics_result : [(Text, ServerMetricsShared)] = await usage_canister.get_all_server_metrics();
 
     // Cache the raw metrics for potential future use
-    server_metrics_cache := Map.fromIter(all_metrics_result.vals(), Map.phash);
+    server_metrics_cache := Map.fromIter(all_metrics_result.vals(), Map.thash);
 
     // --- 1. Calculate Server Leaderboard ---
-    var servers_unsorted = Array.map<(Principal, ServerMetricsShared), (Principal, Nat)>(
+    var servers_unsorted = Array.map<(Text, ServerMetricsShared), (Text, Nat)>(
       all_metrics_result,
       func(entry) {
         let server_id = entry.0;
@@ -111,11 +111,11 @@ shared ({ caller = deployer }) persistent actor class Leaderboard() {
       },
     );
 
-    let servers_sorted = Array.sort<(Principal, Nat)>(servers_unsorted, func(a, b) { Nat.compare(b.1, a.1) });
+    let servers_sorted = Array.sort<(Text, Nat)>(servers_unsorted, func(a, b) { Nat.compare(b.1, a.1) });
 
     // Use a mutable counter with Array.map for ranking.
     var rank_s : Nat = 0;
-    server_leaderboard := Array.map<(Principal, Nat), ServerLeaderboardEntry>(
+    server_leaderboard := Array.map<(Text, Nat), ServerLeaderboardEntry>(
       servers_sorted,
       func(entry) {
         rank_s += 1;
@@ -179,8 +179,8 @@ shared ({ caller = deployer }) persistent actor class Leaderboard() {
    * @param server_id The Principal of the server canister.
    * @returns An array of tool names and their invocation counts. Returns an empty array if the server is not found.
    */
-  public shared query func get_tool_invocations_for_server(server_id : Principal) : async [(Text, Nat)] {
-    switch (Map.get(server_metrics_cache, Map.phash, server_id)) {
+  public shared query func get_tool_invocations_for_server(server_id : Text) : async [(Text, Nat)] {
+    switch (Map.get(server_metrics_cache, Map.thash, server_id)) {
       case (?metrics) {
         // We found the metrics for this server, return the tool invocation data.
         return metrics.invocations_by_tool;

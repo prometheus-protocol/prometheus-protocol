@@ -54,6 +54,7 @@ export interface McpServer {
     [] | [StreamingCallbackResponse]
   >,
   'http_request_update' : ActorMethod<[HttpRequest], HttpResponse>,
+  'icrc120_upgrade_finished' : ActorMethod<[], UpgradeFinishedResult>,
   'list_my_api_keys' : ActorMethod<[], Array<ApiKeyMetadata>>,
   'revoke_my_api_key' : ActorMethod<[string], undefined>,
   'set_owner' : ActorMethod<[Principal], Result_1>,
@@ -97,6 +98,9 @@ export type TransferError = {
 export type TreasuryError = { 'LedgerTrap' : string } |
   { 'NotOwner' : null } |
   { 'TransferFailed' : TransferError };
+export type UpgradeFinishedResult = { 'Failed' : [bigint, string] } |
+  { 'Success' : bigint } |
+  { 'InProgress' : bigint };
 export interface UsageStats {
   'start_timestamp_ns' : Time,
   'end_timestamp_ns' : Time,

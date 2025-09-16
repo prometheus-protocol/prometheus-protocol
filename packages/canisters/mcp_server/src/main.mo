@@ -4,6 +4,7 @@ import Blob "mo:base/Blob";
 import Debug "mo:base/Debug";
 import Principal "mo:base/Principal";
 import Time "mo:base/Time";
+import Int "mo:base/Int";
 
 import HttpTypes "mo:http-types";
 import Map "mo:map/Map";
@@ -136,12 +137,12 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
       ("required", Json.arr([Json.str("report")])),
     ]);
 
-    payment = null; // No payment required, this tool is free to use.
+    // payment = null; // No payment required, this tool is free to use.
     // To require payment, set the `payment` field like this:
-    // payment = ?{
-    //   ledger = Principal.fromText("vizcg-th777-77774-qaaea-cai"); // ICRC2 Ledger canister ID
-    //   amount = 10_000; // Amount in e8s (1 ICP)
-    // };
+    payment = ?{
+      ledger = Principal.fromText("vt46d-j7777-77774-qaagq-cai"); // ICRC2 Ledger canister ID
+      amount = 101_000;
+    };
   }];
 
   // --- 2. DEFINE YOUR TOOL LOGIC ---
@@ -176,7 +177,7 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
     serverInfo = {
       name = "full-onchain-mcp-server";
       title = "Full On-chain MCP Server";
-      version = "0.1.0";
+      version = "0.10.0";
     };
     resources = resources;
     resourceReader = func(uri) {
@@ -403,5 +404,18 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
 
     // 3. Return the result back to the test suite.
     return result;
+  };
+
+  /// (5.1) Upgrade finished stub
+  public type UpgradeFinishedResult = {
+    #InProgress : Nat;
+    #Failed : (Nat, Text);
+    #Success : Nat;
+  };
+  private func natNow() : Nat {
+    return Int.abs(Time.now());
+  };
+  public func icrc120_upgrade_finished() : async UpgradeFinishedResult {
+    #Success(natNow());
   };
 };

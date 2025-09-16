@@ -49,7 +49,7 @@ export const getTierInfo = (
   if (tier === 'Unranked') {
     return {
       name: 'Community Tier',
-      description: 'Provides app info but has not been fully audited.',
+      description: 'Has a reproducible build and is open source.',
       textColorClass: 'text-muted-foreground',
       borderColorClass: 'border-border',
       Icon: ShieldQuestion,

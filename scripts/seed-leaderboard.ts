@@ -20,6 +20,10 @@ const createRandomPrincipal = (): Principal => {
   return Principal.fromUint8Array(randomBytesArray);
 };
 
+const createRandomWasmHash = (): Uint8Array => {
+  return randomBytes(32);
+};
+
 // --- Main Seeding Function ---
 async function main() {
   $.verbose = false;
@@ -76,9 +80,9 @@ async function main() {
   console.log(
     `  - Generating mock data for ${NUM_SERVERS} servers and ${NUM_USERS} users...`,
   );
-  const serverPrincipals = Array.from(
+  const serverWasmHashes = Array.from(
     { length: NUM_SERVERS },
-    createRandomPrincipal,
+    createRandomWasmHash,
   );
   const userPrincipals = Array.from(
     { length: NUM_USERS },
@@ -90,7 +94,7 @@ async function main() {
     `  - Seeding Usage Tracker with ${NUM_SERVERS * LOGS_PER_SERVER} logs...`,
   );
   const seedPromises = [];
-  for (const serverPrincipal of serverPrincipals) {
+  for (const serverWasmHash of serverWasmHashes) {
     const stats = {
       start_timestamp_ns: BigInt(faker.date.past().getTime()) * 1_000_000n,
       end_timestamp_ns: BigInt(new Date().getTime()) * 1_000_000n,
@@ -104,7 +108,13 @@ async function main() {
         call_count: BigInt(faker.number.int({ min: 1, max: 1000 })),
       })),
     };
-    seedPromises.push(trackerActor.seed_log(serverPrincipal, stats));
+    seedPromises.push(
+      trackerActor.seed_log(
+        createRandomPrincipal(),
+        Buffer.from(serverWasmHash).toString('hex'),
+        stats,
+      ),
+    );
   }
   await Promise.all(seedPromises);
 

@@ -11,8 +11,16 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CodeBlock } from '@/components/ui/code-block';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { AppStoreDetails } from '@prometheus-protocol/ic-js';
+import { Button } from '../ui/button';
+import { Copy } from 'lucide-react';
+import { toast } from 'sonner';
 
 const clientSetups = [
+  {
+    id: 'copy',
+    name: 'Copy URL',
+    icon: 'copy.png',
+  },
   {
     id: 'cursor',
     name: 'Cursor',
@@ -163,13 +171,20 @@ const clientSetups = [
 ];
 
 // --- 2. THE REFACTORED CONTENT COMPONENT ---
-
 function InstallDialogContent({ server }: { server: AppStoreDetails }) {
   const [activeClientId, setActiveClientId] = React.useState(
     clientSetups[0].id,
   );
   const activeSetup = clientSetups.find((c) => c.id === activeClientId)!;
   const configKey = server.name.split(':')[0].replace(/\s+/g, '');
+  const serverUrl = server.latestVersion.serverUrl;
+
+  // 3. Add the handler for the copy action
+  const handleCopyToClipboard = () => {
+    if (!serverUrl) return;
+    navigator.clipboard.writeText(serverUrl);
+    toast.success('MCP URL copied to clipboard!');
+  };
 
   return (
     <>
@@ -191,18 +206,16 @@ function InstallDialogContent({ server }: { server: AppStoreDetails }) {
                 <TabsTrigger
                   key={client.id}
                   value={client.id}
-                  className="
-                    relative rounded-none bg-transparent px-8 py-4 text-sm font-medium text-muted-foreground shadow-none
-                    hover:text-foreground
-                    data-[state=active]:text-foreground data-[state=active]:shadow-none
-                    after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary after:hidden
-                    data-[state=active]:after:block data-[state=active]:border-none data-[state=active]:bg-transparent
-                  ">
-                  <img
-                    src={`/images/${client.icon}`}
-                    alt={client.name}
-                    className="mr-2 h-4 w-4"
-                  />
+                  className="relative rounded-none bg-transparent px-8 py-4 text-sm font-medium text-muted-foreground shadow-none hover:text-foreground data-[state=active]:text-foreground data-[state=active]:shadow-none after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary after:hidden data-[state=active]:after:block data-[state=active]:border-none data-[state=active]:bg-transparent">
+                  {client.id === 'copy' ? (
+                    <Copy />
+                  ) : (
+                    <img
+                      src={`/images/${client.icon}`}
+                      alt={client.name}
+                      className="mr-2 h-4 w-4"
+                    />
+                  )}
                   {client.name}
                 </TabsTrigger>
               ))}
@@ -210,23 +223,46 @@ function InstallDialogContent({ server }: { server: AppStoreDetails }) {
           </div>
         </div>
 
+        {/* --- 4. Add conditional rendering for the tab content --- */}
         <div className="p-6">
-          <h3 className="font-semibold mb-4 text-sm">
-            {activeSetup.instructionsTitle || 'For manual setup:'}
-          </h3>
-
-          {activeSetup.instructions && (
-            <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground mb-6">
-              {activeSetup.instructions.map((step, index) => (
-                <li key={index}>{step}</li>
-              ))}
-            </ol>
+          {activeSetup.id === 'copy' ? (
+            // --- UI for the "Copy URL" tab ---
+            <div className="space-y-2">
+              <div className="relative">
+                <div className="font-mono text-sm p-3 pr-12 bg-muted rounded-md">
+                  <code className="break-all">{serverUrl}</code>
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="absolute top-1/2 right-2 -translate-y-1/2 h-8 w-8"
+                  onClick={handleCopyToClipboard}>
+                  <Copy className="h-4 w-4" />
+                  <span className="sr-only">Copy URL</span>
+                </Button>
+              </div>
+            </div>
+          ) : (
+            // --- UI for all other client tabs ---
+            <>
+              <h3 className="font-semibold mb-4 text-sm">
+                {activeSetup.instructionsTitle || 'For manual setup:'}
+              </h3>
+              {activeSetup.instructions && (
+                <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground mb-6">
+                  {activeSetup.instructions.map((step, index) => (
+                    <li key={index}>{step}</li>
+                  ))}
+                </ol>
+              )}
+              {activeSetup.code && (
+                <CodeBlock
+                  code={activeSetup.code(configKey, serverUrl)}
+                  filename={activeSetup.filename}
+                />
+              )}
+            </>
           )}
-
-          <CodeBlock
-            code={activeSetup.code(configKey, server.latestVersion.serverUrl)}
-            filename={activeSetup.filename}
-          />
         </div>
       </Tabs>
     </>

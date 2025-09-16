@@ -41,7 +41,8 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   };
 
   public type LogEntry = {
-    server_id : Principal;
+    wasm_id : Text; // The Wasm hash of the server canister
+    canister_id : Principal;
     timestamp : Time.Time;
     stats : UsageStats;
   };
@@ -79,8 +80,8 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   var logs = Vector.new<LogEntry>();
 
   // The new top-level state for all aggregated data.
-  // Maps a server's Principal to its metrics.
-  var aggregated_metrics = Map.new<Principal, ServerMetrics>();
+  // Maps a server's WASM hash to its metrics.
+  var aggregated_metrics = Map.new<Text, ServerMetrics>();
 
   // ==================================================================================================
   // PRIVATE HELPERS (ACCESS CONTROL)
@@ -98,10 +99,10 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   };
 
   // Private helper to handle the aggregation logic.
-  private func update_metrics(server_id : Principal, stats : UsageStats) {
+  private func update_metrics(wasm_id : Text, stats : UsageStats) {
     // Get the existing metrics for this server, or create a new entry.
     var server_metrics = Option.get(
-      Map.get(aggregated_metrics, Map.phash, server_id),
+      Map.get(aggregated_metrics, Map.thash, wasm_id),
       {
         var total_invocations = 0;
         invocations_by_user = Map.new<Principal, Nat>();
@@ -124,7 +125,7 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
     };
 
     // Put the updated metrics back into the main state map.
-    Map.set(aggregated_metrics, Map.phash, server_id, server_metrics);
+    Map.set(aggregated_metrics, Map.thash, wasm_id, server_metrics);
   };
 
   // ==================================================================================================
@@ -206,7 +207,8 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
 
     // 3. If authorized, create and store the log entry.
     let new_log : LogEntry = {
-      server_id = caller;
+      wasm_id = wasm_id; // Use the Wasm hash as the server identifier
+      canister_id = caller;
       timestamp = Time.now();
       stats = stats;
     };
@@ -215,7 +217,7 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
     Debug.print("UsageTracker: Log entry added. Total logs stored: " # debug_show (Vector.size(logs)));
 
     // 4. Update the aggregated metrics for the UI.
-    update_metrics(caller, stats);
+    update_metrics(wasm_id, stats);
 
     return #ok(());
   };
@@ -256,19 +258,19 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   };
 
   /// Returns the aggregated metrics for a specific server.
-  public shared query func get_metrics_for_server(server_id : Principal) : async ?ServerMetricsShared {
+  public shared query func get_metrics_for_server(wasm_id : Text) : async ?ServerMetricsShared {
     // Use Option.map to cleanly apply the conversion function if a value exists.
     return Option.map(
-      Map.get(aggregated_metrics, Map.phash, server_id),
+      Map.get(aggregated_metrics, Map.thash, wasm_id),
       to_shared_metrics,
     );
   };
 
   /// Returns the aggregated metrics for all servers.
-  public shared query func get_all_server_metrics() : async [(Principal, ServerMetricsShared)] {
-    let all_metrics = Buffer.Buffer<(Principal, ServerMetricsShared)>(Map.size(aggregated_metrics));
-    for ((server_id, metrics) in Map.entries(aggregated_metrics)) {
-      all_metrics.add((server_id, to_shared_metrics(metrics)));
+  public shared query func get_all_server_metrics() : async [(Text, ServerMetricsShared)] {
+    let all_metrics = Buffer.Buffer<(Text, ServerMetricsShared)>(Map.size(aggregated_metrics));
+    for ((wasm_id, metrics) in Map.entries(aggregated_metrics)) {
+      all_metrics.add((wasm_id, to_shared_metrics(metrics)));
     };
     return Buffer.toArray(all_metrics);
   };
@@ -295,21 +297,22 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
     * Bypasses the Wasm hash check but requires the caller to be the admin.
     * Allows logging usage on behalf of any server principal.
     */
-  public shared (msg) func seed_log(server_id : Principal, stats : UsageStats) : async Result.Result<(), Text> {
+  public shared (msg) func seed_log(canister_id : Principal, wasm_id : Text, stats : UsageStats) : async Result.Result<(), Text> {
     if (not is_admin(msg.caller)) {
       return #err("Unauthorized: Only the admin can call seed_log.");
     };
 
     // Create and store the log entry
     let new_log : LogEntry = {
-      server_id = server_id;
+      wasm_id = wasm_id;
+      canister_id = canister_id;
       timestamp = Time.now();
       stats = stats;
     };
     Vector.add(logs, new_log);
 
     // Update the aggregated metrics for the UI.
-    update_metrics(server_id, stats);
+    update_metrics(wasm_id, stats);
 
     return #ok(());
   };

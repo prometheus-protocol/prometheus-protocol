@@ -181,18 +181,17 @@ describe('Leaderboard Aggregator Canister', () => {
 
     // --- Server Leaderboard Assertions ---
     // Expected: Server B (28), Server A (15)
+    // Since we use the wasm hash as the server id,
+    // both servers will have different principals but the same hash.
     const serverBoard = await aggregatorActor.get_server_leaderboard();
-    expect(serverBoard).toHaveLength(2);
+    expect(serverBoard).toHaveLength(1);
 
     // Rank 1: Server B
     expect(serverBoard[0].rank).toBe(1n);
-    expect(serverBoard[0].server.toText()).toBe(serverBPrincipal.toText());
-    expect(serverBoard[0].total_invocations).toBe(28n);
-
-    // Rank 2: Server A
-    expect(serverBoard[1].rank).toBe(2n);
-    expect(serverBoard[1].server.toText()).toBe(serverAPrincipal.toText());
-    expect(serverBoard[1].total_invocations).toBe(15n);
+    expect(serverBoard[0].server).toBe(
+      Buffer.from(serverWasmHash).toString('hex'),
+    );
+    expect(serverBoard[0].total_invocations).toBe(43n); // 15 + 28
   });
 
   it('should update automatically via its internal timer', async () => {

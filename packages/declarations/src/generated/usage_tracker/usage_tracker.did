@@ -7,7 +7,7 @@ type UsageTracker =
    /// Returns the aggregated metrics for all servers.
    get_all_server_metrics: () ->
     (vec record {
-           principal;
+           text;
            ServerMetricsShared;
          }) query;
    /// * Allows the designated payout canister to atomically retrieve all collected logs and clear the buffer.
@@ -15,8 +15,7 @@ type UsageTracker =
    ///      * This pattern prevents unbounded memory growth and ensures that logs are processed exactly once.
    get_and_clear_logs: () -> (Result_1);
    /// Returns the aggregated metrics for a specific server.
-   get_metrics_for_server: (server_id: principal) ->
-    (opt ServerMetricsShared) query;
+   get_metrics_for_server: (wasm_id: text) -> (opt ServerMetricsShared) query;
    /// Returns the current payout canister principal.
    get_payout_canister: () -> (opt principal) query;
    /// Checks if a given Wasm hash is on the allowlist.
@@ -29,7 +28,8 @@ type UsageTracker =
    /// * [ADMIN-ONLY] A backdoor for seeding local development data.
    ///     * Bypasses the Wasm hash check but requires the caller to be the admin.
    ///     * Allows logging usage on behalf of any server principal.
-   seed_log: (server_id: principal, stats: UsageStats) -> (Result);
+   seed_log: (canister_id: principal, wasm_id: text, stats: UsageStats) ->
+    (Result);
    /// Sets the designated payout canister.
    set_payout_canister: (canister_id: principal) -> (Result);
    /// Transfers admin rights to a new principal.
@@ -66,9 +66,10 @@ type Result =
  };
 type LogEntry = 
  record {
-   server_id: principal;
+   canister_id: principal;
    stats: UsageStats;
    timestamp: Time;
+   wasm_id: text;
  };
 type CallerActivity = 
  record {

@@ -237,20 +237,12 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   // --- a post-deployment, one-time setter function ---
   public shared ({ caller }) func set_auditor_credentials_canister_id(canister_id : Principal) : async Result.Result<(), Text> {
     if (caller != _owner) { return #err("Caller is not the owner") };
-    if (_credentials_canister_id != null) {
-      return #err("Auditor Credentials Canister ID has already been set");
-    };
-
     _credentials_canister_id := ?canister_id;
     return #ok(());
   };
 
   public shared ({ caller }) func set_orchestrator_canister_id(canister_id : Principal) : async Result.Result<(), Text> {
     if (caller != _owner) { return #err("Caller is not the owner") };
-    if (_orchestrator_canister_id != null) {
-      return #err("Orchestrator Canister ID has already been set");
-    };
-
     _orchestrator_canister_id := ?canister_id;
     return #ok(());
   };
@@ -1126,7 +1118,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           status = "success";
           git_commit = AppStore.getICRC16TextOptional(att.metadata, "git_commit");
           repo_url = AppStore.getICRC16TextOptional(att.metadata, "repo_url");
-          canister_id = AppStore.getICRC16TextOptional(att.metadata, "canister_id");
           failure_reason = null;
         };
       };
@@ -1146,7 +1137,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           status = "failure";
           git_commit = null;
           repo_url = null;
-          canister_id = null;
           failure_reason = ?div.report;
         };
       };
@@ -1157,7 +1147,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       status = "unknown";
       git_commit = null;
       repo_url = null;
-      canister_id = null;
       failure_reason = null;
     };
   };
@@ -1291,7 +1280,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       status = #Verified; // If we got this far, it must be at least Pending/Verified
       security_tier = AppStore.calculate_security_tier(true, AppStore.get_completed_audit_types(latest_audit_records));
       build_info = latest_build_info;
-      canister_id = latest_build_info.canister_id;
       tools = _get_tools_from_records(latest_audit_records);
       data_safety = _get_data_safety_from_records(latest_audit_records);
       bounties = latest_bounties;
@@ -1308,7 +1296,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           namespace = namespace;
           name = AppStore.getICRC16Text(att.metadata, "name");
           mcp_path = AppStore.getICRC16Text(att.metadata, "mcp_path");
-          canister_id = Principal.fromText(AppStore.getICRC16Text(att.metadata, "canister_id"));
           publisher = AppStore.getICRC16Text(att.metadata, "publisher");
           category = AppStore.getICRC16Text(att.metadata, "category");
           icon_url = AppStore.getICRC16Text(att.metadata, "icon_url");
@@ -1333,7 +1320,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
               namespace = namespace;
               name = AppStore.getICRC16Text(meta, "name");
               mcp_path = AppStore.getICRC16Text(meta, "mcp_path");
-              canister_id = Principal.fromText(AppStore.getICRC16Text(meta, "canister_id"));
               publisher = AppStore.getICRC16Text(meta, "publisher");
               category = AppStore.getICRC16Text(meta, "category");
               description = AppStore.getICRC16Text(meta, "description");

@@ -8,7 +8,7 @@ type Time = int;
 type ServerLeaderboardEntry = 
  record {
    rank: nat;
-   server: principal;
+   server: text;
    total_invocations: nat;
  };
 type Result = 
@@ -25,7 +25,7 @@ type Leaderboard =
    ///    * Data is sourced from the last cached update.
    ///    * @param server_id The Principal of the server canister.
    ///    * @returns An array of tool names and their invocation counts. Returns an empty array if the server is not found.
-   get_tool_invocations_for_server: (server_id: principal) ->
+   get_tool_invocations_for_server: (server_id: text) ->
     (vec record {
            text;
            nat;

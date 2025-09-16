@@ -123,7 +123,7 @@ describe('Usage Tracker Canister (Wasm Hash Allowlist)', () => {
       // @ts-ignore
       expect(logs.ok).toHaveLength(1);
       // @ts-ignore
-      expect(logs.ok[0].server_id.toText()).toBe(serverPrincipal.toText());
+      expect(logs.ok[0].canister_id.toText()).toBe(serverPrincipal.toText());
     });
 
     it('should REJECT a log from a canister after its Wasm hash is removed', async () => {
@@ -166,8 +166,8 @@ describe('Usage Tracker Canister (Wasm Hash Allowlist)', () => {
     });
 
     it('should return empty for a server that has not logged data', async () => {
-      const metrics =
-        await trackerActor.get_metrics_for_server(serverPrincipal);
+      const serverHashId = Buffer.from(serverWasmHash).toString('hex');
+      const metrics = await trackerActor.get_metrics_for_server(serverHashId);
       // Motoko's `?T` (Option<T>) is represented as `[]` (empty array) in candid.js
       expect(metrics).toEqual([]);
     });
@@ -196,7 +196,7 @@ describe('Usage Tracker Canister (Wasm Hash Allowlist)', () => {
 
       // ACT: Query the metrics for that server.
       const metricsResult =
-        await trackerActor.get_metrics_for_server(serverPrincipal);
+        await trackerActor.get_metrics_for_server(serverHashId);
 
       // ASSERT: Check the returned data.
       expect(metricsResult).not.toEqual([]); // It should return a value

@@ -212,54 +212,9 @@ export const useClaimBounty = () => {
   });
 };
 
-interface CreateBountyArgs {
-  wasmId: string;
-  auditType: string;
-  amount: bigint;
-  tokenInfo: Token;
-}
-
-const VALIDATION_CANISTER_ID = process.env.CANISTER_ID_MCP_REGISTRY!;
-/**
- * A React Query mutation hook for creating a new audit bounty.
- *
- * This hook requires the user to have approved the registry canister to spend
- * the bounty amount from their token balance beforehand.
- */
-export const useCreateBounty = () => {
-  const { identity } = useInternetIdentity();
-
-  return useMutation<CreateBountyArgs, bigint>({
-    mutationFn: async ({ wasmId, auditType, amount, tokenInfo }) => {
-      if (!identity) {
-        throw new Error('You must be logged in to create a bounty.');
-      }
-
-      // The API layer handles the final serialization and canister call.
-      return await createBounty(identity, {
-        wasm_id: wasmId,
-        audit_type: auditType,
-        amount,
-        token: tokenInfo,
-        // For simplicity, we'll set the timeout to 30 days from now.
-        timeout_date:
-          BigInt(Math.floor(Date.now() / 1000)) + BigInt(30 * 24 * 60 * 60),
-        // Using a hardcoded validation canister for now.
-        validation_canister_id: Principal.fromText(VALIDATION_CANISTER_ID),
-      });
-    },
-
-    successMessage:
-      'Bounty created successfully! It is now available in the Audit Hub.',
-
-    // Refetch the main list of bounties and any queries related to this specific app.
-    queryKeysToRefetch: [['auditBounties'], ['appDetails']],
-  });
-};
-
 // Define the arguments for our new hook
 interface SponsorBountyArgs {
-  appId: string;
+  wasmId: string;
   auditType: string;
   paymentToken: Token;
   amount: number | string; // Human-readable amount
@@ -281,7 +236,7 @@ export const useSponsorBounty = () => {
   const [status, setStatus] = useState<SponsorStatus>('Idle');
 
   const mutation = useMutation<SponsorBountyArgs, bigint>({
-    mutationFn: async ({ appId, auditType, paymentToken, amount }) => {
+    mutationFn: async ({ wasmId, auditType, paymentToken, amount }) => {
       if (!identity)
         throw new Error('You must be logged in to sponsor a bounty.');
 
@@ -317,7 +272,7 @@ export const useSponsorBounty = () => {
       // 3. Create the bounty
       setStatus('Creating bounty...');
       const bountyId = await createBounty(identity, {
-        wasm_id: appId,
+        wasm_id: wasmId,
         audit_type: auditType,
         amount: bountyAtomic, // The bounty itself is just the net amount
         token: paymentToken,

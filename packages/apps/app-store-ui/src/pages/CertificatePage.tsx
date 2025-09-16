@@ -167,14 +167,6 @@ export function CertificatePage() {
                 })}
               </div>
               <div className="space-y-3 mb-12 font-mono text-md">
-                {buildInfo?.canisterId && (
-                  <div>
-                    <p>Canister ID: </p>
-                    <p className="text-muted-foreground break-words">
-                      {buildInfo.canisterId.toText()}
-                    </p>
-                  </div>
-                )}
                 <div>
                   <p>Wasm Hash: </p>
                   <p className="text-muted-foreground break-words">
@@ -263,7 +255,7 @@ export function CertificatePage() {
       <CreateBountyDialog
         isOpen={!!sponsoringAuditType}
         onOpenChange={(open) => !open && setSponsoringAuditType(null)}
-        appId={latestVersion.wasmId}
+        wasmId={latestVersion.wasmId}
         auditType={sponsoringAuditType ?? ''}
         paymentToken={Tokens.USDC}
       />

@@ -6,6 +6,7 @@ import ExperimentalCycles "mo:base/ExperimentalCycles";
 import { ic } "mo:ic";
 import IC "mo:ic";
 import Error "mo:base/Error";
+import Debug "mo:base/Debug";
 
 /**
  * =======================================================================================
@@ -43,6 +44,7 @@ module {
     // The calling actor should ensure it has enough cycles before calling this.
     // This check provides a safe fallback.
     if (ExperimentalCycles.balance() < provision_cycles) {
+      Debug.print("Insufficient cycles to provision a new canister.");
       return #err("Insufficient funds: The factory does not have enough cycles to provision a new canister.");
     };
 
@@ -68,10 +70,12 @@ module {
 
       // Create the new canister.
       let result = await (with cycles = provision_cycles) ic.create_canister(new_canister_settings);
+      Debug.print("Successfully created new canister with ID: " # Principal.toText(result.canister_id));
 
       // --- 3. Return Result ---
       return #ok(result.canister_id);
     } catch (e) {
+      Debug.print("Canister creation failed: " # Error.message(e));
       return #err("Canister creation failed: " # Error.message(e));
     };
   };

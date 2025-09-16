@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Loader2 } from 'lucide-react';
-import { useCreateBounty, useSponsorBounty } from '@/hooks/useAuditBounties';
+import { useSponsorBounty } from '@/hooks/useAuditBounties';
 import { useMemo } from 'react';
 import { Token } from '@prometheus-protocol/ic-js';
 import { useGetTokenBalance } from '@/hooks/usePayment';
@@ -29,7 +29,7 @@ import { useGetTokenBalance } from '@/hooks/usePayment';
 interface CreateBountyDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  appId: string; // The WASM ID
+  wasmId: string; // The WASM ID
   auditType: string;
   // For the MVP, we'll assume USDC. A future version could pass a list of accepted tokens.
   paymentToken: Token;
@@ -56,7 +56,7 @@ const CostRow = ({
 export function CreateBountyDialog({
   isOpen,
   onOpenChange,
-  appId,
+  wasmId,
   auditType,
   paymentToken,
 }: CreateBountyDialogProps) {
@@ -109,7 +109,7 @@ export function CreateBountyDialog({
   function onSubmit(values: z.infer<typeof formSchema>) {
     sponsorBounty(
       {
-        appId,
+        wasmId,
         auditType,
         paymentToken,
         amount: values.amount,

@@ -2,7 +2,7 @@
 
 import { Identity } from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
-import { getMcpServerActor } from '../actors';
+import { getMcpServerActor } from '../actors.js';
 import { McpServer } from '@prometheus-protocol/declarations';
 
 /**

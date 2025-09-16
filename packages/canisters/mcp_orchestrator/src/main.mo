@@ -126,10 +126,6 @@ shared (deployer) actor class ICRC120Canister<system>(
   // --- FIX 2: A post-deployment, one-time setter for the registry ID ---
   public shared ({ caller }) func set_mcp_registry_id(registryId : Principal) : async Result.Result<(), Text> {
     if (caller != _owner) { return #err("Caller is not the owner") };
-    if (_mcp_registry_id != null) {
-      return #err("MCP Registry ID has already been set");
-    };
-
     _mcp_registry_id := ?registryId;
     return #ok(());
   };

@@ -42,6 +42,11 @@ export const idlFactory = ({ IDL }) => {
     'streaming_strategy' : IDL.Opt(StreamingStrategy),
     'status_code' : IDL.Nat16,
   });
+  const UpgradeFinishedResult = IDL.Variant({
+    'Failed' : IDL.Tuple(IDL.Nat, IDL.Text),
+    'Success' : IDL.Nat,
+    'InProgress' : IDL.Nat,
+  });
   const ApiKeyInfo = IDL.Record({
     'created' : Time,
     'principal' : IDL.Principal,
@@ -101,6 +106,7 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'http_request_update' : IDL.Func([HttpRequest], [HttpResponse], []),
+    'icrc120_upgrade_finished' : IDL.Func([], [UpgradeFinishedResult], []),
     'list_my_api_keys' : IDL.Func([], [IDL.Vec(ApiKeyMetadata)], ['query']),
     'revoke_my_api_key' : IDL.Func([IDL.Text], [], []),
     'set_owner' : IDL.Func([IDL.Principal], [Result_1], []),

@@ -10,7 +10,6 @@ const TEMPLATES: Record<string, Record<string, any>> = {
     '126:audit_type': 'app_info_v1',
     name: "Your App's Display Name",
     publisher: 'Your Company or Developer Name',
-    canister_id: 'Your App Canister ID (e.g., aaaaa-aa)',
     mcp_path: '/mcp',
     category: 'App Store Category (e.g., Productivity, Games)',
     icon_url: '/path/to/your/icon.png',
@@ -33,7 +32,6 @@ const TEMPLATES: Record<string, Record<string, any>> = {
     status: 'success | failure',
     git_commit: 'The exact commit hash used for the build.',
     repo_url: 'The URL of the repository used for the build.',
-    canister_id: 'The canister ID of the deployed version.',
     failure_reason: 'If status is "failure", provide a brief explanation here.',
   },
   data_safety_v1: {

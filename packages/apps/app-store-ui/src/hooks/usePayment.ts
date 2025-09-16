@@ -76,6 +76,7 @@ export const useGetTokenAllowance = (spender?: Principal, token?: Token) => {
     ],
     queryFn: () => getAllowance(identity!, token!, spender!),
     enabled: !!identity && !!token && !!spender,
+    refetchInterval: 30000,
   });
 };
 

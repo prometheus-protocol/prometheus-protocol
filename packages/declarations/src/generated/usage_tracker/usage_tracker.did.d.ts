@@ -8,8 +8,9 @@ export interface CallerActivity {
   'caller' : Principal,
 }
 export interface LogEntry {
-  'server_id' : Principal,
+  'canister_id' : Principal,
   'stats' : UsageStats,
+  'wasm_id' : string,
   'timestamp' : Time,
 }
 export type Result = { 'ok' : null } |
@@ -32,18 +33,15 @@ export interface UsageTracker {
   'get_admin' : ActorMethod<[], Principal>,
   'get_all_server_metrics' : ActorMethod<
     [],
-    Array<[Principal, ServerMetricsShared]>
+    Array<[string, ServerMetricsShared]>
   >,
   'get_and_clear_logs' : ActorMethod<[], Result_1>,
-  'get_metrics_for_server' : ActorMethod<
-    [Principal],
-    [] | [ServerMetricsShared]
-  >,
+  'get_metrics_for_server' : ActorMethod<[string], [] | [ServerMetricsShared]>,
   'get_payout_canister' : ActorMethod<[], [] | [Principal]>,
   'is_wasm_hash_approved' : ActorMethod<[string], boolean>,
   'log_call' : ActorMethod<[UsageStats], Result>,
   'remove_approved_wasm_hash' : ActorMethod<[string], Result>,
-  'seed_log' : ActorMethod<[Principal, UsageStats], Result>,
+  'seed_log' : ActorMethod<[Principal, string, UsageStats], Result>,
   'set_payout_canister' : ActorMethod<[Principal], Result>,
   'transfer_admin' : ActorMethod<[Principal], Result>,
 }

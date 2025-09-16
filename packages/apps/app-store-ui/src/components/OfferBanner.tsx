@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'; // Import the Button component
 
 export function OfferBanner() {
   return (
-    <section className="bg-primary/80 rounded-4xl p-8 md:p-12 my-20 text-center relative [perspective:10000px]">
+    <section className="bg-primary/90 rounded-4xl p-8 md:p-12 my-20 text-center relative [perspective:10000px]">
       <img
         src="/images/usdc.svg"
         alt="USDC Token"

@@ -12,18 +12,18 @@ interface Review {
   comment: string;
 }
 
-// 1. Update the props to include bounty, appId, and paymentToken
+// 1. Update the props to include bounty, wasmId, and paymentToken
 interface ReviewsSectionProps {
   reviews: Review[];
   bounty?: AuditBounty;
-  appId: string;
+  wasmId: string;
   paymentToken: Token;
 }
 
 export function ReviewsSection({
   reviews,
   bounty,
-  appId,
+  wasmId,
   paymentToken,
 }: ReviewsSectionProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -92,7 +92,7 @@ export function ReviewsSection({
       <CreateBountyDialog
         isOpen={isDialogOpen}
         onOpenChange={setIsDialogOpen}
-        appId={appId}
+        wasmId={wasmId}
         auditType={auditType}
         paymentToken={paymentToken}
       />

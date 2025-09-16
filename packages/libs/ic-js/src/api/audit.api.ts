@@ -594,7 +594,6 @@ export interface BuildInfo {
   status: 'success' | 'failure' | 'unknown';
   gitCommit?: string;
   repoUrl?: string;
-  canisterId?: Principal;
   failureReason?: string;
 }
 
@@ -614,8 +613,8 @@ export interface AppVersionDetails {
   status: 'Rejected' | 'Verified' | 'Pending';
   securityTier: SecurityTier;
   buildInfo: BuildInfo;
-  canisterId: Principal;
   serverUrl: string;
+  canisterId: Principal;
   tools: ServerTool[];
   dataSafety: DataSafetyInfo;
   bounties: AuditBounty[];

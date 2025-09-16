@@ -4,6 +4,15 @@ type UsageStats =
    end_timestamp_ns: Time;
    start_timestamp_ns: Time;
  };
+type UpgradeFinishedResult = 
+ variant {
+   Failed: record {
+             nat;
+             text;
+           };
+   InProgress: nat;
+   Success: nat;
+ };
 type TreasuryError = 
  variant {
    LedgerTrap: text;
@@ -77,6 +86,7 @@ type McpServer =
     (opt StreamingCallbackResponse) query;
    /// Handle incoming HTTP requests that modify state (e.g., POST).
    http_request_update: (req: HttpRequest) -> (HttpResponse);
+   icrc120_upgrade_finished: () -> (UpgradeFinishedResult);
    /// List all API keys owned by the caller.
    ///    * @returns A list of API key metadata (but not the raw keys).
    list_my_api_keys: () -> (vec ApiKeyMetadata) query;
