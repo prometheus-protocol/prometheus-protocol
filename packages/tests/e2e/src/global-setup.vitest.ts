@@ -80,6 +80,7 @@ export async function setup() {
         ['image:read', 'Allows the app to read your files.'],
         ['image:write', 'Allows the app to create and modify your files.'],
       ],
+      frontend_host: ['https://some-frontend-host.com'],
     });
 
     if ('err' in registerRsResponse) {

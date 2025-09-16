@@ -97,6 +97,7 @@ describe('Admin and Registration', () => {
         initial_service_principal: Principal.fromText('aaaaa-aa'),
         scopes: [['read', 'Read access']],
         accepted_payment_canisters: [],
+        frontend_host: [],
       });
 
       if ('err' in result) {
@@ -128,6 +129,7 @@ describe('Admin and Registration', () => {
         accepted_payment_canisters: toNullable([
           Principal.fromText('ryjl3-tyaaa-aaaaa-aaaba-cai'),
         ]),
+        frontend_host: toNullable('https://frontend.example.com'),
       };
 
       // Act: Call the update function
@@ -176,6 +178,7 @@ describe('Admin and Registration', () => {
         scopes: toNullable<[string, string][]>(),
         service_principals: toNullable<Principal[]>(),
         accepted_payment_canisters: toNullable<Principal[]>(),
+        frontend_host: toNullable<string>(),
       };
 
       // Act: Attempt to update the server using the hacker's identity
@@ -196,6 +199,7 @@ describe('Admin and Registration', () => {
         scopes: toNullable([]),
         service_principals: toNullable([]),
         accepted_payment_canisters: toNullable([]),
+        frontend_host: toNullable(''),
       };
 
       // Act
