@@ -20,7 +20,6 @@ export interface AppDetailsResponse {
   'publisher' : string,
   'name' : string,
   'tags' : Array<string>,
-  'canister_id' : Principal,
   'why_this_app' : string,
   'description' : string,
   'icon_url' : string,
@@ -58,7 +57,6 @@ export type AppStoreError = { 'NotFound' : string } |
 export interface AppVersionDetails {
   'status' : AppListingStatus,
   'tools' : Array<ICRC16Map>,
-  'canister_id' : [] | [string],
   'bounties' : Array<Bounty>,
   'security_tier' : SecurityTier,
   'wasm_id' : string,
@@ -141,7 +139,6 @@ export interface BuildInfo {
   'git_commit' : [] | [string],
   'status' : string,
   'failure_reason' : [] | [string],
-  'canister_id' : [] | [string],
   'repo_url' : [] | [string],
 }
 export interface CanisterType {

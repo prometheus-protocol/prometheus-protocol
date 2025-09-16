@@ -724,7 +724,6 @@ type CanisterType =
  };
 type BuildInfo = 
  record {
-   canister_id: opt text;
    failure_reason: opt text;
    git_commit: opt text;
    repo_url: opt text;
@@ -835,7 +834,6 @@ type AppVersionDetails =
    audit_records: vec AuditRecord;
    bounties: vec Bounty;
    build_info: BuildInfo;
-   canister_id: opt text;
    data_safety: DataSafetyInfo;
    security_tier: SecurityTier;
    status: AppListingStatus;
@@ -886,7 +884,6 @@ type AppDetailsResponse =
  record {
    all_versions: vec AppVersionSummary;
    banner_url: text;
-   canister_id: principal;
    category: text;
    description: text;
    gallery_images: vec text;
