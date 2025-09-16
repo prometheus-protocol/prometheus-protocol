@@ -50,8 +50,8 @@ export function TokenAllowanceItem({
 
   const { mutate: updateAllowance, isPending } = useUpdateAllowance();
 
-  const form = useForm<z.input<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema) as any,
     defaultValues: { budget: 0 },
   });
 
