@@ -3,7 +3,7 @@ export const idlFactory = ({ IDL }) => {
   const ServerLeaderboardEntry = IDL.Record({
     'total_invocations' : IDL.Nat,
     'rank' : IDL.Nat,
-    'server' : IDL.Principal,
+    'server' : IDL.Text,
   });
   const UserLeaderboardEntry = IDL.Record({
     'total_invocations' : IDL.Nat,
@@ -20,7 +20,7 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'get_tool_invocations_for_server' : IDL.Func(
-        [IDL.Principal],
+        [IDL.Text],
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))],
         ['query'],
       ),

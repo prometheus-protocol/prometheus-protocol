@@ -1,6 +1,7 @@
 type UpdateResourceServerArgs = 
  record {
    accepted_payment_canisters: opt vec principal;
+   frontend_host: opt text;
    logo_uri: opt text;
    name: opt text;
    resource_server_id: text;
@@ -27,11 +28,6 @@ type ScopeData =
  record {
    description: text;
    id: text;
- };
-type Result_6 = 
- variant {
-   err: text;
-   ok;
  };
 type Result_5 = 
  variant {
@@ -66,6 +62,7 @@ type Result =
 type ResourceServer = 
  record {
    accepted_payment_canisters: vec principal;
+   frontend_host: opt text;
    logo_uri: text;
    name: text;
    owner: principal;
@@ -84,6 +81,7 @@ type ResourceServer =
 type RegisterResourceServerArgs = 
  record {
    accepted_payment_canisters: vec principal;
+   frontend_host: opt text;
    initial_service_principal: principal;
    logo_uri: text;
    name: text;
@@ -96,6 +94,7 @@ type RegisterResourceServerArgs =
 type PublicResourceServer = 
  record {
    accepted_payment_canisters: vec principal;
+   frontend_host: opt text;
    logo_uri: text;
    name: text;
    resource_server_id: text;
@@ -151,7 +150,6 @@ type AuthFlowStep =
 type AuthCanister = 
  service {
    complete_authorize: (session_id: text) -> (Result);
-   complete_payment_setup: (session_id: text) -> (Result_6);
    confirm_login: (session_id: text) -> (Result_5);
    delete_resource_server: (id: text) -> (Result);
    deny_consent: (session_id: text) -> (Result);

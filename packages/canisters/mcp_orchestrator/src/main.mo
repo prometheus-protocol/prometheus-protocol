@@ -16,12 +16,14 @@ import Blob "mo:base/Blob";
 import Sha256 "mo:sha2/Sha256";
 import Result "mo:base/Result";
 import Map "mo:map/Map";
-import { phash } "mo:map/Map";
 import Debug "mo:base/Debug";
 import Error "mo:base/Error";
 import Iter "mo:base/Iter";
+import { ic } "mo:ic";
 
 import McpRegistry "McpRegistry";
+import CanisterFactory "CanisterFactory";
+import McpServer "McpServer";
 
 import ICRC118WasmRegistry "../../../../libs/icrc118/src/service";
 import System "../../../../libs/icrc120/src/system";
@@ -37,10 +39,17 @@ shared (deployer) actor class ICRC120Canister<system>(
 
   let thisPrincipal = Principal.fromActor(this);
   stable var _owner = deployer.caller;
+  let CANISTER_PROVISION_CYCLES : Nat = 4_000_000_000_000; // 4T cycles to provision a new canister
 
   let initManager = ClassPlus.ClassPlusInitializationManager(_owner, Principal.fromActor(this), true);
   let icrc120InitArgs = do ? { args!.icrc120Args! };
   let ttInitArgs : ?TT.InitArgList = do ? { args!.ttArgs! };
+
+  stable var managed_canisters = Map.new<Text, Principal>();
+
+  // --- NEW: A reverse-lookup map for finding a namespace by its canister ID ---
+  // This provides a fast, O(1) lookup for the security hooks.
+  stable var reverse_managed_canisters = Map.new<Principal, Text>();
 
   stable var icrc10 = ICRC10.initCollection();
 
@@ -112,18 +121,12 @@ shared (deployer) actor class ICRC120Canister<system>(
   private stable var wasm : ?Blob = null;
   private stable var wasmHash : ?Blob = null;
 
-  stable var managed_canisters = Map.new<Principal, Text>();
-
   // --- FIX 1: The stable variable to hold the registry ID ---
   stable var _mcp_registry_id : ?Principal = null;
 
   // --- FIX 2: A post-deployment, one-time setter for the registry ID ---
   public shared ({ caller }) func set_mcp_registry_id(registryId : Principal) : async Result.Result<(), Text> {
     if (caller != _owner) { return #err("Caller is not the owner") };
-    if (_mcp_registry_id != null) {
-      return #err("MCP Registry ID has already been set");
-    };
-
     _mcp_registry_id := ?registryId;
     return #ok(());
   };
@@ -138,7 +141,12 @@ shared (deployer) actor class ICRC120Canister<system>(
         return false;
       }; // Cannot admin if registry is not set
       case (?registryId) {
-        switch (Map.get(managed_canisters, phash, canisterId)) {
+        if (registryId == caller or caller == _owner) {
+          Debug.print("Caller is the MCP Registry itself, allowing admin.");
+          return true;
+        };
+
+        switch (Map.get(reverse_managed_canisters, Map.phash, canisterId)) {
           case (?namespace) {
             let registry : McpRegistry.Service = actor (Principal.toText(registryId));
             switch (await registry.is_controller_of_type(namespace, caller)) {
@@ -146,6 +154,7 @@ shared (deployer) actor class ICRC120Canister<system>(
               case (#err(_)) { return false };
             };
           };
+
           case (_) {
             Debug.print("Cannot admin canister: Unknown canister.");
             return false;
@@ -174,7 +183,12 @@ shared (deployer) actor class ICRC120Canister<system>(
         return false;
       }; // Cannot install if registry is not set
       case (?registryId) {
-        switch (Map.get(managed_canisters, phash, canisterId)) {
+        if (caller != registryId and caller != _owner) {
+          Debug.print("Caller is not the Owner and not the MCP Registry itself, denying install.");
+          return false;
+        };
+
+        switch (Map.get(reverse_managed_canisters, Map.phash, canisterId)) {
           case (?namespace) {
             let registry : McpRegistry.Service = actor (Principal.toText(registryId));
             let wasm_id = Base16.encode(args.wasm_module_hash);
@@ -395,49 +409,235 @@ shared (deployer) actor class ICRC120Canister<system>(
     icrc3().get_tip();
   };
 
-  // --- ICRC118WasmRegistryService Endpoints ---
-  public shared (msg) func register_canister(canister_id : Principal, namespace : Text) : async Result.Result<(), Text> {
-    // 1. Ask the registry if the caller is a controller for the given namespace.
-    // let service : Service = actor("um5iw-rqaaa-aaaaq-qaaba-cai");
+  // =====================================================================================
+  // NEW DEPLOYMENT/UPGRADE WRAPPER
+  // =====================================================================================
 
+  public type canister_install_mode = {
+    #reinstall;
+    #upgrade : ?{
+      wasm_memory_persistence : ?{ #keep; #replace };
+      skip_pre_upgrade : ?Bool;
+    };
+    #install;
+  };
+
+  // Define a new type for the request to make the function signature cleaner.
+  // It's the standard UpgradeToRequest, but with `namespace` instead of `canister_id`.
+  public type DeployOrUpgradeRequest = {
+    namespace : Text;
+    hash : Blob;
+    args : Blob;
+    stop : Bool;
+    restart : Bool;
+    snapshot : Bool;
+    timeout : Nat;
+    mode : canister_install_mode;
+    parameters : ?[(Text, ICRC118WasmRegistry.ICRC16)];
+  };
+
+  /**
+   * The primary entry point for developers.
+   * - If no canister exists for the given namespace, it provisions a new one and installs the code.
+   * - If a canister already exists, it upgrades the existing canister to the new code.
+   */
+  private func _do_deploy_or_upgrade(
+    caller : Principal, // The identity being checked for permissions
+    request : DeployOrUpgradeRequest,
+  ) : async Result.Result<Principal, Text> {
+
+    // --- 1. Permission Check ---
+    // First, verify the caller is a controller of the namespace. This is the main security gate.
     let registryId = switch (_mcp_registry_id) {
-      case (null) return #err("MCP Registry ID is not set. Please set it before registering canisters.");
-      case (?exists) { exists };
+      case (null) return #err("Orchestrator is not configured: MCP Registry ID is not set.");
+      case (?id) { id };
     };
 
-    let registry : McpRegistry.Service = actor (Principal.toText(registryId));
-    let permission_result = await registry.is_controller_of_type(namespace, msg.caller);
+    // The underlying `can_install_canister` hook will automatically check if the WASM is verified,
+    // so we don't need to check it here again.
 
-    // 2. Handle all possible outcomes from the registry call.
-    switch (permission_result) {
-      case (#err(registry_error)) {
-        // If the registry call itself failed, propagate the error.
-        return #err("Failed to check permissions with registry: " # registry_error);
+    // --- 2. Determine Canister ID (Deploy vs. Upgrade) ---
+    let canister_id_to_upgrade = switch (Map.get(managed_canisters, Map.thash, request.namespace)) {
+      case (?existing_canister_id) {
+        // --- UPGRADE PATH ---
+        Debug.print("Found existing canister for namespace " # request.namespace # ". Upgrading...");
+        existing_canister_id;
       };
-      case (#ok(is_controller)) {
-        // 3. Check the boolean permission result.
-        if (not is_controller) {
-          // If the registry says the user is NOT a controller, return a clear error.
-          return #err("Unauthorized: Caller is not a controller for the namespace '" # namespace # "'.");
-        } else {
-          // 4. SUCCESS: The caller is authorized. Perform the action.
-          Map.set(managed_canisters, phash, canister_id, namespace);
-          return #ok();
+      case (null) {
+        // --- DEPLOY PATH ---
+        Debug.print("No canister found for namespace " # request.namespace # ". Provisioning a new one...");
+
+        // Provision a new, empty canister using the factory module.
+        let provision_result = await CanisterFactory.provision_canister(
+          thisPrincipal,
+          CANISTER_PROVISION_CYCLES,
+        );
+
+        switch (provision_result) {
+          case (#err(e)) {
+            return #err(e);
+          };
+          case (#ok(new_canister_id)) {
+            // IMPORTANT: Track the new canister before proceeding.
+            Map.set(managed_canisters, Map.thash, request.namespace, new_canister_id);
+            Map.set(reverse_managed_canisters, Map.phash, new_canister_id, request.namespace);
+            Debug.print("Provisioned new canister " # Principal.toText(new_canister_id));
+            new_canister_id;
+          };
         };
+      };
+    };
+
+    // --- 3. NEW: Idempotency Check ---
+    // Before proceeding, check if the target canister already has the desired WASM installed.
+    try {
+      let status_result = await ic.canister_status({
+        canister_id = canister_id_to_upgrade;
+      });
+
+      switch (status_result.module_hash) {
+        case (?installed_hash) {
+          // A WASM is already installed. Check if it's the same one.
+          if (installed_hash == request.hash) {
+            // It's the same WASM. The operation is a no-op. Return success immediately.
+            Debug.print("WASM hash matches installed hash for canister " # Principal.toText(canister_id_to_upgrade) # ". No upgrade needed.");
+            return #ok(canister_id_to_upgrade);
+          };
+        };
+        case (null) {
+          // The canister is empty (this happens on the initial deploy path).
+          // The install must proceed, so we do nothing here and let the code continue.
+        };
+      };
+    } catch (e) {
+      // If we can't get the status, it's a critical error.
+      return #err("Failed to get canister status before upgrade: " # Error.message(e));
+    };
+
+    // --- 3. Execute the Upgrade/Install ---
+    // By this point, `canister_id_to_upgrade` is set, regardless of the path taken.
+    // We now construct the final request for the underlying ICRC-120 service.
+    let upgrade_request : ICRC120Types.Current.UpgradeToRequest = {
+      canister_id = canister_id_to_upgrade;
+      hash = request.hash;
+      args = request.args;
+      stop = request.stop;
+      restart = request.restart;
+      snapshot = request.snapshot;
+      timeout = request.timeout;
+      mode = request.mode;
+      parameters = request.parameters;
+    };
+
+    // Call the existing, robust `icrc120_upgrade_to` method.
+    let upgrade_results = await icrc120().icrc120_upgrade_to(caller, [upgrade_request]);
+
+    let result = upgrade_results[0]; // We only sent one request.
+
+    // --- 4. Return Final Result ---
+    switch (result) {
+      case (#Ok(_)) {
+        // On success, return the Principal of the canister that was affected.
+        return #ok(canister_id_to_upgrade);
+      };
+      case (#Err(err)) {
+        // If the upgrade/install itself failed, propagate the error.
+        // Note: If this was a new deployment, the canister is already created and tracked.
+        // A failed install is a recoverable state.
+        return #err("Installation failed: " # debug_show (err));
       };
     };
   };
 
   // Get canisters for a given namespace
   public query func get_canisters(namespace : Text) : async [Principal] {
-    let canisters = Map.filter(
-      managed_canisters,
-      phash,
-      func(key : Principal, value : Text) : Bool {
-        value == namespace;
-      },
-    );
-    return Iter.toArray(Map.keys(canisters));
+    // With the new state structure, this is a simple and fast lookup.
+    switch (Map.get(managed_canisters, Map.thash, namespace)) {
+      case (?canister_id) { return [canister_id] };
+      case (null) { return [] };
+    };
+  };
+
+  // =====================================================================================
+  // PRIVATE HELPERS
+  // =====================================================================================
+
+  private func _get_mode(namespace : Text) : canister_install_mode {
+    // Check if a canister is already managed for this namespace.
+    switch (Map.get(managed_canisters, Map.thash, namespace)) {
+      case (?existing_canister_id) {
+        // A canister exists. This is an upgrade.
+        // We use `null` for the options to signify a default upgrade.
+        return #upgrade(null);
+      };
+      case (null) {
+        // No canister exists. This is a first-time deployment.
+        return #install;
+      };
+    };
+  };
+
+  // =====================================================================================
+  // PUBLIC WRAPPERS
+  // =====================================================================================
+
+  /**
+   * The primary entry point for developers.
+   */
+  public shared ({ caller }) func deploy_or_upgrade(
+    request : DeployOrUpgradeRequest
+  ) : async Result.Result<Principal, Text> {
+    // This is now a thin wrapper that uses the `caller` as the developer identity.
+    await _do_deploy_or_upgrade(caller, request);
+  };
+
+  type InternalDeployRequest = {
+    namespace : Text;
+    hash : Blob;
+    owner : Principal;
+  };
+  /**
+   * [INTERNAL] A privileged endpoint for the MCP Registry.
+   */
+  public shared ({ caller }) func internal_deploy_or_upgrade(request : InternalDeployRequest) : async () {
+    // --- 1. CRITICAL SECURITY CHECK ---
+    switch (_mcp_registry_id) {
+      case (?reg_id) {
+        if (caller != reg_id) {
+          Debug.trap("Unauthorized: This function can only be called by the configured MCP Registry.");
+        };
+      };
+      case (null) {
+        Debug.trap("Service not configured: Registry Principal not set.");
+      };
+    };
+
+    let mode = _get_mode(request.namespace);
+
+    // --- 3. THE FIX: Prepare init args based on context ---
+    // We encode the developer's principal as the init arg.
+    let args = ?{
+      owner = ?request.owner;
+    };
+    let encoded_args : Blob = to_candid (args);
+
+    // --- 2. Construct the full request and delegate to the core logic ---
+    // For an automated deploy, we use sensible defaults.
+    let full_request : DeployOrUpgradeRequest = {
+      namespace = request.namespace;
+      hash = request.hash;
+      args = encoded_args; // Automated deploys use the encoded owner as init args
+      stop = false;
+      restart = false;
+      snapshot = false;
+      timeout = 0;
+      mode = mode; // Automated deploys are either install or upgrade with defaults
+      parameters = null;
+    };
+
+    // Call the core logic, passing the developer principal from the request.
+    // We use `ignore` because the registry doesn't need a response.
+    ignore _do_deploy_or_upgrade(caller, full_request);
   };
 
   //------------------- Test FUNCTION -------------------//

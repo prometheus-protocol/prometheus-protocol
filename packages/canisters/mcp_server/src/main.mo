@@ -4,6 +4,8 @@ import Blob "mo:base/Blob";
 import Debug "mo:base/Debug";
 import Principal "mo:base/Principal";
 import Time "mo:base/Time";
+import Int "mo:base/Int";
+import Option "mo:base/Option";
 
 import HttpTypes "mo:http-types";
 import Map "mo:map/Map";
@@ -25,9 +27,15 @@ import Beacon "mo:mcp-motoko-sdk/mcp/Beacon";
 
 import IC "mo:ic";
 
-shared ({ caller = deployer }) persistent actor class McpServer() = self {
+shared ({ caller = deployer }) persistent actor class McpServer(
+  args : ?{
+    owner : ?Principal;
+  }
+) = self {
 
-  var owner : Principal = deployer;
+  Debug.print("args: " # debug_show (args));
+
+  var owner : Principal = Option.get(do ? { args!.owner! }, deployer);
 
   // State for certified HTTP assets (like /.well-known/...)
   var stable_http_assets : HttpAssets.StableEntries = [];
@@ -56,7 +64,7 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
   // --- UNCOMMENT THIS BLOCK TO ENABLE AUTHENTICATION ---
 
   let issuerUrl = "https://bfggx-7yaaa-aaaai-q32gq-cai.icp0.io";
-  let allowanceUrl = "https://bmfnl-jqaaa-aaaai-q32ha-cai.icp0.io";
+  let allowanceUrl = "https://prometheusprotocol.org/connections";
   let requiredScopes = ["openid"];
 
   //function to transform the response for jwks client
@@ -77,6 +85,9 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
     requiredScopes,
     transformJwksResponse,
   );
+
+  // Initialize the auth context with the issuer URL and required scopes.
+  // transient let authContext : ?AuthTypes.AuthContext = ?AuthState.initApiKey(owner);
 
   let beaconCanisterId = Principal.fromText("vu5yx-eh777-77774-qaaga-cai");
   transient let beaconContext : Beacon.BeaconContext = Beacon.init(
@@ -133,12 +144,12 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
       ("required", Json.arr([Json.str("report")])),
     ]);
 
-    payment = null; // No payment required, this tool is free to use.
+    // payment = null; // No payment required, this tool is free to use.
     // To require payment, set the `payment` field like this:
-    // payment = ?{
-    //   ledger = Principal.fromText("vizcg-th777-77774-qaaea-cai"); // ICRC2 Ledger canister ID
-    //   amount = 10_000; // Amount in e8s (1 ICP)
-    // };
+    payment = ?{
+      ledger = Principal.fromText("vt46d-j7777-77774-qaagq-cai"); // ICRC2 Ledger canister ID
+      amount = 100_000;
+    };
   }];
 
   // --- 2. DEFINE YOUR TOOL LOGIC ---
@@ -172,8 +183,8 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
     allowanceUrl = ?allowanceUrl; // Uncomment this line if using paid tools.
     serverInfo = {
       name = "full-onchain-mcp-server";
-      title = "Full On-chain MCP Server";
-      version = "0.1.0";
+      title = "App Three MCP Server";
+      version = "0.1.7";
     };
     resources = resources;
     resourceReader = func(uri) {
@@ -337,28 +348,51 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
   // ==================================================================================================
 
   /**
-   * Creates a new API key. Only the owner can call this.
-   * @param label A human-readable name for the key.
-   * @param principal The principal this key will act on behalf of.
-   * @param scopes The permissions granted to this key.
+   * Creates a new API key. This API key is linked to the caller's principal.
+   * @param name A human-readable name for the key.
    * @returns The raw, unhashed API key. THIS IS THE ONLY TIME IT WILL BE VISIBLE.
    */
-  public shared (msg) func create_api_key(name : Text, principal : Principal, scopes : [Text]) : async Text {
+  public shared (msg) func create_my_api_key(name : Text, scopes : [Text]) : async Text {
     switch (authContext) {
       case (null) {
         Debug.trap("Authentication is not enabled on this canister.");
       };
       case (?ctx) {
-        if (msg.caller != owner) {
-          Debug.trap("Only the owner can create API keys.");
-        };
-        return await ApiKey.create_api_key({
-          ctx = ctx;
-          caller = msg.caller;
-          name = name;
-          principal = principal;
-          scopes = scopes;
-        });
+        return await ApiKey.create_my_api_key(
+          ctx,
+          msg.caller,
+          name,
+          scopes,
+        );
+      };
+    };
+  };
+
+  /** Revoke (delete) an API key owned by the caller.
+   * @param key_id The ID of the key to revoke.
+   * @returns True if the key was found and revoked, false otherwise.
+   */
+  public shared (msg) func revoke_my_api_key(key_id : Text) : async () {
+    switch (authContext) {
+      case (null) {
+        Debug.trap("Authentication is not enabled on this canister.");
+      };
+      case (?ctx) {
+        return ApiKey.revoke_my_api_key(ctx, msg.caller, key_id);
+      };
+    };
+  };
+
+  /** List all API keys owned by the caller.
+   * @returns A list of API key metadata (but not the raw keys).
+   */
+  public query (msg) func list_my_api_keys() : async [AuthTypes.ApiKeyMetadata] {
+    switch (authContext) {
+      case (null) {
+        Debug.trap("Authentication is not enabled on this canister.");
+      };
+      case (?ctx) {
+        return ApiKey.list_my_api_keys(ctx, msg.caller);
       };
     };
   };
@@ -377,5 +411,18 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
 
     // 3. Return the result back to the test suite.
     return result;
+  };
+
+  /// (5.1) Upgrade finished stub
+  public type UpgradeFinishedResult = {
+    #InProgress : Nat;
+    #Failed : (Nat, Text);
+    #Success : Nat;
+  };
+  private func natNow() : Nat {
+    return Int.abs(Time.now());
+  };
+  public func icrc120_upgrade_finished() : async UpgradeFinishedResult {
+    #Success(natNow());
   };
 };

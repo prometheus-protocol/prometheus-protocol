@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -32,9 +31,6 @@ const formSchema = z
       .string()
       .regex(/^[a-f0-9]{40}$/, 'Must be a valid 40-character git commit hash.'),
     repo_url: z.string().url('Must be a valid repository URL.'),
-    canister_id: z
-      .string()
-      .regex(/^[a-z0-9-]{5,27}$/, 'Invalid Principal ID format.'),
     failure_reason: z.string().optional(),
   })
   .superRefine((data, ctx) => {
@@ -68,7 +64,6 @@ export const BuildReproducibilityAttestationForm = ({
       status: 'success',
       git_commit: '',
       repo_url: '',
-      canister_id: '',
       failure_reason: '',
     },
   });
@@ -85,7 +80,6 @@ export const BuildReproducibilityAttestationForm = ({
         status: values.status,
         git_commit: values.git_commit,
         repo_url: values.repo_url,
-        canister_id: values.canister_id,
       };
       submitAttestation({
         bountyId: audit.id,
@@ -164,20 +158,6 @@ export const BuildReproducibilityAttestationForm = ({
                 <FormLabel>Git Commit Hash</FormLabel>
                 <FormControl>
                   <Input placeholder="40-character SHA-1 hash" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="canister_id"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Deployed Canister ID</FormLabel>
-                <FormControl>
-                  <Input {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

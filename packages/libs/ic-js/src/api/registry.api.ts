@@ -13,18 +13,14 @@ import {
   AppVersionDetails,
   buildServerUrl,
   DataSafetyPoint,
-  ServerTool,
 } from './audit.api.js';
 import {
-  processAttestation,
   processAuditRecord,
   processBounty,
-  processVerificationRecord,
-  processVerificationRequest,
+  processServerTool,
   uint8ArrayToHex,
 } from '../utils.js';
 import { fromNullable, toNullable } from '@dfinity/utils';
-import { canisterId } from '@prometheus-protocol/declarations/app_bounties/index.js';
 import { deserializeFromIcrc16Map } from '../icrc16.js';
 
 export type { Registry };
@@ -77,6 +73,8 @@ export const updateWasm = async (
     metadata: [],
     previous: [],
   });
+
+  console.log(result);
 
   if ('Error' in result) {
     throw new Error(
@@ -167,29 +165,6 @@ export const removeController = async (
     throw new Error(
       `Failed to remove controller: ${JSON.stringify(manageResult.Error)}`,
     );
-  }
-};
-
-/**
- * Registers a canister ID with the orchestrator, linking it to a namespace.
- * This is a prerequisite for upgrading the canister.
- */
-export const registerCanister = async (
-  identity: Identity,
-  args: { canister_id: string; namespace: string },
-): Promise<void> => {
-  const { canister_id, namespace } = args;
-  const orchestratorActor = getOrchestratorActor(identity);
-
-  // The orchestrator canister itself will handle authorization.
-  // If the caller is not a controller of the namespace, this call will fail.
-  const res = await orchestratorActor.register_canister(
-    Principal.fromText(canister_id),
-    namespace,
-  );
-
-  if ('err' in res) {
-    throw new Error(`Failed to register canister: ${JSON.stringify(res.err)}`);
   }
 };
 
@@ -563,13 +538,10 @@ export const getAppStoreListings = async (): Promise<AppStoreListing[]> => {
 // This function's only job is to convert the canister's version object to the TS version object.
 
 function mapCanisterVersionToTS(
-  canisterVersion: Registry.AppVersionDetails, // This is the type from your .did.js file
-  serverUrl: string,
+  canisterDetails: Registry.AppDetailsResponse, // This is the type from your .did.js file
+  canisterId: Principal,
 ): AppVersionDetails {
-  const principaId = fromNullable(canisterVersion.build_info.canister_id)
-    ? Principal.fromText(canisterVersion.build_info.canister_id[0]!)
-    : undefined;
-
+  const canisterVersion = canisterDetails.latest_version;
   return {
     wasmId: canisterVersion.wasm_id,
     versionString: canisterVersion.version_string,
@@ -582,12 +554,11 @@ function mapCanisterVersionToTS(
         | 'unknown',
       gitCommit: fromNullable(canisterVersion.build_info.git_commit),
       repoUrl: fromNullable(canisterVersion.build_info.repo_url),
-      canisterId: principaId,
       failureReason: fromNullable(canisterVersion.build_info.failure_reason),
     },
-    canisterId: principaId!,
-    serverUrl,
-    tools: canisterVersion.tools.map(deserializeFromIcrc16Map) as ServerTool[],
+    canisterId,
+    serverUrl: buildServerUrl(canisterId, canisterDetails.mcp_path),
+    tools: canisterVersion.tools.map(processServerTool),
     dataSafety: {
       overallDescription: canisterVersion.data_safety.overall_description,
       dataPoints: canisterVersion.data_safety.data_points.map(
@@ -636,22 +607,24 @@ export const getAppDetailsByNamespace = async (
   wasmId?: string,
 ): Promise<AppStoreDetails | null> => {
   const registryActor = getRegistryActor();
+  const orchestratorActor = getOrchestratorActor();
 
   try {
-    const result = await registryActor.get_app_details_by_namespace(
-      namespace,
-      toNullable(wasmId),
-    );
+    const [appDetailsReq, canisterIdsReq] = await Promise.all([
+      registryActor.get_app_details_by_namespace(namespace, toNullable(wasmId)),
+      orchestratorActor.get_canisters(namespace),
+    ]);
 
-    if ('err' in result) {
+    if ('err' in appDetailsReq) {
       console.error(
         `Failed to fetch details for namespace "${namespace}":`,
-        result.err,
+        appDetailsReq.err,
       );
       return null;
     }
 
-    const canisterDetails = result.ok;
+    const canisterDetails = appDetailsReq.ok;
+    const canisterId = canisterIdsReq[0];
 
     // --- 3. THE MAIN FUNCTION IS NOW CLEAN, SIMPLE, AND DECLARATIVE ---
     return {
@@ -670,10 +643,7 @@ export const getAppDetailsByNamespace = async (
       reviews: [], // Placeholder for reviews
 
       // --- B. Delegate all complex mapping to our new helper functions ---
-      latestVersion: mapCanisterVersionToTS(
-        canisterDetails.latest_version,
-        buildServerUrl(canisterDetails.canister_id, canisterDetails.mcp_path),
-      ),
+      latestVersion: mapCanisterVersionToTS(canisterDetails, canisterId),
       allVersions: canisterDetails.all_versions.map(
         mapCanisterVersionSummaryToTS,
       ),

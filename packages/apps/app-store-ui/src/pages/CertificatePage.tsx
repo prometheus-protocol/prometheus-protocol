@@ -167,27 +167,19 @@ export function CertificatePage() {
                 })}
               </div>
               <div className="space-y-3 mb-12 font-mono text-md">
-                {buildInfo?.canisterId && (
-                  <p>
-                    Canister ID:{' '}
-                    <p className="text-muted-foreground break-words">
-                      {buildInfo.canisterId.toText()}
-                    </p>
-                  </p>
-                )}
-                <p>
-                  Wasm Hash:{' '}
+                <div>
+                  <p>Wasm Hash: </p>
                   <p className="text-muted-foreground break-words">
                     {latestVersion.wasmId}
                   </p>
-                </p>
+                </div>
                 {buildInfo?.gitCommit && (
-                  <p>
-                    Git Commit:{' '}
+                  <div>
+                    <p>Git Commit: </p>
                     <p className="text-muted-foreground break-words">
                       {buildInfo.gitCommit}
                     </p>
-                  </p>
+                  </div>
                 )}
                 {buildInfo?.repoUrl && buildInfo.gitCommit && (
                   <a
@@ -235,7 +227,7 @@ export function CertificatePage() {
             </div>
           </div>
 
-          <Accordion
+          {/* <Accordion
             type="multiple"
             className="w-full border border-primary/60 divide-y divide-primary/60">
             <AccordionItem value="dependencies" className="px-4">
@@ -256,14 +248,14 @@ export function CertificatePage() {
                 version lineage will be displayed here.
               </AccordionContent>
             </AccordionItem>
-          </Accordion>
+          </Accordion> */}
         </div>
       </div>
 
       <CreateBountyDialog
         isOpen={!!sponsoringAuditType}
         onOpenChange={(open) => !open && setSponsoringAuditType(null)}
-        appId={latestVersion.wasmId}
+        wasmId={latestVersion.wasmId}
         auditType={sponsoringAuditType ?? ''}
         paymentToken={Tokens.USDC}
       />

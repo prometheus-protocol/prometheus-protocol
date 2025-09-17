@@ -72,14 +72,14 @@ export interface ToolInvocationRecord {
 
 /**
  * Fetches the invocation counts for all tools of a specific server canister.
- * @param canisterId The Principal of the server canister.
+ * @param wasmId The Principal of the server canister.
  * @returns A map of tool names to their invocation counts.
  */
 export const getToolInvocationsForServer = async (
-  canisterId: Principal,
+  wasmId: string,
 ): Promise<Map<string, bigint>> => {
   const actor = getLeaderboardActor();
-  const records = await actor.get_tool_invocations_for_server(canisterId);
+  const records = await actor.get_tool_invocations_for_server(wasmId);
 
   const invocationMap = new Map<string, bigint>();
   for (const [toolName, count] of records) {

@@ -8,6 +8,7 @@ import {
   Auth,
   AppBounties,
   Leaderboard,
+  McpServer,
 } from '@prometheus-protocol/declarations';
 import { getCanisterId, getHost } from './config.js';
 
@@ -122,6 +123,22 @@ export const getLeaderboardActor = (identity?: Identity) => {
   return createActor<Leaderboard._SERVICE>(
     Leaderboard.idlFactory,
     getCanisterId('LEADERBOARD'),
+    identity,
+  );
+};
+
+/**
+ * @param canisterId The canister ID of the MCP Server canister to connect to
+ * @param identity Optional identity to use for the actor
+ * @returns
+ */
+export const getMcpServerActor = (
+  canisterId: Principal,
+  identity?: Identity,
+) => {
+  return createActor<McpServer._SERVICE>(
+    McpServer.idlFactory,
+    canisterId.toText(),
     identity,
   );
 };

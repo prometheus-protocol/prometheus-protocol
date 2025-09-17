@@ -26,14 +26,16 @@ export function registerInitCommand(program: Command) {
       const responses = await prompts([
         {
           type: 'text',
-          // 1. Use 'namespace' as the key for consistency.
           name: 'namespace',
           message:
             'Enter a unique, reverse-domain namespace for your app (e.g., com.mycompany.app):',
           validate: (value) =>
-            /^[a-z0-9]+(\.[a-z0-9]+)+$/.test(value)
+            // --- THE FIX ---
+            // The character class [a-z0-9] has been changed to [a-z0-9-]
+            // to allow hyphens within each segment of the namespace.
+            /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(value)
               ? true
-              : 'Namespace must be in reverse-domain format (e.g., com.example.app)',
+              : 'Namespace must be in reverse-domain format (e.g., com.my-company.app)',
         },
         // ... (all other prompts remain the same)
         {
@@ -90,12 +92,6 @@ export function registerInitCommand(program: Command) {
         },
         {
           type: 'text',
-          name: 'canister_id',
-          message:
-            "Enter the canister ID of your 'official' instance for this version:",
-        },
-        {
-          type: 'text',
           name: 'icon_url',
           message:
             'Enter the public URL for your app icon (e.g., a 512x512 PNG):',
@@ -121,7 +117,6 @@ export function registerInitCommand(program: Command) {
           publisher: responses.publisher,
           category: responses.category,
           repo_url: responses.repo_url,
-          canister_id: responses.canister_id || '',
           mcp_path: '/mcp',
           why_this_app: responses.why_this_app,
           key_features: responses.key_features
@@ -142,14 +137,13 @@ export function registerInitCommand(program: Command) {
 
       const fileHeader = `# Prometheus Application Manifest\n`;
       const namespaceComment = `# This is the permanent, unique identifier for your application.`;
-      const submissionComment = `# This section contains all data for a specific version. This entire package
-# will be submitted for review and locked to the audit of this version.`;
+      const submissionComment = `# This section contains all data for a specific version. This entire package will be submitted for review and locked to the audit of this version.`;
 
       // 3. Generate the YAML content with the new structure.
       const yamlContent =
         `${namespaceComment}\n` +
         yaml.dump({ namespace: configData.namespace }, { indent: 2 }) +
-        `\n# This section contains all data for a specific version.\n` +
+        `\n${submissionComment}\n` +
         yaml.dump({ submission: configData.submission }, { indent: 2 });
 
       fs.writeFileSync(configPath, fileHeader + yamlContent);
@@ -160,10 +154,7 @@ export function registerInitCommand(program: Command) {
       );
       // 4. Update the help text to use the correct command name.
       console.log(
-        '   When you are ready, run `app-store submit` to register on-chain and request an audit.',
+        '   When you are ready, run `app-store publish` to submit your app for review.',
       );
-
-      // 5. The on-chain 'createCanisterType' call has been removed.
-      // It will be added to the 'submit' command, which is a more logical place for it.
     });
 }

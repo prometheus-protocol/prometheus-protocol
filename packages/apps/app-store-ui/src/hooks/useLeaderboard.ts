@@ -39,20 +39,20 @@ export const useGetServerLeaderboard = () => {
 
 /**
  * A React Query hook to fetch tool invocation counts for a specific server.
- * @param canisterId The Principal of the server canister. Can be null if not yet known.
+ * @param wasmId The WASM ID of the server to fetch tool invocation counts for.
  */
-export const useGetToolInvocations = (canisterId: Principal | null) => {
+export const useGetToolInvocations = (wasmId: string | null) => {
   return useQuery({
-    // The query key includes the canisterId to ensure data is cached per-server.
-    queryKey: ['toolInvocations', canisterId?.toText()],
+    // The query key includes the wasmId to ensure data is cached per-server.
+    queryKey: ['toolInvocations', wasmId],
     queryFn: () => {
-      if (!canisterId) {
-        // If there's no canisterId, we can't fetch, so return an empty map.
+      if (!wasmId) {
+        // If there's no wasmId, we can't fetch, so return an empty map.
         return new Map<string, bigint>();
       }
-      return getToolInvocationsForServer(canisterId);
+      return getToolInvocationsForServer(wasmId);
     },
-    // This query is only enabled if the canisterId is actually provided.
-    enabled: !!canisterId,
+    // This query is only enabled if the wasmId is actually provided.
+    enabled: !!wasmId,
   });
 };

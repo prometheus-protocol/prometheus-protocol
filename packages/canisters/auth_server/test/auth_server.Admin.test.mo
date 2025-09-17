@@ -98,6 +98,7 @@ await suite(
                 initial_service_principal = service_principal;
                 scopes = [("scope1", "description1")];
                 accepted_payment_canisters = [Principal.fromText("aaaaa-aa")];
+                frontend_host = null;
               },
             );
 

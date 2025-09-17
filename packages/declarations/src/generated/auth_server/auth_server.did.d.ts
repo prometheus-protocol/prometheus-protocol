@@ -4,7 +4,6 @@ import type { IDL } from '@dfinity/candid';
 
 export interface AuthCanister {
   'complete_authorize' : ActorMethod<[string], Result>,
-  'complete_payment_setup' : ActorMethod<[string], Result_6>,
   'confirm_login' : ActorMethod<[string], Result_5>,
   'delete_resource_server' : ActorMethod<[string], Result>,
   'deny_consent' : ActorMethod<[string], Result>,
@@ -60,6 +59,7 @@ export interface PublicResourceServer {
   'uris' : Array<string>,
   'accepted_payment_canisters' : Array<Principal>,
   'logo_uri' : string,
+  'frontend_host' : [] | [string],
   'service_principals' : Array<Principal>,
 }
 export interface RegisterResourceServerArgs {
@@ -69,6 +69,7 @@ export interface RegisterResourceServerArgs {
   'uris' : Array<string>,
   'accepted_payment_canisters' : Array<Principal>,
   'logo_uri' : string,
+  'frontend_host' : [] | [string],
 }
 export interface ResourceServer {
   'status' : { 'active' : null } |
@@ -80,6 +81,7 @@ export interface ResourceServer {
   'uris' : Array<string>,
   'accepted_payment_canisters' : Array<Principal>,
   'logo_uri' : string,
+  'frontend_host' : [] | [string],
   'service_principals' : Array<Principal>,
 }
 export type Result = { 'ok' : string } |
@@ -93,8 +95,6 @@ export type Result_3 = { 'ok' : SessionInfo } |
 export type Result_4 = { 'ok' : PublicResourceServer } |
   { 'err' : string };
 export type Result_5 = { 'ok' : LoginConfirmation } |
-  { 'err' : string };
-export type Result_6 = { 'ok' : null } |
   { 'err' : string };
 export interface ScopeData { 'id' : string, 'description' : string }
 export interface SessionInfo {
@@ -114,6 +114,7 @@ export interface UpdateResourceServerArgs {
   'uris' : [] | [Array<string>],
   'accepted_payment_canisters' : [] | [Array<Principal>],
   'logo_uri' : [] | [string],
+  'frontend_host' : [] | [string],
   'service_principals' : [] | [Array<Principal>],
 }
 export interface _SERVICE extends AuthCanister {}

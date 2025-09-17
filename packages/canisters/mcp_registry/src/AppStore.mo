@@ -52,7 +52,6 @@ module {
     status : Text; // "success" | "failure" | "unknown"
     git_commit : ?Text;
     repo_url : ?Text;
-    canister_id : ?Text;
     failure_reason : ?Text;
   };
 
@@ -68,7 +67,6 @@ module {
     status : AppListingStatus;
     security_tier : SecurityTier;
     build_info : BuildInfo;
-    canister_id : ?Text;
     tools : [ICRC126.ICRC16Map];
     data_safety : DataSafetyInfo;
     bounties : [ICRC127.Bounty];
@@ -80,7 +78,6 @@ module {
     namespace : Text;
     name : Text;
     mcp_path : Text;
-    canister_id : Principal;
     publisher : Text;
     category : Text;
     icon_url : Text;

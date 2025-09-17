@@ -14,7 +14,7 @@ export function ReputationBar({ available, total }: ReputationBarProps) {
       {/* The visual bar container, which grows to fill available space */}
       <div className="relative flex-grow h-2 bg-neutral-700 rounded-full overflow-hidden">
         <div
-          className="absolute top-0 left-0 h-full bg-yellow-500 rounded-full"
+          className="absolute top-0 left-0 h-full bg-primary/80 rounded-full"
           style={{ width: `${percentage}%` }}
         />
       </div>

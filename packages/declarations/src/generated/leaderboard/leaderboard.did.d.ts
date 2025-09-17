@@ -7,7 +7,7 @@ export interface Leaderboard {
   'get_owner' : ActorMethod<[], Principal>,
   'get_server_leaderboard' : ActorMethod<[], Array<ServerLeaderboardEntry>>,
   'get_tool_invocations_for_server' : ActorMethod<
-    [Principal],
+    [string],
     Array<[string, bigint]>
   >,
   'get_user_leaderboard' : ActorMethod<[], Array<UserLeaderboardEntry>>,
@@ -19,7 +19,7 @@ export type Result = { 'ok' : null } |
 export interface ServerLeaderboardEntry {
   'total_invocations' : bigint,
   'rank' : bigint,
-  'server' : Principal,
+  'server' : string,
 }
 export type Time = bigint;
 export interface UserLeaderboardEntry {

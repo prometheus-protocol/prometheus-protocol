@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import {
   getAppStoreListings,
-  getAppDetailsByHash,
+  getAppDetailsByNamespace,
 } from '@prometheus-protocol/ic-js';
 import { Buffer } from 'buffer';
 
@@ -55,16 +55,16 @@ export function registerDiscoverCommand(program: Command) {
       }
     });
 
-  // --- Subcommand: `discover details <wasm_hash>` ---
+  // --- Subcommand: `discover details <namespace>` ---
   discoverCommand
-    .command('details <wasm_hash>')
+    .command('details <namespace>')
     .description(
       'Fetch and display the full details for a specific app version.',
     )
-    .action(async (wasmHashStr: string) => {
-      console.log(`🔎 Fetching details for WASM hash: ${wasmHashStr}`);
+    .action(async (namespace: string) => {
+      console.log(`🔎 Fetching details for WASM hash: ${namespace}`);
       try {
-        const details = await getAppDetailsByHash(wasmHashStr);
+        const details = await getAppDetailsByNamespace(namespace);
 
         console.log('\n--- App Details ---');
         console.log(JSON.stringify(details, jsonReplacer, 2));

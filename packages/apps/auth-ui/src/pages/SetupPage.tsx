@@ -39,6 +39,7 @@ export default function SetupPage() {
           scopes: state.consent_data.scopes,
           accepted_payment_canisters: acceptedPaymentCanisters,
           service_principals: [spenderPrincipal!], // We get this from sessionInfo
+          frontend_host: state.consent_data.frontend_host, // New field
         }
       : undefined;
 

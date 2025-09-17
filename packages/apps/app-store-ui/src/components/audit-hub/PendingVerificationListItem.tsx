@@ -17,7 +17,7 @@ export const PendingVerificationListItem = ({
     <div className="border border-gray-700 rounded-lg hover:border-primary transition-colors">
       {/* --- DESKTOP VIEW (Inspired by AuditHubListItem) --- */}
       <div className="hidden md:grid grid-cols-12 gap-4 items-center px-4 py-4">
-        <div className="col-span-3 flex items-center gap-3">
+        <div className="col-span-2 flex items-center gap-3">
           <FileCode className="h-5 w-5 text-gray-400 flex-shrink-0" />
           <div>
             <div className="font-mono font-semibold text-white">
@@ -42,7 +42,7 @@ export const PendingVerificationListItem = ({
             </span>
           </a>
         </div>
-        <div className="col-span-2 text-gray-400">
+        <div className="col-span-3 text-gray-400">
           {request.timestamp.toLocaleString()}
         </div>
         <div className="col-span-2 text-right">

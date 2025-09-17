@@ -1,4 +1,10 @@
-import { getBalance, icrc1Transfer, Token } from '@prometheus-protocol/ic-js';
+import {
+  approveAllowance,
+  getAllowance,
+  getBalance,
+  icrc1Transfer,
+  Token,
+} from '@prometheus-protocol/ic-js';
 import { Principal } from '@dfinity/principal';
 import { useQuery } from '@tanstack/react-query';
 import useMutation from './useMutation';
@@ -9,14 +15,14 @@ import { useInternetIdentity } from 'ic-use-internet-identity';
  *
  * @param token The Token object (from the token registry) for which to fetch the balance.
  */
-export const useTokenBalance = (token: Token | undefined) => {
+export const useGetTokenBalance = (token: Token | undefined) => {
   const { identity } = useInternetIdentity();
   const principal = identity?.getPrincipal();
 
   return useQuery({
     // The query key includes the token's canister ID to ensure balances are cached separately.
     queryKey: [
-      'balance',
+      'tokenBalance',
       identity?.getPrincipal().toText(),
       token?.canisterId?.toText(),
     ],
@@ -44,7 +50,7 @@ export const useTransfer = () => {
   const { identity } = useInternetIdentity();
 
   return useMutation<TransferArgs, bigint>({
-    queryKeysToRefetch: [['balance', identity?.getPrincipal().toText()]],
+    queryKeysToRefetch: [['tokenBalance', identity?.getPrincipal().toText()]],
     mutationFn: async (args: TransferArgs) => {
       if (!identity) {
         throw new Error('User is not authenticated');
@@ -52,5 +58,43 @@ export const useTransfer = () => {
       // Perform the transfer using the shared library function
       return await icrc1Transfer(identity, args.token, args.to, args.amount);
     },
+  });
+};
+
+/**
+ * Fetches the user's allowance for a specific spender and token.
+ * @returns The allowance as a bigint in the token's atomic unit.
+ */
+export const useGetTokenAllowance = (spender?: Principal, token?: Token) => {
+  const { identity } = useInternetIdentity();
+  return useQuery({
+    queryKey: [
+      'tokenAllowance',
+      identity?.getPrincipal().toText(),
+      spender?.toText(),
+      token?.canisterId.toText(),
+    ],
+    queryFn: () => getAllowance(identity!, token!, spender!),
+    enabled: !!identity && !!token && !!spender,
+    refetchInterval: 30000,
+  });
+};
+
+/**
+ * A mutation hook for approving or updating an ICRC-2 allowance.
+ */
+export const useUpdateAllowance = () => {
+  const { identity } = useInternetIdentity();
+  return useMutation<
+    { token: Token; spender: Principal; amount: number | string },
+    bigint
+  >({
+    mutationFn: ({ token, spender, amount }) => {
+      if (!identity) throw new Error('Identity not found');
+      return approveAllowance(identity, token, spender, amount);
+    },
+    successMessage: 'Allowance updated successfully!',
+    // Refetch balance and allowance after a successful update
+    queryKeysToRefetch: [['tokenBalance'], ['tokenAllowance']],
   });
 };

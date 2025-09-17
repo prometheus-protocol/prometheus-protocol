@@ -7,7 +7,6 @@ import { configure as configureIcJs } from '@prometheus-protocol/ic-js';
 import { Command } from 'commander';
 
 import { registerInitCommand } from './commands/init.command.js';
-import { registerSubmitCommand } from './commands/submit.command.js';
 import { registerStatusCommand } from './commands/status.command.js';
 import { registerPublishCommand } from './commands/publish.command.js';
 import { registerDiscoverCommand } from './commands/discover.js';
@@ -119,7 +118,6 @@ program.hook('preAction', (thisCommand) => {
 
 // 1. Primary Developer Workflow (The most common entry point)
 registerInitCommand(program);
-registerSubmitCommand(program);
 registerStatusCommand(program);
 registerPublishCommand(program);
 registerDiscoverCommand(program);

@@ -168,7 +168,6 @@ export const idlFactory = ({ IDL }) => {
     'git_commit' : IDL.Opt(IDL.Text),
     'status' : IDL.Text,
     'failure_reason' : IDL.Opt(IDL.Text),
-    'canister_id' : IDL.Opt(IDL.Text),
     'repo_url' : IDL.Opt(IDL.Text),
   });
   const DataSafetyInfo = IDL.Record({
@@ -178,7 +177,6 @@ export const idlFactory = ({ IDL }) => {
   const AppVersionDetails = IDL.Record({
     'status' : AppListingStatus,
     'tools' : IDL.Vec(ICRC16Map),
-    'canister_id' : IDL.Opt(IDL.Text),
     'bounties' : IDL.Vec(Bounty),
     'security_tier' : SecurityTier,
     'wasm_id' : IDL.Text,
@@ -194,7 +192,6 @@ export const idlFactory = ({ IDL }) => {
     'publisher' : IDL.Text,
     'name' : IDL.Text,
     'tags' : IDL.Vec(IDL.Text),
-    'canister_id' : IDL.Principal,
     'why_this_app' : IDL.Text,
     'description' : IDL.Text,
     'icon_url' : IDL.Text,
@@ -815,6 +812,7 @@ export const idlFactory = ({ IDL }) => {
         [Result],
         [],
       ),
+    'set_orchestrator_canister_id' : IDL.Func([IDL.Principal], [Result], []),
   });
   return ICRC118WasmRegistryCanister;
 };

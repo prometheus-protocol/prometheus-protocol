@@ -75,6 +75,14 @@ export function registerUpdateCommand(program: Command) {
             initial: serverToUpdate.logo_uri,
           },
           {
+            type: 'text',
+            name: 'frontendHost',
+            message: 'Frontend Host (for auth flow):',
+            initial:
+              serverToUpdate.frontend_host?.[0] ??
+              'https://prometheusprotocol.org',
+          },
+          {
             type: 'confirm',
             name: 'willCharge',
             message: 'Will this canister charge users for services?',
@@ -119,6 +127,7 @@ export function registerUpdateCommand(program: Command) {
           accepted_payment_canisters: [newTokens],
           scopes: [newScopes],
           service_principals: [], // Not currently supported in this CLI flow
+          frontend_host: [response.frontendHost],
         };
 
         console.log('\nSending update to the Prometheus auth server...');

@@ -32,6 +32,7 @@ export function registerListCommand(program: Command) {
             Name: s.name,
             'Resource Server ID': s.resource_server_id,
             URL: s.uris[0],
+            FrontendHost: s.frontend_host?.[0] ?? 'N/A',
             // Extract just the scope name from each tuple for a clean display.
             Scopes: s.scopes.map((scope) => scope[0]).join(', '),
           })),

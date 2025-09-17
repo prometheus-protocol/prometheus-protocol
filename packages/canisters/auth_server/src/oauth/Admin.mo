@@ -62,6 +62,7 @@ module Admin {
       uris = args.uris;
       scopes = args.scopes;
       accepted_payment_canisters = args.accepted_payment_canisters;
+      frontend_host = args.frontend_host;
     };
 
     // Update the main map.
@@ -131,6 +132,7 @@ module Admin {
       scopes = server.scopes;
       accepted_payment_canisters = server.accepted_payment_canisters;
       service_principals = server.service_principals; // Include service principals for public visibility
+      frontend_host = server.frontend_host; // Optional custom frontend host for login redirects.
     };
     return #ok(public_info);
   };
@@ -175,6 +177,12 @@ module Admin {
     };
 
     // 4. Construct the new, immutable ResourceServer object
+    let frontend_host = if (Option.isSome(args.frontend_host)) {
+      args.frontend_host;
+    } else {
+      server.frontend_host;
+    };
+
     let updated_server : Types.ResourceServer = {
       server with // Start with old values
       name = Option.get(args.name, server.name);
@@ -183,6 +191,7 @@ module Admin {
       service_principals = Option.get(args.service_principals, server.service_principals);
       scopes = Option.get(args.scopes, server.scopes);
       accepted_payment_canisters = Option.get(args.accepted_payment_canisters, server.accepted_payment_canisters);
+      frontend_host = frontend_host;
     };
 
     // 5. Save the new object, replacing the old one

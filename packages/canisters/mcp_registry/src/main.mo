@@ -31,6 +31,7 @@ import Order "mo:base/Order";
 import AppStore "AppStore";
 import AuditHub "AuditHub";
 import Bounty "Bounty";
+import Orchestrator "Orchestrator";
 
 import ICRC118WasmRegistry "../../../../libs/icrc118/src";
 import Service "../../../../libs/icrc118/src/service";
@@ -53,6 +54,12 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   let thisPrincipal = Principal.fromActor(this);
   stable var _owner = deployer.caller;
   stable var _credentials_canister_id : ?Principal = null;
+  stable var _orchestrator_canister_id : ?Principal = null;
+
+  // --- NEW: A reverse-lookup index to find a namespace from a wasm_id ---
+  // Key: wasm_id (hex string)
+  // Value: namespace (Text)
+  stable var wasm_to_namespace_map = BTree.init<Text, Text>(null);
 
   let initManager = ClassPlus.ClassPlusInitializationManager(_owner, thisPrincipal, true);
   let icrc118wasmregistryInitArgs = do ? { args!.icrc118wasmregistryArgs! };
@@ -230,11 +237,13 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   // --- a post-deployment, one-time setter function ---
   public shared ({ caller }) func set_auditor_credentials_canister_id(canister_id : Principal) : async Result.Result<(), Text> {
     if (caller != _owner) { return #err("Caller is not the owner") };
-    if (_credentials_canister_id != null) {
-      return #err("Auditor Credentials Canister ID has already been set");
-    };
-
     _credentials_canister_id := ?canister_id;
+    return #ok(());
+  };
+
+  public shared ({ caller }) func set_orchestrator_canister_id(canister_id : Principal) : async Result.Result<(), Text> {
+    if (caller != _owner) { return #err("Caller is not the owner") };
+    _orchestrator_canister_id := ?canister_id;
     return #ok(());
   };
 
@@ -591,7 +600,23 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   };
 
   public shared (msg) func icrc118_update_wasm(req : Service.UpdateWasmRequest) : async Service.UpdateWasmResult {
-    await* icrc118wasmregistry().icrc118_update_wasm(msg.caller, req);
+    // First, delegate the core logic to the underlying library.
+    let result = await* icrc118wasmregistry().icrc118_update_wasm(msg.caller, req);
+
+    // --- NEW: If the update was successful, populate our reverse index ---
+    switch (result) {
+      case (#Ok(_)) {
+        // The library has successfully associated the wasm with the namespace.
+        // Now, we store this relationship in our fast lookup map.
+        let wasm_id = Base16.encode(req.expected_hash);
+        ignore BTree.insert(wasm_to_namespace_map, Text.compare, wasm_id, req.canister_type_namespace);
+      };
+      case (#Error(_)) {
+        // The update failed, so we do nothing.
+      };
+    };
+
+    return result;
   };
 
   public shared (msg) func icrc118_upload_wasm_chunk(req : Service.UploadRequest) : async Service.UploadResponse {
@@ -827,6 +852,76 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       ?convertIcrc126ValueToIcrc3Value(#Map([("btype", #Text(btype))])),
     );
 
+    // --- 4. REFACTORED: Automated Deployment Trigger ---
+    if (outcome == #Verified) {
+      switch (_orchestrator_canister_id) {
+        case (?orc_id) {
+          // --- a. Find the namespace using our new reverse index ---
+          let namespace_opt = BTree.get(wasm_to_namespace_map, Text.compare, wasm_id);
+
+          switch (namespace_opt) {
+            case (?namespace) {
+              // We found the namespace! Now we can proceed.
+              Debug.print("WASM " # wasm_id # " verified for namespace " # namespace # ". Triggering auto-deployment...");
+
+              // --- b. Find the developer's principal from the original request ---
+              let request_record_opt = _get_verification_request(wasm_id);
+              switch (request_record_opt) {
+                case (?request_record) {
+
+                  // --- c. Decode wasm_id and construct the request ---
+                  let wasm_hash : Blob = switch (Base16.decode(wasm_id)) {
+                    case (?b) { b };
+                    case (null) { return trx_id; /* Should not happen */ };
+                  };
+
+                  let state = icrc118wasmregistry().state;
+                  // Find the canister type by its namespace using the library's internal map.
+                  let owner = switch (BTree.get(state.canister_types, Text.compare, namespace)) {
+                    case (null) { thisPrincipal }; // Should not happen if the namespace is valid.
+                    case (?canister_type) {
+                      if (canister_type.controllers.size() == 0) {
+                        thisPrincipal; // No controllers defined, cannot determine owner.
+                      } else {
+                        // For simplicity, we take the first controller as the owner.
+                        // In a real-world scenario, this logic might be more complex.
+                        canister_type.controllers[0];
+                      };
+                    };
+                  };
+
+                  let deploy_request : Orchestrator.InternalDeployRequest = {
+                    namespace = namespace;
+                    hash = wasm_hash;
+                    owner = owner;
+                  };
+
+                  // --- d. Make the "fire-and-forget" call ---
+                  try {
+                    let orchestrator : Orchestrator.Service = actor (Principal.toText(orc_id));
+                    ignore orchestrator.internal_deploy_or_upgrade(deploy_request);
+                  } catch (e) {
+                    Debug.print("Error calling orchestrator: " # Error.message(e));
+                  };
+                };
+                case (null) {
+                  Debug.print("Auto-deploy failed: Could not find original verification request for wasm_id " # wasm_id);
+                };
+              };
+            };
+            case (null) {
+              // This is a valid scenario: the WASM was verified *before* a developer
+              // published it to a namespace. No deployment can happen yet.
+              Debug.print("WASM " # wasm_id # " verified, but not yet published to a namespace. Skipping auto-deployment.");
+            };
+          };
+        };
+        case (null) {
+          Debug.print("WASM " # wasm_id # " verified, but no orchestrator is configured.");
+        };
+      };
+    };
+
     return trx_id;
   };
 
@@ -1039,7 +1134,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           status = "success";
           git_commit = AppStore.getICRC16TextOptional(att.metadata, "git_commit");
           repo_url = AppStore.getICRC16TextOptional(att.metadata, "repo_url");
-          canister_id = AppStore.getICRC16TextOptional(att.metadata, "canister_id");
           failure_reason = null;
         };
       };
@@ -1059,7 +1153,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           status = "failure";
           git_commit = null;
           repo_url = null;
-          canister_id = null;
           failure_reason = ?div.report;
         };
       };
@@ -1070,7 +1163,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       status = "unknown";
       git_commit = null;
       repo_url = null;
-      canister_id = null;
       failure_reason = null;
     };
   };
@@ -1204,7 +1296,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       status = #Verified; // If we got this far, it must be at least Pending/Verified
       security_tier = AppStore.calculate_security_tier(true, AppStore.get_completed_audit_types(latest_audit_records));
       build_info = latest_build_info;
-      canister_id = latest_build_info.canister_id;
       tools = _get_tools_from_records(latest_audit_records);
       data_safety = _get_data_safety_from_records(latest_audit_records);
       bounties = latest_bounties;
@@ -1221,7 +1312,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           namespace = namespace;
           name = AppStore.getICRC16Text(att.metadata, "name");
           mcp_path = AppStore.getICRC16Text(att.metadata, "mcp_path");
-          canister_id = AppStore.getICRC16Principal(att.metadata, "canister_id");
           publisher = AppStore.getICRC16Text(att.metadata, "publisher");
           category = AppStore.getICRC16Text(att.metadata, "category");
           icon_url = AppStore.getICRC16Text(att.metadata, "icon_url");
@@ -1246,7 +1336,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
               namespace = namespace;
               name = AppStore.getICRC16Text(meta, "name");
               mcp_path = AppStore.getICRC16Text(meta, "mcp_path");
-              canister_id = AppStore.getICRC16Principal(meta, "canister_id");
               publisher = AppStore.getICRC16Text(meta, "publisher");
               category = AppStore.getICRC16Text(meta, "category");
               description = AppStore.getICRC16Text(meta, "description");
@@ -1455,7 +1544,26 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
         pending_requests.add(request);
       };
     };
-    return Buffer.toArray(pending_requests);
+
+    var pending_array = Buffer.toArray(pending_requests);
+
+    // --- Step 3: Define a custom comparison function for sorting ---
+    // This function will sort records by their timestamp in descending order (newest first).
+    func compareRecords(a : ICRC126.VerificationRecord, b : ICRC126.VerificationRecord) : Order.Order {
+      if (a.timestamp > b.timestamp) {
+        return #less; // a is newer, so it should come first
+      } else if (a.timestamp < b.timestamp) {
+        return #greater; // b is newer, so it should come first
+      } else {
+        return #equal; // timestamps are equal
+      };
+    };
+
+    // --- Step 4: Sort the array in-place using the comparison function ---
+    pending_array := Array.sort<ICRC126.VerificationRecord>(pending_array, compareRecords);
+
+    // --- Step 5: Return the now-sorted array ---
+    return pending_array;
   };
 
   private func _get_audit_records_for_wasm(wasm_id : Text) : [ICRC126.AuditRecord] {

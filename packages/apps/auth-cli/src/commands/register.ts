@@ -35,6 +35,12 @@ export function registerRegisterCommand(program: Command) {
               'https://placehold.co/128x128/1a1a1a/ffffff/png?text=My+Canister',
           },
           {
+            type: 'text',
+            name: 'frontendHost',
+            message: 'Frontend Host (for auth flow):',
+            initial: 'https://prometheusprotocol.org',
+          },
+          {
             type: 'confirm',
             name: 'willCharge',
             message: 'Will this canister charge users for services?',
@@ -44,7 +50,7 @@ export function registerRegisterCommand(program: Command) {
             type: (prev) => (prev ? 'text' : null), // Only ask if willCharge is true
             name: 'tokens',
             message: 'Accepted ICRC-2 Canisters (comma-separated):',
-            initial: 'cngnf-vqaaa-aaaar-qag4q-cai',
+            initial: '53nhb-haaaa-aaaar-qbn5q-cai',
           },
         ]);
 
@@ -105,6 +111,7 @@ export function registerRegisterCommand(program: Command) {
           uris: [serverUrl],
           accepted_payment_canisters: tokenPrincipals,
           scopes: finalScopes,
+          frontend_host: details.frontendHost,
         };
 
         // --- 6. Call the Service Layer and Display Results ---
@@ -119,6 +126,7 @@ export function registerRegisterCommand(program: Command) {
             'Canister Name': details.name,
             'Resource Server ID': result.resource_server_id,
             'Registered URL': serverUrl,
+            'Frontend Host': details.frontendHost,
           },
         ]);
       } catch (error) {

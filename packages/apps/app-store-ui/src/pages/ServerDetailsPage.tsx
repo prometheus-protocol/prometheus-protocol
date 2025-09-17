@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import NotFoundPage from './NotFoundPage';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ShieldCheck, Wallet, Wrench } from 'lucide-react';
 
 // Component Imports
 import { ServerHeader } from '@/components/server-details/ServerHeader';
@@ -25,6 +25,10 @@ import {
 import { useState } from 'react';
 import { Tokens } from '@prometheus-protocol/ic-js';
 import { CreateBountyDialog } from '@/components/server-details/CreateBountyDialog';
+import { AccessAndBilling } from '@/components/server-details/AccessAndBilling';
+import { useInternetIdentity } from 'ic-use-internet-identity';
+import { ConnectionInfo } from '@/components/server-details/ConnectionInfo';
+import { SponsorPrompt } from '@/components/server-details/SponsorPrompt';
 
 // --- NEW High-Fidelity Skeleton Component ---
 const ServerDetailsSkeleton = () => (
@@ -110,7 +114,10 @@ export default function ServerDetailsPage() {
 
   // --- 4. DECONSTRUCT `latestVersion` FOR CLEANER ACCESS ---
   // This is the key to making the rest of the component readable.
-  const { latestVersion } = server;
+  const { latestVersion, allVersions } = server;
+
+  const isViewingArchivedVersion =
+    allVersions.length > 0 && latestVersion.wasmId !== allVersions[0].wasmId;
 
   const handleInstallClick = () => {
     // Logic now correctly checks the nested property.
@@ -121,13 +128,34 @@ export default function ServerDetailsPage() {
     }
   };
 
+  // --- 1. Determine which sections have data ---
+  // The presence of a description indicates the 'app_info_v1' attestation is complete.
+  const hasAppInfo = server.latestVersion.auditRecords.some(
+    (record) => 'audit_type' in record && record.audit_type === 'app_info_v1',
+  );
+
+  // The presence of tools indicates the 'tools_v1' attestation is complete.
+  const hasToolsInfo = server.latestVersion.auditRecords.some(
+    (record) => 'audit_type' in record && record.audit_type === 'tools_v1',
+  );
+  // The presence of dataSafety indicates the 'data_safety_v1' attestation is complete.
+  const hasDataSafetyInfo = server.latestVersion.auditRecords.some(
+    (record) =>
+      'audit_type' in record && record.audit_type === 'data_safety_v1',
+  );
+
   // Bounties are version-specific, so we search in the `latestVersion` object.
   const toolsBounty = latestVersion.bounties.find(
     (bounty) => bounty.challengeParameters.audit_type === 'tools_v1',
   );
+  const appInfoBounty = latestVersion.bounties.find(
+    (bounty) => bounty.challengeParameters.audit_type === 'app_info_v1',
+  );
   const dataSafetyBounty = latestVersion.bounties.find(
     (bounty) => bounty.challengeParameters.audit_type === 'data_safety_v1',
   );
+
+  const acceptsPayments = latestVersion.tools.some((tool) => !!tool.cost);
 
   return (
     <>
@@ -138,42 +166,79 @@ export default function ServerDetailsPage() {
         <ServerHeader
           server={server}
           onInstallClick={handleInstallClick}
-          onSponsorClick={() => setIsBountyDialogOpen(true)}
+          isArchived={isViewingArchivedVersion}
         />
 
-        <div className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-x-16 gap-y-8">
-          <main className="lg:col-span-2 space-y-16 mt-8">
-            <AboutSection server={server} />
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-x-16 gap-y-8">
+          <main className="lg:col-span-3 space-y-16 mt-16">
+            {/* Conditionally render the new container component */}
+
+            {hasAppInfo ? (
+              <AboutSection server={server} />
+            ) : (
+              <SponsorPrompt
+                icon={AlertTriangle}
+                title="App Info"
+                description="Sponsor the App Info audit to provide users with detailed information about this application."
+                auditType="app_info_v1"
+                paymentToken={Tokens.USDC}
+                bounty={appInfoBounty} // Assuming no bounty for app_info_v1 in this context
+                wasmId={server.latestVersion.wasmId}
+                isArchived={isViewingArchivedVersion}
+              />
+            )}
+
+            {hasToolsInfo && acceptsPayments ? (
+              <AccessAndBilling latestVersion={server.latestVersion} />
+            ) : (
+              <SponsorPrompt
+                icon={Wallet}
+                title="Access & Billing"
+                description="Sponsor the Tools & Resources audit to enable API key creation and manage wallet allowances for this app."
+                auditType="tools_v1"
+                bounty={toolsBounty}
+                paymentToken={Tokens.USDC}
+                wasmId={server.latestVersion.wasmId}
+                isArchived={isViewingArchivedVersion}
+              />
+            )}
 
             {/* Conditional rendering now correctly checks the nested status. */}
-            {latestVersion.status === 'Verified' ? (
-              <>
-                <ToolsAndResources
-                  tools={latestVersion.tools}
-                  paymentToken={Tokens.USDC}
-                  appId={latestVersion.wasmId} // Use the version-specific wasmId
-                  bounty={toolsBounty}
-                  canisterId={latestVersion.canisterId} // Use the version-specific canisterId
-                />
-                <DataSafetySection
-                  safetyInfo={latestVersion.dataSafety}
-                  appId={latestVersion.wasmId} // Use the version-specific wasmId
-                  paymentToken={Tokens.USDC}
-                  bounty={dataSafetyBounty}
-                />
-                {/* Reviews section would be similar */}
-              </>
+            {hasToolsInfo ? (
+              <ToolsAndResources
+                tools={latestVersion.tools}
+                wasmId={latestVersion.wasmId}
+              />
             ) : (
-              <div className="border border-gray-600 rounded-lg p-8 text-center text-muted-foreground">
-                <p>
-                  Detailed security and data safety information will be
-                  available after the next audit is complete.
-                </p>
-              </div>
+              <SponsorPrompt
+                icon={Wrench}
+                title="Tools and Resources"
+                description="Sponsor the Tools & Resources audit to see what developer tools and APIs this app provides."
+                auditType="tools_v1"
+                bounty={toolsBounty}
+                paymentToken={Tokens.USDC}
+                wasmId={server.latestVersion.wasmId}
+                isArchived={isViewingArchivedVersion}
+              />
+            )}
+
+            {hasDataSafetyInfo ? (
+              <DataSafetySection safetyInfo={latestVersion.dataSafety!} />
+            ) : (
+              <SponsorPrompt
+                icon={ShieldCheck} // Assuming ShieldCheck for Data Safety
+                title="Data Safety"
+                description="Sponsor the Data Safety audit to understand how this application handles your data."
+                auditType="data_safety_v1"
+                bounty={dataSafetyBounty}
+                paymentToken={Tokens.USDC}
+                wasmId={server.latestVersion.wasmId}
+                isArchived={isViewingArchivedVersion}
+              />
             )}
           </main>
 
-          <aside className="lg:col-span-1 space-y-8">
+          <aside className="lg:col-span-2 space-y-8">
             {/* SimilarApps should use the STABLE namespace to find related apps. */}
             <SimilarApps currentServerNamespace={server.namespace} />
           </aside>
@@ -184,7 +249,7 @@ export default function ServerDetailsPage() {
       <CreateBountyDialog
         isOpen={isBountyDialogOpen}
         onOpenChange={setIsBountyDialogOpen}
-        appId={latestVersion.wasmId}
+        wasmId={latestVersion.wasmId}
         auditType="app_info_v1"
         paymentToken={Tokens.USDC}
       />
@@ -211,7 +276,11 @@ export default function ServerDetailsPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => setDialogState('install')}>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                setDialogState('install');
+              }}>
               I Understand, Proceed
             </AlertDialogAction>
           </AlertDialogFooter>

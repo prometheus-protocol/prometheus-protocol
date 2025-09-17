@@ -30,6 +30,7 @@ describe('list command', () => {
       resource_server_id: 'bravo-server-id',
       uris: ['http://127.0.0.1:4943/?canisterId=bravo'],
       scopes: [['openid', '...']],
+      frontend_host: ['https://bravo-frontend.example.com'],
     },
   ];
 
@@ -64,6 +65,7 @@ describe('list command', () => {
     const tableData = consoleTableSpy.mock.calls[0][0];
     expect(tableData).toEqual([
       {
+        FrontendHost: 'N/A',
         Name: 'Test Server Alpha',
         'Resource Server ID': 'alpha-server-id',
         URL: 'https://alpha.icp0.io',
@@ -73,6 +75,7 @@ describe('list command', () => {
         Name: 'Test Server Bravo',
         'Resource Server ID': 'bravo-server-id',
         URL: 'http://127.0.0.1:4943/?canisterId=bravo',
+        FrontendHost: 'https://bravo-frontend.example.com',
         Scopes: 'openid',
       },
     ]);

@@ -68,13 +68,18 @@ module {
           case (_) "http";
         };
 
-        let frontend_host = Text.replace(
-          host,
-          #text(Principal.toText(context.self)),
-          Principal.toText(context.frontend_canister_id),
-        );
+        let frontend_host = switch (validated.resource_server.frontend_host) {
+          case (null) {
+            protocol # "://" # Text.replace(
+              host,
+              #text(Principal.toText(context.self)),
+              Principal.toText(context.frontend_canister_id),
+            );
+          };
+          case (?custom_host) custom_host;
+        };
 
-        let login_url = protocol # "://" # frontend_host # "/login?session_id=" # session_id;
+        let login_url = frontend_host # "/login?session_id=" # session_id;
 
         // 4. Redirect the user to the login page.
         return res.send({

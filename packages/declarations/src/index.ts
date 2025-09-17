@@ -5,5 +5,15 @@ import * as Orchestrator from './generated/mcp_orchestrator/mcp_orchestrator.did
 import * as Ledger from './generated/icrc1_ledger/icrc1_ledger.did.js';
 import * as AppBounties from './generated/app_bounties/app_bounties.did.js';
 import * as Leaderboard from './generated/leaderboard/leaderboard.did.js';
+import * as McpServer from './generated/mcp_server/mcp_server.did.js';
 
-export { Registry, Orchestrator, Ledger, AuditHub, Auth, AppBounties, Leaderboard };
+export {
+  Registry,
+  Orchestrator,
+  Ledger,
+  AuditHub,
+  Auth,
+  AppBounties,
+  Leaderboard,
+  McpServer,
+};

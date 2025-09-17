@@ -1,10 +1,10 @@
 # Prometheus Application Manifest
 # This is the permanent, unique identifier for your application.
-namespace: com.example.app
+namespace: com.example.app-three
 
 # This section contains all data for a specific version.
 submission:
-  name: Some cool thing
+  name: App Three
   description: It helps you do some stuff
   publisher: Jesse
   category: Utilities

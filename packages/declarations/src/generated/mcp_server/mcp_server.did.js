@@ -42,6 +42,22 @@ export const idlFactory = ({ IDL }) => {
     'streaming_strategy' : IDL.Opt(StreamingStrategy),
     'status_code' : IDL.Nat16,
   });
+  const UpgradeFinishedResult = IDL.Variant({
+    'Failed' : IDL.Tuple(IDL.Nat, IDL.Text),
+    'Success' : IDL.Nat,
+    'InProgress' : IDL.Nat,
+  });
+  const ApiKeyInfo = IDL.Record({
+    'created' : Time,
+    'principal' : IDL.Principal,
+    'scopes' : IDL.Vec(IDL.Text),
+    'name' : IDL.Text,
+  });
+  const HashedApiKey = IDL.Text;
+  const ApiKeyMetadata = IDL.Record({
+    'info' : ApiKeyInfo,
+    'hashed_key' : HashedApiKey,
+  });
   const Timestamp = IDL.Nat64;
   const TransferError = IDL.Variant({
     'GenericError' : IDL.Record({
@@ -76,8 +92,8 @@ export const idlFactory = ({ IDL }) => {
   const Result = IDL.Variant({ 'ok' : IDL.Nat, 'err' : TreasuryError });
   const McpServer = IDL.Service({
     'call_tracker' : IDL.Func([IDL.Principal, UsageStats], [Result_2], []),
-    'create_api_key' : IDL.Func(
-        [IDL.Text, IDL.Principal, IDL.Vec(IDL.Text)],
+    'create_my_api_key' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Text)],
         [IDL.Text],
         [],
       ),
@@ -90,6 +106,9 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'http_request_update' : IDL.Func([HttpRequest], [HttpResponse], []),
+    'icrc120_upgrade_finished' : IDL.Func([], [UpgradeFinishedResult], []),
+    'list_my_api_keys' : IDL.Func([], [IDL.Vec(ApiKeyMetadata)], ['query']),
+    'revoke_my_api_key' : IDL.Func([IDL.Text], [], []),
     'set_owner' : IDL.Func([IDL.Principal], [Result_1], []),
     'transformJwksResponse' : IDL.Func(
         [
@@ -105,4 +124,6 @@ export const idlFactory = ({ IDL }) => {
   });
   return McpServer;
 };
-export const init = ({ IDL }) => { return []; };
+export const init = ({ IDL }) => {
+  return [IDL.Opt(IDL.Record({ 'owner' : IDL.Opt(IDL.Principal) }))];
+};

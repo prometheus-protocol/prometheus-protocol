@@ -117,7 +117,7 @@ export const ToolsAttestationForm = ({
                     name={`tools.${index}.cost`}
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Cost</FormLabel>
+                        <FormLabel>Human Readable Cost</FormLabel>
                         <FormControl>
                           <Input type="number" step="0.01" {...field} />
                         </FormControl>

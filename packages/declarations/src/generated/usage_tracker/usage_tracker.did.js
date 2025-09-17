@@ -17,8 +17,9 @@ export const idlFactory = ({ IDL }) => {
     'activity' : IDL.Vec(CallerActivity),
   });
   const LogEntry = IDL.Record({
-    'server_id' : IDL.Principal,
+    'canister_id' : IDL.Principal,
     'stats' : UsageStats,
+    'wasm_id' : IDL.Text,
     'timestamp' : Time,
   });
   const Result_1 = IDL.Variant({ 'ok' : IDL.Vec(LogEntry), 'err' : IDL.Text });
@@ -27,12 +28,12 @@ export const idlFactory = ({ IDL }) => {
     'get_admin' : IDL.Func([], [IDL.Principal], ['query']),
     'get_all_server_metrics' : IDL.Func(
         [],
-        [IDL.Vec(IDL.Tuple(IDL.Principal, ServerMetricsShared))],
+        [IDL.Vec(IDL.Tuple(IDL.Text, ServerMetricsShared))],
         ['query'],
       ),
     'get_and_clear_logs' : IDL.Func([], [Result_1], []),
     'get_metrics_for_server' : IDL.Func(
-        [IDL.Principal],
+        [IDL.Text],
         [IDL.Opt(ServerMetricsShared)],
         ['query'],
       ),
@@ -40,7 +41,7 @@ export const idlFactory = ({ IDL }) => {
     'is_wasm_hash_approved' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'log_call' : IDL.Func([UsageStats], [Result], []),
     'remove_approved_wasm_hash' : IDL.Func([IDL.Text], [Result], []),
-    'seed_log' : IDL.Func([IDL.Principal, UsageStats], [Result], []),
+    'seed_log' : IDL.Func([IDL.Principal, IDL.Text, UsageStats], [Result], []),
     'set_payout_canister' : IDL.Func([IDL.Principal], [Result], []),
     'transfer_admin' : IDL.Func([IDL.Principal], [Result], []),
   });

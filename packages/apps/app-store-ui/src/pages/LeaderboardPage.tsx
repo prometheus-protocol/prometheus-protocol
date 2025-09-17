@@ -10,6 +10,7 @@ import {
 } from '@/hooks/useLeaderboard';
 import { Leaderboard } from '@prometheus-protocol/ic-js';
 import { Button } from '@/components/ui/button';
+import { truncateHash } from '@prometheus-protocol/ic-js/utils';
 
 // --- SUB-COMPONENTS ---
 
@@ -118,10 +119,14 @@ const LeaderboardList = ({
       </div>
     </div>
     {data.map((entry) => {
-      const principal =
+      const id =
         type === 'user'
-          ? (entry as Leaderboard.UserLeaderboardEntry).user
+          ? (entry as Leaderboard.UserLeaderboardEntry).user.toText()
           : (entry as Leaderboard.ServerLeaderboardEntry).server;
+
+      const truncatedId =
+        type === 'user' ? truncatePrincipal(id) : truncateHash(id);
+
       const avatarType = type === 'user' ? 'adventurer' : 'bottts';
       return (
         <div
@@ -132,13 +137,11 @@ const LeaderboardList = ({
           </div>
           <div className="col-span-6 flex items-center gap-4">
             <img
-              src={`https://api.dicebear.com/9.x/${avatarType}/svg?seed=${principal}`}
+              src={`https://api.dicebear.com/9.x/${avatarType}/svg?seed=${id}`}
               alt="Avatar"
               className="w-10 h-10 rounded-full bg-gray-800 p-1"
             />
-            <span className="font-mono text-white">
-              {truncatePrincipal(principal.toText())}
-            </span>
+            <span className="font-mono text-white">{truncatedId}</span>
           </div>
           <div className="col-span-4 text-right">
             <span className="font-mono text-white">
@@ -221,6 +224,7 @@ export default function LeaderboardPage() {
     data: servers,
     isLoading: serversLoading,
     isError: serversError,
+    error,
     refetch: refetchServers,
   } = useGetServerLeaderboard();
 

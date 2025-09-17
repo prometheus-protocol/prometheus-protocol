@@ -1,6 +1,5 @@
 export const idlFactory = ({ IDL }) => {
   const Result = IDL.Variant({ 'ok' : IDL.Text, 'err' : IDL.Text });
-  const Result_6 = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   const AuthFlowStep = IDL.Variant({
     'consent' : IDL.Null,
     'setup' : IDL.Null,
@@ -26,6 +25,7 @@ export const idlFactory = ({ IDL }) => {
     'uris' : IDL.Vec(IDL.Text),
     'accepted_payment_canisters' : IDL.Vec(IDL.Principal),
     'logo_uri' : IDL.Text,
+    'frontend_host' : IDL.Opt(IDL.Text),
     'service_principals' : IDL.Vec(IDL.Principal),
   });
   const Result_1 = IDL.Variant({ 'ok' : ResourceServer, 'err' : IDL.Text });
@@ -36,6 +36,7 @@ export const idlFactory = ({ IDL }) => {
     'uris' : IDL.Vec(IDL.Text),
     'accepted_payment_canisters' : IDL.Vec(IDL.Principal),
     'logo_uri' : IDL.Text,
+    'frontend_host' : IDL.Opt(IDL.Text),
     'service_principals' : IDL.Vec(IDL.Principal),
   });
   const Result_4 = IDL.Variant({
@@ -82,6 +83,7 @@ export const idlFactory = ({ IDL }) => {
     'uris' : IDL.Vec(IDL.Text),
     'accepted_payment_canisters' : IDL.Vec(IDL.Principal),
     'logo_uri' : IDL.Text,
+    'frontend_host' : IDL.Opt(IDL.Text),
   });
   const UpdateResourceServerArgs = IDL.Record({
     'resource_server_id' : IDL.Text,
@@ -90,11 +92,11 @@ export const idlFactory = ({ IDL }) => {
     'uris' : IDL.Opt(IDL.Vec(IDL.Text)),
     'accepted_payment_canisters' : IDL.Opt(IDL.Vec(IDL.Principal)),
     'logo_uri' : IDL.Opt(IDL.Text),
+    'frontend_host' : IDL.Opt(IDL.Text),
     'service_principals' : IDL.Opt(IDL.Vec(IDL.Principal)),
   });
   const AuthCanister = IDL.Service({
     'complete_authorize' : IDL.Func([IDL.Text], [Result], []),
-    'complete_payment_setup' : IDL.Func([IDL.Text], [Result_6], []),
     'confirm_login' : IDL.Func([IDL.Text], [Result_5], []),
     'delete_resource_server' : IDL.Func([IDL.Text], [Result], []),
     'deny_consent' : IDL.Func([IDL.Text], [Result], []),

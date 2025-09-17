@@ -87,9 +87,9 @@ export function PendingVerificationsTab() {
       <div className="space-y-3">
         {/* --- DESKTOP HEADER (Inspired by OpenBountiesTab) --- */}
         <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-2 text-gray-500 font-semibold uppercase text-sm">
-          <div className="col-span-3">Project / WASM</div>
+          <div className="col-span-2">Project / WASM</div>
           <div className="col-span-5">Source</div>
-          <div className="col-span-3">Submitted On</div>
+          <div className="col-span-4">Submitted On</div>
           <div className="col-span-1">Action</div>
         </div>
 
@@ -117,7 +117,7 @@ export function PendingVerificationsTab() {
             setSponsoringWasmId(null); // Close the dialog by resetting the state
           }
         }}
-        appId={sponsoringWasmId ?? ''} // Pass the selected wasm_id as the appId
+        wasmId={sponsoringWasmId ?? ''} // Pass the selected wasm_id as the appId
         auditType="build_reproducibility_v1" // This is always the audit type for this tab
         paymentToken={Tokens.USDC} // Assuming a default payment token
       />

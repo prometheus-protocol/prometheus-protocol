@@ -21,15 +21,15 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Loader2 } from 'lucide-react';
-import { useCreateBounty, useSponsorBounty } from '@/hooks/useAuditBounties';
+import { useSponsorBounty } from '@/hooks/useAuditBounties';
 import { useMemo } from 'react';
 import { Token } from '@prometheus-protocol/ic-js';
-import { useTokenBalance } from '@/hooks/usePayment';
+import { useGetTokenBalance } from '@/hooks/usePayment';
 
 interface CreateBountyDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  appId: string; // The WASM ID
+  wasmId: string; // The WASM ID
   auditType: string;
   // For the MVP, we'll assume USDC. A future version could pass a list of accepted tokens.
   paymentToken: Token;
@@ -56,13 +56,13 @@ const CostRow = ({
 export function CreateBountyDialog({
   isOpen,
   onOpenChange,
-  appId,
+  wasmId,
   auditType,
   paymentToken,
 }: CreateBountyDialogProps) {
   const { mutate: sponsorBounty, isPending, status } = useSponsorBounty();
   const { data: balance, isLoading: isBalanceLoading } =
-    useTokenBalance(paymentToken); // 4. Enhance calculations to include the max spendable amount
+    useGetTokenBalance(paymentToken); // 4. Enhance calculations to include the max spendable amount
   // 1. Calculate fixed fees and the maximum spendable amount first.
   //    This does NOT depend on the form's input.
   const { totalFees, maxSpendable } = useMemo(() => {
@@ -109,7 +109,7 @@ export function CreateBountyDialog({
   function onSubmit(values: z.infer<typeof formSchema>) {
     sponsorBounty(
       {
-        appId,
+        wasmId,
         auditType,
         paymentToken,
         amount: values.amount,
