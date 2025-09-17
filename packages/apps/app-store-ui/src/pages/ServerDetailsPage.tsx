@@ -134,7 +134,6 @@ export default function ServerDetailsPage() {
     (record) => 'audit_type' in record && record.audit_type === 'app_info_v1',
   );
 
-  console.log(server.latestVersion.auditRecords);
   // The presence of tools indicates the 'tools_v1' attestation is complete.
   const hasToolsInfo = server.latestVersion.auditRecords.some(
     (record) => 'audit_type' in record && record.audit_type === 'tools_v1',
@@ -170,8 +169,8 @@ export default function ServerDetailsPage() {
           isArchived={isViewingArchivedVersion}
         />
 
-        <div className="mt-12 grid grid-cols-1 lg:grid-cols-5 gap-x-12 gap-y-8">
-          <main className="lg:col-span-3 space-y-16 mt-8">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-x-16 gap-y-8">
+          <main className="lg:col-span-3 space-y-16 mt-16">
             {/* Conditionally render the new container component */}
 
             {hasAppInfo ? (

@@ -169,7 +169,7 @@
   /* Define our custom theme values as CSS variables */
   --font-sans: 'Inter', sans-serif;
   --font-heading: 'Space Grotesk', sans-serif;
-  --shadow-header: 0px 0px 8px 0px hsla(45, 59%, 51%, 0.5);
+  --shadow-header: 0px 0px 6px 0px hsla(45, 59%, 51%, 0.4);
 
   @keyframes flip-and-pause {
     /* The coin is stationary for the first 80% of the animation duration */
