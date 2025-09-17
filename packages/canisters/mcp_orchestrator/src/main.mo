@@ -562,13 +562,30 @@ shared (deployer) actor class ICRC120Canister<system>(
   // PRIVATE HELPERS
   // =====================================================================================
 
-  private func _get_mode(namespace : Text) : canister_install_mode {
+  private func _get_mode(namespace : Text) : async canister_install_mode {
     // Check if a canister is already managed for this namespace.
     switch (Map.get(managed_canisters, Map.thash, namespace)) {
       case (?existing_canister_id) {
-        // A canister exists. This is an upgrade.
-        // We use `null` for the options to signify a default upgrade.
-        return #upgrade(null);
+        // A canister exists. This COULD be an upgrade.
+        // Lets check the wasm hash to determine if it's a reinstall or an upgrade.
+        let status_result = await ic.canister_status({
+          canister_id = existing_canister_id;
+        });
+        switch (status_result.module_hash) {
+          case (?installed_hash) {
+            if (installed_hash == wasmHash) {
+              // The same WASM is already installed. This is a reinstall.
+              return #reinstall;
+            } else {
+              // A different WASM is installed. This is an upgrade.
+              return #upgrade(null);
+            };
+          };
+          case (null) {
+            // No WASM is installed. This is effectively a first-time install.
+            return #install;
+          };
+        };
       };
       case (null) {
         // No canister exists. This is a first-time deployment.
@@ -612,7 +629,7 @@ shared (deployer) actor class ICRC120Canister<system>(
       };
     };
 
-    let mode = _get_mode(request.namespace);
+    let mode = await _get_mode(request.namespace);
 
     // --- 3. THE FIX: Prepare init args based on context ---
     // We encode the developer's principal as the init arg.
