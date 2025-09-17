@@ -4,6 +4,8 @@ import { getTierInfo } from '@/lib/get-tier-info';
 import { cn } from '@/lib/utils';
 import { useGetAppStoreListings } from '@/hooks/useAppStore';
 import { ImageWithFallback } from '@/components/ui/image-with-fallback';
+import { Badge } from '../ui/badge';
+import { ShieldCheck } from 'lucide-react';
 
 interface SimilarAppsProps {
   // The ID is the hex string of the current app's WASM hash
@@ -97,11 +99,30 @@ export function SimilarApps({ currentServerNamespace }: SimilarAppsProps) {
                 <p className="text-sm text-muted-foreground">{app.category}</p>
               </div>
 
-              {isCertified && (
-                <tierInfo.Icon
-                  className={cn('w-5 h-5', tierInfo.textColorClass)}
-                />
-              )}
+              {/* 2. Use a proper, contextual status badge */}
+              <div className="mr-1.5">
+                {app.latestVersion.status === 'Pending' ? (
+                  // --- Badge for PENDING apps ---
+                  <Badge
+                    variant="secondary"
+                    className="text-xs bg-grey-900/50 border-grey-700 text-grey-300">
+                    <ShieldCheck className="h-3 w-3 mr-1" />
+                    Build Verified
+                  </Badge>
+                ) : (
+                  // --- Badge for LISTED apps ---
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      'text-xs',
+                      tierInfo.borderColorClass,
+                      tierInfo.textColorClass,
+                    )}>
+                    <tierInfo.Icon className="h-3 w-3 mr-1" />
+                    {tierInfo.name}
+                  </Badge>
+                )}
+              </div>
             </Link>
           );
         })}

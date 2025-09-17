@@ -301,6 +301,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const BlockType = IDL.Record({ 'url' : IDL.Text, 'block_type' : IDL.Text });
   const InternalDeployRequest = IDL.Record({
+    'owner' : IDL.Principal,
     'hash' : IDL.Vec(IDL.Nat8),
     'namespace' : IDL.Text,
   });

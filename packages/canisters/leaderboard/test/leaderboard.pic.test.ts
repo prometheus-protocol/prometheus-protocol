@@ -111,6 +111,7 @@ describe('Leaderboard Aggregator Canister', () => {
     const serverAFixture = await pic.setupCanister<MCPService>({
       idlFactory: serverIdl,
       wasm: MCP_SERVER_DUMMY_WASM_PATH,
+      arg: IDL.encode(mcpServerInit({ IDL }), [[]]),
     });
     const serverAActor = serverAFixture.actor;
     const serverAPrincipal = serverAFixture.canisterId;
@@ -119,6 +120,7 @@ describe('Leaderboard Aggregator Canister', () => {
     const serverBFixture = await pic.setupCanister<MCPService>({
       idlFactory: serverIdl,
       wasm: MCP_SERVER_DUMMY_WASM_PATH,
+      arg: IDL.encode(mcpServerInit({ IDL }), [[]]),
     });
     const serverBActor = serverBFixture.actor;
     const serverBPrincipal = serverBFixture.canisterId;
@@ -205,6 +207,7 @@ describe('Leaderboard Aggregator Canister', () => {
     const serverFixture = await pic.setupCanister<MCPService>({
       idlFactory: serverIdl,
       wasm: MCP_SERVER_DUMMY_WASM_PATH,
+      arg: IDL.encode(mcpServerInit({ IDL }), [[]]),
     });
     const serverActor = serverFixture.actor;
     const user1 = createIdentity('user1-timer').getPrincipal();

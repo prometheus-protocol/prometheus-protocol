@@ -212,6 +212,7 @@ export interface InitArgList {
 }
 export type InitArgs = {};
 export interface InternalDeployRequest {
+  'owner' : Principal,
   'hash' : Uint8Array | number[],
   'namespace' : string,
 }

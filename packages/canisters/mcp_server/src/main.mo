@@ -5,6 +5,7 @@ import Debug "mo:base/Debug";
 import Principal "mo:base/Principal";
 import Time "mo:base/Time";
 import Int "mo:base/Int";
+import Option "mo:base/Option";
 
 import HttpTypes "mo:http-types";
 import Map "mo:map/Map";
@@ -26,9 +27,15 @@ import Beacon "mo:mcp-motoko-sdk/mcp/Beacon";
 
 import IC "mo:ic";
 
-shared ({ caller = deployer }) persistent actor class McpServer() = self {
+shared ({ caller = deployer }) persistent actor class McpServer(
+  args : ?{
+    owner : ?Principal;
+  }
+) = self {
 
-  var owner : Principal = deployer;
+  Debug.print("args: " # debug_show (args));
+
+  var owner : Principal = Option.get(do ? { args!.owner! }, deployer);
 
   // State for certified HTTP assets (like /.well-known/...)
   var stable_http_assets : HttpAssets.StableEntries = [];
@@ -141,7 +148,7 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
     // To require payment, set the `payment` field like this:
     payment = ?{
       ledger = Principal.fromText("vt46d-j7777-77774-qaagq-cai"); // ICRC2 Ledger canister ID
-      amount = 101_000;
+      amount = 100_000;
     };
   }];
 
@@ -176,8 +183,8 @@ shared ({ caller = deployer }) persistent actor class McpServer() = self {
     allowanceUrl = ?allowanceUrl; // Uncomment this line if using paid tools.
     serverInfo = {
       name = "full-onchain-mcp-server";
-      title = "Full On-chain MCP Server";
-      version = "0.10.0";
+      title = "App Three MCP Server";
+      version = "0.1.7";
     };
     resources = resources;
     resourceReader = func(uri) {

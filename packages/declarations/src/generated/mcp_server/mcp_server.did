@@ -161,4 +161,4 @@ type ApiKeyInfo =
    "principal": principal;
    scopes: vec text;
  };
-service : () -> McpServer
+service : (args: opt record {owner: opt principal;}) -> McpServer

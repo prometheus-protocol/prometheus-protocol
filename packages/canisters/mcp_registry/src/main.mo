@@ -611,7 +611,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
         let wasm_id = Base16.encode(req.expected_hash);
         ignore BTree.insert(wasm_to_namespace_map, Text.compare, wasm_id, req.canister_type_namespace);
       };
-      case (#Err(_)) {
+      case (#Error(_)) {
         // The update failed, so we do nothing.
       };
     };
@@ -875,9 +875,25 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
                     case (null) { return trx_id; /* Should not happen */ };
                   };
 
+                  let state = icrc118wasmregistry().state;
+                  // Find the canister type by its namespace using the library's internal map.
+                  let owner = switch (BTree.get(state.canister_types, Text.compare, namespace)) {
+                    case (null) { thisPrincipal }; // Should not happen if the namespace is valid.
+                    case (?canister_type) {
+                      if (canister_type.controllers.size() == 0) {
+                        thisPrincipal; // No controllers defined, cannot determine owner.
+                      } else {
+                        // For simplicity, we take the first controller as the owner.
+                        // In a real-world scenario, this logic might be more complex.
+                        canister_type.controllers[0];
+                      };
+                    };
+                  };
+
                   let deploy_request : Orchestrator.InternalDeployRequest = {
                     namespace = namespace;
                     hash = wasm_hash;
+                    owner = owner;
                   };
 
                   // --- d. Make the "fire-and-forget" call ---

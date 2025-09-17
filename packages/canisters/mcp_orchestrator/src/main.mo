@@ -23,6 +23,7 @@ import { ic } "mo:ic";
 
 import McpRegistry "McpRegistry";
 import CanisterFactory "CanisterFactory";
+import McpServer "McpServer";
 
 import ICRC118WasmRegistry "../../../../libs/icrc118/src/service";
 import System "../../../../libs/icrc120/src/system";
@@ -593,6 +594,7 @@ shared (deployer) actor class ICRC120Canister<system>(
   type InternalDeployRequest = {
     namespace : Text;
     hash : Blob;
+    owner : Principal;
   };
   /**
    * [INTERNAL] A privileged endpoint for the MCP Registry.
@@ -612,12 +614,19 @@ shared (deployer) actor class ICRC120Canister<system>(
 
     let mode = _get_mode(request.namespace);
 
+    // --- 3. THE FIX: Prepare init args based on context ---
+    // We encode the developer's principal as the init arg.
+    let args = ?{
+      owner = ?request.owner;
+    };
+    let encoded_args : Blob = to_candid (args);
+
     // --- 2. Construct the full request and delegate to the core logic ---
     // For an automated deploy, we use sensible defaults.
     let full_request : DeployOrUpgradeRequest = {
       namespace = request.namespace;
       hash = request.hash;
-      args = Blob.fromArray([]); // Automated deploys have no init args for MVP
+      args = encoded_args; // Automated deploys use the encoded owner as init args
       stop = false;
       restart = false;
       snapshot = false;

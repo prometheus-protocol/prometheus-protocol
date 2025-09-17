@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "The Motoko canister for the Prometheus Protocol MCP Registry.",
   "devDependencies": {
-    "@dfinity/pic": "^0.13.1"
+    "@dfinity/pic": "^0.13.1",
+    "@noble/hashes": "^2.0.0"
   }
 }

@@ -29,12 +29,12 @@ export function ServerCard({ app }: AppCardProps) {
         <p className="text-xs text-muted-foreground">by {app.publisher}</p>
 
         {/* 2. Use a proper, contextual status badge */}
-        <div className="mt-1.5">
+        <div className="mr-1.5">
           {app.latestVersion.status === 'Pending' ? (
             // --- Badge for PENDING apps ---
             <Badge
               variant="secondary"
-              className="text-xs bg-green-900/50 border-green-700 text-green-300">
+              className="text-xs bg-grey-900/50 border-grey-700 text-grey-300">
               <ShieldCheck className="h-3 w-3 mr-1" />
               Build Verified
             </Badge>

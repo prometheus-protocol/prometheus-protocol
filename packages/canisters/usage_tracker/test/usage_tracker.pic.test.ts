@@ -64,7 +64,7 @@ describe('Usage Tracker Canister (Wasm Hash Allowlist)', () => {
         idlFactory: serverIdl,
         wasm: MCP_SERVER_DUMMY_WASM_PATH,
         sender: ADMIN_IDENTITY.getPrincipal(),
-        arg: IDL.encode(mcpServerInit({ IDL }), []),
+        arg: IDL.encode(mcpServerInit({ IDL }), [[]]),
       });
       serverActor = serverFixture.actor;
       serverPrincipal = serverFixture.canisterId;
@@ -157,7 +157,7 @@ describe('Usage Tracker Canister (Wasm Hash Allowlist)', () => {
         idlFactory: serverIdl,
         wasm: MCP_SERVER_DUMMY_WASM_PATH,
         sender: ADMIN_IDENTITY.getPrincipal(),
-        arg: IDL.encode(mcpServerInit({ IDL }), []),
+        arg: IDL.encode(mcpServerInit({ IDL }), [[]]),
       });
       serverActor = serverFixture.actor;
       serverPrincipal = serverFixture.canisterId;

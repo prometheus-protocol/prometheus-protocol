@@ -124,4 +124,6 @@ export const idlFactory = ({ IDL }) => {
   });
   return McpServer;
 };
-export const init = ({ IDL }) => { return []; };
+export const init = ({ IDL }) => {
+  return [IDL.Opt(IDL.Record({ 'owner' : IDL.Opt(IDL.Principal) }))];
+};

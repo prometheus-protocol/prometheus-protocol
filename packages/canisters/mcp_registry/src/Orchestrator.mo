@@ -4,6 +4,7 @@ module {
   public type InternalDeployRequest = {
     namespace : Text;
     hash : Blob;
+    owner : Principal;
   };
 
   public type Service = actor {

@@ -21,7 +21,7 @@ export function ImageWithFallback({
     return (
       <div
         className={`
-          flex items-center justify-center bg-muted/40 text-muted-foreground 
+          flex items-center justify-center bg-muted/40 text-muted-foreground
           ${className} ${fallbackClassName}
         `}>
         <ImageIcon className="w-1/3 h-1/3 opacity-50" />
@@ -34,7 +34,7 @@ export function ImageWithFallback({
     <img
       src={src}
       alt={alt}
-      className={cn(className, 'border border-grey-600')}
+      className={cn(className)}
       onError={() => setHasError(true)} // This is the key!
       {...props}
     />

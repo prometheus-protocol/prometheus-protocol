@@ -158,6 +158,7 @@ type InternalDeployRequest =
  record {
    hash: blob;
    namespace: text;
+   owner: principal;
  };
 type InitArgs = record {};
 type InitArgList = 
