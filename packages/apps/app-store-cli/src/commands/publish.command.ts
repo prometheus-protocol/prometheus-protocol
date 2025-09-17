@@ -149,7 +149,6 @@ export function registerPublishCommand(program: Command) {
         // --- 5. PUBLISH WASM (Idempotent) ---
         console.log('\n   [4/5] 📦 Registering WASM version...');
         try {
-          console.log(versionTuple);
           await updateWasm(identity, {
             namespace: manifest.namespace,
             version: versionTuple,
