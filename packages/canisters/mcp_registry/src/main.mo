@@ -925,6 +925,85 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     return trx_id;
   };
 
+  /**
+   * [OWNER-ONLY] Manually re-triggers the deployment process for a given WASM.
+   * This is a utility function for debugging failed automated deployments without
+   * needing to re-run the entire verification and attestation lifecycle.
+   *
+   * @param wasm_id The hex-encoded SHA256 hash of the WASM to deploy.
+   * @returns An empty Ok(()) on success, or a Text error on failure.
+   */
+  public shared ({ caller }) func retrigger_deployment(wasm_id : Text) : async Result.Result<(), Text> {
+    // --- 1. Security: Ensure only the owner can call this ---
+    if (caller != _owner) {
+      return #err("Unauthorized: Only the owner can retrigger deployments.");
+    };
+
+    // --- 2. Pre-flight Checks ---
+    // a. Ensure the orchestrator is configured.
+    let orc_id = switch (_orchestrator_canister_id) {
+      case (?id) { id };
+      case (null) { return #err("Orchestrator is not configured.") };
+    };
+
+    // b. Ensure the WASM has actually been verified.
+    switch (BTree.get(finalization_log, Text.compare, wasm_id)) {
+      case (null) { return #err("WASM not found in finalization log.") };
+      case (?record) {
+        if (record.outcome != #Verified) {
+          return #err("Cannot deploy: WASM is not in a 'Verified' state.");
+        };
+      };
+    };
+
+    // --- 3. Replicate the Trigger Logic from _finalize_verification ---
+    // a. Find the namespace for this WASM.
+    let namespace = switch (BTree.get(wasm_to_namespace_map, Text.compare, wasm_id)) {
+      case (?ns) { ns };
+      case (null) { return #err("Namespace not found for this WASM.") };
+    };
+
+    // b. Decode the wasm_id back into a Blob.
+    let wasm_hash : Blob = switch (Base16.decode(wasm_id)) {
+      case (?b) { b };
+      case (null) { return #err("Invalid wasm_id format (not valid hex).") };
+    };
+
+    // c. Determine the owner (developer) from the canister type controllers.
+    let state = icrc118wasmregistry().state;
+    let developer_owner = switch (BTree.get(state.canister_types, Text.compare, namespace)) {
+      case (null) {
+        return #err("Internal error: Canister type not found for namespace.");
+      };
+      case (?canister_type) {
+        if (canister_type.controllers.size() == 0) {
+          return #err("Cannot determine owner: No controllers defined for this canister type.");
+        } else {
+          canister_type.controllers[0]; // Take the first controller as the owner.
+        };
+      };
+    };
+
+    // d. Construct the deployment request.
+    let deploy_request : Orchestrator.InternalDeployRequest = {
+      namespace = namespace;
+      hash = wasm_hash;
+      owner = developer_owner;
+    };
+
+    // --- 4. Make the Call to the Orchestrator ---
+    Debug.print("Owner manually retriggering deployment for namespace " # namespace);
+    try {
+      let orchestrator : Orchestrator.Service = actor (Principal.toText(orc_id));
+      ignore orchestrator.internal_deploy_or_upgrade(deploy_request);
+      return #ok(());
+    } catch (e) {
+      let err_msg = "Failed to call orchestrator: " # Error.message(e);
+      Debug.print(err_msg);
+      return #err(err_msg);
+    };
+  };
+
   // The request type for our new custom query.
   public type GetCanisterTypeVersionRequest = {
     canister_type_namespace : Text;

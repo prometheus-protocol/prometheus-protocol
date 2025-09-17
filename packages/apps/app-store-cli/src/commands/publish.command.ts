@@ -13,7 +13,7 @@ import {
 } from '@prometheus-protocol/ic-js';
 import { getCurrentIdentityName, loadDfxIdentity } from '../identity.node.js';
 
-const CHUNK_SIZE = 1.9 * 1024 * 1024; // 1.9MB chunk size
+const CHUNK_SIZE = 1024 * 1024; // 1MiB
 
 // The manifest now contains all necessary information for the unified command.
 interface Manifest {
