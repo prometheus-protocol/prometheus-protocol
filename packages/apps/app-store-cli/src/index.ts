@@ -25,6 +25,7 @@ import { registerAppBountiesCommand } from './commands/app-bounties/app-bounties
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// This cli is built with production canister IDs baked in at build time.
 const program = new Command();
 
 program
