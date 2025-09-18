@@ -32,6 +32,7 @@ import AppStore "AppStore";
 import AuditHub "AuditHub";
 import Bounty "Bounty";
 import Orchestrator "Orchestrator";
+import UsageTracker "UsageTracker";
 
 import ICRC118WasmRegistry "../../../../libs/icrc118/src";
 import Service "../../../../libs/icrc118/src/service";
@@ -55,6 +56,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   stable var _owner = deployer.caller;
   stable var _credentials_canister_id : ?Principal = null;
   stable var _orchestrator_canister_id : ?Principal = null;
+  stable var _usage_tracker_canister_id : ?Principal = null;
 
   // --- NEW: A reverse-lookup index to find a namespace from a wasm_id ---
   // Key: wasm_id (hex string)
@@ -244,6 +246,12 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   public shared ({ caller }) func set_orchestrator_canister_id(canister_id : Principal) : async Result.Result<(), Text> {
     if (caller != _owner) { return #err("Caller is not the owner") };
     _orchestrator_canister_id := ?canister_id;
+    return #ok(());
+  };
+
+  public shared ({ caller }) func set_usage_tracker_canister_id(canister_id : Principal) : async Result.Result<(), Text> {
+    if (caller != _owner) { return #err("Caller is not the owner") };
+    _usage_tracker_canister_id := ?canister_id;
     return #ok(());
   };
 
@@ -664,7 +672,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       };
     };
 
-    // --- NEW LOGIC: Check if this attestation finalizes a verification ---
+    // --- Check if this attestation finalizes a verification ---
     // 2. Extract the audit_type from the metadata.
     let audit_type = AppStore.getICRC16TextOptional(req.metadata, "126:audit_type");
 
@@ -675,6 +683,19 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
         ("bounty_id", #Nat(bounty_id)),
       ];
       ignore await _finalize_verification(req.wasm_id, #Verified, finalization_meta);
+    };
+
+    // Check if this attestation is for tools:
+    if (audit_type == ?"tools_v1") {
+      // 3. This is a tools verification!
+      // If tools are verified, we can whitelist the WASM to use the usage tracker canister.
+      switch (_usage_tracker_canister_id) {
+        case (null) { Debug.trap("Usage Tracker canister is not configured.") };
+        case (?id) {
+          let usage_tracker : UsageTracker.Service = actor (Principal.toText(id));
+          ignore await usage_tracker.add_approved_wasm_hash(req.wasm_id);
+        };
+      };
     };
     // --- END NEW LOGIC ---
 

@@ -56,6 +56,11 @@ const LeaderboardPodium = ({
   ) => {
     const isChampion = tier === 'Champion';
     const styles = tierStyles[tier];
+
+    if (!entry) {
+      return null;
+    }
+
     return (
       <div
         className={`flex flex-col items-center justify-center p-4 border-2 rounded-2xl text-center transition-all shadow-lg shadow-primary/20 ${styles.border} ${isChampion ? 'relative mt-8 md:-top-8 md:scale-105' : ''}`}>
@@ -74,12 +79,12 @@ const LeaderboardPodium = ({
           </h3>
         </div>
         <img
-          src={`https://api.dicebear.com/8.x/adventurer/svg?seed=${entry.user.toText()}`}
+          src={`https://api.dicebear.com/8.x/adventurer/svg?seed=${entry.user?.toText()}`}
           alt="Avatar"
           className="w-20 h-20 rounded-full mb-4 bg-gray-800 p-1"
         />
         <p className={`font-mono text-lg ${styles.text}`}>
-          {truncatePrincipal(entry.user.toText())}
+          {truncatePrincipal(entry.user?.toText())}
         </p>
         <div className="flex items-center gap-2 mt-2">
           <span className="font-mono text-gray-400">

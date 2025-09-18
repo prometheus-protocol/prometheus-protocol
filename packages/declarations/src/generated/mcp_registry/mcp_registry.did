@@ -492,8 +492,16 @@ type ICRC118WasmRegistryCanister =
    list_bounties: (req: BountyListingRequest) ->
     (BountyListingResponse) query;
    list_pending_verifications: () -> (vec VerificationRecord) query;
+   /// * [OWNER-ONLY] Manually re-triggers the deployment process for a given WASM.
+   ///    * This is a utility function for debugging failed automated deployments without
+   ///    * needing to re-run the entire verification and attestation lifecycle.
+   ///    *
+   ///    * @param wasm_id The hex-encoded SHA256 hash of the WASM to deploy.
+   ///    * @returns An empty Ok(()) on success, or a Text error on failure.
+   retrigger_deployment: (wasm_id: text) -> (Result);
    set_auditor_credentials_canister_id: (canister_id: principal) -> (Result);
    set_orchestrator_canister_id: (canister_id: principal) -> (Result);
+   set_usage_tracker_canister_id: (canister_id: principal) -> (Result);
  };
 type GetWasmsFilter = 
  variant {

@@ -807,12 +807,14 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(VerificationRecord)],
         ['query'],
       ),
+    'retrigger_deployment' : IDL.Func([IDL.Text], [Result], []),
     'set_auditor_credentials_canister_id' : IDL.Func(
         [IDL.Principal],
         [Result],
         [],
       ),
     'set_orchestrator_canister_id' : IDL.Func([IDL.Principal], [Result], []),
+    'set_usage_tracker_canister_id' : IDL.Func([IDL.Principal], [Result], []),
   });
   return ICRC118WasmRegistryCanister;
 };
