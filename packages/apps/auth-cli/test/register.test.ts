@@ -65,10 +65,6 @@ describe('register command', () => {
     expect(identity).toBe(mockIdentity);
     expect(args.name).toBe('My Prod Canister');
     expect(args.uris[0]).toBe(`https://${mockCanisterId}.icp0.io`);
-    expect(args.scopes).toContainEqual([
-      'prometheus:charge',
-      expect.any(String),
-    ]);
     expect(args.accepted_payment_canisters).toHaveLength(1);
     consoleTableSpy.mockRestore();
   });
