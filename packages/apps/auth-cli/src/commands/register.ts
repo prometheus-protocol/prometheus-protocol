@@ -24,8 +24,8 @@ export function registerRegisterCommand(program: Command) {
           {
             type: 'text',
             name: 'name',
-            message: 'Canister Name:',
-            initial: 'My Monetized AI Canister',
+            message: 'Server Name:',
+            initial: 'My Monetized Server',
           },
           {
             type: 'text',
@@ -37,8 +37,8 @@ export function registerRegisterCommand(program: Command) {
           {
             type: 'text',
             name: 'frontendHost',
-            message: 'Frontend Host (for auth flow):',
-            initial: 'https://prometheusprotocol.org',
+            message: 'Frontend Host (for OAuth consent flow):',
+            initial: 'https://prometheusprotocol.org/oauth',
           },
           {
             type: 'confirm',
@@ -91,12 +91,6 @@ export function registerRegisterCommand(program: Command) {
             "Grants access to the user's unique identifier (Principal).",
           ],
         ];
-        if (details.willCharge) {
-          finalScopes.push([
-            'prometheus:charge',
-            'Allows the canister to request payments from the user.',
-          ]);
-        }
 
         const tokenPrincipals = (details.tokens || '')
           .split(',')
@@ -111,7 +105,7 @@ export function registerRegisterCommand(program: Command) {
           uris: [serverUrl],
           accepted_payment_canisters: tokenPrincipals,
           scopes: finalScopes,
-          frontend_host: details.frontendHost,
+          frontend_host: [details.frontendHost],
         };
 
         // --- 6. Call the Service Layer and Display Results ---

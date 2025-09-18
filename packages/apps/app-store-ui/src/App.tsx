@@ -70,7 +70,10 @@ function App() {
   return (
     // AuthProvider will wrap the entire app to provide auth context
     // This will manage the Internet Identity client and user state.
-    <InternetIdentityProvider>
+    <InternetIdentityProvider
+      loginOptions={{
+        maxTimeToLive: 1_000_000_000n * 60n * 60n * 24n * 7n * 30n,
+      }}>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <ScrollToTop />

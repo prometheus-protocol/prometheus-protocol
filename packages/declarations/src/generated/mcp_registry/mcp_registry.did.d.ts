@@ -374,8 +374,10 @@ export interface ICRC118WasmRegistryCanister {
   'is_wasm_verified' : ActorMethod<[string], boolean>,
   'list_bounties' : ActorMethod<[BountyListingRequest], BountyListingResponse>,
   'list_pending_verifications' : ActorMethod<[], Array<VerificationRecord>>,
+  'retrigger_deployment' : ActorMethod<[string], Result>,
   'set_auditor_credentials_canister_id' : ActorMethod<[Principal], Result>,
   'set_orchestrator_canister_id' : ActorMethod<[Principal], Result>,
+  'set_usage_tracker_canister_id' : ActorMethod<[Principal], Result>,
 }
 export type ICRC16 = { 'Int' : bigint } |
   { 'Map' : Array<[string, ICRC16]> } |

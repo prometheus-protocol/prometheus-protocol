@@ -62,7 +62,7 @@ shared ({ caller = deployer }) persistent actor class Leaderboard() {
   var server_metrics_cache = Map.new<Text, ServerMetricsShared>();
 
   var last_updated : Time.Time = 0;
-  let UPDATE_INTERVAL_NS : Nat = 3_600 * 1_000_000_000; // 1 hour
+  transient let UPDATE_INTERVAL_NS : Nat = 15 * 60 * 1_000_000_000; // 15 minutes
 
   // ==================================================================================
   // INITIALIZATION & TIMERS
