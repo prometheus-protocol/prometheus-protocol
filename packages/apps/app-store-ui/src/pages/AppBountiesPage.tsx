@@ -91,7 +91,7 @@ export default function PublicBountyBoardPage() {
         <Input
           type="search"
           placeholder="Search Bounties (e.g. 'metrics', 'faucet', 'japanese')"
-          className="w-full bg-gray-900/50 border-gray-400 pl-10 focus:ring-primary focus:border-primary"
+          className="w-full bg-gray-900/50 border-gray-700 pl-10 focus:ring-primary focus:border-primary"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
@@ -111,7 +111,7 @@ export default function PublicBountyBoardPage() {
               <AccordionItem
                 key={bounty.id.toString()}
                 value={bounty.id.toString()}
-                className="border border-gray-400 rounded-lg mb-4 data-[state=open]:border-primary transition-colors last:border-b">
+                className="bg-card/50 border border-gray-700 rounded-lg mb-4 data-[state=open]:border-primary transition-colors last:border-b">
                 <AccordionTrigger className="px-4 py-4 hover:no-underline items-center">
                   <div className="grid grid-cols-12 gap-4 w-full text-left">
                     <div className="col-span-12 md:col-span-7">

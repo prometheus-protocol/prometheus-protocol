@@ -32,7 +32,7 @@ export const AuditHubListItem = ({ audit }: { audit: AuditBounty }) => {
   const projectName = wasmHash.slice(0, 10) + '...' + wasmHash.slice(-4);
 
   return (
-    <div className="border border-gray-700 rounded-lg hover:border-primary transition-colors">
+    <div className="bg-card/50 border border-gray-700 rounded-lg hover:border-primary transition-colors">
       <Link to={`/audit-hub/${audit.id}`}>
         {/* --- DESKTOP VIEW --- */}
         <div className="hidden md:grid grid-cols-12 gap-4 items-center px-4 py-4">

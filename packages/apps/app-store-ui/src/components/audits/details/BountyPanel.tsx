@@ -171,7 +171,7 @@ export const BountyPanel = ({ audit }: { audit: AuditBountyWithDetails }) => {
   };
 
   return (
-    <div className="border border-gray-600 rounded-lg p-6 space-y-6 h-fit">
+    <div className="bg-card/50 border border-gray-700 rounded-lg p-6 space-y-6 h-fit">
       <h2 className="text-xl font-bold text-white">Bounty Details</h2>
       <div className="space-y-6">{renderPanelContent()}</div>
       <StartAuditDialog
