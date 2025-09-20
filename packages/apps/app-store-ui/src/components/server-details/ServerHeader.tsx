@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { AppStoreDetails } from '@prometheus-protocol/ic-js';
 import { ImageWithFallback } from '@/components/ui/image-with-fallback';
 import { ConnectionInfo } from './ConnectionInfo';
+import { StatsStrip } from './StatsStrip';
 
 interface ServerHeaderProps {
   server: AppStoreDetails;
@@ -19,6 +20,7 @@ export function ServerHeader({
 }: ServerHeaderProps) {
   const { latestVersion } = server;
   const tierInfo = getTierInfo(latestVersion.securityTier);
+  const metrics = latestVersion.metrics;
 
   return (
     <header>
@@ -64,6 +66,14 @@ export function ServerHeader({
               </div>
             </div>
           </div>
+
+          {/* --- 3. Conditionally render the StatsStrip component --- */}
+          {/* It will only show up if the metrics object exists. */}
+          <StatsStrip
+            uniqueUsers={metrics?.uniqueUsers || 0}
+            totalTools={metrics?.totalTools || 0}
+            totalInvocations={metrics?.totalInvocations || 0}
+          />
 
           <ConnectionInfo
             namespace={server.namespace}

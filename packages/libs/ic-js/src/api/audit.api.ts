@@ -645,6 +645,14 @@ export interface AppStoreDetails {
 
   // A list of all other available versions to populate the version selector dropdown.
   allVersions: AppVersionSummary[];
+
+  // --- Metrics ---
+  // These metrics are aggregated across all versions of the app.
+  metrics?: {
+    uniqueUsers: bigint;
+    totalTools: bigint;
+    totalInvocations: bigint;
+  };
 }
 
 // 1. Define the new, more powerful filter types that match the canister.

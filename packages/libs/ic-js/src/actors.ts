@@ -10,6 +10,7 @@ import {
   Leaderboard,
   McpServer,
   SearchIndex,
+  UsageTracker,
 } from '@prometheus-protocol/declarations';
 import { getCanisterId, getHost } from './config.js';
 
@@ -152,6 +153,18 @@ export const getSearchIndexActor = (identity?: Identity) => {
   return createActor<SearchIndex._SERVICE>(
     SearchIndex.idlFactory,
     getCanisterId('SEARCH_INDEX'),
+    identity,
+  );
+};
+
+/**
+ * @param identity Optional identity to use for the actor
+ * @returns
+ */
+export const getUsageTrackerActor = (identity?: Identity) => {
+  return createActor<UsageTracker._SERVICE>(
+    UsageTracker.idlFactory,
+    getCanisterId('USAGE_TRACKER'),
     identity,
   );
 };

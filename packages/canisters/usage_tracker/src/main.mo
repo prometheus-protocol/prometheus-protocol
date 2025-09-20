@@ -15,11 +15,6 @@ import Array "mo:base/Array";
 /**
  * The UsageTracker canister serves as a high-throughput logbook for the "Proof-of-Use" system.
  * It accepts usage statistics from approved MCP server canisters and makes them available to a designated payout canister.
- *
- * Security Model (MVP):
- * Authorization is based on the Wasm hash of the calling canister. A canister is considered "approved"
- * if its Wasm hash is present in an admin-managed allowlist. This implies that the canister's Wasm
- * has passed a `beacon_v1` audit, verifying that its usage reporting logic is correct and cannot be tampered with.
  */
 shared ({ caller = deployer }) persistent actor class UsageTracker() {
 
@@ -29,7 +24,7 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
 
   public type CallerActivity = {
     caller : Principal;
-    tool_id : Text; // e.g., "get_balance", "execute_swap"
+    tool_id : Text;
     call_count : Nat;
   };
 
@@ -37,54 +32,51 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
     start_timestamp_ns : Time.Time;
     end_timestamp_ns : Time.Time;
     activity : [CallerActivity];
-    // The signature field is omitted for this MVP implementation.
   };
 
   public type LogEntry = {
-    wasm_id : Text; // The Wasm hash of the server canister
+    wasm_id : Text;
     canister_id : Principal;
     timestamp : Time.Time;
     stats : UsageStats;
   };
 
-  // This struct holds all the aggregated metrics for a single server.
   public type ServerMetrics = {
     var total_invocations : Nat;
-    // Maps a user's Principal to their total call count on this server.
     invocations_by_user : Map.Map<Principal, Nat>;
-    // Maps a tool_id (Text) to its total call count on this server.
     invocations_by_tool : Map.Map<Text, Nat>;
   };
 
-  // A public-facing, immutable version of ServerMetrics for query calls.
   public type ServerMetricsShared = {
     total_invocations : Nat;
     invocations_by_user : [(Principal, Nat)];
     invocations_by_tool : [(Text, Nat)];
   };
 
+  // --- 1. A simplified metrics type specifically for the App Store UI ---
+  public type AppMetrics = {
+    total_invocations : Nat;
+    unique_users : Nat;
+    total_tools : Nat;
+  };
+
   // ==================================================================================================
   // STATE
   // ==================================================================================================
 
-  // The admin has the sole authority to manage the Wasm hash allowlist.
   var admin : Principal = deployer;
-
-  // The payout canister has the sole authority to read the collected logs.
   var payout_canister : ?Principal = null;
-
-  // The allowlist: A set of approved Wasm hashes. We use a Map with Null values.
   var approved_wasm_hashes = Map.new<Text, Null>();
-
-  // The logbook: A buffer to store incoming usage stats.
   var logs = Vector.new<LogEntry>();
 
-  // The new top-level state for all aggregated data.
-  // Maps a server's WASM hash to its metrics.
+  // The primary state for all aggregated data, keyed by WASM hash for payouts.
   var aggregated_metrics = Map.new<Text, ServerMetrics>();
 
+  // --- 2. A new, lean state map for fast UI queries, keyed by canister_id ---
+  var metrics_by_canister = Map.new<Principal, AppMetrics>();
+
   // ==================================================================================================
-  // PRIVATE HELPERS (ACCESS CONTROL)
+  // PRIVATE HELPERS
   // ==================================================================================================
 
   private func is_admin(caller : Principal) : Bool {
@@ -93,14 +85,14 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
 
   private func is_payout_canister(caller : Principal) : Bool {
     switch (payout_canister) {
-      case (null) { return false }; // No payout canister set, so no one is authorized.
+      case (null) { return false };
       case (?payout) { return Principal.equal(payout, caller) };
     };
   };
 
-  // Private helper to handle the aggregation logic.
-  private func update_metrics(wasm_id : Text, stats : UsageStats) {
-    // Get the existing metrics for this server, or create a new entry.
+  // --- 3. CORRECTED: This helper now updates BOTH state maps efficiently ---
+  private func update_metrics(wasm_id : Text, canister_id : Principal, stats : UsageStats) {
+    // --- Part A: Update the detailed metrics by wasm_id (for payouts) ---
     var server_metrics = Option.get(
       Map.get(aggregated_metrics, Map.thash, wasm_id),
       {
@@ -110,29 +102,29 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
       },
     );
 
-    // Iterate through the activity in the new stats payload.
     for (activity_item : CallerActivity in stats.activity.vals()) {
-      // Update total invocations for the server.
       server_metrics.total_invocations += activity_item.call_count;
-
-      // Update invocations by user.
       let user_calls = Option.get(Map.get(server_metrics.invocations_by_user, Map.phash, activity_item.caller), 0);
       Map.set(server_metrics.invocations_by_user, Map.phash, activity_item.caller, user_calls + activity_item.call_count);
-
-      // Update invocations by tool.
       let tool_calls = Option.get(Map.get(server_metrics.invocations_by_tool, Map.thash, activity_item.tool_id), 0);
       Map.set(server_metrics.invocations_by_tool, Map.thash, activity_item.tool_id, tool_calls + activity_item.call_count);
     };
-
-    // Put the updated metrics back into the main state map.
     Map.set(aggregated_metrics, Map.thash, wasm_id, server_metrics);
+
+    // --- Part B: Update the lean metrics by canister_id (for UI) ---
+    // We derive the UI metrics from the fully updated `server_metrics` object.
+    let app_metrics : AppMetrics = {
+      total_invocations = server_metrics.total_invocations;
+      unique_users = Map.size(server_metrics.invocations_by_user);
+      total_tools = Map.size(server_metrics.invocations_by_tool);
+    };
+    Map.set(metrics_by_canister, Map.phash, canister_id, app_metrics);
   };
 
   // ==================================================================================================
   // PUBLIC METHODS: ADMIN
   // ==================================================================================================
 
-  /// Sets the designated payout canister.
   public shared (msg) func set_payout_canister(canister_id : Principal) : async Result.Result<(), Text> {
     if (not is_admin(msg.caller)) {
       return #err("Unauthorized: Only the admin can set the payout canister.");
@@ -141,7 +133,6 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
     return #ok(());
   };
 
-  /// Transfers admin rights to a new principal.
   public shared (msg) func transfer_admin(new_admin : Principal) : async Result.Result<(), Text> {
     if (not is_admin(msg.caller)) {
       return #err("Unauthorized: Only the admin can transfer admin rights.");
@@ -150,7 +141,6 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
     return #ok(());
   };
 
-  /// Adds a Wasm hash to the allowlist of approved servers.
   public shared (msg) func add_approved_wasm_hash(wasm_id : Text) : async Result.Result<(), Text> {
     if (not is_admin(msg.caller)) {
       return #err("Unauthorized: Only the admin can add a Wasm hash.");
@@ -159,7 +149,6 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
     return #ok(());
   };
 
-  /// Removes a Wasm hash from the allowlist.
   public shared (msg) func remove_approved_wasm_hash(wasm_id : Text) : async Result.Result<(), Text> {
     if (not is_admin(msg.caller)) {
       return #err("Unauthorized: Only the admin can remove a Wasm hash.");
@@ -169,86 +158,62 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   };
 
   // ==================================================================================================
-  // PUBLIC METHODS: LOGGING (Called by MCP Servers)
+  // PUBLIC METHODS: LOGGING
   // ==================================================================================================
 
-  /**
-    * The primary entry point for MCP servers to submit their usage statistics.
-    * This method performs an inter-canister call to verify the caller's Wasm hash against the allowlist.
-    */
   public shared (msg) func log_call(stats : UsageStats) : async Result.Result<(), Text> {
     let caller = msg.caller;
-
-    Debug.print("UsageTracker: Received log_call from " # Principal.toText(caller) # " with " # debug_show (Array.size(stats.activity)) # " activity records.");
-    // 1. Get the status of the calling canister to retrieve its Wasm hash.
     let status_result = await ic.canister_info({
       canister_id = caller;
       num_requested_changes = null;
     });
-
-    Debug.print("UsageTracker: Retrieved canister status for " # Principal.toText(caller));
-
     let wasm_hash = switch (status_result.module_hash) {
       case (null) {
         return #err("Could not retrieve Wasm hash for the calling canister.");
       };
       case (?hash) { hash };
     };
-
-    Debug.print("UsageTracker: Calling canister Wasm hash is " # Base16.encode(wasm_hash));
-
-    // 2. Verify the Wasm hash is on the allowlist.
     let wasm_id = Base16.encode(wasm_hash);
     if (Option.isNull(Map.get(approved_wasm_hashes, Map.thash, wasm_id))) {
       return #err("Wasm hash not approved. The canister is not authorized to submit logs.");
     };
 
-    Debug.print("UsageTracker: Wasm hash approved. Processing log entry.");
-
-    // 3. If authorized, create and store the log entry.
     let new_log : LogEntry = {
-      wasm_id = wasm_id; // Use the Wasm hash as the server identifier
+      wasm_id = wasm_id;
       canister_id = caller;
       timestamp = Time.now();
       stats = stats;
     };
     Vector.add(logs, new_log);
 
-    Debug.print("UsageTracker: Log entry added. Total logs stored: " # debug_show (Vector.size(logs)));
-
-    // 4. Update the aggregated metrics for the UI.
-    update_metrics(wasm_id, stats);
+    // --- 4. CORRECTED: Call the updated helper with both identifiers ---
+    update_metrics(wasm_id, caller, stats);
 
     return #ok(());
   };
 
   // ==================================================================================================
-  // PUBLIC METHODS: DATA RETRIEVAL (Called by Payout Canister)
+  // PUBLIC METHODS: DATA RETRIEVAL
   // ==================================================================================================
 
-  /**
-     * Allows the designated payout canister to atomically retrieve all collected logs and clear the buffer.
-     * This is an update call because it modifies the canister's state by clearing the logs.
-     * This pattern prevents unbounded memory growth and ensures that logs are processed exactly once.
-     */
   public shared (msg) func get_and_clear_logs() : async Result.Result<[LogEntry], Text> {
     if (not is_payout_canister(msg.caller)) {
       return #err("Unauthorized: Only the designated payout canister can retrieve and clear logs.");
     };
-
-    // 1. Create a copy of the current logs to be returned.
     let logs_to_return = Vector.toArray(logs);
-
-    // 2. Clear the state buffer to free up memory.
     Vector.clear(logs);
-
-    // 3. Return the copy.
     return #ok(logs_to_return);
   };
 
   // ==================================================================================================
-  // PUBLIC QUERIES (For UI / Devs)
+  // PUBLIC QUERIES
   // ==================================================================================================
+
+  // --- 5. NEW: The public query endpoint for the App Store UI ---
+  public shared query func get_app_metrics(canister_id : Principal) : async ?AppMetrics {
+    return Map.get(metrics_by_canister, Map.phash, canister_id);
+  };
+
   private func to_shared_metrics(metrics : ServerMetrics) : ServerMetricsShared {
     return {
       total_invocations = metrics.total_invocations;
@@ -257,16 +222,13 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
     };
   };
 
-  /// Returns the aggregated metrics for a specific server.
   public shared query func get_metrics_for_server(wasm_id : Text) : async ?ServerMetricsShared {
-    // Use Option.map to cleanly apply the conversion function if a value exists.
     return Option.map(
       Map.get(aggregated_metrics, Map.thash, wasm_id),
       to_shared_metrics,
     );
   };
 
-  /// Returns the aggregated metrics for all servers.
   public shared query func get_all_server_metrics() : async [(Text, ServerMetricsShared)] {
     let all_metrics = Buffer.Buffer<(Text, ServerMetricsShared)>(Map.size(aggregated_metrics));
     for ((wasm_id, metrics) in Map.entries(aggregated_metrics)) {
@@ -275,34 +237,23 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
     return Buffer.toArray(all_metrics);
   };
 
-  /// Returns the current admin principal.
-  public shared query func get_admin() : async Principal {
-    return admin;
-  };
-
-  /// Returns the current payout canister principal.
+  public shared query func get_admin() : async Principal { return admin };
   public shared query func get_payout_canister() : async ?Principal {
     return payout_canister;
   };
-
-  /// Checks if a given Wasm hash is on the allowlist.
   public shared query func is_wasm_hash_approved(wasm_id : Text) : async Bool {
     return Option.isSome(Map.get(approved_wasm_hashes, Map.thash, wasm_id));
   };
 
-  // Add this function inside your UsageTracker actor class.
+  // ==================================================================================================
+  // DEVELOPMENT HELPERS
+  // ==================================================================================================
 
-  /**
-    * [ADMIN-ONLY] A backdoor for seeding local development data.
-    * Bypasses the Wasm hash check but requires the caller to be the admin.
-    * Allows logging usage on behalf of any server principal.
-    */
   public shared (msg) func seed_log(canister_id : Principal, wasm_id : Text, stats : UsageStats) : async Result.Result<(), Text> {
     if (not is_admin(msg.caller)) {
       return #err("Unauthorized: Only the admin can call seed_log.");
     };
 
-    // Create and store the log entry
     let new_log : LogEntry = {
       wasm_id = wasm_id;
       canister_id = canister_id;
@@ -311,8 +262,8 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
     };
     Vector.add(logs, new_log);
 
-    // Update the aggregated metrics for the UI.
-    update_metrics(wasm_id, stats);
+    // --- 6. CORRECTED: Call the updated helper with both identifiers ---
+    update_metrics(wasm_id, canister_id, stats);
 
     return #ok(());
   };
