@@ -35,8 +35,8 @@ const StatItem = ({
 );
 
 interface StatsStripProps {
-  uniqueUsers: number;
-  totalTools: number;
+  uniqueUsers: bigint;
+  totalTools: bigint;
   totalInvocations: bigint;
 }
 

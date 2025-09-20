@@ -20,7 +20,7 @@ export function ServerHeader({
 }: ServerHeaderProps) {
   const { latestVersion } = server;
   const tierInfo = getTierInfo(latestVersion.securityTier);
-  const metrics = latestVersion.metrics;
+  const metrics = server.metrics;
 
   return (
     <header>
@@ -70,9 +70,9 @@ export function ServerHeader({
           {/* --- 3. Conditionally render the StatsStrip component --- */}
           {/* It will only show up if the metrics object exists. */}
           <StatsStrip
-            uniqueUsers={metrics?.uniqueUsers || 0}
-            totalTools={metrics?.totalTools || 0}
-            totalInvocations={metrics?.totalInvocations || 0}
+            uniqueUsers={metrics?.uniqueUsers || 0n}
+            totalTools={metrics?.totalTools || 0n}
+            totalInvocations={metrics?.totalInvocations || 0n}
           />
 
           <ConnectionInfo
