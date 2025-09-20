@@ -9,6 +9,7 @@ import {
   AppBounties,
   Leaderboard,
   McpServer,
+  SearchIndex,
 } from '@prometheus-protocol/declarations';
 import { getCanisterId, getHost } from './config.js';
 
@@ -139,6 +140,18 @@ export const getMcpServerActor = (
   return createActor<McpServer._SERVICE>(
     McpServer.idlFactory,
     canisterId.toText(),
+    identity,
+  );
+};
+
+/**
+ * @param identity Optional identity to use for the actor
+ * @returns
+ */
+export const getSearchIndexActor = (identity?: Identity) => {
+  return createActor<SearchIndex._SERVICE>(
+    SearchIndex.idlFactory,
+    getCanisterId('SEARCH_INDEX'),
     identity,
   );
 };

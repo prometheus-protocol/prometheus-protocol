@@ -28,6 +28,7 @@ export const idlFactory = ({ IDL }) => {
     'expectedExecutionTime' : Time,
     'lastExecutionTime' : Time,
   });
+  const Result_4 = IDL.Variant({ 'ok' : IDL.Text, 'err' : IDL.Text });
   const AppListingStatus = IDL.Variant({
     'Rejected' : IDL.Record({ 'reason' : IDL.Text }),
     'Verified' : IDL.Null,
@@ -223,6 +224,7 @@ export const idlFactory = ({ IDL }) => {
     'banner_url' : IDL.Text,
     'publisher' : IDL.Text,
     'name' : IDL.Text,
+    'tags' : IDL.Vec(IDL.Text),
     'description' : IDL.Text,
     'icon_url' : IDL.Text,
     'category' : IDL.Text,
@@ -649,6 +651,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const Result = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   const ICRC118WasmRegistryCanister = IDL.Service({
+    'bootstrap_search_index' : IDL.Func([], [Result_4], []),
     'get_app_details_by_namespace' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
         [Result_3],
@@ -814,7 +817,9 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'set_orchestrator_canister_id' : IDL.Func([IDL.Principal], [Result], []),
+    'set_search_index_canister_id' : IDL.Func([IDL.Principal], [Result], []),
     'set_usage_tracker_canister_id' : IDL.Func([IDL.Principal], [Result], []),
+    'test_only_notify_indexer' : IDL.Func([IDL.Text, IDL.Text], [], []),
   });
   return ICRC118WasmRegistryCanister;
 };

@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-// --- 1. Import NavLink instead of Link for active state handling ---
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LoginButton } from '../LoginButton';
 import { Logo } from '../Logo';
-import { SearchInput } from '../SearchInput';
 import { Search, X, Menu } from 'lucide-react';
 import { Button } from '../ui/button';
 import {
@@ -13,8 +11,26 @@ import {
   NavigationMenuList,
   navigationMenuTriggerStyle,
 } from '@/components/ui/navigation-menu';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import { useSearchQuery } from '@/hooks/useSearch';
 import { cn } from '@/lib/utils';
 import React from 'react';
+import { CommandLoading } from 'cmdk';
+import { SearchInput } from '../SearchInput';
+import { Dialog, DialogContent } from '../ui/dialog';
+import { DialogTrigger } from '@radix-ui/react-dialog';
 
 interface ListItemProps extends React.HTMLAttributes<HTMLAnchorElement> {
   title: string;
@@ -70,9 +86,30 @@ export function AppBar() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
-
-  // --- 2. Get the current location from the router ---
+  const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const { pathname } = useLocation();
+
+  const { data: searchResults, isLoading: isSearchLoading } =
+    useSearchQuery(searchQuery);
+
+  const handleSelectResult = (namespace: string) => {
+    navigate(`/app/${namespace}`); // Navigate to the app detail page
+    setIsPopoverOpen(false); // Close the desktop popover
+    setIsSearchOpen(false); // Close the mobile search overlay
+    setSearchQuery(''); // Clear the search input
+  };
+
+  // Effect to open the popover when the user starts typing
+  useEffect(() => {
+    // Only open the DESKTOP popover if the user is typing AND the MOBILE dialog is closed.
+    if (searchQuery.trim().length > 0 && !isSearchOpen) {
+      setIsPopoverOpen(true);
+    } else {
+      setIsPopoverOpen(false);
+    }
+  }, [searchQuery, isSearchOpen]);
 
   useEffect(() => {
     if (isSearchOpen) {
@@ -89,6 +126,39 @@ export function AppBar() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // --- FIX #1: The SearchResults component should NOT have its own <Command> wrapper ---
+  // It should only render the list, assuming it will be placed inside a parent Command.
+  const SearchResults = () => (
+    <CommandList className="border-t-0">
+      {isSearchLoading && <CommandEmpty>Searching for apps...</CommandEmpty>}
+      {!isSearchLoading &&
+        searchResults?.length === 0 &&
+        searchQuery.trim() && <CommandEmpty>No results found.</CommandEmpty>}
+      {searchResults && searchResults.length > 0 && (
+        <CommandGroup heading="Applications">
+          {searchResults.map((app) => (
+            <CommandItem
+              key={app.namespace}
+              value={app.namespace}
+              onSelect={() => handleSelectResult(app.namespace)}>
+              <img
+                src={app.icon_url}
+                className="h-6 w-6 mr-3 rounded-sm"
+                alt=""
+              />
+              <div className="flex flex-col">
+                <span className="font-medium">{app.name}</span>
+                <span className="text-xs text-muted-foreground">
+                  {app.publisher}
+                </span>
+              </div>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      )}
+    </CommandList>
+  );
 
   return (
     <>
@@ -140,21 +210,56 @@ export function AppBar() {
 
           <div className="hidden md:flex justify-end flex-1 px-8">
             <div className="w-full max-w-sm">
-              <SearchInput
-                className="border border-gray-400 rounded-md"
-                placeholder="Search for MCP servers..."
-              />
+              <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Command>
+                    <CommandInput
+                      value={searchQuery}
+                      onValueChange={setSearchQuery}
+                      placeholder="Search for on-chain apps..."
+                      className="rounded-md"
+                    />
+                  </Command>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-[24rem] p-0"
+                  align="start"
+                  onOpenAutoFocus={(e) => e.preventDefault()}>
+                  {/* --- FIX #2: The PopoverContent now provides the Command wrapper --- */}
+                  <Command shouldFilter={false}>
+                    <SearchResults />
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
+
           <div className="flex items-center justify-end space-x-2 sm:space-x-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden"
-              onClick={() => setIsSearchOpen(true)}>
-              <Search className="h-5 w-5" />
-              <span className="sr-only">Search</span>
-            </Button>
+            <Dialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+              <DialogTrigger asChild>
+                <Button variant="ghost" size="icon" className="md:hidden">
+                  <Search className="h-5 w-5" />
+                  <span className="sr-only">Search</span>
+                </Button>
+              </DialogTrigger>
+              {/* --- 3. THE DIALOG CONTENT HOLDS THE ENTIRE MOBILE SEARCH UI --- */}
+              <DialogContent className="p-1 gap-0 top-0 translate-y-0 h-screen max-h-screen border-none max-w-full">
+                <Command shouldFilter={false} className="h-full">
+                  <div className="flex items-center border-b-1 pr-3">
+                    <CommandInput
+                      value={searchQuery}
+                      onValueChange={setSearchQuery}
+                      placeholder="Search for on-chain apps..."
+                      className="flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                    />
+                  </div>
+                  <div className="overflow-y-auto">
+                    <SearchResults />
+                  </div>
+                </Command>
+              </DialogContent>
+            </Dialog>
+
             <LoginButton />
             <Button
               variant="ghost"
@@ -169,24 +274,30 @@ export function AppBar() {
         <div className="absolute bottom-0 left-0 w-full h-px bg-primary" />
       </header>
 
-      {/* Mobile overlays remain the same, as they already use <Link> */}
+      {/* --- CORRECTED MOBILE SEARCH OVERLAY --- */}
       {isSearchOpen && (
-        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm md:hidden">
-          <div className="border-b bg-background">
-            <div className="container mx-auto flex h-20 items-center gap-4 px-4">
-              <SearchInput
+        <div className="fixed inset-0 z-50 rounded bg-background/80 backdrop-blur-sm md:hidden">
+          <div className="container mx-auto flex h-20 items-center gap-4 px-4">
+            {/* The Command component now structures the entire mobile search view */}
+            <Command className="flex-1" shouldFilter={false}>
+              <CommandInput
                 ref={searchInputRef}
-                placeholder="Search for MCP servers..."
-                className="flex-1"
+                value={searchQuery}
+                onValueChange={setSearchQuery}
+                placeholder="Search for on-chain apps..."
               />
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsSearchOpen(false)}>
-                <X className="h-5 w-5" />
-                <span className="sr-only">Close search</span>
-              </Button>
-            </div>
+              {/* The results list is part of the command and positioned below the input */}
+              <div className="absolute top-20 left-0 right-0 bg-background border-t max-h-[70vh] overflow-y-auto">
+                <SearchResults />
+              </div>
+            </Command>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsSearchOpen(false)}>
+              <X className="h-5 w-5" />
+              <span className="sr-only">Close search</span>
+            </Button>
           </div>
         </div>
       )}
