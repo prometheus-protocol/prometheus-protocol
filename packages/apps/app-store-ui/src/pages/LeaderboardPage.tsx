@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { AlertTriangle, Award, Trophy } from 'lucide-react';
+import { AlertTriangle, Award, BarChart3, Trophy } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import JSConfetti from 'js-confetti';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -86,10 +86,9 @@ const LeaderboardPodium = ({
         <p className={`font-mono text-lg ${styles.text}`}>
           {truncatePrincipal(entry.user?.toText())}
         </p>
-        <div className="flex items-center gap-2 mt-2">
-          <span className="font-mono text-gray-400">
-            {entry.total_invocations.toLocaleString()}
-          </span>
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground font-mono">
+          <BarChart3 className="h-3 w-3" />
+          <span>{entry.total_invocations.toLocaleString()}</span>
         </div>
       </div>
     );
@@ -116,7 +115,7 @@ const LeaderboardList = ({
   type: 'user' | 'server';
 }) => (
   <div className="space-y-3">
-    <div className="grid grid-cols-12 gap-4 px-6 py-2 text-gray-500 font-semibold uppercase text-sm">
+    <div className="grid grid-cols-12 gap-4 px-2 py-2 text-gray-500 font-semibold uppercase text-sm">
       <div className="col-span-2">Rank</div>
       <div className="col-span-6">{type === 'user' ? 'User' : 'Server'}</div>
       <div className="col-span-4 text-right">
@@ -149,9 +148,10 @@ const LeaderboardList = ({
             <span className="font-mono text-white">{truncatedId}</span>
           </div>
           <div className="col-span-4 text-right">
-            <span className="font-mono text-white">
-              {entry.total_invocations.toLocaleString()}
-            </span>
+            <div className="flex items-center gap-1.5 text-sm text-muted-foreground font-mono justify-end">
+              <BarChart3 className="h-3 w-3" />
+              <span>{entry.total_invocations.toLocaleString()}</span>
+            </div>
           </div>
         </div>
       );
