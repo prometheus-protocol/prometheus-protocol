@@ -94,16 +94,6 @@ export const AppInfoAttestation = ({
             <div className="border border-gray-700 rounded-lg p-4 space-y-4">
               <DetailItem label="Publisher">{data.publisher}</DetailItem>
               <DetailItem label="Category">{data.category}</DetailItem>
-              <DetailItem label="Canister ID">
-                <a
-                  href={`https://icscan.io/canister/${data.canister_id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-primary hover:underline font-mono text-sm">
-                  <span>{truncatePrincipal(data.canister_id)}</span>
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </a>
-              </DetailItem>
             </div>
             <div>
               <h3 className="text-lg font-semibold text-white mb-2">Tags</h3>

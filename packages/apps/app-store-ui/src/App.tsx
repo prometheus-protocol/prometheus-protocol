@@ -44,6 +44,8 @@ const canisterIds = {
   APP_BOUNTIES: process.env.CANISTER_ID_APP_BOUNTIES!,
   LEADERBOARD: process.env.CANISTER_ID_LEADERBOARD!,
   USDC_LEDGER: process.env.CANISTER_ID_USDC_LEDGER!,
+  SEARCH_INDEX: process.env.CANISTER_ID_SEARCH_INDEX!,
+  USAGE_TRACKER: process.env.CANISTER_ID_USAGE_TRACKER!,
   // ... add all other canister IDs your app needs
 };
 

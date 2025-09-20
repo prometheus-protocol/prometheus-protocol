@@ -2,6 +2,11 @@ import type { Principal } from '@dfinity/principal';
 import type { ActorMethod } from '@dfinity/agent';
 import type { IDL } from '@dfinity/candid';
 
+export interface AppMetrics {
+  'total_invocations' : bigint,
+  'unique_users' : bigint,
+  'total_tools' : bigint,
+}
 export interface CallerActivity {
   'call_count' : bigint,
   'tool_id' : string,
@@ -36,6 +41,7 @@ export interface UsageTracker {
     Array<[string, ServerMetricsShared]>
   >,
   'get_and_clear_logs' : ActorMethod<[], Result_1>,
+  'get_app_metrics' : ActorMethod<[Principal], [] | [AppMetrics]>,
   'get_metrics_for_server' : ActorMethod<[string], [] | [ServerMetricsShared]>,
   'get_payout_canister' : ActorMethod<[], [] | [Principal]>,
   'is_wasm_hash_approved' : ActorMethod<[string], boolean>,

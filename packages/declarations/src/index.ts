@@ -6,6 +6,8 @@ import * as Ledger from './generated/icrc1_ledger/icrc1_ledger.did.js';
 import * as AppBounties from './generated/app_bounties/app_bounties.did.js';
 import * as Leaderboard from './generated/leaderboard/leaderboard.did.js';
 import * as McpServer from './generated/mcp_server/mcp_server.did.js';
+import * as SearchIndex from './generated/search_index/search_index.did.js';
+import * as UsageTracker from './generated/usage_tracker/usage_tracker.did.js';
 
 // Centralized export for all canister interfaces
 export {
@@ -17,4 +19,6 @@ export {
   AppBounties,
   Leaderboard,
   McpServer,
+  SearchIndex,
+  UsageTracker,
 };

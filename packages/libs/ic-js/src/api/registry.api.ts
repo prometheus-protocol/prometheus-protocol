@@ -1,5 +1,9 @@
 import { Certificate, HttpAgent, Identity } from '@dfinity/agent';
-import { getOrchestratorActor, getRegistryActor } from '../actors.js';
+import {
+  getOrchestratorActor,
+  getRegistryActor,
+  getUsageTrackerActor,
+} from '../actors.js';
 import { Registry } from '@prometheus-protocol/declarations';
 import { Principal } from '@dfinity/principal';
 import {
@@ -605,9 +609,11 @@ function mapCanisterVersionSummaryToTS(
 export const getAppDetailsByNamespace = async (
   namespace: string,
   wasmId?: string,
+  canisterId?: Principal,
 ): Promise<AppStoreDetails | null> => {
   const registryActor = getRegistryActor();
   const orchestratorActor = getOrchestratorActor();
+  const usageTrackerActor = getUsageTrackerActor();
 
   try {
     const [appDetailsReq, canisterIdsReq] = await Promise.all([
@@ -625,6 +631,19 @@ export const getAppDetailsByNamespace = async (
 
     const canisterDetails = appDetailsReq.ok;
     const canisterId = canisterIdsReq[0];
+
+    let metrics = undefined;
+    if (canisterId) {
+      const res = await usageTrackerActor.get_app_metrics(canisterId);
+      const appMetrics = fromNullable(res);
+      metrics = appMetrics
+        ? {
+            totalInvocations: appMetrics.total_invocations,
+            uniqueUsers: appMetrics.unique_users,
+            totalTools: appMetrics.total_tools,
+          }
+        : undefined;
+    }
 
     // --- 3. THE MAIN FUNCTION IS NOW CLEAN, SIMPLE, AND DECLARATIVE ---
     return {
@@ -647,6 +666,7 @@ export const getAppDetailsByNamespace = async (
       allVersions: canisterDetails.all_versions.map(
         mapCanisterVersionSummaryToTS,
       ),
+      metrics,
     };
   } catch (error) {
     console.error(`Error calling get_app_details_by_namespace:`, error);

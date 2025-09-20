@@ -220,5 +220,55 @@ describe('Usage Tracker Canister (Wasm Hash Allowlist)', () => {
       expect(toolMetric[0]).toBe(toolId);
       expect(toolMetric[1]).toBe(callCount);
     });
+
+    // In describe('Public Queries', ...), after the existing 'it' block...
+
+    it('should return correct app metrics by canister_id after a log has been processed', async () => {
+      // ARRANGE: Approve the server and prepare complex activity data.
+      trackerActor.setIdentity(ADMIN_IDENTITY);
+      const serverHashId = Buffer.from(serverWasmHash).toString('hex');
+      await trackerActor.add_approved_wasm_hash(serverHashId);
+
+      const user1 = Principal.fromText('ryjl3-tyaaa-aaaaa-aaaba-cai');
+      const user2 = Principal.fromText('rrkah-fqaaa-aaaaa-aaaaq-cai');
+
+      // Have the server log activity from 2 users across 2 different tools.
+      await serverActor.call_tracker(trackerCanisterId, {
+        start_timestamp_ns: 0n,
+        end_timestamp_ns: 1_000_000n,
+        activity: [
+          {
+            caller: user1,
+            tool_id: 'tool_A',
+            call_count: 5n,
+          },
+          {
+            caller: user1,
+            tool_id: 'tool_B',
+            call_count: 3n,
+          },
+          {
+            caller: user2,
+            tool_id: 'tool_A',
+            call_count: 10n,
+          },
+        ],
+      });
+
+      // ACT: Query the new app-specific metrics using the server's canister ID.
+      const metricsResult = await trackerActor.get_app_metrics(serverPrincipal);
+
+      // ASSERT: Check the returned data.
+      expect(metricsResult).not.toEqual([]); // It should return a value
+      const metrics = metricsResult[0]; // Unpack the option
+
+      expect(metrics).toBeDefined();
+      // Total invocations should be the sum of all call counts (5 + 3 + 10)
+      expect(metrics?.total_invocations).toBe(18n);
+      // There were 2 unique user principals
+      expect(metrics?.unique_users).toBe(2n);
+      // There were 2 unique tool IDs ('tool_A' and 'tool_B')
+      expect(metrics?.total_tools).toBe(2n);
+    });
   });
 });

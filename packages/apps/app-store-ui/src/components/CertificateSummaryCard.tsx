@@ -25,7 +25,7 @@ export function CertificateSummaryCard({
   return (
     <div
       className={cn(
-        'border rounded-lg p-4 md:p-6 mb-12',
+        'bg-card/50 border border-gray-700 rounded-lg p-4 md:p-6 mb-12',
         tierInfo.borderColorClass,
       )}>
       <div className="flex justify-between items-center">

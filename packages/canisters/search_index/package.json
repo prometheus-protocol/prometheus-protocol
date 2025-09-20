@@ -1,0 +1,10 @@
+{
+  "name": "@prometheus-protocol/search-index",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A canister to index and search data for the Prometheus Protocol",
+  "devDependencies": {
+    "@dfinity/pic": "^0.13.1",
+    "@noble/hashes": "^2.0.0"
+  }
+}

@@ -153,6 +153,11 @@ type RunBountyResult =
            };
    trx_id: opt nat;
  };
+type Result_4 = 
+ variant {
+   err: text;
+   ok: text;
+ };
 type Result_3 = 
  variant {
    err: AppStoreError;
@@ -428,6 +433,15 @@ type ICRC16 =
  };
 type ICRC118WasmRegistryCanister = 
  service {
+   /// * [OWNER-ONLY] Iterates through all published apps and pushes their data
+   ///    * to the search indexer to bootstrap or rebuild the index.
+   ///    *
+   ///    * NOTE: This function is designed for a small number of apps. If the registry
+   ///    * grows to hundreds or thousands of apps, this single call may exceed the
+   ///    * instruction limit and trap.
+   ///    *
+   ///    * @returns A status message indicating how many apps were successfully indexed.
+   bootstrap_search_index: () -> (Result_4);
    /// * Fetches and assembles all data for an app's detail page using its stable namespace.
    ///    * This is the single, powerful query the frontend needs.
    get_app_details_by_namespace: (namespace: text, opt_wasm_id: opt text) ->
@@ -501,7 +515,9 @@ type ICRC118WasmRegistryCanister =
    retrigger_deployment: (wasm_id: text) -> (Result);
    set_auditor_credentials_canister_id: (canister_id: principal) -> (Result);
    set_orchestrator_canister_id: (canister_id: principal) -> (Result);
+   set_search_index_canister_id: (canister_id: principal) -> (Result);
    set_usage_tracker_canister_id: (canister_id: principal) -> (Result);
+   test_only_notify_indexer: (namespace: text, content: text) -> ();
  };
 type GetWasmsFilter = 
  variant {
@@ -887,6 +903,7 @@ type AppListing =
    name: text;
    namespace: text;
    publisher: text;
+   tags: vec text;
  };
 type AppDetailsResponse = 
  record {

@@ -33,6 +33,7 @@ export interface AppListing {
   'banner_url' : string,
   'publisher' : string,
   'name' : string,
+  'tags' : Array<string>,
   'description' : string,
   'icon_url' : string,
   'category' : string,
@@ -286,6 +287,7 @@ export type GetWasmsFilter = { 'canister_type_namespace' : string } |
   { 'version_max' : [bigint, [] | [bigint], [] | [bigint]] } |
   { 'version_min' : [bigint, [] | [bigint], [] | [bigint]] };
 export interface ICRC118WasmRegistryCanister {
+  'bootstrap_search_index' : ActorMethod<[], Result_4>,
   'get_app_details_by_namespace' : ActorMethod<
     [string, [] | [string]],
     Result_3
@@ -377,7 +379,9 @@ export interface ICRC118WasmRegistryCanister {
   'retrigger_deployment' : ActorMethod<[string], Result>,
   'set_auditor_credentials_canister_id' : ActorMethod<[Principal], Result>,
   'set_orchestrator_canister_id' : ActorMethod<[Principal], Result>,
+  'set_search_index_canister_id' : ActorMethod<[Principal], Result>,
   'set_usage_tracker_canister_id' : ActorMethod<[Principal], Result>,
+  'test_only_notify_indexer' : ActorMethod<[string, string], undefined>,
 }
 export type ICRC16 = { 'Int' : bigint } |
   { 'Map' : Array<[string, ICRC16]> } |
@@ -566,6 +570,8 @@ export type Result_2 = { 'ok' : Wasm } |
   { 'err' : string };
 export type Result_3 = { 'ok' : AppDetailsResponse } |
   { 'err' : AppStoreError };
+export type Result_4 = { 'ok' : string } |
+  { 'err' : string };
 export interface RunBountyResult {
   'result' : { 'Invalid' : null } |
     { 'Valid' : null },

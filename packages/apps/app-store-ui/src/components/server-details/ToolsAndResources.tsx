@@ -7,8 +7,7 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { ServerTool } from '@prometheus-protocol/ic-js';
-import { Wrench, Zap } from 'lucide-react';
-import TokenIcon from '../Token';
+import { BarChart3, Wrench } from 'lucide-react';
 import { useGetToolInvocations } from '@/hooks/useLeaderboard';
 
 // The props are now much simpler
@@ -38,22 +37,21 @@ export function ToolsAndResources({ tools, wasmId }: ToolsAndResourcesProps) {
               value={`item-${index}`}
               className="border border-border rounded-lg px-4 last:border-b transition-colors data-[state=open]:border-primary">
               <AccordionTrigger className="group text-left hover:no-underline">
-                <div className="flex-1 flex items-center pr-4">
+                <div className="flex-1 flex items-center">
                   <span className="font-mono font-semibold group-data-[state=open]:text-primary">
                     {tool.name}
                   </span>
                   <div className="flex items-center gap-4 ml-auto">
                     {count && count > 0 && (
                       <div className="flex items-center gap-1.5 text-sm text-muted-foreground font-mono">
-                        <Zap className="h-4 w-4 text-yellow-400" />
-                        <span>{count.toString()}</span>
+                        <BarChart3 className="h-3 w-3" />
+                        <span>{count.toLocaleString()}</span>
                       </div>
                     )}
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-foreground font-mono">
-                        {tool.cost}
+                        ${tool.cost}
                       </span>
-                      <TokenIcon className="h-5" />
                     </div>
                   </div>
                 </div>

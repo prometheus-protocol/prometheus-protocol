@@ -31,8 +31,11 @@ import {
 import type { _SERVICE as LedgerService } from '@declarations/icrc1_ledger/icrc1_ledger.did.js';
 import { idlFactory as credentialIdlFactory } from '@declarations/audit_hub/audit_hub.did.js';
 import type { _SERVICE as CredentialService } from '@declarations/audit_hub/audit_hub.did.js';
-import { idlFactory as serverIdl } from '@declarations/mcp_server/mcp_server.did.js';
-import type { _SERVICE as ServerService } from '@declarations/mcp_server/mcp_server.did.js';
+import {
+  idlFactory as indexerIdlFactory,
+  init as indexerInit,
+} from '@declarations/search_index/search_index.did.js';
+import type { _SERVICE as IndexerService } from '@declarations/search_index/search_index.did.js';
 
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -63,6 +66,11 @@ const MCP_SERVER_DUMMY_WASM_PATH = path.resolve(
   '../../../../',
   '.dfx/local/canisters/mcp_server/mcp_server.wasm',
 );
+const INDEXER_WASM_PATH = path.resolve(
+  __dirname,
+  '../../../../',
+  '.dfx/local/canisters/search_index/search_index.wasm',
+);
 
 // --- Identities ---
 const daoIdentity = createIdentity('dao-principal'); // Also the canister owner
@@ -70,7 +78,7 @@ const developerIdentity = createIdentity('developer-principal');
 const operatorIdentity = createIdentity('operator-principal');
 const bountyCreatorIdentity = createIdentity('bounty-creator');
 const reproAuditorIdentity = createIdentity('repro-auditor');
-const securityAuditorIdentity = createIdentity('security-auditor');
+const appInfoAuditor = createIdentity('app-info-auditor');
 const qualityAuditorIdentity = createIdentity('quality-auditor');
 
 describe('MCP Registry Full E2E Lifecycle', () => {
@@ -81,7 +89,8 @@ describe('MCP Registry Full E2E Lifecycle', () => {
   let auditHubActor: Actor<CredentialService>;
   let registryCanisterId: Principal;
   let ledgerCanisterId: Principal;
-  let targetCanisterId: Principal;
+  let indexerActor: Actor<IndexerService>;
+  let indexerCanisterId: Principal;
 
   beforeAll(async () => {
     const url = inject('PIC_URL');
@@ -143,6 +152,15 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     registryActor = registryFixture.actor;
     registryCanisterId = registryFixture.canisterId;
 
+    const indexerFixture = await pic.setupCanister<IndexerService>({
+      idlFactory: indexerIdlFactory,
+      wasm: INDEXER_WASM_PATH,
+      sender: daoIdentity.getPrincipal(),
+      arg: IDL.encode(indexerInit({ IDL }), []),
+    });
+    indexerActor = indexerFixture.actor;
+    indexerCanisterId = indexerFixture.canisterId;
+
     // 3. Deploy Orchestrator with real dependency IDs
     const orchestratorFixture = await pic.setupCanister<OrchestratorService>({
       idlFactory: orchestratorIdlFactory,
@@ -153,6 +171,9 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     orchestratorActor = orchestratorFixture.actor;
 
     // 3. Setup Permissions and Funds
+    indexerActor.setIdentity(daoIdentity);
+    await indexerActor.set_registry_canister_id(registryCanisterId);
+
     registryActor.setIdentity(daoIdentity);
     await registryActor.set_auditor_credentials_canister_id(
       auditHub.canisterId,
@@ -160,6 +181,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     await registryActor.set_orchestrator_canister_id(
       orchestratorFixture.canisterId,
     );
+    await registryActor.set_search_index_canister_id(indexerFixture.canisterId);
 
     orchestratorActor.setIdentity(daoIdentity);
     await orchestratorActor.set_mcp_registry_id(registryFixture.canisterId);
@@ -167,7 +189,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     auditHub.actor.setIdentity(daoIdentity);
     // Configure the required stake for the reputation token
     await auditHubActor.set_stake_requirement('build_reproducibility_v1', 100n);
-    await auditHubActor.set_stake_requirement('security', 100n);
+    await auditHubActor.set_stake_requirement('app_info_v1', 100n);
     await auditHubActor.set_stake_requirement('quality', 100n);
 
     await auditHub.actor.mint_tokens(
@@ -176,8 +198,8 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       1000n,
     );
     await auditHub.actor.mint_tokens(
-      securityAuditorIdentity.getPrincipal(),
-      'security',
+      appInfoAuditor.getPrincipal(),
+      'app_info_v1',
       1000n,
     );
     await auditHub.actor.mint_tokens(
@@ -260,11 +282,11 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       bounty_id: [],
       validation_canister_id: registryCanisterId,
     });
-    const securityBountyResult = await registryActor.icrc127_create_bounty({
+    const qualityBountyResult = await registryActor.icrc127_create_bounty({
       challenge_parameters: {
         Map: [
           ['wasm_hash', { Blob: wasmHash }],
-          ['audit_type', { Text: 'security' }],
+          ['audit_type', { Text: 'quality' }],
         ],
       },
       bounty_metadata: [
@@ -278,8 +300,8 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     });
     const buildBountyId =
       ('Ok' in buildBountyResult && buildBountyResult.Ok.bounty_id) || 0n;
-    const securityBountyId =
-      ('Ok' in securityBountyResult && securityBountyResult.Ok.bounty_id) || 0n;
+    const qualityBountyResultId =
+      ('Ok' in qualityBountyResult && qualityBountyResult.Ok.bounty_id) || 0n;
 
     // === PHASE 3: The Build Auditor completes the verification, unlocking the "Verified" status ===
     // Step 3.1: Reserve the bounty
@@ -305,14 +327,14 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     expect(await registryActor.is_wasm_verified(wasmId)).toBe(true);
 
     // === PHASE 4: Other declarative audits (e.g., Security) can now proceed ===
-    auditHubActor.setIdentity(securityAuditorIdentity);
-    await auditHubActor.reserve_bounty(securityBountyId, 'security');
-    registryActor.setIdentity(securityAuditorIdentity);
+    auditHubActor.setIdentity(qualityAuditorIdentity);
+    await auditHubActor.reserve_bounty(qualityBountyResultId, 'quality');
+    registryActor.setIdentity(qualityAuditorIdentity);
     await registryActor.icrc126_file_attestation({
       wasm_id: wasmId,
       metadata: [
-        ['126:audit_type', { Text: 'security' }],
-        ['bounty_id', { Nat: securityBountyId }],
+        ['126:audit_type', { Text: 'quality' }],
+        ['bounty_id', { Nat: qualityBountyResultId }],
       ],
     });
 
@@ -490,5 +512,99 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     console.log(
       `Automated deployment successful! New canister ID: ${deployedCanisterId.toText()}`,
     );
+  });
+
+  // ... after the last 'it' block ...
+
+  it('should correctly index app data and return search results', async () => {
+    // === ARRANGE: Setup the data that will be indexed ===
+    // We will use the wasmId and appNamespace from the first E2E test.
+    const wasmBytes = await readFile(MCP_SERVER_DUMMY_WASM_PATH);
+    const wasmHash = createHash('sha256').update(wasmBytes).digest();
+    const wasmId = Buffer.from(wasmHash).toString('hex');
+    const appNamespace = 'com.prometheus.auto-deploy-app';
+    const bountyAmount = 100_000n;
+
+    // The searchable metadata for our test app
+    const appInfo = {
+      name: 'TaskPad On-Chain',
+      description: 'A simple and permanent to-do list for agents.',
+      publisher: 'Atlas Labs',
+      tags: ['productivity', 'utility', 'todo'],
+    };
+
+    // Create a new bounty specifically for the app_info audit
+    registryActor.setIdentity(bountyCreatorIdentity);
+    const appInfoBountyResult = await registryActor.icrc127_create_bounty({
+      challenge_parameters: {
+        Map: [
+          ['wasm_hash', { Blob: wasmHash }],
+          ['audit_type', { Text: 'app_info_v1' }],
+        ],
+      },
+      bounty_metadata: [
+        ['icrc127:reward_canister', { Principal: ledgerCanisterId }],
+        ['icrc127:reward_amount', { Nat: bountyAmount }],
+      ],
+      timeout_date: BigInt(Date.now() + 8.64e10) * 1000000n,
+      start_date: [],
+      bounty_id: [],
+      validation_canister_id: registryCanisterId,
+    });
+    const appInfoBountyId =
+      ('Ok' in appInfoBountyResult && appInfoBountyResult.Ok.bounty_id) || 0n;
+    console.log('App Info Bounty Result:', appInfoBountyResult);
+
+    // === ACT: File the `app_info_v1` attestation, which triggers the indexing ===
+    auditHubActor.setIdentity(appInfoAuditor);
+    const resRes = await auditHubActor.reserve_bounty(
+      appInfoBountyId,
+      'app_info_v1',
+    );
+    console.log('App Info Reserve Result:', resRes);
+
+    registryActor.setIdentity(appInfoAuditor);
+    await registryActor.icrc126_file_attestation({
+      wasm_id: wasmId,
+      metadata: [
+        ['126:audit_type', { Text: 'app_info_v1' }],
+        ['bounty_id', { Nat: appInfoBountyId }],
+        ['name', { Text: appInfo.name }],
+        ['description', { Text: appInfo.description }],
+        ['publisher', { Text: appInfo.publisher }],
+        ['tags', { Array: appInfo.tags.map((t) => ({ Text: t })) }],
+      ],
+    });
+
+    // CRITICAL: Allow the IC to process the "fire-and-forget" inter-canister call
+    // from the Registry to the Indexer.
+    await pic.tick(2);
+
+    // === ASSERT: Query the indexer and verify the results ===
+    // Test 1: Search for a unique word from the name
+    let results = await indexerActor.search('taskpad');
+    expect(results).toHaveLength(1);
+    expect(results[0]).toBe(appNamespace);
+
+    // Test 2: Search for a word from the description (case-insensitive)
+    results = await indexerActor.search('AGENTS');
+    expect(results).toHaveLength(1);
+    expect(results[0]).toBe(appNamespace);
+
+    // Test 3: Search for a tag
+    results = await indexerActor.search('productivity');
+    expect(results).toHaveLength(1);
+    expect(results[0]).toBe(appNamespace);
+
+    // Test 4: Multi-word search (intersection)
+    results = await indexerActor.search('list atlas');
+    expect(results).toHaveLength(1);
+    expect(results[0]).toBe(appNamespace);
+
+    // Test 5: Search for a word that doesn't exist
+    results = await indexerActor.search('nonexistent');
+    expect(results).toHaveLength(0);
+
+    console.log('Search indexer E2E test completed successfully!');
   });
 });

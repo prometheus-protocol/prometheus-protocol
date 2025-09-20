@@ -23,6 +23,11 @@ export const idlFactory = ({ IDL }) => {
     'timestamp' : Time,
   });
   const Result_1 = IDL.Variant({ 'ok' : IDL.Vec(LogEntry), 'err' : IDL.Text });
+  const AppMetrics = IDL.Record({
+    'total_invocations' : IDL.Nat,
+    'unique_users' : IDL.Nat,
+    'total_tools' : IDL.Nat,
+  });
   const UsageTracker = IDL.Service({
     'add_approved_wasm_hash' : IDL.Func([IDL.Text], [Result], []),
     'get_admin' : IDL.Func([], [IDL.Principal], ['query']),
@@ -32,6 +37,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'get_and_clear_logs' : IDL.Func([], [Result_1], []),
+    'get_app_metrics' : IDL.Func(
+        [IDL.Principal],
+        [IDL.Opt(AppMetrics)],
+        ['query'],
+      ),
     'get_metrics_for_server' : IDL.Func(
         [IDL.Text],
         [IDL.Opt(ServerMetricsShared)],
