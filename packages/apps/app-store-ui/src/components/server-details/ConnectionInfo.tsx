@@ -7,7 +7,6 @@ import {
   AppVersionDetails,
   AppVersionSummary,
 } from '@prometheus-protocol/ic-js';
-import { VersionSelector } from './VersionSelector';
 import {
   Tooltip,
   TooltipContent,
@@ -44,18 +43,6 @@ export function ConnectionInfo({
 
   return (
     <div className="space-y-6">
-      <div>
-        <label className="text-sm font-medium text-muted-foreground">
-          Version
-        </label>
-        <div className="mt-2">
-          <VersionSelector
-            allVersions={allVersions}
-            currentVersionWasmId={latestVersion.wasmId}
-            namespace={namespace}
-          />
-        </div>
-      </div>
       <div className="pt-2 flex items-center gap-4 flex-wrap">
         <TooltipProvider>
           <Tooltip>

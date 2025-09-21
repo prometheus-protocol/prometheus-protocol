@@ -1,0 +1,19 @@
+type Result = 
+ variant {
+   err: text;
+   ok;
+ };
+type Indexer = 
+ service {
+   /// * Performs a search against the inverted index and returns matching app namespaces.
+   ///    * @param query_string The user's search string.
+   ///    * @returns An array of app namespaces that match ALL keywords in the query.
+   search: (query_string: text) -> (vec text) query;
+   /// * [ADMIN-ONLY] Sets the Registry canister ID.
+   ///    * This method should be called once after deployment to establish trust.
+   set_registry_canister_id: (registry_id: principal) -> (Result);
+   /// * [SECURE] Updates the index for a given app.
+   ///    * This method can ONLY be called by the official Registry canister.
+   update_index: (namespace: text, searchable_content: text) -> ();
+ };
+service : () -> Indexer

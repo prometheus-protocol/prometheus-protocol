@@ -74,14 +74,13 @@ export function SimilarApps({ currentServerNamespace }: SimilarAppsProps) {
   return (
     <section>
       <h2 className="text-2xl font-bold tracking-tight md:mt-0 mt-10 mb-5">
-        Similar apps
+        Similar Apps
       </h2>
       <div className="space-y-2">
         {similarApps.map((app) => {
           // --- 3. THE RENDER LOGIC NOW ACCESSES THE NESTED `latestVersion` OBJECT ---
           const { latestVersion } = app;
           const tierInfo = getTierInfo(latestVersion.securityTier);
-          const isCertified = latestVersion.securityTier !== 'Unranked';
 
           return (
             <Link

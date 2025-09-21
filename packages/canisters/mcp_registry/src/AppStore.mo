@@ -42,6 +42,7 @@ module {
     publisher : Text;
     icon_url : Text;
     banner_url : Text;
+    tags : [Text];
 
     // --- Details of the Latest Published Version ---
     latest_version : AppVersionSummary;

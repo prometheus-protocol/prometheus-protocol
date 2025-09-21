@@ -2,8 +2,8 @@
   "app_bounties": {
     "ic": "jld6p-yqaaa-aaaai-q33ra-cai"
   },
-  "old_app_store_ui": {
-    "ic": "jfbth-daaaa-aaaai-q33qa-cai"
+  "app_store_ui": {
+    "ic": "gyeil-qyaaa-aaaai-q32uq-cai"
   },
   "audit_hub": {
     "ic": "eq6xo-cyaaa-aaaai-q32yq-cai"
@@ -29,8 +29,11 @@
   "mcp_server": {
     "ic": "jcavt-oyaaa-aaaai-q33qq-cai"
   },
-  "app_store_ui": {
-    "ic": "gyeil-qyaaa-aaaai-q32uq-cai"
+  "old_app_store_ui": {
+    "ic": "jfbth-daaaa-aaaai-q33qa-cai"
+  },
+  "search_index": {
+    "ic": "kst7v-syaaa-aaaai-q33yq-cai"
   },
   "usage_tracker": {
     "ic": "m63pw-fqaaa-aaaai-q33pa-cai"

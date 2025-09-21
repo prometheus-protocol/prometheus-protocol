@@ -26,13 +26,12 @@ import { useState } from 'react';
 import { Tokens } from '@prometheus-protocol/ic-js';
 import { CreateBountyDialog } from '@/components/server-details/CreateBountyDialog';
 import { AccessAndBilling } from '@/components/server-details/AccessAndBilling';
-import { useInternetIdentity } from 'ic-use-internet-identity';
-import { ConnectionInfo } from '@/components/server-details/ConnectionInfo';
 import { SponsorPrompt } from '@/components/server-details/SponsorPrompt';
+import { VersionSelector } from '@/components/server-details/VersionSelector';
 
 // --- NEW High-Fidelity Skeleton Component ---
 const ServerDetailsSkeleton = () => (
-  <div className="w-full max-w-6xl mx-auto py-8 pb-32 animate-pulse">
+  <div className="w-full max-w-6xl mx-auto py-12 pb-32 animate-pulse">
     {/* Header Skeleton */}
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-x-12 gap-y-8">
       <div className="lg:col-span-3 space-y-8">
@@ -50,18 +49,18 @@ const ServerDetailsSkeleton = () => (
           <div className="h-10 w-32 bg-muted/50 rounded-lg" />
         </div>
       </div>
-      <div className="lg:col-span-2">
+      <div className="lg:col-span-2 mt-8">
         <div className="aspect-video w-full bg-muted rounded-lg" />
       </div>
     </div>
 
     {/* Body Skeleton */}
-    <div className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-x-16">
-      <div className="lg:col-span-2 space-y-16 mt-8">
+    <div className="mt-12 grid grid-cols-1 lg:grid-cols-5 gap-x-12">
+      <div className="lg:col-span-3 space-y-16 mt-8">
         <div className="h-64 bg-muted rounded-lg" /> {/* About Section */}
         <div className="h-48 bg-muted rounded-lg" /> {/* Tools Section */}
       </div>
-      <aside className="lg:col-span-1 mt-8">
+      <aside className="lg:col-span-2 mt-8">
         <div className="h-96 bg-muted rounded-lg" /> {/* Similar Apps */}
       </aside>
     </div>
@@ -236,6 +235,19 @@ export default function ServerDetailsPage() {
                 isArchived={isViewingArchivedVersion}
               />
             )}
+
+            <div>
+              <label className="text-sm font-medium text-muted-foreground">
+                Version
+              </label>
+              <div className="mt-2">
+                <VersionSelector
+                  allVersions={allVersions}
+                  currentVersionWasmId={latestVersion.wasmId}
+                  namespace={server.namespace}
+                />
+              </div>
+            </div>
           </main>
 
           <aside className="lg:col-span-2 space-y-8">

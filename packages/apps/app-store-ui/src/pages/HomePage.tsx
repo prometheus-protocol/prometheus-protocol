@@ -45,9 +45,7 @@ function HomePage() {
         (app) => app.latestVersion.status === 'Pending',
       );
       const otherListedApps = allServers.filter(
-        (app) =>
-          app.latestVersion.status === 'Verified' &&
-          app.latestVersion.securityTier !== 'Gold',
+        (app) => app.latestVersion.status === 'Verified',
       );
 
       // 2. Create the list for the main carousel (mix of best and newest)

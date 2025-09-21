@@ -33,6 +33,7 @@ import AuditHub "AuditHub";
 import Bounty "Bounty";
 import Orchestrator "Orchestrator";
 import UsageTracker "UsageTracker";
+import SearchIndex "SearchIndex";
 
 import ICRC118WasmRegistry "../../../../libs/icrc118/src";
 import Service "../../../../libs/icrc118/src/service";
@@ -57,6 +58,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   stable var _credentials_canister_id : ?Principal = null;
   stable var _orchestrator_canister_id : ?Principal = null;
   stable var _usage_tracker_canister_id : ?Principal = null;
+  stable var _search_index_canister_id : ?Principal = null;
 
   // --- NEW: A reverse-lookup index to find a namespace from a wasm_id ---
   // Key: wasm_id (hex string)
@@ -252,6 +254,12 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   public shared ({ caller }) func set_usage_tracker_canister_id(canister_id : Principal) : async Result.Result<(), Text> {
     if (caller != _owner) { return #err("Caller is not the owner") };
     _usage_tracker_canister_id := ?canister_id;
+    return #ok(());
+  };
+
+  public shared ({ caller }) func set_search_index_canister_id(canister_id : Principal) : async Result.Result<(), Text> {
+    if (caller != _owner) { return #err("Caller is not the owner") };
+    _search_index_canister_id := ?canister_id;
     return #ok(());
   };
 
@@ -676,6 +684,34 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     // 2. Extract the audit_type from the metadata.
     let audit_type = AppStore.getICRC16TextOptional(req.metadata, "126:audit_type");
 
+    if (audit_type == ?"app_info_v1") {
+      // This is an app info attestation! This is our trigger point.
+
+      // --- START: NEW INDEXER LOGIC ---
+      // a. Find the namespace associated with this wasm_id.
+      let namespace_opt = BTree.get(wasm_to_namespace_map, Text.compare, req.wasm_id);
+
+      switch (namespace_opt) {
+        case (?namespace) {
+          // b. We found the namespace! Now, gather all searchable text.
+          let name = AppStore.getICRC16Text(req.metadata, "name");
+          let description = AppStore.getICRC16Text(req.metadata, "description");
+          let publisher = AppStore.getICRC16Text(req.metadata, "publisher");
+          let tags = AppStore.getICRC16TextArray(req.metadata, "tags");
+
+          let combined_text = name # " " # description # " " # publisher # " " # Text.join(" ", tags.vals());
+
+          // c. Call our robust helper to update the index.
+          ignore _notify_indexer_of_update(namespace, combined_text);
+        };
+        case (null) {
+          // This can happen if an attestation is filed before the wasm is linked to a namespace.
+          Debug.print("Could not find namespace for wasm_id " # req.wasm_id # ". Skipping indexing for now.");
+        };
+      };
+      // --- END: NEW INDEXER LOGIC ---
+    };
+
     if (audit_type == ?"build_reproducibility_v1") {
       // 3. This is a build verification! Finalize the request as "Verified".
       let finalization_meta : ICRC126.ICRC16Map = [
@@ -1092,6 +1128,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   private func _build_listing_for_canister_type(canister_type : ICRC118WasmRegistry.CanisterType) : ?AppStore.AppListing {
     // 1. Find the latest version for this canister type.
     if (canister_type.versions.size() == 0) {
+      Debug.print("Canister type " # canister_type.canister_type_namespace # " has no versions.");
       return null; // No versions, so nothing to list.
     };
 
@@ -1107,6 +1144,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     // 2. Get the wasm_id and apply the verification gateway check.
     let wasm_id = Base16.encode(latest_version.calculated_hash);
     if (not _is_wasm_verified(wasm_id)) {
+      Debug.print("WASM not verified: " # wasm_id);
       return null; // The latest version is not verified, so we don't list the app.
     };
 
@@ -1135,6 +1173,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           name = AppStore.getICRC16Text(att.metadata, "name");
           description = AppStore.getICRC16Text(att.metadata, "description");
           category = AppStore.getICRC16Text(att.metadata, "category");
+          tags = AppStore.getICRC16TextArray(att.metadata, "tags");
           publisher = AppStore.getICRC16Text(att.metadata, "publisher");
           icon_url = AppStore.getICRC16Text(att.metadata, "icon_url");
           banner_url = AppStore.getICRC16Text(att.metadata, "banner_url");
@@ -1161,6 +1200,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
               name = AppStore.getICRC16Text(meta, "name");
               description = AppStore.getICRC16Text(meta, "description");
               category = AppStore.getICRC16Text(meta, "category");
+              tags = AppStore.getICRC16TextArray(meta, "tags");
               publisher = AppStore.getICRC16Text(meta, "publisher");
               icon_url = switch (visuals_map) {
                 case (?v) { AppStore.getICRC16Text(v, "icon_url") };
@@ -1680,6 +1720,112 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
 
   public shared query func get_audit_records_for_wasm(wasm_id : Text) : async [ICRC126.AuditRecord] {
     _get_audit_records_for_wasm(wasm_id);
+  };
+
+  // --- NEW: Private helper to notify the search indexer ---
+  private func _notify_indexer_of_update(namespace : Text, content : Text) : async () {
+    // 1. Check if the indexer canister ID is configured.
+    let indexer_id = switch (_search_index_canister_id) {
+      case (?id) { id };
+      case (null) {
+        // If not configured, print a warning and do nothing.
+        Debug.print("Warning: Search indexer is not configured. Skipping indexing.");
+        return;
+      };
+    };
+
+    // 2. Make a "fire-and-forget" call to the indexer.
+    // A failure here should be logged but should NOT trap the registry.
+    try {
+      Debug.print("Notifying indexer for namespace: " # namespace);
+      let indexer : SearchIndex.Service = actor (Principal.toText(indexer_id));
+      await indexer.update_index(namespace, content);
+    } catch (e) {
+      Debug.print("Warning: Failed to notify indexer canister: " # Error.message(e));
+    };
+  };
+
+  // Add this temporary public function to your Registry.mo for testing purposes
+  public shared ({ caller }) func test_only_notify_indexer(namespace : Text, content : Text) : async () {
+    // This bypasses the full publish logic and directly calls the indexer
+    // It should be secured or removed for production mainnet deployment.
+    if (caller != _owner) { Debug.trap("Admin only") };
+    try {
+      let indexer_id = switch (_search_index_canister_id) {
+        case (?id) { id };
+        case (null) { Debug.trap("Indexer canister not configured") };
+      };
+      let indexer : SearchIndex.Service = actor (Principal.toText(indexer_id));
+      await indexer.update_index(namespace, content);
+    } catch (e) {
+      Debug.print("Warning: Failed to notify indexer canister: " # Error.message(e));
+    };
+  };
+
+  /**
+   * [OWNER-ONLY] Iterates through all published apps and pushes their data
+   * to the search indexer to bootstrap or rebuild the index.
+   *
+   * NOTE: This function is designed for a small number of apps. If the registry
+   * grows to hundreds or thousands of apps, this single call may exceed the
+   * instruction limit and trap.
+   *
+   * @returns A status message indicating how many apps were successfully indexed.
+   */
+  public shared ({ caller }) func bootstrap_search_index() : async Result.Result<Text, Text> {
+    // 1. Security: Ensure only the owner can run this.
+    if (caller != _owner) {
+      return #err("Unauthorized: Only the owner can run the bootstrap process.");
+    };
+
+    // 2. Ensure the indexer is configured.
+    let indexer_id = switch (_search_index_canister_id) {
+      case (?id) { id };
+      case (null) { return #err("Search indexer canister is not configured.") };
+    };
+
+    var indexed_count : Nat = 0;
+    let all_canister_types = icrc118wasmregistry().icrc118_get_canister_types({
+      filter = [];
+      prev = null;
+      take = null;
+    });
+
+    // 3. Loop through every canister type in the registry.
+    for (canister_type in all_canister_types.vals()) {
+      Debug.print("Processing namespace: " # canister_type.canister_type_namespace);
+      // a. Find the latest, verified version with an app_info attestation.
+      // This reuses the exact same logic as your get_app_listings function.
+      let listing_opt = _build_listing_for_canister_type(canister_type);
+
+      Debug.print("Listing found: " # debug_show (Option.isSome(listing_opt)));
+
+      switch (listing_opt) {
+        case (?listing) {
+          Debug.print("Found listable app: " # listing.name # " (namespace: " # listing.namespace # ")");
+          // b. We found a valid, listable app. Assemble its searchable text.
+          // We can pull the data directly from the `listing` object.
+          let combined_text = listing.name # " " # listing.description # " " # listing.publisher # " " # Text.join(" ", listing.tags.vals());
+
+          // c. Make the "fire-and-forget" call to the indexer.
+          try {
+            let indexer : SearchIndex.Service = actor (Principal.toText(indexer_id));
+            await indexer.update_index(listing.namespace, combined_text);
+            indexed_count += 1;
+          } catch (e) {
+            // Log the error for the specific app but continue the loop.
+            Debug.print(
+              "Warning: Failed to index namespace " # listing.namespace # ": " # Error.message(e)
+            );
+          };
+        };
+        case (null) {
+          // This canister_type is not listable (e.g., not verified), so we skip it.
+        };
+      };
+    };
+
+    return #ok("Bootstrap complete. Successfully indexed " # Nat.toText(indexed_count) # " apps.");
   };
 
   //------------------- SAMPLE FUNCTION -------------------//

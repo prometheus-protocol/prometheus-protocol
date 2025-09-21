@@ -44,7 +44,7 @@ module {
       case (null) return #err("resource parameter is required");
     };
     // The scope parameter is optional, so Option.get with a default is correct here.
-    let scope_string = Option.get(req.url.queryObj.get("scope"), "");
+    let scope_string = Option.get(req.url.queryObj.get("scope"), "openid");
 
     // The state parameter is optional.
     let state = req.url.queryObj.get("state");
@@ -103,11 +103,6 @@ module {
       if (Option.isNull(Map.get(supported_scopes_map, thash, scope))) {
         return #err("invalid_scope: The scope '" # scope # "' is not supported by this resource server.");
       };
-    };
-
-    // --- 6. Additional Security/Logic Checks ---
-    if (Text.contains(scope_string, #text("prometheus:charge")) and resource_server.accepted_payment_canisters.size() == 0) {
-      return #err("invalid_request: The target resource server does not support payments.");
     };
 
     // --- 7. If all checks pass, return the structured, validated data ---

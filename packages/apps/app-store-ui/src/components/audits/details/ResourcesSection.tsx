@@ -10,7 +10,7 @@ export const ResourcesSection = ({
     <h2 className="text-xl font-semibold text-white mb-6">Resources</h2>
     <div className="flex flex-col gap-3">
       <a
-        href={audit.repo}
+        href={`${audit.repo}/commit/${audit.commitHash}`}
         className="inline-flex items-center gap-2 text-primary hover:underline w-fit"
         target="_blank"
         rel="noopener noreferrer">

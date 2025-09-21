@@ -22,9 +22,6 @@ import { useSubmitAttestation } from '@/hooks/useAuditBounties';
 const formSchema = z.object({
   name: z.string().min(3, 'Name must be at least 3 characters.'),
   publisher: z.string().min(3, 'Publisher must be at least 3 characters.'),
-  canister_id: z
-    .string()
-    .regex(/^[a-z0-9-]{5,27}$/, 'Invalid Principal ID format.'),
   mcp_path: z.string().startsWith('/', 'Path must start with a "/"'),
   category: z.string().min(2, 'Category is required.'),
   icon_url: z.string().url('Must be a valid URL.'),
@@ -66,8 +63,7 @@ export const AppInfoAttestationForm = ({
     defaultValues: {
       name: '',
       publisher: '',
-      canister_id: '',
-      mcp_path: '/',
+      mcp_path: '/mcp',
       category: '',
       icon_url: '',
       banner_url: '',
@@ -131,25 +127,26 @@ export const AppInfoAttestationForm = ({
             />
             <FormField
               control={form.control}
-              name="canister_id"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Canister ID</FormLabel>
-                  <FormControl>
-                    <Input {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
               name="category"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Category</FormLabel>
                   <FormControl>
                     <Input placeholder="e.g., Productivity, Games" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="mcp_path"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>MCP Path</FormLabel>
+                  <FormControl>
+                    <Input {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -254,20 +251,6 @@ export const AppInfoAttestationForm = ({
                 <FormLabel>Why This App?</FormLabel>
                 <FormControl>
                   <Textarea rows={3} {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="mcp_path"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>MCP Path</FormLabel>
-                <FormControl>
-                  <Input {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
