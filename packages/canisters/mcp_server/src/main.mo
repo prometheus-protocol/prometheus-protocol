@@ -59,37 +59,37 @@ shared ({ caller = deployer }) persistent actor class McpServer(
   // See the README for more details.
   // =================================================================================
 
-  // transient let authContext : ?AuthTypes.AuthContext = null;
+  transient let authContext : ?AuthTypes.AuthContext = null;
 
   // --- UNCOMMENT THIS BLOCK TO ENABLE AUTHENTICATION ---
 
-  let issuerUrl = "https://bfggx-7yaaa-aaaai-q32gq-cai.icp0.io";
-  let allowanceUrl = "https://prometheusprotocol.org/connections";
-  let requiredScopes = ["openid"];
+  // let issuerUrl = "https://bfggx-7yaaa-aaaai-q32gq-cai.icp0.io";
+  // let allowanceUrl = "https://prometheusprotocol.org/connections";
+  // let requiredScopes = ["openid"];
 
-  //function to transform the response for jwks client
-  public query func transformJwksResponse({
-    context : Blob;
-    response : IC.HttpRequestResult;
-  }) : async IC.HttpRequestResult {
-    {
-      response with headers = []; // not intersted in the headers
-    };
-  };
+  // //function to transform the response for jwks client
+  // public query func transformJwksResponse({
+  //   context : Blob;
+  //   response : IC.HttpRequestResult;
+  // }) : async IC.HttpRequestResult {
+  //   {
+  //     response with headers = []; // not intersted in the headers
+  //   };
+  // };
 
-  // Initialize the auth context with the issuer URL and required scopes.
-  transient let authContext : ?AuthTypes.AuthContext = ?AuthState.init(
-    Principal.fromActor(self),
-    owner,
-    issuerUrl,
-    requiredScopes,
-    transformJwksResponse,
-  );
+  // // Initialize the auth context with the issuer URL and required scopes.
+  // transient let authContext : ?AuthTypes.AuthContext = ?AuthState.init(
+  //   Principal.fromActor(self),
+  //   owner,
+  //   issuerUrl,
+  //   requiredScopes,
+  //   transformJwksResponse,
+  // );
 
   // Initialize the auth context with the issuer URL and required scopes.
   // transient let authContext : ?AuthTypes.AuthContext = ?AuthState.initApiKey(owner);
 
-  let beaconCanisterId = Principal.fromText("vu5yx-eh777-77774-qaaga-cai");
+  let beaconCanisterId = Principal.fromText("vt46d-j7777-77774-qaagq-cai");
   transient let beaconContext : Beacon.BeaconContext = Beacon.init(
     beaconCanisterId, // Public beacon canister ID
     ?60, // Send a beacon every minute
@@ -144,18 +144,18 @@ shared ({ caller = deployer }) persistent actor class McpServer(
       ("required", Json.arr([Json.str("report")])),
     ]);
 
-    // payment = null; // No payment required, this tool is free to use.
+    payment = null; // No payment required, this tool is free to use.
     // To require payment, set the `payment` field like this:
-    payment = ?{
-      ledger = Principal.fromText("vt46d-j7777-77774-qaagq-cai"); // ICRC2 Ledger canister ID
-      amount = 100_000;
-    };
+    // payment = ?{
+    //   ledger = Principal.fromText("v27v7-7x777-77774-qaaha-cai"); // ICRC2 Ledger canister ID
+    //   amount = 100_000;
+    // };
   }];
 
   // --- 2. DEFINE YOUR TOOL LOGIC ---
   // The `auth` parameter will be `null` if auth is disabled or if the user is anonymous.
   // It will contain user info if auth is enabled and the user provides a valid token.
-  func getWeatherTool(args : McpTypes.JsonValue, auth : ?AuthTypes.AuthInfo, cb : (Result.Result<McpTypes.CallToolResult, McpTypes.HandlerError>) -> ()) {
+  func getWeatherTool(args : McpTypes.JsonValue, auth : ?AuthTypes.AuthInfo, cb : (Result.Result<McpTypes.CallToolResult, McpTypes.HandlerError>) -> ()) : async () {
     let location = switch (Result.toOption(Json.getAsText(args, "location"))) {
       case (?loc) { loc };
       case (null) {
@@ -179,12 +179,12 @@ shared ({ caller = deployer }) persistent actor class McpServer(
   // --- 3. CONFIGURE THE SDK ---
   transient let mcpConfig : McpTypes.McpConfig = {
     self = Principal.fromActor(self);
-    // allowanceUrl = null; // No allowance URL needed for free tools.
-    allowanceUrl = ?allowanceUrl; // Uncomment this line if using paid tools.
+    allowanceUrl = null; // No allowance URL needed for free tools.
+    // allowanceUrl = ?allowanceUrl; // Uncomment this line if using paid tools.
     serverInfo = {
       name = "full-onchain-mcp-server";
       title = "App Three MCP Server";
-      version = "0.1.7";
+      version = "0.1.6";
     };
     resources = resources;
     resourceReader = func(uri) {

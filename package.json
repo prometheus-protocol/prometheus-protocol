@@ -26,7 +26,8 @@
     "format": "prettier --write .",
     "seed:app-bounties": "zx ./scripts/seed-app-bounties.ts",
     "seed:leaderboard": "zx ./scripts/seed-leaderboard.ts",
-    "seed": "npm run seed:app-bounties && npm run seed:leaderboard"
+    "seed": "npm run seed:app-bounties && npm run seed:leaderboard",
+    "bootstrap": "zx ./scripts/bootstrap.ts"
   },
   "devDependencies": {
     "@anolilab/semantic-release-pnpm": "^2.0.3",

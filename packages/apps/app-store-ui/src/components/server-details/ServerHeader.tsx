@@ -69,11 +69,14 @@ export function ServerHeader({
 
           {/* --- 3. Conditionally render the StatsStrip component --- */}
           {/* It will only show up if the metrics object exists. */}
-          <StatsStrip
-            uniqueUsers={metrics?.uniqueUsers || 0n}
-            totalTools={metrics?.totalTools || 0n}
-            totalInvocations={metrics?.totalInvocations || 0n}
-          />
+          {metrics && (
+            <StatsStrip
+              authenticatedUniqueUsers={metrics.authenticatedUniqueUsers}
+              anonymousInvocations={metrics.anonymousInvocations}
+              totalTools={metrics.totalTools}
+              totalInvocations={metrics.totalInvocations}
+            />
+          )}
 
           <ConnectionInfo
             namespace={server.namespace}

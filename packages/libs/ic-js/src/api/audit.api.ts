@@ -649,9 +649,10 @@ export interface AppStoreDetails {
   // --- Metrics ---
   // These metrics are aggregated across all versions of the app.
   metrics?: {
-    uniqueUsers: bigint;
-    totalTools: bigint;
     totalInvocations: bigint;
+    totalTools: bigint;
+    authenticatedUniqueUsers: bigint;
+    anonymousInvocations: bigint;
   };
 }
 

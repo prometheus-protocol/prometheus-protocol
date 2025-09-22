@@ -63,9 +63,10 @@ type CallerActivity =
  };
 type AppMetrics = 
  record {
+   anonymous_invocations: nat;
+   authenticated_unique_users: nat;
    total_invocations: nat;
    total_tools: nat;
-   unique_users: nat;
  };
 /// * The UsageTracker canister serves as a high-throughput logbook for the "Proof-of-Use" system.
 ///  * It accepts usage statistics from approved MCP server canisters and makes them available to a designated payout canister.

@@ -24,8 +24,9 @@ export const idlFactory = ({ IDL }) => {
   });
   const Result_1 = IDL.Variant({ 'ok' : IDL.Vec(LogEntry), 'err' : IDL.Text });
   const AppMetrics = IDL.Record({
+    'authenticated_unique_users' : IDL.Nat,
     'total_invocations' : IDL.Nat,
-    'unique_users' : IDL.Nat,
+    'anonymous_invocations' : IDL.Nat,
     'total_tools' : IDL.Nat,
   });
   const UsageTracker = IDL.Service({

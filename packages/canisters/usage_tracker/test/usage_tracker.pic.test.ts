@@ -231,6 +231,7 @@ describe('Usage Tracker Canister (Wasm Hash Allowlist)', () => {
 
       const user1 = Principal.fromText('ryjl3-tyaaa-aaaaa-aaaba-cai');
       const user2 = Principal.fromText('rrkah-fqaaa-aaaaa-aaaaq-cai');
+      const anon1 = Principal.fromText('aaaaa-aa'); // Anonymous user
 
       // Have the server log activity from 2 users across 2 different tools.
       await serverActor.call_tracker(trackerCanisterId, {
@@ -252,6 +253,11 @@ describe('Usage Tracker Canister (Wasm Hash Allowlist)', () => {
             tool_id: 'tool_A',
             call_count: 10n,
           },
+          {
+            caller: anon1,
+            tool_id: 'tool_B',
+            call_count: 7n,
+          },
         ],
       });
 
@@ -264,10 +270,11 @@ describe('Usage Tracker Canister (Wasm Hash Allowlist)', () => {
 
       expect(metrics).toBeDefined();
       // Total invocations should be the sum of all call counts (5 + 3 + 10)
-      expect(metrics?.total_invocations).toBe(18n);
+      expect(metrics?.total_invocations).toBe(25n);
       // There were 2 unique user principals
-      expect(metrics?.unique_users).toBe(2n);
+      expect(metrics?.authenticated_unique_users).toBe(2n);
       // There were 2 unique tool IDs ('tool_A' and 'tool_B')
+      expect(metrics?.anonymous_invocations).toBe(7n);
       expect(metrics?.total_tools).toBe(2n);
     });
   });

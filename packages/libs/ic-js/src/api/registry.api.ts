@@ -639,8 +639,9 @@ export const getAppDetailsByNamespace = async (
       metrics = appMetrics
         ? {
             totalInvocations: appMetrics.total_invocations,
-            uniqueUsers: appMetrics.unique_users,
             totalTools: appMetrics.total_tools,
+            authenticatedUniqueUsers: appMetrics.authenticated_unique_users,
+            anonymousInvocations: appMetrics.anonymous_invocations,
           }
         : undefined;
     }

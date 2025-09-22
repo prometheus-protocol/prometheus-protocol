@@ -11,7 +11,7 @@
 ---
 
 <h2 align="center">Prometheus Protocol Monorepo</h2>
-<p align="center">🏛️ <b>The Trust Layer for the AI Economy on the Internet Computer.</b></p>
+<p align="center">🏛️ <b>The Foundational Infrastructure for the Open Agentic Web.</b></p>
 
 ---
 
@@ -23,15 +23,15 @@
 
 ## Project Summary
 
-Prometheus Protocol is the open-source trust layer for the decentralized AI economy on the Internet Computer. We provide a seamless, on-chain experience for **identity, verifiable trust, and programmable payments**—empowering users, agents, and developers to participate in an open, secure machine-to-machine economy. Our full-stack solution includes a verifiable App Store, an on-chain OAuth 2.1 identity provider, and a complete developer toolchain with a CLI and SDKs.
+Prometheus Protocol is the open-source infrastructure for the decentralized AI economy. We provide the essential on-chain foundation for **verifiable trust, secure identity, and programmable payments** to ensure the future is an open "Web of Agents," not a series of closed "walled gardens." Our full-stack solution includes a verifiable App Store, an on-chain OAuth 2.1 identity provider, and a complete developer toolchain with a CLI and SDKs.
 
 ## Table of Contents
 
 1.  [Problem](#problem)
 2.  [Solution Overview](#solution-overview)
-3.  [Hackathon Submission Highlights](#hackathon-submission-highlights)
+3.  [Key Progress & Achievements](#key-progress--achievements)
 4.  [Core Features](#core-features)
-5.  [Monetization & Sustainability](#monetization--sustainability)
+5.  [Economic Model & Sustainability](#economic-model--sustainability)
 6.  [Technologies & ICP Features Used](#technologies--icp-features-used)
 7.  [System Architecture](#system-architecture)
 8.  [Demo Links & Resources](#demo-links--resources)
@@ -39,7 +39,7 @@ Prometheus Protocol is the open-source trust layer for the decentralized AI econ
 10. [Testing](#testing)
 11. [Deploying to ICP Mainnet](#deploying-to-icp-mainnet)
 12. [Challenges & Learnings](#challenges--learnings)
-13. [Roadmap & Future Work](#roadmap--future-work)
+13. [Roadmap](#roadmap)
 14. [Deployment Team](#deployment-team)
 15. [License](#license)
 
@@ -47,62 +47,65 @@ Prometheus Protocol is the open-source trust layer for the decentralized AI econ
 
 ## Problem
 
-As autonomous AI agents proliferate, they rely on a decentralized network of specialized servers (MCPs) to perform their work. But this creates a fundamental problem: **how can an agent, or its owner, trust a third-party server?** How can we be sure it's secure, reliable, and won't manipulate data or poison AI models? This lack of a unified trust layer fragments the AI economy and hinders its growth.
+The agentic economy faces a critical choice: will it be a series of closed, corporate **"walled gardens,"** or an open, innovative **"web of agents"?**
+
+An open web is impossible without solving the fundamental problem of trust. Without a unified trust layer, the ecosystem defaults to two bad outcomes: a chaotic, unsafe free-for-all, or a lockdown into centralized platforms that stifle competition and extract value.
 
 ---
 
 ## Solution Overview
 
-**Prometheus Protocol** provides the solution by creating a transparent, on-chain "app store" for AI infrastructure, governed by cryptographic proofs, economic incentives, and a decentralized community.
+**Prometheus Protocol** provides the solution by creating a transparent, on-chain "app store" for the open agentic web, governed by cryptographic proofs and economic incentives. We provide the trust that makes the open economy possible.
 
 [![Watch our Pitch & Demo Video](https://i.ytimg.com/vi/4YvL-2Jt0I0/hqdefault.jpg)](https://www.youtube.com/watch?v=4YvL-2Jt0I0)
 
 ---
 
-## Hackathon Submission Highlights
+## Key Progress & Achievements
 
-For the WCHL25 National Round, our team focused on building the complete **Trust Layer** to complement our existing economic foundation. This represents a massive leap forward, delivering a full-stack, end-to-end solution for a secure software supply chain.
+We have moved at an accelerated pace to build not just the technical primitives, but the entire economic and social ecosystem required for an open agentic web to thrive.
 
-**Key features built and delivered during this round include:**
-
-- **The Verifiable App Store Backend:** A fully on-chain registry for MCP servers, architected on open ICRC standards (118, 120, 126, 127). It manages versions, cryptographic proofs, and audit attestations, all governed by a DAO.
-- **The Prometheus CLI (`prom-cli`):** A purpose-built command-line interface that serves both sides of the ecosystem:
-  - **For Developers:** `prom-cli submit` allows developers to publish their MCP servers and submit new versions for verification.
-  - **For Auditors:** `prom-cli status` and `attest` commands enable auditors to discover open bounties, review code, and file on-chain cryptographic attestations.
-- **The App Store Frontend:** A user-facing web application for the discovery and inspection of MCP servers. Users can browse the registry and dive deep into any server's on-chain **Prometheus Certificate** to see the underlying audit proofs.
-- **Full Integration of ICRC Standards:** We composed five different ICRC standards into a single, cohesive system, demonstrating the power of the IC's open protocols.
+- **Launched a Complete Economic Engine:**
+  - **Usage Mining System:** A full-stack system for developers to reward end-users with USDC for interacting with their services, driving a powerful economic feedback loop.
+  - **Public Bounty & Grant Infrastructure:** A live bounty board with over 1,000 USDC in initial bounties to fund the creation of new services, plus a Genesis Grant Program for larger projects.
+- **Forged a Robust Trust Layer:**
+  - **Auditor Hub & Reputation System:** A dedicated hub where vetted auditors can stake USDC to claim audit bounties from a public queue and build their on-chain reputation.
+  - **Automated & Social Integration:** A complete auditor onboarding process with real-time Discord bot notifications for new service submissions.
+- **Driven Real-World Adoption:**
+  - **Multi-Platform Agent Integration:** Proved end-to-end functionality by creating AI agents that consume Prometheus-verified services using diverse clients, including **n8n, PortalOne, and VSCode.**
+  - **Official Documentation & Community:** Launched comprehensive documentation and a new "On-chain AI" tech meetup to accelerate developer onboarding and community growth.
 
 ---
 
 ## Core Features
 
-|     | Feature                   | Description                                                           |
-| :-: | ------------------------- | --------------------------------------------------------------------- |
-| 🛡️  | Secure On-Chain OAuth 2.1 | Production-grade identity and authorization for any service.          |
-| 🔎  | Verifiable App Store      | Certified discovery, audit trails, and cryptographic code provenance. |
-| 💸  | ICRC-2 Allowance Payments | Direct, programmable, and low-fee token payments for M2M commerce.    |
-| 🤖  | Agent-Ready APIs          | Built from the ground up for both humans and autonomous agents.       |
-| 🏆  | Open-Source SDKs          | Motoko & TypeScript SDKs for rapid integration and development.       |
+|     | Feature                   | Description                                                               |
+| :-: | ------------------------- | ------------------------------------------------------------------------- |
+| 🛡️  | Secure On-Chain OAuth 2.1 | Production-grade identity and authorization for any service.              |
+| 🔎  | Verifiable App Store      | A decentralized software supply chain with on-chain audits & code proofs. |
+| 💸  | Direct Token Payments     | Programmable, low-fee payments for a true M2M economy.                    |
+| 🤖  | Agent-Ready APIs          | Built from the ground up for both humans and autonomous agents.           |
+| 🏆  | Open-Source SDKs          | Motoko & TypeScript SDKs for rapid integration and development.           |
 
 ---
 
-## Monetization & Sustainability
+## Economic Model & Sustainability
 
-Our protocol is designed as a self-sustaining economic flywheel for the entire AI ecosystem on ICP.
+Our protocol is designed as a self-sustaining economic flywheel for the open agentic web.
 
 1.  **Enabling Monetization (The Foundation):** Our OAuth 2.1 server provides the essential tools for any developer to monetize their AI services with on-chain micropayments.
-2.  **Driving Discovery & Trust (The Marketplace):** The App Store is the public marketplace where users and agents discover these monetized servers. The Prometheus Certificate acts as a powerful signal of quality and security, reducing friction and encouraging user adoption. **Trust is the lubricant for economic activity.**
-3.  **Protocol Sustainability (The DAO Treasury):** The long-term sustainability of the protocol will be managed by the Prometheus DAO. In the future, the DAO can vote to introduce a micro-fee on transactions processed by the economic layer. These funds would flow directly to the DAO treasury to fund ongoing development, security audits, and ecosystem grants, ensuring Prometheus remains a well-maintained public good.
+2.  **Driving Discovery & Trust (The Marketplace):** The App Store is the public marketplace where users and agents discover these monetized services. The Prometheus Certificate acts as a powerful signal of quality and security, reducing friction and encouraging user adoption. **Trust is the lubricant for economic activity.**
+3.  **Protocol Sustainability:** The long-term sustainability of the protocol will be ensured by its core utility. In the future, a micro-fee on transactions can be introduced via a transparent, community-vetted process. These funds would flow to a protocol-managed treasury to fund ongoing development, security audits, and ecosystem grants, ensuring Prometheus remains a well-maintained public good.
 
 ---
 
 ## Technologies & ICP Features Used
 
-- **Protocol:** Internet Computer Protocol (ICP), Model Context Protocol (MCP)
+- **Protocol:** Internet Computer Protocol (ICP)
 - **Canisters:** Motoko
 - **Standards:** ICRC-1/2 (Tokens), ICRC-118 (Versioning), ICRC-120 (Orchestration), ICRC-126 (Attestation), ICRC-127 (Bounties)
-- **Identity:** Internet Identity, On-Chain OAuth 2.1 with PKCE, Dynamic Client Registration
-- **Advanced IC Features:** **t-ECDSA** (for JWT signing in the Auth Server), **Certified Responses** (for secure data delivery), **Timers** (for managing bounty expirations).
+- **Identity:** Internet Identity, On-Chain OAuth 2.1 with PKCE
+- **Advanced IC Features:** **t-ECDSA** (for JWT signing), **Certified Responses**, **Timers**
 - **Frontend:** React, TypeScript, Vite
 - **Testing:** `picjs` (powered by PocketIC), Vitest
 
@@ -164,9 +167,9 @@ The protocol is a vertically integrated stack where each layer builds upon the l
 
 ## Testing
 
-The project includes a comprehensive test suite to ensure reliability and correctness, hitting a key bonus criterion for the hackathon.
+The project includes a comprehensive test suite to ensure reliability and correctness.
 
-- **E2E & Integration Tests (`picjs`):** We use `picjs`, a powerful testing library powered by **PocketIC**, to run end-to-end tests that simulate real-world interactions between all canisters in a deterministic local environment.
+- **E2E & Integration Tests (`picjs`):** We use `picjs`, powered by **PocketIC**, to run end-to-end tests that simulate real-world interactions between all canisters.
   ```bash
   pnpm test:canisters
   ```
@@ -193,7 +196,10 @@ The project includes a comprehensive test suite to ensure reliability and correc
 - **App Store UI:** `gyeil-qyaaa-aaaai-q32uq-cai`
 - **MCP Registry:** `grhdx-gqaaa-aaaai-q32va-cai`
 - **MCP Orchestrator:** `ez54s-uqaaa-aaaai-q32za-cai`
-- **Auditor Credentials:** `eq6xo-cyaaa-aaaai-q32yq-cai`
+- **Auditor Hub:** `eq6xo-cyaaa-aaaai-q32yq-cai`
+- **App Bounties:** `jld6p-yqaaa-aaaai-q33ra-cai`
+- **Usage Tracker:** `m63pw-fqaaa-aaaai-q33pa-cai`
+- **Leaderboard:** `jmcy3-viaaa-aaaai-q33rq-cai`
 - **OAuth Server:** `bfggx-7yaaa-aaaai-q32gq-cai`
 - **OAuth Frontend:** `bmfnl-jqaaa-aaaai-q32ha-cai`
 - **ICRC1 Ledger (PMP):** `dy3i7-mqaaa-aaaai-q32ja-cai`
@@ -202,15 +208,15 @@ The project includes a comprehensive test suite to ensure reliability and correc
 
 ## Challenges & Learnings
 
-Building a full-stack, on-chain trust layer presented several unique challenges during the hackathon:
+Building a full-stack, on-chain trust layer presented several unique challenges:
 
-1.  **On-Chain OAuth 2.1 Security:** Implementing a secure OAuth server on a public blockchain required a novel approach. We leveraged mandatory PKCE, certified responses, and a unique `request_id` system to protect against code interception and malicious boundary nodes, ensuring that secret access tokens are never publicly exposed.
-2.  **ICRC Standard Composability:** Integrating five different ICRC standards (1, 2, 118, 120, 126, 127) into a cohesive system was a significant architectural challenge. It required careful state management and inter-canister communication patterns to ensure data consistency and atomicity where needed.
-3.  **CLI Tooling & Build Process:** Creating a professional CLI with a unified developer experience required solving complex build issues, particularly managing ESM/CJS module compatibility between our shared libraries and the final executable, which we solved using `esbuild`'s `define` and `external` features.
+1.  **On-Chain OAuth 2.1 Security:** Implementing a secure OAuth server on a public blockchain required leveraging mandatory PKCE, certified responses, and a unique `request_id` system to protect against code interception and malicious boundary nodes.
+2.  **ICRC Standard Composability:** Integrating five different ICRC standards into a cohesive system was a significant architectural challenge, requiring careful state management and inter-canister communication patterns.
+3.  **CLI Tooling & Build Process:** Creating a professional CLI required solving complex build issues, particularly managing ESM/CJS module compatibility, which we solved using `esbuild`.
 
 ---
 
-## Roadmap & Future Work
+## Roadmap
 
 Our journey is structured in ambitious phases, building from a solid foundation towards a vibrant, trusted ecosystem.
 
@@ -218,41 +224,34 @@ Our journey is structured in ambitious phases, building from a solid foundation 
   <summary><strong>Phase 0: The Foundation (✅ COMPLETE)</strong></summary>
   <p><strong>Goal:</strong> Forge the complete, end-to-end stack for secure identity and payments.</p>
   <ul>
-    <li><strong>[x] The Core Auth Server:</strong> Implemented the core OAuth 2.1 flows, JWT signing, and modern security standards.</li>
-    <li><strong>[x] The Developer SDKs:</strong> Released <code>motoko-mcp-sdk</code> and <code>@prometheus-protocol/typescript-sdk</code> for building and integrating monetizable services.</li>
-    <li><strong>[x] The Proof of Concept:</strong> Deployed live demos showcasing the full identity and payment stack.</li>
+    <li><strong>[x]</strong> Deployed a production-ready OAuth 2.1 provider and a full suite of SDKs, enabling any developer to build and monetize secure, on-chain services.</li>
   </ul>
 </details>
 
 <details>
-  <summary><strong>Phase 1: The Trust Layer (⏳ NEARING COMPLETION)</strong></summary>
-  <p><strong>Goal:</strong> Build the premier, high-trust software supply chain for provably safe services, establishing the gold standard for reliability in the agent economy.</p>
+  <summary><strong>Phase 1: The Trust Layer (✅ COMPLETE)</strong></summary>
+  <p><strong>Goal:</strong> Build the premier, high-trust software supply chain for provably safe services.</p>
   <ul>
-    <li><strong>[x] The On-Chain Supply Chain Hub:</strong> Deployed the <code>mcp_registry</code> (ICRC-118/126/127) and <code>mcp_orchestrator</code> (ICRC-120).</li>
-    <li><strong>[x] The Developer & Auditor Tooling:</strong> Developed and shipped the complete <code>@prometheus-protocol/cli</code>.</li>
-    <li><strong>[x] The App Store Frontend:</strong> Deployed a user-friendly web interface for discovering services and viewing their on-chain certification status.</li>
-    <li><strong>[x] The Governance & Audit Workflow:</strong> Implemented the full on-chain workflow for Developers, Auditors, and the DAO.</li>
-    <li><strong>[ ] DAO Formation & Onboarding:</strong> Formally constitute the governing DAO and onboard the initial set of trusted auditors.</li>
-    <li><strong>[ ] Security Hardening:</strong> Submit the entire canister suite for a professional, third-party security audit.</li>
+    <li><strong>[x]</strong> Shipped a feature-complete, on-chain App Store and Trust Hub, including a service registry, an audit and bounty marketplace, and a full command-line interface for developers and auditors.</li>
   </ul>
 </details>
 
 <details>
-  <summary><strong>Phase 2: Ecosystem Growth (🚀 UP NEXT)</strong></summary>
-  <p><strong>Goal:</strong> With a unified platform for trust, identity, and payments, the focus shifts to scaling the ecosystem through strategic onboarding and partnerships.</p>
+  <summary><strong>Phase 2: Ecosystem Growth (✅ COMPLETE)</strong></summary>
+  <p><strong>Goal:</strong> Build the complete economic and social infrastructure to bootstrap a self-sustaining economy via the <strong>Alpha Flywheel Initiative</strong>.</p>
   <ul>
-    <li><strong>[ ] Onboard the First Wave of Production Services:</strong> Actively recruit and support high-value developers to publish their services on the platform.</li>
-    <li><strong>[ ] Drive Client-Side Integration:</strong> Partner with developers of AI agents and MCP clients to integrate the registry as a primary, high-trust service source.</li>
-    <li><strong>[ ] Accelerate Community Adoption:</strong> Launch community initiatives such as hackathons, developer grants, and comprehensive tutorials.</li>
+    <li><strong>[x]</strong> Launched a full suite of incentive systems: a developer bounty board, a Genesis Grant program, an Auditor Hub with staking and reputation, and a "Usage Mining" system to reward end-users with USDC.</li>
   </ul>
 </details>
 
 <details>
-  <summary><strong>Phase 3: The Autonomous Economy</strong></summary>
-  <p><strong>Goal:</strong> Evolve from a platform managed by the founding team into a self-sustaining, community-governed economic protocol.</p>
+  <summary><strong>Phase 3: The Professional Marketplace (🚀 UP NEXT)</strong></summary>
+  <p><strong>Goal:</strong> Evolve from a foundational protocol into a professional, scalable, and accessible marketplace ready for widespread adoption.</p>
   <ul>
-    <li><strong>[ ] Full Decentralization & Curation:</strong> Transition full control of the Registry Hub and its policies to the DAO, cementing its status as a decentralized public utility.</li>
-    <li><strong>[ ] Advanced Economic Primitives:</strong> Enable security bonds and atomic, on-chain revenue sharing for services.</li>
+    <li><strong>[ ] Professionalizing the Marketplace:</strong> Establish clear SOPs for auditors, and implement a robust cycles monitoring and top-up system for service reliability.</li>
+    <li><strong>[ ] Expanding the Economy:</strong> Enhance the Motoko SDK with programmatic charging and integrate ETH wallet support with 1-click USDC bridging to lower the barrier for new users.</li>
+    <li><strong>[ ] Scaling Developer Adoption:</strong> Achieve full feature parity for the Rust MCP SDK and integrate with the official MCP registry to maximize discoverability.</li>
+    <li><strong>[ ] Accelerating Community Growth:</strong> Scale our community engagement through targeted outreach, tech meetups, and a steady stream of high-quality tutorials and guides.</li>
   </ul>
 </details>
 

@@ -3,8 +3,9 @@ import type { ActorMethod } from '@dfinity/agent';
 import type { IDL } from '@dfinity/candid';
 
 export interface AppMetrics {
+  'authenticated_unique_users' : bigint,
   'total_invocations' : bigint,
-  'unique_users' : bigint,
+  'anonymous_invocations' : bigint,
   'total_tools' : bigint,
 }
 export interface CallerActivity {
