@@ -49,8 +49,10 @@ export function ToolsAndResources({ tools, wasmId }: ToolsAndResourcesProps) {
                       </div>
                     )}
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-foreground font-mono">
-                        ${tool.cost}
+                      <span className="text-sm text-foreground font-mono font-semibold px-2 py-0.5 bg-accent rounded">
+                        {parseFloat(tool.cost) === 0
+                          ? 'Free'
+                          : `${tool.cost} ${tool.tokenSymbol}`}
                       </span>
                     </div>
                   </div>

@@ -74,7 +74,7 @@ export const AccessAndBilling = ({
     <>
       <div className="space-y-4">
         <div className="space-y-1">
-          <h2 className="text-2xl font-bold flex items-center gap-3">
+          <h2 className="text-2xl font-bold tracking-tight flex items-center gap-3 mb-4">
             <Wallet className="w-6 h-6" />
             Access & Billing
           </h2>

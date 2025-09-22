@@ -1,7 +1,7 @@
 // src/lib/search.api.ts
 
 import { AppListing } from '@prometheus-protocol/declarations/mcp_registry/mcp_registry.did.js';
-import { getSearchIndexActor, getRegistryActor } from '../actors'; // You'll need both actors now
+import { getSearchIndexActor, getRegistryActor } from '../actors.js'; // You'll need both actors now
 
 /**
  * Performs a full, two-hop search for apps.
