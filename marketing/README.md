@@ -1,8 +1,8 @@
 ![Project Alliance Banner](./images/banner.png)
 
-# Phase 2 Retrospective: Project Alliance
+# Phase 3 Retrospective
 
-Phase 2: Project Alliance was all about scaling adoption and building a thriving ecosystem for the Model Context Protocol (MCP) through real-world incentives, community growth, and seamless integrations. Our challenge: Bootstrap a self-sustaining economy that attracts and rewards developers, auditors, and end-users—while reinforcing trust, transparency, and usability at every step.
+Phase 3 was all about scaling adoption and building a thriving ecosystem for the Model Context Protocol (MCP) through real-world incentives, community growth, and seamless integrations. Our challenge: Bootstrap a self-sustaining economy that attracts and rewards developers, auditors, and end-users—while reinforcing trust, transparency, and usability at every step.
 
 ![Motoko SDK Downloads](./images/motoko-sdk-downloads.png)
 
@@ -16,7 +16,7 @@ Phase 2: Project Alliance was all about scaling adoption and building a thriving
 
 ### 1. Research: Understanding the Ecosystem
 
-We kicked off Phase 2 by diving deep into the Model Context Protocol (MCP) landscape. Our goal was to understand the ecosystem’s real needs and uncover opportunities for impact. We analyzed the latest in trust, incentives, and agent-driven workflows—setting the stage for features that would truly resonate with our target users.
+We kicked off Phase 3 by diving deep into the Model Context Protocol (MCP) landscape. Our goal was to understand the ecosystem’s real needs and uncover opportunities for impact. We analyzed the latest in trust, incentives, and agent-driven workflows—setting the stage for features that would truly resonate with our target users.
 
 - [Microsoft Introduces Logic Apps as MCP Servers in Public Preview](https://techcommunity.microsoft.com/t5/integrations-on-azure-blog/introducing-logic-apps-as-mcp-servers-in-public-preview/ba-p/4038138)
 - [Creating and Deploying an MCP Server from Scratch](https://medium.com/@jesse.moore/creating-and-deploying-an-mcp-server-from-scratch-828853681352)
@@ -81,4 +81,4 @@ The feedback was overwhelmingly positive and provided clear direction for our ne
 
 ## The Takeaway
 
-Phase 2 was a journey of discovery, design, and genuine community building—proving that user-centered research, collaborative design, and real-world engagement are the keys to sustainable ecosystem growth.
+Phase 3 was a journey of discovery, design, and genuine community building—proving that user-centered research, collaborative design, and real-world engagement are the keys to sustainable ecosystem growth.
