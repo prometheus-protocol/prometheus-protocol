@@ -57,7 +57,9 @@ An open web is impossible without solving the fundamental problem of trust. With
 
 **Prometheus Protocol** provides the solution by creating a transparent, on-chain "app store" for the open agentic web, governed by cryptographic proofs and economic incentives. We provide the trust that makes the open economy possible.
 
-[![Watch our Pitch & Demo Video](https://i.ytimg.com/vi/4YvL-2Jt0I0/hqdefault.jpg)](https://www.youtube.com/watch?v=4YvL-2Jt0I0)
+![YouTube Video](https://www.youtube.com/watch?v=ZK6Zo2tWfSQ)
+
+![YouTube Video](https://www.youtube.com/watch?v=639_-z_Oq8E)
 
 ---
 
@@ -116,16 +118,21 @@ Our protocol is designed as a self-sustaining economic flywheel for the open age
 The protocol is a vertically integrated stack where each layer builds upon the last, ensuring a secure and seamless flow from user identity to service execution.
 
 ![Protocol Architecture](design/images/protocol-architecture.png)
+
 ![Canister Architecture](design/images/canister-architecture.png)
 
 ---
 
 ## Demo Links & Resources
 
-- **Live App Store:** [Discover and inspect verified services](https://gyeil-qyaaa-aaaai-q32uq-cai.icp0.io/)
-- **Video Pitch & Demo:** [Watch our Vision, Architecture Overview, and Code Walkthrough](https://www.youtube.com/watch?v=4YvL-2Jt0I0)
+- **Live App Store:** [Discover Verified MCP Servers](https://prometheusprotocol.org)
+- **Documentation:** [Read the Docs](https://docs.prometheusprotocol.org)
+- **Marketing and User Research:** [View our Marketing and User Research](marketing/README.md)
 - **Design Document:** [View our UX/UI Research & Design System](design/README.md)
-- **OAuth 2.1 Dashboard:** [Manage clients and grants for the payment protocol](https://bmfnl-jqaaa-aaaai-q32ha-cai.icp0.io/)
+- **OAuth 2.1 Dashboard:** [Manage Clients and Grants](https://bmfnl-jqaaa-aaaai-q32ha-cai.icp0.io/)
+
+- **Video Pitch & Demo:** [Watch our Vision, Architecture Overview, and Code Walkthrough](https://www.youtube.com/watch?v=639_-z_Oq8E)
+- **Full Functional Demo:** [Watch our Full Functional Demo](https://www.youtube.com/watch?v=ZK6Zo2tWfSQ)
 
 ---
 
