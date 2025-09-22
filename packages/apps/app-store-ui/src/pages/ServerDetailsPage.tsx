@@ -156,6 +156,8 @@ export default function ServerDetailsPage() {
 
   const acceptsPayments = latestVersion.tools.some((tool) => !!tool.cost);
 
+  const similarAppsTopMargin = !server.metrics ? 'mt-16' : 'mt-0';
+
   return (
     <>
       <div className="w-full max-w-6xl mx-auto pt-12 pb-32">
@@ -250,7 +252,7 @@ export default function ServerDetailsPage() {
             </div>
           </main>
 
-          <aside className="lg:col-span-2 space-y-8">
+          <aside className={`lg:col-span-2 space-y-8 ${similarAppsTopMargin}`}>
             {/* SimilarApps should use the STABLE namespace to find related apps. */}
             <SimilarApps currentServerNamespace={server.namespace} />
           </aside>
