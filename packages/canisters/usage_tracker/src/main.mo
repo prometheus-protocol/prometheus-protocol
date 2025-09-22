@@ -67,10 +67,11 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   // STATE
   // ==================================================================================================
 
-  var admin : Principal = deployer;
+  var owner : Principal = deployer;
   var payout_canister : ?Principal = null;
   var approved_wasm_hashes = Map.new<Text, Null>();
   var logs = Vector.new<LogEntry>();
+  var registry_canister_id : ?Principal = null;
 
   // The primary state for all aggregated data, keyed by WASM hash for payouts.
   var aggregated_metrics = Map.new<Text, ServerMetrics>();
@@ -82,8 +83,8 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   // PRIVATE HELPERS
   // ==================================================================================================
 
-  private func is_admin(caller : Principal) : Bool {
-    return Principal.equal(admin, caller);
+  private func is_owner(caller : Principal) : Bool {
+    return Principal.equal(owner, caller);
   };
 
   private func is_payout_canister(caller : Principal) : Bool {
@@ -143,36 +144,43 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   // ==================================================================================================
 
   public shared (msg) func set_payout_canister(canister_id : Principal) : async Result.Result<(), Text> {
-    if (not is_admin(msg.caller)) {
+    if (not is_owner(msg.caller)) {
       Debug.print("Unauthorized attempt to set payout canister by: " # Principal.toText(msg.caller));
-      return #err("Unauthorized: Only the admin can set the payout canister.");
+      return #err("Unauthorized: Only the owner can set the payout canister.");
     };
     payout_canister := ?canister_id;
     return #ok(());
   };
 
-  public shared (msg) func transfer_admin(new_admin : Principal) : async Result.Result<(), Text> {
-    if (not is_admin(msg.caller)) {
-      Debug.print("Unauthorized attempt to transfer admin by: " # Principal.toText(msg.caller));
-      return #err("Unauthorized: Only the admin can transfer admin rights.");
+  public shared (msg) func set_owner(new_owner : Principal) : async Result.Result<(), Text> {
+    if (not is_owner(msg.caller)) {
+      Debug.print("Unauthorized attempt to transfer owner by: " # Principal.toText(msg.caller));
+      return #err("Unauthorized: Only the owner can transfer owner rights.");
     };
-    admin := new_admin;
+    owner := new_owner;
     return #ok(());
   };
 
+  private func is_registry_canister(caller : Principal) : Bool {
+    switch (registry_canister_id) {
+      case (null) { return false };
+      case (?registry) { return Principal.equal(registry, caller) };
+    };
+  };
+
   public shared (msg) func add_approved_wasm_hash(wasm_id : Text) : async Result.Result<(), Text> {
-    if (not is_admin(msg.caller)) {
+    if (not is_owner(msg.caller) and not is_registry_canister(msg.caller)) {
       Debug.print("Unauthorized attempt to add Wasm hash by: " # Principal.toText(msg.caller));
-      return #err("Unauthorized: Only the admin can add a Wasm hash.");
+      return #err("Unauthorized: Only the owner or registry can add a Wasm hash.");
     };
     Map.set(approved_wasm_hashes, Map.thash, wasm_id, null);
     return #ok(());
   };
 
   public shared (msg) func remove_approved_wasm_hash(wasm_id : Text) : async Result.Result<(), Text> {
-    if (not is_admin(msg.caller)) {
+    if (not is_owner(msg.caller)) {
       Debug.print("Unauthorized attempt to remove Wasm hash by: " # Principal.toText(msg.caller));
-      return #err("Unauthorized: Only the admin can remove a Wasm hash.");
+      return #err("Unauthorized: Only the owner can remove a Wasm hash.");
     };
     Map.delete(approved_wasm_hashes, Map.thash, wasm_id);
     return #ok(());
@@ -216,6 +224,15 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
 
     Debug.print("Log entry added. Total log entries: " # debug_show (Vector.size(logs)));
 
+    return #ok(());
+  };
+
+  public shared (msg) func set_registry_canister(canister_id : Principal) : async Result.Result<(), Text> {
+    if (not is_owner(msg.caller)) {
+      Debug.print("Unauthorized attempt to set registry canister by: " # Principal.toText(msg.caller));
+      return #err("Unauthorized: Only the owner can set the registry canister.");
+    };
+    registry_canister_id := ?canister_id;
     return #ok(());
   };
 
@@ -265,7 +282,7 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
     return Buffer.toArray(all_metrics);
   };
 
-  public shared query func get_admin() : async Principal { return admin };
+  public shared query func get_owner() : async Principal { return owner };
   public shared query func get_payout_canister() : async ?Principal {
     return payout_canister;
   };
@@ -278,9 +295,9 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   // ==================================================================================================
 
   public shared (msg) func seed_log(canister_id : Principal, wasm_id : Text, stats : UsageStats) : async Result.Result<(), Text> {
-    if (not is_admin(msg.caller)) {
+    if (not is_owner(msg.caller)) {
       Debug.print("Unauthorized attempt to seed log by: " # Principal.toText(msg.caller));
-      return #err("Unauthorized: Only the admin can call seed_log.");
+      return #err("Unauthorized: Only the owner can call seed_log.");
     };
 
     let new_log : LogEntry = {
