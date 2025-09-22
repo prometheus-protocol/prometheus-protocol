@@ -57,9 +57,9 @@ An open web is impossible without solving the fundamental problem of trust. With
 
 **Prometheus Protocol** provides the solution by creating a transparent, on-chain "app store" for the open agentic web, governed by cryptographic proofs and economic incentives. We provide the trust that makes the open economy possible.
 
-![YouTube Video](https://www.youtube.com/watch?v=ZK6Zo2tWfSQ)
+[![Watch our E2E Demo Video](https://i.ytimg.com/vi/ZK6Zo2tWfSQ/hqdefault.jpg)](https://www.youtube.com/watch?v=ZK6Zo2tWfSQ)
 
-![YouTube Video](https://www.youtube.com/watch?v=639_-z_Oq8E)
+[![Watch our Pitch Video](https://i.ytimg.com/vi/639_-z_Oq8E/hqdefault.jpg)](https://www.youtube.com/watch?v=639_-z_Oq8E)
 
 ---
 
