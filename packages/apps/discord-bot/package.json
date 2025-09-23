@@ -1,0 +1,25 @@
+{
+  "name": "@prometheus-protocol/discord-bot",
+  "version": "1.0.0",
+  "description": "Discord bot for Prometheus Protocol community",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node ./dist/index.js",
+    "dev": "tsx src/index.ts",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "discord.js": "^14.13.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "tsx": "^4.10.5",
+    "typescript": "^5.4.5"
+  },
+  "keywords": ["discord", "bot", "prometheus-protocol"],
+  "author": "Prometheus Protocol",
+  "license": "MIT"
+}
