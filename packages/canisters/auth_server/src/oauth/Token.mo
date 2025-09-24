@@ -108,6 +108,8 @@ module {
         };
         Map.set(context.refresh_tokens, thash, refresh_token_string, refresh_token_data);
 
+        Debug.print("TOKEN: Refresh token string: " # refresh_token_string);
+
         Debug.print("Issuing final token response...");
         return issue_token_response(res, access_token, validated_req.auth_code_record.scope, ?refresh_token_string);
       };
@@ -118,6 +120,8 @@ module {
           case (#err((status, error, desc))) return Errors.send_token_error(res, Nat16.fromNat(status), error, ?desc);
           case (#ok(data)) data;
         };
+
+        Debug.print("TOKEN (refresh): Refresh token string: " # old_refresh_token.token);
 
         // REFRESH TOKEN ROTATION: Invalidate the old token immediately.
         Map.delete(context.refresh_tokens, thash, old_refresh_token.token);

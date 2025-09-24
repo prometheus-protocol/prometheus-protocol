@@ -241,6 +241,9 @@ module {
       case (#ok(v)) v;
       case (#err(e)) return #err(e);
     };
+
+    Debug.print("VALIDATION: Refresh token string: " # refresh_token_string);
+
     let client_id = switch (get_required("client_id")) {
       case (#ok(v)) v;
       case (#err(e)) return #err(e);

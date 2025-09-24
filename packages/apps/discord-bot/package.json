@@ -8,18 +8,36 @@
     "build": "tsc",
     "start": "node ./dist/index.js",
     "dev": "tsx src/index.ts",
-    "watch": "tsc --watch"
+    "watch": "tsc --watch",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:watch": "vitest --watch"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.18.1",
+    "@supabase/supabase-js": "^2.39.0",
+    "@types/express": "^5.0.3",
     "discord.js": "^14.13.0",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "eventsource": "^4.0.0",
+    "express": "^5.1.0",
+    "node-cron": "^3.0.3",
+    "openai": "^4.24.0"
   },
   "devDependencies": {
+    "@types/eventsource": "^1.1.15",
     "@types/node": "^20.12.12",
+    "@types/node-cron": "^3.0.11",
     "tsx": "^4.10.5",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^2.1.5",
+    "@vitest/ui": "^2.1.5"
   },
-  "keywords": ["discord", "bot", "prometheus-protocol"],
+  "keywords": [
+    "discord",
+    "bot",
+    "prometheus-protocol"
+  ],
   "author": "Prometheus Protocol",
   "license": "MIT"
 }
