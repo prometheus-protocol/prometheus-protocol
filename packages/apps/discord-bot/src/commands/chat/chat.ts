@@ -1,6 +1,7 @@
 import {
   SlashCommandBuilder,
   SlashCommandOptionsOnlyBuilder,
+  ChatInputCommandInteraction,
 } from 'discord.js';
 import {
   BaseCommand,
@@ -42,11 +43,89 @@ export class ChatCommand extends BaseCommand {
       );
   }
 
+  async executeSlash(interaction: ChatInputCommandInteraction): Promise<void> {
+    const prompt = interaction.options.getString('message', true);
+
+    console.log('🔍 Chat executeSlash called:', {
+      interactionId: interaction.id,
+      isDeferred: interaction.deferred,
+      isReplied: interaction.replied,
+      userId: interaction.user.id,
+    });
+
+    // Acknowledge the interaction immediately - before any other processing
+    try {
+      await interaction.deferReply();
+      console.log(
+        '✅ Successfully deferred reply for interaction:',
+        interaction.id,
+      );
+    } catch (error) {
+      console.error('❌ Failed to defer reply:', error);
+      console.log('🔍 Interaction state when defer failed:', {
+        interactionId: interaction.id,
+        isDeferred: interaction.deferred,
+        isReplied: interaction.replied,
+        createdTimestamp: interaction.createdTimestamp,
+        age: Date.now() - interaction.createdTimestamp,
+      });
+      return;
+    }
+
+    chatLogger.info('Chat slash command executed', {
+      userId: interaction.user.id,
+      prompt: prompt.substring(0, 100),
+    });
+
+    try {
+      // Create a context object compatible with the existing execute method
+      const context: CommandContext = {
+        interaction,
+        args: [],
+        userId: interaction.user.id,
+        channelId: interaction.channelId,
+        guildId: interaction.guildId || undefined,
+      };
+
+      // Call the existing execute method
+      const response = await this.executeInternal(context, prompt);
+
+      // Send the response using editReply since we deferred
+      if (response) {
+        await interaction.editReply({
+          content: response.content || undefined,
+          embeds: response.embeds || undefined,
+          files: response.files || undefined,
+          components: response.components || undefined,
+        });
+      } else {
+        await interaction.editReply({ content: '✅ Done.' });
+      }
+    } catch (error) {
+      chatLogger.error(
+        'Error in chat slash command',
+        error instanceof Error ? error : new Error(String(error)),
+      );
+
+      await interaction.editReply({
+        content:
+          'Sorry, I encountered an error while processing your request. Please try again later.',
+      });
+    }
+  }
+
   async execute(context: CommandContext): Promise<CommandResponse> {
     const prompt = context.interaction
       ? context.interaction.options.getString('message', true)
       : context.args.join(' ');
 
+    return this.executeInternal(context, prompt);
+  }
+
+  private async executeInternal(
+    context: CommandContext,
+    prompt: string,
+  ): Promise<CommandResponse> {
     chatLogger.info('Chat command executed', {
       userId: context.userId,
       prompt: prompt.substring(0, 100),
@@ -61,8 +140,12 @@ export class ChatCommand extends BaseCommand {
     }
 
     try {
-      // Show typing indicator
-      if (context.interaction) {
+      // Show typing indicator - but only if not already deferred
+      if (
+        context.interaction &&
+        !context.interaction.deferred &&
+        !context.interaction.replied
+      ) {
         await context.interaction.deferReply();
       }
 

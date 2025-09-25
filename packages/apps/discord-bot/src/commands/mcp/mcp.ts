@@ -13,6 +13,7 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  ChatInputCommandInteraction,
 } from 'discord.js';
 
 export class MCPCommand extends BaseCommand {
@@ -112,6 +113,96 @@ export class MCPCommand extends BaseCommand {
         return this.handleReset(args[1], userId);
       default:
         return this.handleHelp();
+    }
+  }
+
+  async executeSlash(interaction: ChatInputCommandInteraction): Promise<void> {
+    const subcommand = interaction.options.getSubcommand();
+
+    console.log('🔍 MCP executeSlash called:', {
+      interactionId: interaction.id,
+      isDeferred: interaction.deferred,
+      isReplied: interaction.replied,
+      userId: interaction.user.id,
+      subcommand,
+    });
+
+    // Acknowledge the interaction immediately - same pattern as chat command
+    try {
+      await interaction.deferReply();
+      console.log(
+        '✅ Successfully deferred reply for interaction:',
+        interaction.id,
+      );
+    } catch (error) {
+      console.error('❌ Failed to defer reply:', error);
+      console.log('🔍 Interaction state when defer failed:', {
+        interactionId: interaction.id,
+        isDeferred: interaction.deferred,
+        isReplied: interaction.replied,
+        createdTimestamp: interaction.createdTimestamp,
+        age: Date.now() - interaction.createdTimestamp,
+      });
+      return;
+    }
+
+    let response: CommandResponse | void;
+
+    try {
+      // Route to existing handlers
+      switch (subcommand) {
+        case 'search': {
+          const query = interaction.options.getString('query') || '';
+          const fakeContext = {
+            userId: interaction.user.id,
+            args: query.split(' '),
+          } as CommandContext;
+          response = await this.handleSearch(query.split(' '), fakeContext);
+          break;
+        }
+        case 'list':
+          response = await this.handleList(interaction.user.id);
+          break;
+        case 'connect': {
+          const serverId = interaction.options.getString('server-id', true);
+          response = await this.handleConnect(serverId, interaction.user.id);
+          break;
+        }
+        case 'disconnect': {
+          const serverId = interaction.options.getString('server-id', true);
+          response = await this.handleDisconnect(serverId, interaction.user.id);
+          break;
+        }
+        case 'tools':
+          response = await this.handleTools(interaction.user.id);
+          break;
+        case 'status':
+          response = await this.handleStatus();
+          break;
+        default:
+          response = {
+            content: `❌ Subcommand "${subcommand}" is not implemented.`,
+          };
+          break;
+      }
+
+      // Send the response using editReply since we deferred
+      if (response) {
+        await interaction.editReply({
+          content: response.content || undefined,
+          embeds: response.embeds || undefined,
+          files: response.files || undefined,
+          components: response.components || undefined,
+        });
+      } else {
+        await interaction.editReply({ content: '✅ Done.' });
+      }
+    } catch (error) {
+      console.error(`Error executing /mcp ${subcommand}:`, error);
+
+      await interaction.editReply({
+        content: '❌ An unexpected error occurred while running this command.',
+      });
     }
   }
 

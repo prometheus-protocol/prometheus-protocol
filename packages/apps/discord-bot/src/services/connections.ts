@@ -426,6 +426,8 @@ export class ConnectionPoolService {
         serverUrl: payload.mcpServerUrl,
       });
 
+      console.log('authStatus', authStatus);
+
       // Handle non-error exit conditions from auth flow
       if (authStatus === 'REDIRECT') {
         logger.info(
@@ -463,8 +465,8 @@ export class ConnectionPoolService {
 
       // --- Client Creation and Connection ---
       const clientConstructorOpts: Implementation = {
-        title: 'Portal One MCP Client',
-        name: 'portal-one-mcp-client',
+        title: 'Prometheus Protocol MCP Client',
+        name: 'prometheus-protocol-mcp-client',
         version: '1.0.1',
       };
       const clientOptions = {

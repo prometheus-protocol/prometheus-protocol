@@ -121,25 +121,6 @@ export class MCPEventHandlerService {
       logger.info(
         `[MCPEventHandler] Successfully synced ${tools.length} tools for ${mcpServerConfigId}`,
       );
-
-      // Send Discord notification about tools being ready
-      if (this.discordNotification) {
-        try {
-          await this.discordNotification.sendToolsReadyMessage(
-            userId,
-            connectionData.server_name,
-            tools.length,
-          );
-          logger.info(
-            `[MCPEventHandler] Sent Discord notification to user ${userId} about ${tools.length} tools ready`,
-          );
-        } catch (notificationError) {
-          logger.warn(
-            `[MCPEventHandler] Failed to send Discord notification to user ${userId}: ${notificationError instanceof Error ? notificationError.message : String(notificationError)}`,
-          );
-          // Don't throw - notification failure shouldn't break tool syncing
-        }
-      }
     } catch (error) {
       logger.error(
         `[MCPEventHandler] Error syncing tools for ${mcpServerConfigId}:`,

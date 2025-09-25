@@ -69,36 +69,6 @@ export class DiscordNotificationService {
   }
 
   /**
-   * Send a tools ready notification to a user
-   */
-  async sendToolsReadyMessage(
-    userId: string,
-    serverName: string,
-    toolCount: number,
-  ): Promise<void> {
-    try {
-      const user = await this.discordClient.users.fetch(userId);
-
-      const message =
-        `🛠️ **Tools Ready!**\n\n` +
-        `🎉 **${serverName}** has finished loading!\n` +
-        `🔧 **${toolCount} tools** are now available for use.\n\n` +
-        `You can use \`!mcp tools\` to see what's available, or just start using them in AI chats.`;
-
-      await user.send(message);
-
-      logger.info(
-        `[DiscordNotification] Sent tools ready message to user ${userId} for server ${serverName}`,
-      );
-    } catch (error) {
-      logger.error(
-        `[DiscordNotification] Failed to send tools ready message to user ${userId}:`,
-        error instanceof Error ? error : new Error(String(error)),
-      );
-    }
-  }
-
-  /**
    * Send a connection error notification to a user
    */
   async sendConnectionErrorMessage(

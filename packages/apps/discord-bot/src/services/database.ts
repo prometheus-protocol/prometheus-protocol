@@ -526,17 +526,43 @@ export class SupabaseService implements DatabaseService {
     token_type?: string | null;
     raw_tokens: any;
   }): Promise<void> {
-    await this.client.from('oauth_tokens').upsert({
-      server_id: tokens.server_id,
-      user_id: tokens.user_id,
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token || null,
-      expires_at: tokens.expires_at ? tokens.expires_at.toISOString() : null,
-      scope: tokens.scope || null,
-      token_type: tokens.token_type || null,
-      raw_tokens: tokens.raw_tokens,
-      updated_at: new Date().toISOString(),
-    });
+    try {
+      // The data to be inserted or updated
+      const tokenData = {
+        server_id: tokens.server_id,
+        user_id: tokens.user_id,
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token || null,
+        expires_at: tokens.expires_at ? tokens.expires_at.toISOString() : null,
+        scope: tokens.scope || null,
+        token_type: tokens.token_type || null,
+        raw_tokens: tokens.raw_tokens,
+        updated_at: new Date().toISOString(),
+      };
+
+      // The corrected upsert call
+      const { error } = await this.client
+        .from('oauth_tokens')
+        .upsert(tokenData, {
+          onConflict: 'server_id, user_id', // <-- THIS IS THE FIX
+        });
+
+      // Explicitly check for the error returned by the Supabase client
+      if (error) {
+        throw error;
+      }
+
+      dbLogger.info(`✅ [DB] Successfully saved OAuth tokens for:`, {
+        server_id: tokens.server_id,
+        user_id: tokens.user_id,
+      });
+    } catch (error) {
+      dbLogger.error(
+        'Error saving OAuth tokens:',
+        error instanceof Error ? error : new Error(String(error)),
+      );
+      throw error;
+    }
   }
 
   async getOAuthTokens(serverId: string, userId: string) {

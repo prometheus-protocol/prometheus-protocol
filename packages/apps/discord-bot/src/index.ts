@@ -44,6 +44,7 @@ class DiscordBot {
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildIntegrations,
       ],
     });
 
@@ -97,9 +98,32 @@ class DiscordBot {
   }
 
   private setupEventHandlers(): void {
+    // Add comprehensive event logging
+    this.client.on('debug', (info) => {
+      if (info.includes('interaction') || info.includes('command')) {
+        console.log('🐛 DEBUG:', info);
+      }
+    });
+
+    this.client.on('warn', console.warn);
+    this.client.on('error', console.error);
+
     this.client.on(Events.ClientReady, async () => {
       if (this.client.user) {
         console.log(`✅ Bot logged in as ${this.client.user.tag}!`);
+        console.log(`🤖 Bot ID: ${this.client.user.id}`);
+        console.log(
+          `🔗 Invite URL: https://discord.com/api/oauth2/authorize?client_id=${this.client.user.id}&permissions=2147483648&scope=bot%20applications.commands`,
+        );
+
+        // Log gateway connection info
+        console.log(`🌐 Gateway URL: ${this.client.ws.gateway}`);
+        console.log(`🔗 Connected to ${this.client.guilds.cache.size} guilds`);
+
+        // List guilds for debugging
+        this.client.guilds.cache.forEach((guild) => {
+          console.log(`📍 Guild: ${guild.name} (${guild.id})`);
+        });
         console.log(
           `🤖 AI Function Calling enabled with ${this.taskFunctions.getFunctions().length} functions`,
         );
@@ -135,6 +159,9 @@ class DiscordBot {
     });
 
     this.client.on(Events.MessageCreate, async (message) => {
+      console.log(
+        `💬 MESSAGE: ${message.author.tag}: ${message.content.substring(0, 50)}${message.content.length > 50 ? '...' : ''}`,
+      );
       if (message.author.bot) return;
 
       // Handle text commands (starting with !)
@@ -175,60 +202,80 @@ class DiscordBot {
     });
 
     this.client.on(Events.InteractionCreate, async (interaction) => {
+      console.log('🔔 INTERACTION RECEIVED:', {
+        type: interaction.type,
+        isSlash: interaction.isChatInputCommand(),
+        commandName: interaction.isChatInputCommand()
+          ? interaction.commandName
+          : 'N/A',
+        userId: interaction.user.id,
+        guildId: interaction.guildId,
+        channelId: interaction.channelId,
+      });
       if (!interaction.isChatInputCommand()) return;
 
       const command = this.commandRegistry.getCommand(interaction.commandName);
+
       if (!command) {
-        await interaction.reply({
-          content: 'Command not found!',
-          ephemeral: true,
-        });
+        console.error(
+          `No command matching ${interaction.commandName} was found.`,
+        );
+        try {
+          await interaction.reply({
+            content: 'Command not found!',
+            ephemeral: true,
+          });
+        } catch (error) {
+          console.error('Failed to reply to unknown command:', error);
+        }
         return;
       }
 
-      const context: CommandContext = {
-        interaction,
-        args: [],
-        userId: interaction.user.id,
-        channelId: interaction.channel?.id || '',
-        guildId: interaction.guild?.id,
-      };
-
       try {
-        const response = await command.execute(context);
-        if (response) {
-          if (interaction.deferred) {
-            await interaction.editReply({
-              content: response.content || undefined,
-              embeds: response.embeds || undefined,
-              files: response.files || undefined,
-              components: response.components || undefined,
-            });
-          } else {
+        // Check if the command has our new, slash-specific method
+        if (
+          'executeSlash' in command &&
+          typeof command.executeSlash === 'function'
+        ) {
+          // Call the new method designed for interactions
+          await command.executeSlash(interaction);
+        } else {
+          // This is a fallback for any commands you haven't updated yet
+          console.warn(
+            `Command '${command.name}' is not slash-command compatible (missing executeSlash).`,
+          );
+          try {
             await interaction.reply({
-              content: response.content || undefined,
-              embeds: response.embeds || undefined,
-              files: response.files || undefined,
-              ephemeral: response.ephemeral,
-              components: response.components || undefined,
+              content:
+                'This command is not properly configured to be run as a slash command.',
+              ephemeral: true,
             });
+          } catch (error) {
+            console.error('Failed to reply to incompatible command:', error);
           }
         }
       } catch (error) {
-        console.error('Error executing slash command:', error);
-        const errorMessage =
-          'Sorry, an error occurred while executing that command.';
-
-        if (interaction.deferred) {
-          await interaction.editReply(errorMessage);
-        } else {
-          await interaction.reply({ content: errorMessage, ephemeral: true });
+        console.error(
+          `Error during interaction for command ${interaction.commandName}:`,
+          error,
+        );
+        // Safely reply or follow up if an error occurs
+        try {
+          if (interaction.replied || interaction.deferred) {
+            await interaction.followUp({
+              content: 'There was an error while executing this command!',
+              ephemeral: true,
+            });
+          } else {
+            await interaction.reply({
+              content: 'There was an error while executing this command!',
+              ephemeral: true,
+            });
+          }
+        } catch (replyError) {
+          console.error('Failed to send error message:', replyError);
         }
       }
-    });
-
-    this.client.on(Events.Error, (error) => {
-      console.error('Discord client error:', error);
     });
   }
 
@@ -250,55 +297,12 @@ class DiscordBot {
     serverId: string,
     userId: string,
   ): Promise<void> {
-    try {
-      console.log(
-        `🔄 [AutoReconnect] Starting auto-reconnect for server=${serverId}, user=${userId}`,
-      );
+    console.log(
+      `🔄 [AutoReconnect] Starting auto-reconnect for server=${serverId}, user=${userId}`,
+    );
 
-      // Attempt auto-reconnect
-      const result = await this.mcpService.autoReconnectAfterOAuth(
-        serverId,
-        userId,
-      );
-
-      // Try to find the user and send them a direct message
-      try {
-        const user = await this.client.users.fetch(userId);
-
-        if (result.success && result.connection) {
-          await user.send(
-            `🎉 **Auto-connection successful!**\n\n` +
-              `✅ **${result.connection.server_name}** is now connected!\n` +
-              `🔧 **Tools are being discovered...** Just a moment!\n\n` +
-              `You'll get an update when tools are ready to use.`,
-          );
-          console.log(
-            `✅ [AutoReconnect] Notified user ${userId} of successful reconnection`,
-          );
-        } else {
-          await user.send(
-            `⚠️ **Auto-connection issue**\n\n` +
-              `While your OAuth authorization was successful, there was an issue with the automatic connection:\n\n` +
-              `**Error:** ${result.error}\n\n` +
-              `Please try running \`!mcp connect ${serverId}\` manually.`,
-          );
-          console.log(
-            `⚠️ [AutoReconnect] Notified user ${userId} of connection issue`,
-          );
-        }
-      } catch (dmError) {
-        console.warn(
-          `⚠️ [AutoReconnect] Could not send DM to user ${userId}:`,
-          dmError,
-        );
-        // Could also try posting to a channel if we knew which one, but DMs are more private
-      }
-    } catch (error) {
-      console.error(
-        `💥 [AutoReconnect] Failed to handle auto-reconnect:`,
-        error,
-      );
-    }
+    // Attempt auto-reconnect
+    await this.mcpService.autoReconnectAfterOAuth(serverId, userId);
   }
 
   private setupWebServer(): void {

@@ -15,7 +15,7 @@ interface PendingInvocation {
  */
 export class PendingToolInvocationsService {
   private pendingInvocations = new Map<string, PendingInvocation>();
-  private readonly TIMEOUT_MS = 30000; // 30 seconds timeout
+  private readonly TIMEOUT_MS = 300_000; // 5 minutes timeout
 
   /**
    * Register a new pending tool invocation

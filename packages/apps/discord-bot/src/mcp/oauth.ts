@@ -14,6 +14,57 @@ import {
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { ConnectionManagerOAuthProvider } from './oauth-provider.js';
 
+/**
+ * Checks if a JWT is expired or close to expiring.
+ * @param token The JWT string.
+ * @param bufferSeconds A buffer in seconds to treat the token as expired ahead of time (e.g., for network latency). Defaults to 30 seconds.
+ * @returns `true` if the token is expired, `false` otherwise.
+ */
+function isTokenExpired(token: string, bufferSeconds = 30): boolean {
+  try {
+    // Get the payload part of the token (the middle part)
+    const payloadBase64 = token.split('.')[1];
+    if (!payloadBase64) {
+      console.log('DEBUG: Invalid token format - no payload section');
+      return true; // Invalid token format
+    }
+
+    // Decode the base64 payload
+    const decodedJson = atob(payloadBase64);
+    const payload = JSON.parse(decodedJson);
+
+    // Check if the 'exp' claim exists
+    if (!payload.exp || typeof payload.exp !== 'number') {
+      console.log('DEBUG: No exp claim found in token payload:', payload);
+      return true; // No expiration claim, treat as invalid/expired
+    }
+
+    // Get the expiration time in milliseconds
+    const expMillis = payload.exp * 1000;
+    // Get the current time in milliseconds
+    const nowMillis = Date.now();
+
+    const timeUntilExpiry = expMillis - nowMillis;
+    const isExpired = expMillis < nowMillis + bufferSeconds * 1000;
+
+    console.log('DEBUG: Token expiry check:', {
+      exp: payload.exp,
+      expMillis,
+      nowMillis,
+      timeUntilExpirySeconds: Math.floor(timeUntilExpiry / 1000),
+      bufferSeconds,
+      isExpired,
+      tokenPreview: token.substring(0, 50) + '...',
+    });
+
+    // Check if the token is expired, including the buffer
+    return isExpired;
+  } catch (error) {
+    console.error('Error decoding token:', error);
+    return true; // If we can't parse it, assume it's expired/invalid
+  }
+}
+
 export async function auth(
   provider: ConnectionManagerOAuthProvider,
   {
@@ -129,11 +180,17 @@ export async function auth(
 
   console.log('metadata', metadata);
 
-  // 1. Check for tokens first
+  // 1. Check for existing and valid tokens first
   const tokens = await provider.tokens();
   if (tokens && tokens.access_token) {
-    // Optionally: check if token is expired and refresh if needed
-    return 'AUTHORIZED';
+    // Check if the access token is NOT expired.
+    if (!isTokenExpired(tokens.access_token)) {
+      // If we have a token and it's still valid, we're good.
+      return 'AUTHORIZED';
+    }
+    // If the token IS expired, we don't return. We let the code
+    // fall through to the refresh logic below.
+    console.log('Access token is expired, proceeding to refresh logic.');
   }
 
   // Handle client registration if needed
@@ -198,6 +255,13 @@ export async function auth(
     try {
       // Attempt to refresh the token
       console.log('Attempting to refresh OAuth tokens...');
+      console.log('DEBUG: Refresh token details:', {
+        refreshTokenPreview: tokens.refresh_token.substring(0, 50) + '...',
+        authorizationServerUrl: authorizationServerUrl.toString(),
+        clientId: clientInformation?.client_id,
+        resourceUrl: resource?.toString(),
+      });
+
       const newTokens = await refreshAuthorization(authorizationServerUrl, {
         metadata,
         clientInformation,
@@ -205,10 +269,17 @@ export async function auth(
         resource,
       });
 
+      console.log('DEBUG: Token refresh successful, saving new tokens');
       await provider.saveTokens(newTokens);
       return 'AUTHORIZED';
-    } catch {
+    } catch (refreshError: any) {
       // Could not refresh OAuth tokens
+      console.log('DEBUG: Token refresh failed with error:', {
+        error: refreshError.message,
+        status: refreshError.status || refreshError.response?.status,
+        responseText: refreshError.response?.statusText,
+        stack: refreshError.stack,
+      });
       console.log(
         'Failed to refresh OAuth tokens, starting new authorization.',
       );
