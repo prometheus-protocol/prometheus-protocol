@@ -23,13 +23,9 @@ if (!token || !clientId || !guildId) {
 // This part mimics your bot's setup to get the command definitions.
 // We pass 'null as any' because we don't need the full services for just building the command data.
 const commandRegistry = new CommandRegistryImpl();
-commandRegistry.register(
-  new ChatCommand(null as any, null as any),
-);
-commandRegistry.register(new MCPCommand(null as any));
-commandRegistry.register(
-  new TasksCommand(null as any, null as any),
-);
+commandRegistry.register(new ChatCommand(null as any, null as any));
+commandRegistry.register(new MCPCommand(null as any, null as any));
+commandRegistry.register(new TasksCommand(null as any, null as any));
 
 const commands = commandRegistry
   .getAllCommands()

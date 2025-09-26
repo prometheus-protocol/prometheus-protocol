@@ -5,6 +5,7 @@ import {
   ChatInputCommandInteraction,
   AutocompleteInteraction,
   EmbedBuilder,
+  InteractionContextType,
 } from 'discord.js';
 import {
   BaseCommand,
@@ -155,7 +156,12 @@ export class TasksCommand extends BaseCommand {
                 { name: 'Daily', value: 'daily' },
               ),
           ),
-      );
+      )
+      .setContexts([
+        InteractionContextType.BotDM,
+        InteractionContextType.Guild,
+        InteractionContextType.PrivateChannel,
+      ]); // Enable this command in DMs
   }
 
   async executeSlash(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -183,7 +189,7 @@ export class TasksCommand extends BaseCommand {
         args: [], // Not used in slash commands, but required by interface
         userId: interaction.user.id,
         channelId: interaction.channelId!,
-        guildId: interaction.guildId!,
+        guildId: interaction.guildId || undefined, // Handle DMs where guildId is null
       };
 
       const response = await this.executeInternal(

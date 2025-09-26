@@ -41,7 +41,12 @@ class DiscordBot {
     this.config = new ConfigManager();
 
     this.client = new Client({
-      intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildIntegrations],
+      intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildIntegrations,
+        GatewayIntentBits.DirectMessages, // Enable DM listening
+        GatewayIntentBits.MessageContent, // Needed for reading message content
+      ],
     });
 
     this.commandRegistry = new CommandRegistryImpl();
@@ -165,6 +170,7 @@ class DiscordBot {
         userId: interaction.user.id,
         guildId: interaction.guildId,
         channelId: interaction.channelId,
+        isDM: !interaction.guildId, // Flag DM interactions
       });
 
       // Handle autocomplete interactions
@@ -268,7 +274,9 @@ class DiscordBot {
     );
 
     // Register MCP management command
-    this.commandRegistry.register(new MCPCommand(this.mcpService));
+    this.commandRegistry.register(
+      new MCPCommand(this.mcpService, this.registryService),
+    );
 
     // Register dedicated tasks management command
     this.commandRegistry.register(

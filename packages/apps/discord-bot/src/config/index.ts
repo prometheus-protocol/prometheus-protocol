@@ -14,6 +14,7 @@ export interface BotConfig {
     model?: string;
     maxTokens?: number;
     temperature?: number;
+    toolConcurrencyLimit?: number; // Max concurrent tool calls to prevent MCP server overload
   };
   alerts: {
     defaultInterval: number; // milliseconds
@@ -58,6 +59,9 @@ export class ConfigManager {
         model: optional('LLM_MODEL', 'gpt-3.5-turbo'),
         maxTokens: parseInt(optional('LLM_MAX_TOKENS', '1000')),
         temperature: parseFloat(optional('LLM_TEMPERATURE', '0.7')),
+        toolConcurrencyLimit: parseInt(
+          optional('LLM_TOOL_CONCURRENCY_LIMIT', '3'),
+        ),
       },
       alerts: {
         defaultInterval: parseInt(optional('ALERT_DEFAULT_INTERVAL', '300000')), // 5 minutes

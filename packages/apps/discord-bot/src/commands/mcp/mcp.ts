@@ -4,6 +4,7 @@ import {
   CommandCategory,
 } from '../../types/index.js';
 import { MCPService } from '../../services/mcp/index.js';
+import { RegistryService } from '../../services/registry.service.js';
 import { OAuthAuthorizationRequiredError } from '../../services/mcp/auth.js';
 import {
   EmbedBuilder,
@@ -14,6 +15,7 @@ import {
   ButtonStyle,
   ChatInputCommandInteraction,
   AutocompleteInteraction,
+  InteractionContextType,
 } from 'discord.js';
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 
@@ -22,7 +24,10 @@ export class MCPCommand extends BaseCommand {
   description = 'Manage Model Context Protocol (MCP) server connections';
   category = CommandCategory.UTILITY;
 
-  constructor(private mcpService: MCPService) {
+  constructor(
+    private mcpService: MCPService,
+    private registryService: RegistryService,
+  ) {
     super();
   }
 
@@ -106,7 +111,12 @@ export class MCPCommand extends BaseCommand {
           .setDescription(
             'Repair corrupted database records (fixes missing server_url)',
           ),
-      );
+      )
+      .setContexts([
+        InteractionContextType.BotDM,
+        InteractionContextType.Guild,
+        InteractionContextType.PrivateChannel,
+      ]);
   }
 
   async executeSlash(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -290,7 +300,8 @@ export class MCPCommand extends BaseCommand {
         )
         .setColor(0x00ae86);
 
-      connections.forEach((conn) => {
+      // Enrich connections with registry data for better display names and descriptions
+      for (const conn of connections) {
         const statusEmoji =
           conn.status === 'connected'
             ? '🟢'
@@ -299,11 +310,37 @@ export class MCPCommand extends BaseCommand {
               : '🟡';
         const parsedTools = JSON.parse(conn.tools || '[]') as Tool[];
 
+        // Try to get server info from registry for better name and description
+        let displayName = conn.server_name || 'Unknown Server';
+        let description = conn.description || '';
+
+        try {
+          // First try to get server info from registry using server_id
+          const registryResult = await this.registryService.searchServers({
+            limit: 100,
+          });
+          const registryServer = registryResult.servers.find(
+            (s: any) => s.id === conn.server_id,
+          );
+
+          if (registryServer) {
+            // Use registry data for better display
+            displayName = registryServer.name || displayName;
+            description = registryServer.description || description;
+          }
+        } catch (error) {
+          // If registry lookup fails, use the stored data
+          console.warn(
+            'Could not fetch registry data for server:',
+            conn.server_id,
+          );
+        }
+
         // Build value array with description and other details
         const valueLines = [
           `**ID:** ${conn.server_id}`,
-          conn.description
-            ? `**Description:** ${conn.description.substring(0, 150)}${conn.description.length > 150 ? '...' : ''}`
+          description
+            ? `**Description:** ${description.substring(0, 150)}${description.length > 150 ? '...' : ''}`
             : '',
           `**Status:** ${conn.status} | **Tools:** ${parsedTools.length}`,
           conn.server_url ? `**URL:** ${conn.server_url}` : '',
@@ -314,11 +351,11 @@ export class MCPCommand extends BaseCommand {
         ].filter(Boolean);
 
         embed.addFields({
-          name: `${statusEmoji} ${conn.server_name}`,
+          name: `${statusEmoji} ${displayName}`,
           value: valueLines.join('\n'),
           inline: false,
         });
-      });
+      }
 
       return { content: '', embeds: [embed] };
     } catch (error) {
@@ -365,7 +402,6 @@ export class MCPCommand extends BaseCommand {
         return {
           content:
             `✅ Successfully connected to **${connection.server_name}**!\n` +
-            `� Tools are being discovered... Just a moment!\n` +
             `Use \`/mcp tools\` to see what you can do.`,
         };
       } else if (connection.status === 'auth-required') {

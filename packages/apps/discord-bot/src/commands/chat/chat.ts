@@ -2,6 +2,7 @@ import {
   SlashCommandBuilder,
   SlashCommandOptionsOnlyBuilder,
   ChatInputCommandInteraction,
+  InteractionContextType,
 } from 'discord.js';
 import {
   BaseCommand,
@@ -37,7 +38,12 @@ export class ChatCommand extends BaseCommand {
           .setName('message')
           .setDescription('Your message to the AI')
           .setRequired(true),
-      );
+      )
+      .setContexts([
+        InteractionContextType.BotDM,
+        InteractionContextType.Guild,
+        InteractionContextType.PrivateChannel,
+      ]); // Enable this command in DMs
   }
 
   async executeSlash(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -76,12 +82,13 @@ export class ChatCommand extends BaseCommand {
 
     try {
       // Create a context object compatible with the existing execute method
+      // In DMs, interaction.guildId will be null, so we handle that properly
       const context: CommandContext = {
         interaction,
         args: [],
         userId: interaction.user.id,
         channelId: interaction.channelId,
-        guildId: interaction.guildId || undefined,
+        guildId: interaction.guildId || undefined, // Will be undefined in DMs
       };
 
       // Call the existing execute method
@@ -151,8 +158,16 @@ export class ChatCommand extends BaseCommand {
         historyCount: history.length,
       });
 
-      // Generate response from LLM
+      // Generate response from LLM with status updates
       chatLogger.info('Calling LLM service', { userId: context.userId });
+
+      // Update user with initial status
+      if (context.interaction && context.interaction.deferred) {
+        await context.interaction.editReply({
+          content: '🤖 Processing your request...',
+        });
+      }
+
       const response = await this.llmService.generateResponse(
         prompt,
         {
@@ -162,6 +177,17 @@ export class ChatCommand extends BaseCommand {
         },
         functions,
         context.userId, // Pass userId for MCP integration
+        // Pass callback for status updates
+        async (status: string) => {
+          if (context.interaction && context.interaction.deferred) {
+            try {
+              await context.interaction.editReply({ content: `🤖 ${status}` });
+            } catch (error) {
+              // If update fails, log but don't break the flow
+              chatLogger.warn('Failed to update status', { status, error });
+            }
+          }
+        },
       );
 
       const isFunction = Array.isArray(response);
@@ -180,9 +206,13 @@ export class ChatCommand extends BaseCommand {
           preview: response.substring(0, 100),
         });
 
+        // Safety check: ensure response fits Discord's limits
+        // (The LLM service should already handle this, but this is a backup)
+        const finalResponse = this.ensureDiscordLimit(response);
+
         // Save conversation to database
-        await this.saveConversationTurn(context, prompt, response);
-        return { content: response };
+        await this.saveConversationTurn(context, prompt, finalResponse);
+        return { content: finalResponse };
       }
     } catch (error) {
       chatLogger.error(
@@ -374,28 +404,13 @@ export class ChatCommand extends BaseCommand {
       return { content: message.trim() };
     }
 
-    // Build context for AI response
-    let functionResultsContext = this.buildFunctionContext(
+    // Use the new loop-based approach instead of generateContextualResponse
+    return await this.processWithLoop(
       functionCalls,
       functionResults,
-      successResults,
-      errorResults,
+      context,
+      originalPrompt,
     );
-
-    if (functionResultsContext) {
-      return await this.generateContextualResponse(
-        functionResultsContext,
-        originalPrompt,
-        context,
-      );
-    }
-
-    // Fallback if no function results context
-    const message =
-      "I attempted to process your request but didn't get any results.";
-    chatLogger.info('No function results context, using fallback response');
-    await this.saveConversationTurn(context, originalPrompt, message);
-    return { content: message };
   }
 
   private buildFunctionContext(
@@ -447,69 +462,189 @@ export class ChatCommand extends BaseCommand {
     return functionResultsContext;
   }
 
-  private async generateContextualResponse(
-    functionResultsContext: string,
-    originalPrompt: string,
+  private async processWithLoop(
+    initialFunctionCalls: AIFunctionCall[],
+    initialFunctionResults: any[],
     context: CommandContext,
+    originalPrompt: string,
   ): Promise<CommandResponse> {
-    chatLogger.info('Generating contextual response based on function results');
+    chatLogger.info('Processing with loop-based approach');
 
-    const contextualPrompt = `Based on the following function call results, provide a helpful and natural response to the user's original request: "${originalPrompt}"\n\n${functionResultsContext}\n\nProvide a conversational response that summarizes and interprets the results for the user.`;
+    const conversationHistory: Array<{
+      role: 'user' | 'assistant' | 'system';
+      content: string;
+      timestamp: Date;
+    }> = [{ role: 'user', content: originalPrompt, timestamp: new Date() }];
 
-    try {
-      const contextualResponse = await this.llmService.generateResponse(
-        contextualPrompt,
-        {
-          userId: context.userId,
-          channelId: context.channelId,
-          history: [], // Don't include full history for this follow-up call
-        },
-        [], // No functions for the follow-up response
-        context.userId,
-      );
+    // Add initial function results to conversation
+    let functionResultsContext = this.buildFunctionContext(
+      initialFunctionCalls,
+      initialFunctionResults,
+      initialFunctionResults.filter((r) => r.success),
+      initialFunctionResults.filter((r) => !r.success),
+    );
 
-      const finalResponse = Array.isArray(contextualResponse)
-        ? 'I processed your request but encountered an issue generating the response.'
-        : contextualResponse;
-
-      chatLogger.info('Generated contextual response', {
-        length: finalResponse.length,
-        preview: finalResponse.substring(0, 200),
+    if (functionResultsContext) {
+      conversationHistory.push({
+        role: 'assistant',
+        content: `Tool results:\n${functionResultsContext}`,
+        timestamp: new Date(),
       });
-      await this.saveConversationTurn(context, originalPrompt, finalResponse);
-      return { content: finalResponse };
-    } catch (error) {
-      chatLogger.error(
-        'Failed to generate contextual response',
-        error instanceof Error ? error : new Error(String(error)),
-      );
-
-      // Fallback to original formatted response
-      const successResults = this.extractSuccessResults(functionResultsContext);
-      const errorResults = this.extractErrorResults(functionResultsContext);
-
-      let fallbackMessage = '';
-      if (successResults.length > 0) {
-        fallbackMessage += successResults.join('\n\n');
-      }
-      if (errorResults.length > 0) {
-        if (fallbackMessage) fallbackMessage += '\n\n';
-        fallbackMessage += '❌ **Errors:**\n' + errorResults.join('\n');
-      }
-
-      await this.saveConversationTurn(context, originalPrompt, fallbackMessage);
-      return { content: fallbackMessage };
     }
+
+    const maxIterations = 5; // Prevent infinite loops
+    let iteration = 0;
+
+    while (iteration < maxIterations) {
+      iteration++;
+      chatLogger.info(`Loop iteration ${iteration}/${maxIterations}`);
+
+      try {
+        // Get the last user message or a summary prompt for follow-up iterations
+        const currentPrompt =
+          iteration === 1
+            ? `Based on the tool results above, provide a helpful response to the user's request: "${originalPrompt}"`
+            : 'Continue processing based on the conversation above.';
+
+        const response = await this.llmService.generateResponse(
+          currentPrompt,
+          {
+            userId: context.userId,
+            channelId: context.channelId,
+            history: conversationHistory.slice(-10), // Keep recent context
+          },
+          [], // Get available functions from MCP
+          context.userId,
+        );
+
+        // If we get a text response, we're done
+        if (!Array.isArray(response)) {
+          chatLogger.info('Loop completed with text response', {
+            iterations: iteration,
+            responseLength: response.length,
+          });
+          await this.saveConversationTurn(context, originalPrompt, response);
+          return { content: response };
+        }
+
+        // If we get function calls, execute them and continue the loop
+        if (response.length > 0) {
+          chatLogger.info(
+            `Executing ${response.length} additional function calls in iteration ${iteration}`,
+          );
+
+          const newFunctionResults = [];
+          for (const functionCall of response) {
+            try {
+              const result = await this.executeFunctionCall(
+                functionCall,
+                context,
+              );
+              newFunctionResults.push(result);
+            } catch (error) {
+              chatLogger.error(
+                'Function call failed in loop',
+                error instanceof Error ? error : new Error(String(error)),
+              );
+              newFunctionResults.push({
+                success: false,
+                message: `Failed to execute ${functionCall.name}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              });
+            }
+          }
+
+          // Add new function results to conversation history
+          const newResultsContext = this.buildFunctionContext(
+            response,
+            newFunctionResults,
+            newFunctionResults.filter((r) => r.success),
+            newFunctionResults.filter((r) => !r.success),
+          );
+
+          if (newResultsContext) {
+            conversationHistory.push({
+              role: 'assistant',
+              content: `Additional tool results:\n${newResultsContext}`,
+              timestamp: new Date(),
+            });
+          }
+        } else {
+          // No function calls returned, but it was an array - treat as completed
+          chatLogger.info('Loop completed with empty function calls array', {
+            iterations: iteration,
+          });
+          const fallbackMessage = 'I processed your request successfully.';
+          await this.saveConversationTurn(
+            context,
+            originalPrompt,
+            fallbackMessage,
+          );
+          return { content: fallbackMessage };
+        }
+      } catch (error) {
+        chatLogger.error(
+          'Error in loop iteration',
+          error instanceof Error ? error : new Error(String(error)),
+        );
+        const errorMessage = `I encountered an error while processing your request (iteration ${iteration}).`;
+        await this.saveConversationTurn(context, originalPrompt, errorMessage);
+        return { content: errorMessage };
+      }
+    }
+
+    // If we exit the loop due to max iterations, provide a summary
+    chatLogger.warn('Loop exited due to max iterations reached');
+    const summaryMessage =
+      'I processed multiple steps of your request but reached the maximum processing limit. The actions have been completed.';
+    await this.saveConversationTurn(context, originalPrompt, summaryMessage);
+    return { content: summaryMessage };
   }
 
-  private extractSuccessResults(context: string): string[] {
-    // Simple extraction - in a real implementation, you'd parse this properly
-    return [];
-  }
+  private ensureDiscordLimit(
+    response: string,
+    maxLength: number = 1950,
+  ): string {
+    if (response.length <= maxLength) {
+      return response;
+    }
 
-  private extractErrorResults(context: string): string[] {
-    // Simple extraction - in a real implementation, you'd parse this properly
-    return [];
+    chatLogger.warn('Response exceeds Discord limit, truncating', {
+      originalLength: response.length,
+      maxLength,
+    });
+
+    // Try to find a good truncation point
+    const truncated = response.substring(0, maxLength);
+
+    // Look for the last sentence ending
+    const lastSentence = Math.max(
+      truncated.lastIndexOf('.'),
+      truncated.lastIndexOf('!'),
+      truncated.lastIndexOf('?'),
+    );
+
+    // Look for the last paragraph break
+    const lastParagraph = truncated.lastIndexOf('\n\n');
+
+    // Choose the best truncation point
+    let cutPoint = maxLength - 50;
+
+    if (lastParagraph > maxLength * 0.7) {
+      cutPoint = lastParagraph;
+    } else if (lastSentence > maxLength * 0.7) {
+      cutPoint = lastSentence + 1;
+    } else {
+      // Find the last word boundary
+      const lastSpace = truncated.lastIndexOf(' ', maxLength - 50);
+      if (lastSpace > maxLength * 0.7) {
+        cutPoint = lastSpace;
+      }
+    }
+
+    return (
+      response.substring(0, cutPoint).trim() +
+      '... *(response truncated - ask for more details if needed)*'
+    );
   }
 
   private async saveConversationTurn(

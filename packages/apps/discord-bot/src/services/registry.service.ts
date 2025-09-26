@@ -1,41 +1,42 @@
 import logger from '../utils/logger.js';
 
 // ============================================================================
-// FINAL MINIMAL, SPEC-COMPLIANT TYPES
+// UPDATED, ROBUST TYPES
 // ============================================================================
 
 /**
- * The absolute minimal set of properties our bot needs for server discovery,
- * relying only on guaranteed fields from the official registry spec.
+ * The minimal set of properties our bot needs. This remains unchanged as it's
+ * our clean, internal representation.
  */
 export type MinimalMCPServer = {
-  id: string; // The official, unique server UUID
+  id: string; // The server's unique UUID from our registry
   name: string; // The full reverse-DNS name (e.g., "io.github.user/repo")
   description: string;
   url: string; // The primary connection URL from the 'remotes' array
 };
 
-/** The raw server object from the official registry API. */
-type OfficialServerObject = {
+/**
+ * CHANGED: Represents the raw server object from OUR registry's API.
+ * The top-level 'id' is now the guaranteed unique identifier.
+ */
+type RegistryServerObject = {
+  id: string; // This is now the required, canonical UUID.
   name: string;
   description: string;
   remotes?: { url: string }[];
-  _meta?: {
-    'io.modelcontextprotocol.registry/official'?: {
-      serverId: string;
-    };
-  };
+  // The _meta block is now completely optional and not used for core logic.
+  _meta?: Record<string, any>;
 };
 
-/** The raw list response from the official registry API. */
-type OfficialApiResponse = {
-  servers: OfficialServerObject[];
+/** The raw list response from OUR registry's API. */
+type RegistryApiResponse = {
+  servers: RegistryServerObject[];
   metadata: {
     next_cursor: string | null;
   };
 };
 
-/** Search parameters supported by the official registry. */
+/** Search parameters for our registry. */
 type SearchParams = {
   limit?: number;
   cursor?: string;
@@ -52,15 +53,11 @@ export class RegistryService {
     'User-Agent': 'Prometheus-Discord-Bot/1.0',
   };
 
-  constructor(
-    registryUrl: string = 'https://registry.modelcontextprotocol.io',
-  ) {
+  constructor(registryUrl: string = 'https://remote-mcp-servers.com') {
     this.baseUrl = registryUrl;
     logger.info(
-      `RegistryService (final minimal) initialized for registry: ${this.baseUrl}`,
-      {
-        service: 'RegistryService',
-      },
+      `RegistryService initialized for custom registry: ${this.baseUrl}`,
+      { service: 'RegistryService' },
     );
   }
 
@@ -94,32 +91,33 @@ export class RegistryService {
   }
 
   /**
-   * Search for MCP servers. Returns minimal server objects and a pagination cursor.
+   * Search for MCP servers.
    */
   async searchServers(params: SearchParams = {}): Promise<{
     servers: MinimalMCPServer[];
     nextCursor: string | null;
   }> {
     try {
-      const apiParams = { ...params, version: 'latest' };
-      const response = await this.makeRequest<OfficialApiResponse>(
-        '/v0/servers',
-        apiParams,
+      // Our API doesn't use the 'version' parameter, so it's removed.
+      const response = await this.makeRequest<RegistryApiResponse>(
+        'api/v0/servers',
+        params,
       );
 
       logger.debug(`Raw API response: ${response.servers.length} servers`, {
         service: 'RegistryService',
-        firstServer: response.servers[0] ? {
-          name: response.servers[0].name,
-          hasRemotes: !!response.servers[0].remotes,
-          remotesCount: response.servers[0].remotes?.length || 0,
-          hasMeta: !!response.servers[0]._meta,
-          serverId: response.servers[0]._meta?.['io.modelcontextprotocol.registry/official']?.serverId
-        } : null
+        // Updated debug log to show the new source of truth for the ID
+        firstServer: response.servers[0]
+          ? {
+              name: response.servers[0].name,
+              id: response.servers[0].id, // Log the top-level ID
+              hasRemotes: !!response.servers[0].remotes,
+            }
+          : null,
       });
 
       const minimalServers = response.servers
-        .map(this.convertToMinimalServer.bind(this))
+        .map(this.convertToMinimalServer)
         .filter((s): s is MinimalMCPServer => s !== null);
 
       logger.info(`Found ${minimalServers.length} connectable servers`, {
@@ -137,12 +135,13 @@ export class RegistryService {
   }
 
   /**
-   * Get a single server by its official UUID.
+   * Get a single server by its UUID from our registry.
    */
   async getServerById(serverId: string): Promise<MinimalMCPServer | null> {
     try {
-      const server = await this.makeRequest<OfficialServerObject>(
-        `/v0/servers/${serverId}`,
+      // The endpoint for fetching by ID is correct.
+      const server = await this.makeRequest<RegistryServerObject>(
+        `/api/v0/servers/${serverId}`,
       );
       return this.convertToMinimalServer(server);
     } catch (error: any) {
@@ -158,35 +157,27 @@ export class RegistryService {
   }
 
   /**
-   * The core transformation logic. Converts a full official object to our minimal type.
-   * Returns null if the server is not connectable.
+   * FIXED: The core transformation logic.
+   * It now relies on the guaranteed top-level 'id' field.
    */
   private convertToMinimalServer(
-    server: OfficialServerObject | null,
+    server: RegistryServerObject | null,
   ): MinimalMCPServer | null {
     if (!server) {
-      logger.debug('Server is null', { service: 'RegistryService' });
       return null;
     }
 
-    const canonicalId =
-      server._meta?.['io.modelcontextprotocol.registry/official']?.serverId;
+    // The new, robust source of truth for the ID and remote URL.
+    const canonicalId = server.id;
     const primaryRemoteUrl = server.remotes?.[0]?.url;
 
-    logger.debug(`Converting server: ${server.name}`, {
-      service: 'RegistryService',
-      canonicalId,
-      primaryRemoteUrl,
-      hasRemotes: !!server.remotes,
-      remotesLength: server.remotes?.length || 0,
-      hasMeta: !!server._meta
-    });
-
-    // A server is only useful if it has a unique ID and a connection URL.
+    // This check remains critical: a server is only useful to the bot if it
+    // has a unique ID and a connection URL.
     if (!canonicalId || !primaryRemoteUrl) {
-      logger.debug(`Skipping server ${server.name}: missing canonicalId (${!!canonicalId}) or primaryRemoteUrl (${!!primaryRemoteUrl})`, {
-        service: 'RegistryService'
-      });
+      logger.debug(
+        `Skipping server ${server.name}: missing id (${!!canonicalId}) or primaryRemoteUrl (${!!primaryRemoteUrl})`,
+        { service: 'RegistryService' },
+      );
       return null;
     }
 

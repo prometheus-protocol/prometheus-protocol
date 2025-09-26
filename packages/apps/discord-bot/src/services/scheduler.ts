@@ -428,30 +428,38 @@ export class AlertScheduler {
       );
     }
 
-    // Use proper OpenAI conversation continuation with tool results
+    // Use the centralized generateResponse method which handles tool execution internally
     try {
-      const contextualResponse =
-        await this.llmService.continueConversationWithToolResults(
-          originalPrompt,
-          {
-            userId,
-            channelId: 'scheduler',
-            history: [],
-          },
-          allFunctions,
-          functionCalls,
-          functionResults,
+      const contextualResponse = await this.llmService.generateResponse(
+        originalPrompt,
+        {
           userId,
-        );
+          channelId: 'scheduler',
+          history: [],
+        },
+        allFunctions,
+        userId,
+      );
 
       schedulerLogger.info(
-        'Generated final alert response using conversation continuation',
+        'Generated final alert response using centralized LLM service',
         {
           alertName,
-          responseLength: contextualResponse.length,
-          responsePreview: contextualResponse.substring(0, 200),
+          responseLength:
+            typeof contextualResponse === 'string'
+              ? contextualResponse.length
+              : contextualResponse.length,
+          responsePreview:
+            typeof contextualResponse === 'string'
+              ? contextualResponse.substring(0, 200)
+              : 'Function calls executed',
         },
       );
+
+      // Convert function calls to a descriptive string for the alert
+      if (Array.isArray(contextualResponse)) {
+        return `Executed ${contextualResponse.length} function calls: ${contextualResponse.map((fc) => fc.name).join(', ')}`;
+      }
 
       return contextualResponse;
     } catch (error) {
