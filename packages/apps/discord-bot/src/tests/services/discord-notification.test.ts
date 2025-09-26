@@ -65,60 +65,6 @@ describe('DiscordNotificationService', () => {
     });
   });
 
-  describe('sendConnectionSuccessMessage', () => {
-    it('should send success message with correct format', async () => {
-      const result = await service.sendConnectionSuccessMessage(
-        'user-123',
-        'test-server',
-        5,
-      );
-
-      expect(mockClient.users.fetch).toHaveBeenCalledWith('user-123');
-      expect(mockUser.send).toHaveBeenCalledWith(
-        expect.stringContaining('🎉 **Connection Successful!**'),
-      );
-      expect(result).toBe(undefined); // void method
-    });
-
-    it('should handle errors gracefully', async () => {
-      mockUser.send.mockRejectedValue(new Error('Failed to send'));
-
-      // Should not throw, just log error
-      await expect(
-        service.sendConnectionSuccessMessage('user-123', 'test-server', 3),
-      ).resolves.toBeUndefined();
-    });
-  });
-
-  describe('sendConnectionErrorMessage', () => {
-    it('should send error message with correct format', async () => {
-      const result = await service.sendConnectionErrorMessage(
-        'user-123',
-        'test-server',
-        'Connection timeout',
-      );
-
-      expect(mockClient.users.fetch).toHaveBeenCalledWith('user-123');
-      expect(mockUser.send).toHaveBeenCalledWith(
-        expect.stringContaining('❌ **Connection Failed**'),
-      );
-      expect(result).toBe(undefined); // void method
-    });
-
-    it('should handle error message with generic error', async () => {
-      const result = await service.sendConnectionErrorMessage(
-        'user-123',
-        'test-server',
-        'Generic connection error',
-      );
-
-      expect(mockUser.send).toHaveBeenCalledWith(
-        expect.stringContaining('❌ **Connection Failed**'),
-      );
-      expect(result).toBe(undefined); // void method
-    });
-  });
-
   describe('error handling', () => {
     it('should log errors but not throw exceptions', async () => {
       const consoleSpy = vi

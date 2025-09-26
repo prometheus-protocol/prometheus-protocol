@@ -11,13 +11,13 @@ import {
   DisconnectRequestPayload,
   InvokeToolRequestPayload,
 } from '../../dtos/pubsub.events.dto.js';
+import {
+  ConnectionResult,
+  FunctionCallResult,
+  ServerSearchOptions,
+} from '../../types/mcp.js';
 
-interface ServerSearchQuery {
-  query?: string;
-  category?: string;
-  limit?: number;
-  page?: number;
-}
+// Now using ServerSearchOptions from centralized types
 
 interface PaginatedServerSearchResult {
   servers: ServerSearchResult[];
@@ -45,23 +45,7 @@ interface ServerSearchResult {
   hosted_on?: string;
 }
 
-interface ConnectionResult {
-  success: boolean;
-  message: string;
-  connectionId?: string;
-  authRequired?: boolean;
-  authUrl?: string;
-  // Properties expected by Discord bot
-  status?: 'connected' | 'auth-required' | 'error';
-  server_name?: string;
-  tools?: any[];
-  error_message?: string;
-  connection?: {
-    server_name: string;
-    tools: any[];
-  };
-  error?: string;
-}
+// Now using centralized ConnectionResult and FunctionCallResult types from ../../types/mcp.js
 
 interface SystemStatus {
   activeConnections: number;
@@ -88,11 +72,7 @@ interface MCPFunctionCall {
   arguments: Record<string, any>;
 }
 
-interface FunctionCallResult {
-  success: boolean;
-  result?: any;
-  error?: string;
-}
+// Removed local FunctionCallResult - now using centralized type from ../../types/mcp.js
 
 /**
  * MCPService provides a high-level interface for MCP server management,
@@ -279,7 +259,7 @@ export class MCPService {
    * Search for available MCP servers using the external registry
    */
   async searchServers(
-    query: ServerSearchQuery,
+    query: ServerSearchOptions,
   ): Promise<PaginatedServerSearchResult> {
     try {
       logger.info('Searching servers with query', {

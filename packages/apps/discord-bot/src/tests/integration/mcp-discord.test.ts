@@ -27,8 +27,6 @@ describe('MCP Discord Integration', () => {
     // Mock Discord notification service
     mockDiscordNotification = {
       sendAuthRequiredMessage: vi.fn().mockResolvedValue(undefined),
-      sendConnectionSuccessMessage: vi.fn().mockResolvedValue(undefined),
-      sendConnectionErrorMessage: vi.fn().mockResolvedValue(undefined),
     } as any;
 
     eventHandler = new MCPEventHandlerService(
