@@ -3,7 +3,7 @@ import { SupabaseService } from '../database.js';
 import { MCPEventService } from '../event-emitter.service.js';
 import { MCPCoordinatorService } from '../mcp-coordinator.service.js';
 import { DiscordNotificationService } from '../discord-notification.service.js';
-import { RegistryService } from '../registry.service.js';
+import { RegistryService, MinimalMCPServer } from '../registry.service.js';
 import { PendingToolInvocationsService } from '../pending-tool-invocations.service.js';
 import logger from '../../utils/logger.js';
 import {
@@ -186,15 +186,22 @@ export class MCPService {
         (conn) => conn.status === 'connected',
       ).length;
 
-      // Check registry health
-      const registryConnected =
-        (await this.registryService?.healthCheck()) ?? false;
+      // Check registry health by attempting a simple search
+      let registryConnected = false;
+      try {
+        const testResult = await this.registryService?.searchServers({
+          limit: 1,
+        });
+        registryConnected = !!testResult;
+      } catch (error) {
+        registryConnected = false;
+      }
 
       // Get sample of servers from registry to determine total available
       const registryServers = await this.registryService?.searchServers({
         limit: 1,
       });
-      const totalServers = registryServers?.pagination.totalItems ?? 0;
+      const totalServers = registryServers?.servers?.length ?? 0;
 
       // Calculate total available tools across all connected users
       let totalAvailableTools = 0;
@@ -278,19 +285,23 @@ export class MCPService {
       logger.info('Searching servers with query', {
         service: 'MCPService',
         query: query.query,
+        queryLength: query.query?.length || 0,
         category: query.category,
         limit: query.limit,
       });
 
       // Use the registry service to search for real servers
-      const registryResponse = await this.registryService?.searchServers({
-        q: query.query,
-        categories: query.category,
-        page: query.page || 1,
+      logger.debug('Calling registry service with params', {
+        service: 'MCPService',
+        searchQuery: query.query,
+        searchQueryType: typeof query.query,
+        searchQueryLength: query.query?.length || 0,
         limit: query.limit || 10,
+        hasRegistryService: !!this.registryService,
       });
 
-      if (!registryResponse) {
+      if (!this.registryService) {
+        logger.error('Registry service is not available');
         return {
           servers: [],
           pagination: {
@@ -305,21 +316,60 @@ export class MCPService {
         };
       }
 
-      // Convert registry server objects to the format expected by the Discord bot
-      const servers: ServerSearchResult[] = registryResponse.data.map(
-        (server) => RegistryService.convertToMCPServerResult(server),
+      // Add timeout to prevent hanging
+      const registryResponse = await Promise.race([
+        this.registryService.searchServers({
+          search: query.query,
+          limit: query.limit || 10,
+        }),
+        new Promise<{ servers: []; nextCursor: null }>((_, reject) =>
+          setTimeout(() => reject(new Error('Registry search timeout')), 8000),
+        ),
+      ]);
+
+      logger.debug('Registry service response', {
+        service: 'MCPService',
+        hasResponse: !!registryResponse,
+        hasServers: !!registryResponse?.servers,
+        serverCount: registryResponse?.servers?.length || 0,
+      });
+
+      if (!registryResponse || !registryResponse.servers) {
+        return {
+          servers: [],
+          pagination: {
+            page: 1,
+            totalPages: 0,
+            totalResults: 0,
+            currentPage: 1,
+            totalItems: 0,
+            hasNextPage: false,
+            hasPreviousPage: false,
+          },
+        };
+      }
+
+      // Convert minimal server objects to the format expected by the Discord bot
+      const servers: ServerSearchResult[] = registryResponse.servers.map(
+        (server) => this.convertMinimalServerToResult(server),
       );
+
+      // Since the new registry service doesn't provide pagination info,
+      // we'll simulate it based on the results
+      const currentPage = query.page || 1;
+      const totalItems = servers.length;
+      const hasNextPage = !!registryResponse.nextCursor;
 
       return {
         servers,
         pagination: {
-          page: registryResponse.pagination.currentPage,
-          totalPages: registryResponse.pagination.totalPages,
-          totalResults: registryResponse.pagination.totalItems,
-          currentPage: registryResponse.pagination.currentPage,
-          totalItems: registryResponse.pagination.totalItems,
-          hasNextPage: registryResponse.pagination.hasNextPage,
-          hasPreviousPage: registryResponse.pagination.hasPreviousPage,
+          page: currentPage,
+          totalPages: hasNextPage ? currentPage + 1 : currentPage,
+          totalResults: totalItems,
+          currentPage: currentPage,
+          totalItems: totalItems,
+          hasNextPage: hasNextPage,
+          hasPreviousPage: currentPage > 1,
         },
       };
     } catch (error) {
@@ -357,8 +407,8 @@ export class MCPService {
       let actualServerUrl = serverUrl;
       if (!actualServerUrl) {
         const serverInfo = await this.registryService?.getServerById(serverId);
-        if (serverInfo && serverInfo.mcp_url) {
-          actualServerUrl = serverInfo.mcp_url;
+        if (serverInfo && serverInfo.url) {
+          actualServerUrl = serverInfo.url;
           logger.info(`Found server URL from registry: ${actualServerUrl}`, {
             service: 'MCPService',
             serverId,
@@ -366,7 +416,7 @@ export class MCPService {
           });
         } else if (serverInfo) {
           throw new Error(
-            `Server ${serverId} found in registry but has no mcp_url property`,
+            `Server ${serverId} found in registry but has no url property`,
           );
         } else {
           throw new Error(`Server ${serverId} not found in registry`);
@@ -452,7 +502,7 @@ export class MCPService {
       if (!serverUrl) {
         const serverInfo = await this.registryService?.getServerById(serverId);
         if (serverInfo) {
-          serverUrl = serverInfo.mcp_url;
+          serverUrl = serverInfo.url;
         } else {
           logger.warn(
             `Could not find server URL for ${serverId}, using fallback`,
@@ -465,7 +515,7 @@ export class MCPService {
         generatedAt: new Date().toISOString(),
         userId: userId,
         mcpServerConfigId: serverId,
-        mcpServerUrl: serverUrl,
+        mcpServerUrl: serverUrl || `https://unknown-server/${serverId}`,
       };
 
       await this.connectionPool.handleDisconnectRequest(disconnectPayload);
@@ -527,6 +577,110 @@ export class MCPService {
   }
 
   /**
+   * Sanitizes a server name to be used in function names
+   * Removes spaces, special characters, and limits length
+   */
+  private sanitizeServerName(serverName: string): string {
+    return serverName
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '_') // Replace non-alphanumeric with underscore
+      .replace(/__+/g, '_') // Replace multiple underscores with single
+      .replace(/^_|_$/g, '') // Remove leading/trailing underscores
+      .substring(0, 20); // Limit to 20 characters
+  }
+
+  /**
+   * Resolve a server name to a server ID for a given user
+   */
+  async resolveServerNameToId(
+    userId: string,
+    serverName: string,
+  ): Promise<string | null> {
+    try {
+      const connections = await this.getUserConnections(userId);
+
+      // Try exact match first
+      const exactMatch = connections.find(
+        (conn) => conn.server_name === serverName,
+      );
+      if (exactMatch) {
+        return exactMatch.server_id;
+      }
+
+      // Try case-insensitive match
+      const caseInsensitiveMatch = connections.find(
+        (conn) => conn.server_name.toLowerCase() === serverName.toLowerCase(),
+      );
+      if (caseInsensitiveMatch) {
+        return caseInsensitiveMatch.server_id;
+      }
+
+      // Try sanitized name match (for backward compatibility)
+      const sanitizedInputName = this.sanitizeServerName(serverName);
+      const sanitizedMatch = connections.find(
+        (conn) =>
+          this.sanitizeServerName(conn.server_name) === sanitizedInputName,
+      );
+      if (sanitizedMatch) {
+        return sanitizedMatch.server_id;
+      }
+
+      logger.warn(
+        `Could not resolve server name "${serverName}" to ID for user ${userId}`,
+      );
+      return null;
+    } catch (error) {
+      logger.error(`Error resolving server name to ID: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Converts a MinimalMCPServer to ServerSearchResult format
+   */
+  private convertMinimalServerToResult(
+    server: MinimalMCPServer,
+  ): ServerSearchResult {
+    return {
+      id: server.id,
+      name: server.name,
+      description: server.description,
+      url: server.url,
+      // Optional properties can be undefined since they're not available in minimal type
+      category: undefined,
+      author: undefined,
+      isOAuthEnabled: undefined,
+      tags: undefined,
+      auth_type: undefined,
+      hosted_on: undefined,
+    };
+  }
+
+  /**
+   * Finds a connection by sanitized server name
+   */
+  private async findConnectionBySanitizedName(
+    userId: string,
+    sanitizedName: string,
+  ): Promise<any | null> {
+    try {
+      const connections = await this.getUserConnections(userId);
+
+      // Find connection where sanitized server name matches
+      for (const connection of connections) {
+        if (this.sanitizeServerName(connection.server_name) === sanitizedName) {
+          return connection;
+        }
+      }
+
+      return null;
+    } catch (error) {
+      logger.error(`Error finding connection by sanitized name: ${error}`);
+      return null;
+    }
+  }
+
+  /**
    * Convert available tools to OpenAI function format for LLM integration
    */
   async convertToolsToOpenAIFunctions(userId: string): Promise<any[]> {
@@ -547,8 +701,11 @@ export class MCPService {
           };
         }
 
+        // Use sanitized server name instead of UUID for AI-friendly function names
+        const sanitizedServerName = this.sanitizeServerName(tool.serverName);
+
         return {
-          name: `mcp__${tool.serverId}__${tool.name}`,
+          name: `mcp__${sanitizedServerName}__${tool.name}`,
           description: tool.description,
           parameters: parameters,
         };
@@ -586,20 +743,28 @@ export class MCPService {
         throw new Error('Invalid MCP function call format');
       }
 
-      const serverId = parts[1];
+      const sanitizedServerName = parts[1];
       const toolName = parts.slice(2).join('__');
 
-      // Get the proper server URL from registry or database
-      const connection = await this.databaseService.getUserMCPConnection(
+      // Find the connection by sanitized server name
+      const connection = await this.findConnectionBySanitizedName(
         userId,
-        serverId,
+        sanitizedServerName,
       );
+
+      if (!connection) {
+        throw new Error(
+          `No connection found for server with name: ${sanitizedServerName}`,
+        );
+      }
+
+      const serverId = connection.server_id;
       let serverUrl = connection?.server_url;
 
       if (!serverUrl) {
         const serverInfo = await this.registryService?.getServerById(serverId);
         if (serverInfo) {
-          serverUrl = serverInfo.mcp_url;
+          serverUrl = serverInfo.url;
         } else {
           throw new Error(`Server ${serverId} not found`);
         }
@@ -717,6 +882,41 @@ export class MCPService {
   }
 
   /**
+   * Completely delete/remove a server connection (disconnect + delete database records)
+   */
+  async deleteServerConnection(
+    serverId: string,
+    userId: string,
+  ): Promise<void> {
+    try {
+      logger.info(`Deleting server connection ${serverId} for user ${userId}`);
+
+      // First disconnect from the server if connected
+      try {
+        await this.disconnectFromServer(serverId, userId);
+      } catch (error) {
+        // Ignore disconnect errors - might already be disconnected
+        logger.warn(
+          `Disconnect during delete failed (ignoring): ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      // Then delete all database records and OAuth tokens
+      await this.resetServerData(serverId, userId);
+
+      logger.info(
+        `Successfully deleted server connection ${serverId} for user ${userId}`,
+      );
+    } catch (error) {
+      logger.error(
+        `Error deleting server connection ${serverId}:`,
+        error instanceof Error ? error : new Error(String(error)),
+      );
+      throw error;
+    }
+  }
+
+  /**
    * Get pending authorization for a server (optional method used with 'as any' casting)
    */
   getPendingAuthorization?(serverId: string, userId: string): Promise<any> {
@@ -738,6 +938,209 @@ export class MCPService {
       );
       throw error;
     }
+  }
+
+  /**
+   * Get diagnostic information about connection states
+   */
+  async getConnectionDiagnostics(userId: string): Promise<{
+    databaseConnections: any[];
+    activeConnections: any;
+    mismatchedConnections: string[];
+  }> {
+    // Get connections from database
+    const dbConnections =
+      await this.databaseService.getUserMCPConnections(userId);
+
+    // Get active connections from pool
+    const activeConnectionsInfo = this.connectionPool.getDiagnosticInfo();
+
+    // Find mismatched connections (in DB but not active, or vice versa)
+    const dbConnectionIds = dbConnections.map(
+      (conn) => `${conn.user_id}::${conn.server_id}`,
+    );
+    const activeConnectionIds = activeConnectionsInfo.activeConnectionKeys;
+
+    const mismatchedConnections = [
+      ...dbConnectionIds.filter((id) => !activeConnectionIds.includes(id)),
+      ...activeConnectionIds.filter((id) => !dbConnectionIds.includes(id)),
+    ];
+
+    return {
+      databaseConnections: dbConnections,
+      activeConnections: activeConnectionsInfo,
+      mismatchedConnections,
+    };
+  }
+
+  /**
+   * Clean up stale connections that exist in database but not in active pool
+   */
+  async cleanupStaleConnections(userId: string): Promise<{
+    cleanedCount: number;
+    cleanedConnections: string[];
+    remainingConnections: number;
+  }> {
+    const diagnostics = await this.getConnectionDiagnostics(userId);
+    const cleanedConnections: string[] = [];
+
+    // Find connections that are marked as connected in DB but not active in pool
+    for (const dbConn of diagnostics.databaseConnections) {
+      const poolKey = `${dbConn.user_id}::${dbConn.server_id}`;
+
+      // If connection shows as connected in DB but is not in active pool, mark as disconnected
+      if (
+        dbConn.status === 'connected' &&
+        !diagnostics.activeConnections.activeConnectionKeys.includes(poolKey)
+      ) {
+        logger.info(`[MCPService] Cleaning up stale connection: ${poolKey}`);
+
+        // Update the connection status in database to disconnected
+        await this.databaseService.updateUserMCPConnection(
+          dbConn.user_id,
+          dbConn.server_id,
+          {
+            status: 'disconnected',
+            error_message: 'Cleaned up stale connection',
+          },
+        );
+
+        cleanedConnections.push(poolKey);
+      }
+    }
+
+    // Get remaining active connections count
+    const remainingConnections =
+      diagnostics.activeConnections.activeConnectionCount;
+
+    return {
+      cleanedCount: cleanedConnections.length,
+      cleanedConnections,
+      remainingConnections,
+    };
+  }
+
+  /**
+   * Repair corrupted database records by fixing missing required fields
+   */
+  async repairCorruptedConnections(userId: string): Promise<{
+    repairedCount: number;
+    repairedConnections: Array<{
+      id: string;
+      issues: string[];
+      fixes: string[];
+    }>;
+    healthyConnections: number;
+  }> {
+    const dbConnections =
+      await this.databaseService.getUserMCPConnections(userId);
+    const repairedConnections: Array<{
+      id: string;
+      issues: string[];
+      fixes: string[];
+    }> = [];
+
+    for (const dbConn of dbConnections) {
+      const issues: string[] = [];
+      const fixes: string[] = [];
+      const poolKey = `${dbConn.user_id}::${dbConn.server_id}`;
+
+      // Check for missing or empty server_url
+      if (!dbConn.server_url || dbConn.server_url.trim() === '') {
+        issues.push('Missing server_url');
+
+        // Try to get the server_url from the registry based on server_id
+        try {
+          console.log('REGISTRY SERVICE:', this.registryService);
+          const serverInfo = await this.registryService?.getServerById(
+            dbConn.server_id,
+          );
+          console.log('SERVER INFO:', serverInfo);
+          if (serverInfo && serverInfo.url) {
+            fixes.push(`Set server_url to: ${serverInfo.url}`);
+
+            // Update the database record
+            await this.databaseService.updateUserMCPConnection(
+              dbConn.user_id,
+              dbConn.server_id,
+              {
+                server_url: serverInfo.url,
+                error_message: null, // Clear any previous error
+              },
+            );
+          } else {
+            fixes.push(
+              'Could not find server URL in registry - marked as disconnected',
+            );
+
+            // If we can't find the server, mark it as disconnected
+            await this.databaseService.updateUserMCPConnection(
+              dbConn.user_id,
+              dbConn.server_id,
+              {
+                status: 'disconnected',
+                error_message: 'Server not found in registry - URL missing',
+              },
+            );
+          }
+        } catch (error) {
+          logger.error(
+            `[MCPService] Error repairing connection ${poolKey}:`,
+            error instanceof Error ? error : new Error(String(error)),
+          );
+          fixes.push('Error occurred during repair - marked as disconnected');
+
+          await this.databaseService.updateUserMCPConnection(
+            dbConn.user_id,
+            dbConn.server_id,
+            {
+              status: 'disconnected',
+              error_message: 'Repair failed - please reconnect manually',
+            },
+          );
+        }
+      }
+
+      // Check for missing server_name
+      if (!dbConn.server_name || dbConn.server_name.trim() === '') {
+        issues.push('Missing server_name');
+
+        try {
+          const serverInfo = await this.registryService?.getServerById(
+            dbConn.server_id,
+          );
+          if (serverInfo && serverInfo.name) {
+            fixes.push(`Set server_name to: ${serverInfo.name}`);
+
+            await this.databaseService.updateUserMCPConnection(
+              dbConn.user_id,
+              dbConn.server_id,
+              { server_name: serverInfo.name },
+            );
+          }
+        } catch (error) {
+          fixes.push('Could not repair server_name');
+        }
+      }
+
+      if (issues.length > 0) {
+        repairedConnections.push({
+          id: poolKey,
+          issues,
+          fixes,
+        });
+
+        logger.info(
+          `[MCPService] Repaired connection ${poolKey}: ${issues.join(', ')}`,
+        );
+      }
+    }
+
+    return {
+      repairedCount: repairedConnections.length,
+      repairedConnections,
+      healthyConnections: dbConnections.length - repairedConnections.length,
+    };
   }
 
   /**

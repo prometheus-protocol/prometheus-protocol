@@ -1,6 +1,5 @@
 import {
   BaseCommand,
-  CommandContext,
   CommandResponse,
   CommandCategory,
 } from '../../types/index.js';
@@ -14,23 +13,14 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ChatInputCommandInteraction,
+  AutocompleteInteraction,
 } from 'discord.js';
+import { Tool } from '@modelcontextprotocol/sdk/types.js';
 
 export class MCPCommand extends BaseCommand {
   name = 'mcp';
   description = 'Manage Model Context Protocol (MCP) server connections';
   category = CommandCategory.UTILITY;
-  aliases = ['mcp'];
-
-  usage = [
-    '`!mcp search <query>` - Search for MCP servers',
-    '`!mcp list` - List your connected servers',
-    '`!mcp connect <server-id>` - Connect to an MCP server',
-    '`!mcp disconnect <server-id>` - Disconnect from an MCP server',
-    '`!mcp tools` - List available tools from connected servers',
-    '`!mcp status` - Show MCP system status',
-    '`!mcp authlink <server-id>` - Show full pending OAuth authorization URL',
-  ];
 
   constructor(private mcpService: MCPService) {
     super();
@@ -62,9 +52,10 @@ export class MCPCommand extends BaseCommand {
           .setDescription('Connect to an MCP server')
           .addStringOption((option) =>
             option
-              .setName('server-id')
-              .setDescription('Server ID to connect to')
-              .setRequired(true),
+              .setName('server-name')
+              .setDescription('Name of the server to connect to')
+              .setRequired(true)
+              .setAutocomplete(true),
           ),
       )
       .addSubcommand((subcommand) =>
@@ -73,9 +64,22 @@ export class MCPCommand extends BaseCommand {
           .setDescription('Disconnect from an MCP server')
           .addStringOption((option) =>
             option
-              .setName('server-id')
-              .setDescription('Server ID to disconnect from')
-              .setRequired(true),
+              .setName('server-name')
+              .setDescription('Name of the server to disconnect from')
+              .setRequired(true)
+              .setAutocomplete(true),
+          ),
+      )
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName('delete')
+          .setDescription('Permanently delete/remove an MCP server connection')
+          .addStringOption((option) =>
+            option
+              .setName('server-name')
+              .setDescription('Name of the server to permanently remove')
+              .setRequired(true)
+              .setAutocomplete(true),
           ),
       )
       .addSubcommand((subcommand) =>
@@ -85,38 +89,44 @@ export class MCPCommand extends BaseCommand {
       )
       .addSubcommand((subcommand) =>
         subcommand.setName('status').setDescription('Show MCP system status'),
+      )
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName('debug')
+          .setDescription('Show connection diagnostics (troubleshooting)'),
+      )
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName('cleanup')
+          .setDescription('Clean up stale/corrupted connections'),
+      )
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName('repair')
+          .setDescription(
+            'Repair corrupted database records (fixes missing server_url)',
+          ),
       );
   }
 
-  async execute(context: CommandContext): Promise<CommandResponse | void> {
-    const { args, userId } = context;
-    const subcommand = args[0]?.toLowerCase();
-
-    switch (subcommand) {
-      case 'search':
-        return this.handleSearch(args.slice(1), context);
-      case 'search-page':
-        return this.handleSearchPage(args.slice(1), context);
-      case 'list':
-        return this.handleList(userId);
-      case 'connect':
-        return this.handleConnect(args[1], userId);
-      case 'disconnect':
-        return this.handleDisconnect(args[1], userId);
-      case 'tools':
-        return this.handleTools(userId);
-      case 'status':
-        return this.handleStatus();
-      case 'authlink':
-        return this.handleAuthLink(args[1], userId);
-      case 'reset':
-        return this.handleReset(args[1], userId);
-      default:
-        return this.handleHelp();
-    }
-  }
-
   async executeSlash(interaction: ChatInputCommandInteraction): Promise<void> {
+    // IMMEDIATELY acknowledge the interaction - before any other processing
+    try {
+      await interaction.deferReply();
+    } catch (error) {
+      console.error('❌ Failed to defer reply immediately:', error);
+      // Try immediate reply as fallback
+      try {
+        await interaction.reply({
+          content: '❌ Command processing failed. Please try again.',
+          ephemeral: true,
+        });
+      } catch (replyError) {
+        console.error('❌ Failed to send any response:', replyError);
+      }
+      return;
+    }
+
     const subcommand = interaction.options.getSubcommand();
 
     console.log('🔍 MCP executeSlash called:', {
@@ -127,25 +137,6 @@ export class MCPCommand extends BaseCommand {
       subcommand,
     });
 
-    // Acknowledge the interaction immediately - same pattern as chat command
-    try {
-      await interaction.deferReply();
-      console.log(
-        '✅ Successfully deferred reply for interaction:',
-        interaction.id,
-      );
-    } catch (error) {
-      console.error('❌ Failed to defer reply:', error);
-      console.log('🔍 Interaction state when defer failed:', {
-        interactionId: interaction.id,
-        isDeferred: interaction.deferred,
-        isReplied: interaction.replied,
-        createdTimestamp: interaction.createdTimestamp,
-        age: Date.now() - interaction.createdTimestamp,
-      });
-      return;
-    }
-
     let response: CommandResponse | void;
 
     try {
@@ -153,24 +144,28 @@ export class MCPCommand extends BaseCommand {
       switch (subcommand) {
         case 'search': {
           const query = interaction.options.getString('query') || '';
-          const fakeContext = {
-            userId: interaction.user.id,
-            args: query.split(' '),
-          } as CommandContext;
-          response = await this.handleSearch(query.split(' '), fakeContext);
+          response = await this.handleSearch(query.split(' '));
           break;
         }
         case 'list':
           response = await this.handleList(interaction.user.id);
           break;
         case 'connect': {
-          const serverId = interaction.options.getString('server-id', true);
-          response = await this.handleConnect(serverId, interaction.user.id);
+          const serverName = interaction.options.getString('server-name', true);
+          response = await this.handleConnect(serverName, interaction.user.id);
           break;
         }
         case 'disconnect': {
-          const serverId = interaction.options.getString('server-id', true);
-          response = await this.handleDisconnect(serverId, interaction.user.id);
+          const serverName = interaction.options.getString('server-name', true);
+          response = await this.handleDisconnect(
+            serverName,
+            interaction.user.id,
+          );
+          break;
+        }
+        case 'delete': {
+          const serverName = interaction.options.getString('server-name', true);
+          response = await this.handleDelete(serverName, interaction.user.id);
           break;
         }
         case 'tools':
@@ -178,6 +173,15 @@ export class MCPCommand extends BaseCommand {
           break;
         case 'status':
           response = await this.handleStatus();
+          break;
+        case 'debug':
+          response = await this.handleDebug(interaction.user.id);
+          break;
+        case 'cleanup':
+          response = await this.handleCleanup(interaction.user.id);
+          break;
+        case 'repair':
+          response = await this.handleRepair(interaction.user.id);
           break;
         default:
           response = {
@@ -206,38 +210,7 @@ export class MCPCommand extends BaseCommand {
     }
   }
 
-  private async handleAuthLink(
-    serverId: string,
-    userId: string,
-  ): Promise<CommandResponse> {
-    if (!serverId) {
-      return { content: '❌ Usage: `!mcp authlink <server-id>`' };
-    }
-    try {
-      const pending = (this.mcpService as any).getPendingAuthorization?.(
-        serverId,
-        userId,
-      );
-      if (!pending) {
-        return {
-          content:
-            'ℹ️ No pending authorization found for that server (maybe already authorized or never started).',
-        };
-      }
-      return {
-        content:
-          '🔐 Full Authorization URL (copy & open in browser):\n' +
-          pending.authUrl,
-      };
-    } catch (e) {
-      return { content: '❌ Could not retrieve authorization URL.' };
-    }
-  }
-
-  private async handleSearch(
-    queryArgs: string[],
-    context: CommandContext,
-  ): Promise<CommandResponse> {
+  private async handleSearch(queryArgs: string[]): Promise<CommandResponse> {
     const query = queryArgs.join(' ');
 
     try {
@@ -269,11 +242,8 @@ export class MCPCommand extends BaseCommand {
           name: `🔌 ${server.name}`,
           value: [
             `**ID:** ${server.id}`,
-            `**Description:** ${server.description?.substring(0, 100)}${server.description?.length > 100 ? '...' : ''}`,
-            `**Author:** ${server.author || 'Unknown'}`,
-            `**Tags:** ${server.tags?.slice(0, 3).join(', ') || 'None'}${(server.tags?.length || 0) > 3 ? '...' : ''}`,
-            `**Auth:** ${server.auth_type}`,
-            `**Type:** ${server.hosted_on === 'icp' ? 'ICP Hosted' : 'External'}`,
+            `**Description:** ${server.description?.substring(0, 150)}${server.description?.length > 150 ? '...' : ''}`,
+            `**URL:** ${server.url}`,
           ].join('\n'),
           inline: false,
         });
@@ -281,14 +251,14 @@ export class MCPCommand extends BaseCommand {
 
       if (servers.length > 5) {
         embed.setFooter({
-          text: `Showing 5 of ${servers.length} results. Use !mcp connect <server-id> to connect.`,
+          text: `Showing 5 of ${servers.length} results. Use /mcp connect <server-name> to connect.`,
         });
       }
 
       if (pagination?.hasNextPage) {
         embed.addFields({
-          name: '📄 Pagination',
-          value: `Use \`!mcp search-page ${query} ${pagination.currentPage + 1}\` for next page`,
+          name: '📄 More Results',
+          value: `There are ${pagination.totalItems - pagination.currentPage * 10} more servers. Try refining your search query.`,
           inline: false,
         });
       }
@@ -302,95 +272,6 @@ export class MCPCommand extends BaseCommand {
     }
   }
 
-  private async handleSearchPage(
-    queryArgs: string[],
-    context: CommandContext,
-  ): Promise<CommandResponse> {
-    if (queryArgs.length < 2) {
-      return {
-        content: '❌ Usage: !mcp search-page <query> <page-number>',
-      };
-    }
-
-    const pageNumber = parseInt(queryArgs.pop() || '1', 10);
-    const query = queryArgs.join(' ');
-
-    if (isNaN(pageNumber) || pageNumber < 1) {
-      return {
-        content: '❌ Page number must be a positive integer.',
-      };
-    }
-
-    try {
-      const result = await this.mcpService.searchServers({
-        query,
-        limit: 10,
-        page: pageNumber,
-      });
-
-      const { servers, pagination } = result;
-
-      if (servers.length === 0) {
-        return {
-          content: '🔍 No MCP servers found on this page.',
-        };
-      }
-
-      const embed = new EmbedBuilder()
-        .setTitle('🌐 MCP Server Search Results')
-        .setDescription(
-          `Found ${pagination?.totalItems || servers.length} servers${query ? ` for: "${query}"` : ''}\n` +
-            `Showing page ${pagination?.currentPage || pageNumber} of ${pagination?.totalPages || 1}`,
-        )
-        .setColor(0x00ae86);
-
-      servers.slice(0, 5).forEach((server) => {
-        embed.addFields({
-          name: `🔌 ${server.name}`,
-          value: [
-            `**ID:** ${server.id}`,
-            `**Description:** ${server.description?.substring(0, 100)}${server.description?.length > 100 ? '...' : ''}`,
-            `**Author:** ${server.author || 'Unknown'}`,
-            `**Tags:** ${server.tags?.slice(0, 3).join(', ') || 'None'}${(server.tags?.length || 0) > 3 ? '...' : ''}`,
-            `**Auth:** ${server.auth_type}`,
-            `**Type:** ${server.hosted_on === 'icp' ? 'ICP Hosted' : 'External'}`,
-          ].join('\n'),
-          inline: false,
-        });
-      });
-
-      // Navigation controls
-      const navigationFields = [];
-
-      if (pagination?.hasPreviousPage) {
-        navigationFields.push(
-          `◀️ Previous: \`!mcp search-page ${query} ${pagination.currentPage - 1}\``,
-        );
-      }
-
-      if (pagination?.hasNextPage) {
-        navigationFields.push(
-          `▶️ Next: \`!mcp search-page ${query} ${pagination.currentPage + 1}\``,
-        );
-      }
-
-      if (navigationFields.length > 0) {
-        embed.addFields({
-          name: '📄 Navigation',
-          value: navigationFields.join('\n'),
-          inline: false,
-        });
-      }
-
-      return { content: '', embeds: [embed] };
-    } catch (error) {
-      console.error('MCP search page error:', error);
-      return {
-        content: '❌ Error searching MCP servers. Please try again later.',
-      };
-    }
-  }
-
   private async handleList(userId: string): Promise<CommandResponse> {
     try {
       const connections = await this.mcpService.getUserConnections(userId);
@@ -398,12 +279,15 @@ export class MCPCommand extends BaseCommand {
       if (connections.length === 0) {
         return {
           content:
-            '📋 You have no MCP server connections. Use `!mcp search` to find servers to connect to.',
+            '📋 You have no MCP server connections. Use `/mcp search` to find servers to connect to.',
         };
       }
 
       const embed = new EmbedBuilder()
         .setTitle('🔗 Your MCP Connections')
+        .setDescription(
+          `You have ${connections.length} MCP server connection${connections.length !== 1 ? 's' : ''}`,
+        )
         .setColor(0x00ae86);
 
       connections.forEach((conn) => {
@@ -413,21 +297,26 @@ export class MCPCommand extends BaseCommand {
             : conn.status === 'error'
               ? '🔴'
               : '🟡';
+        const parsedTools = JSON.parse(conn.tools || '[]') as Tool[];
+
+        // Build value array with description and other details
+        const valueLines = [
+          `**ID:** ${conn.server_id}`,
+          conn.description
+            ? `**Description:** ${conn.description.substring(0, 150)}${conn.description.length > 150 ? '...' : ''}`
+            : '',
+          `**Status:** ${conn.status} | **Tools:** ${parsedTools.length}`,
+          conn.server_url ? `**URL:** ${conn.server_url}` : '',
+          conn.error_message ? `**Error:** ${conn.error_message}` : '',
+          conn.last_connected
+            ? `**Last Connected:** ${conn.last_connected.toDateString()}`
+            : '',
+        ].filter(Boolean);
 
         embed.addFields({
           name: `${statusEmoji} ${conn.server_name}`,
-          value: [
-            `**ID:** ${conn.server_id}`,
-            `**Status:** ${conn.status}`,
-            `**Tools:** ${conn.tools.length}`,
-            conn.error_message ? `**Error:** ${conn.error_message}` : '',
-            conn.last_connected
-              ? `**Connected:** ${conn.last_connected.toDateString()}`
-              : '',
-          ]
-            .filter(Boolean)
-            .join('\n'),
-          inline: true,
+          value: valueLines.join('\n'),
+          inline: false,
         });
       });
 
@@ -442,17 +331,31 @@ export class MCPCommand extends BaseCommand {
   }
 
   private async handleConnect(
-    serverId: string,
+    serverName: string,
     userId: string,
   ): Promise<CommandResponse> {
-    if (!serverId) {
+    if (!serverName) {
       return {
         content:
-          '❌ Please provide a server ID. Use `!mcp search` to find servers.',
+          '❌ Please provide a server name. Use `/mcp search` to find servers.',
       };
     }
 
     try {
+      // First, try to resolve the server name to an ID for existing connections
+      let serverId = await this.mcpService.resolveServerNameToId(
+        userId,
+        serverName,
+      );
+
+      // If not found in user's connections, it might be a server they want to connect to from search results
+      // In this case, we need to handle it differently - the serverName might be a search result
+      if (!serverId) {
+        // For new connections from search results, the serverName might actually be the server ID
+        // This maintains backward compatibility with search results
+        serverId = serverName;
+      }
+
       const connection = await this.mcpService.connectToServer(
         serverId,
         userId,
@@ -463,7 +366,7 @@ export class MCPCommand extends BaseCommand {
           content:
             `✅ Successfully connected to **${connection.server_name}**!\n` +
             `� Tools are being discovered... Just a moment!\n` +
-            `Use \`!mcp tools\` to see what you can do.`,
+            `Use \`/mcp tools\` to see what you can do.`,
         };
       } else if (connection.status === 'auth-required') {
         const authUrl = (connection as any).auth_url;
@@ -478,7 +381,7 @@ export class MCPCommand extends BaseCommand {
                     `**Next Steps:**\n` +
                     `• Click the button below to authorize access.\n` +
                     `• Complete the sign-in / consent flow.\n` +
-                    `• Then run \`!mcp connect ${serverId}\` again.\n\n`,
+                    `• Then run \`/mcp connect ${serverId}\` again.\n\n`,
                 )
                 .setColor(0xff9500)
                 .setFooter({
@@ -496,7 +399,7 @@ export class MCPCommand extends BaseCommand {
           };
         } else {
           return {
-            content: `🔐 Authorization required for **${connection.server_name}**. Awaiting authorization URL (try again shortly) then rerun \`!mcp connect ${serverId}\`.`,
+            content: `🔐 Authorization required for **${connection.server_name}**. Awaiting authorization URL (try again shortly) then rerun \`/mcp connect ${serverId}\`.`,
           };
         }
       } else {
@@ -528,7 +431,7 @@ export class MCPCommand extends BaseCommand {
                   `**Next Steps:**\n` +
                   `• Click the button below to open the authorization page.\n` +
                   `• Complete the sign-in / consent flow.\n` +
-                  `• Return here and run \`!mcp connect ${serverId}\` again.\n\n` +
+                  `• Return here and run \`/mcp connect ${serverName}\` again.\n\n` +
                   `URL: ${prettyUrl}`,
               )
               .setColor(0xff9500)
@@ -556,9 +459,9 @@ export class MCPCommand extends BaseCommand {
           content:
             `❌ ${error.message}\n\n` +
             `💡 **Tips:**\n` +
-            `• Use \`!mcp search <query>\` to find available servers\n` +
+            `• Use \`/mcp search <query>\` to find available servers\n` +
             `• Copy the exact ID from search results\n` +
-            `• Try \`!mcp search github\` for GitHub-related servers`,
+            `• Try \`/mcp search github\` for GitHub-related servers`,
         };
       }
 
@@ -569,25 +472,71 @@ export class MCPCommand extends BaseCommand {
   }
 
   private async handleDisconnect(
-    serverId: string,
+    serverName: string,
     userId: string,
   ): Promise<CommandResponse> {
-    if (!serverId) {
+    if (!serverName) {
       return {
         content:
-          '❌ Please provide a server ID. Use `!mcp list` to see your connections.',
+          '❌ Please provide a server name. Use `/mcp list` to see your connections.',
       };
     }
 
     try {
+      // Resolve server name to ID
+      const serverId = await this.mcpService.resolveServerNameToId(
+        userId,
+        serverName,
+      );
+      if (!serverId) {
+        return {
+          content: `❌ Could not find a connection with the name "${serverName}". Use \`/mcp list\` to see your connections.`,
+        };
+      }
+
       await this.mcpService.disconnectFromServer(serverId, userId);
       return {
-        content: `✅ Disconnected from server: ${serverId}`,
+        content: `✅ Disconnected from server: **${serverName}**`,
       };
     } catch (error) {
       console.error('MCP disconnect error:', error);
       return {
         content: `❌ Error disconnecting from server: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
+  }
+
+  private async handleDelete(
+    serverName: string,
+    userId: string,
+  ): Promise<CommandResponse> {
+    if (!serverName) {
+      return {
+        content:
+          '❌ Please provide a server name. Use `/mcp list` to see your connections.',
+      };
+    }
+
+    try {
+      // Resolve server name to ID
+      const serverId = await this.mcpService.resolveServerNameToId(
+        userId,
+        serverName,
+      );
+      if (!serverId) {
+        return {
+          content: `❌ Could not find a connection with the name "${serverName}". Use \`/mcp list\` to see your connections.`,
+        };
+      }
+
+      await this.mcpService.deleteServerConnection(serverId, userId);
+      return {
+        content: `🗑️ Permanently deleted server connection: **${serverName}**\n\n⚠️ This action cannot be undone. All connection data and OAuth tokens have been removed.`,
+      };
+    } catch (error) {
+      console.error('MCP delete error:', error);
+      return {
+        content: `❌ Error deleting server connection: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
     }
   }
@@ -599,7 +548,7 @@ export class MCPCommand extends BaseCommand {
       if (tools.length === 0) {
         return {
           content:
-            '🔧 No tools available. Connect to MCP servers using `!mcp connect <server-id>` first.',
+            '🔧 No tools available. Connect to MCP servers using `/mcp connect <server-id>` first.',
         };
       }
 
@@ -686,65 +635,237 @@ export class MCPCommand extends BaseCommand {
     }
   }
 
-  private async handleReset(
-    serverId: string,
-    userId: string,
-  ): Promise<CommandResponse> {
-    if (!serverId) {
-      return {
-        content:
-          '❌ Please provide a server ID to reset. Use `/mcp reset <server-id>`',
-      };
-    }
-
+  private async handleDebug(userId: string): Promise<CommandResponse> {
     try {
-      console.log(
-        `🔄 [MCP] Resetting OAuth data for server ${serverId} and user ${userId}`,
-      );
+      const diagnostics =
+        await this.mcpService.getConnectionDiagnostics(userId);
 
-      // Use MCP service to reset all data
-      await this.mcpService.resetServerData(serverId, userId);
-      console.log(`🔄 [MCP] Reset complete via MCP service`);
+      const embed = new EmbedBuilder()
+        .setTitle('🔍 Connection Diagnostics')
+        .setColor(0x00ffff)
+        .addFields(
+          {
+            name: '💾 Database Connections',
+            value:
+              diagnostics.databaseConnections.length > 0
+                ? diagnostics.databaseConnections
+                    .map(
+                      (conn) =>
+                        `• ${conn.server_name || conn.server_id}: ${conn.status}`,
+                    )
+                    .join('\n')
+                : 'No connections found in database',
+            inline: false,
+          },
+          {
+            name: '🔗 Active Connections Pool',
+            value:
+              diagnostics.activeConnections.activeConnectionCount > 0
+                ? `Count: ${diagnostics.activeConnections.activeConnectionCount}\n` +
+                  diagnostics.activeConnections.connectionDetails
+                    .map(
+                      (conn: any) =>
+                        `• ${conn.poolKey}: ${conn.isActiveAttempted ? '✅ Active' : '❌ Inactive'} (${conn.currentTransportType || 'no transport'})`,
+                    )
+                    .join('\n')
+                : 'No active connections in pool',
+            inline: false,
+          },
+          {
+            name: '⚠️ Mismatched Connections',
+            value:
+              diagnostics.mismatchedConnections.length > 0
+                ? diagnostics.mismatchedConnections
+                    .map((id) => `• ${id}`)
+                    .join('\n')
+                : '✅ All connections synchronized',
+            inline: false,
+          },
+        )
+        .setFooter({
+          text: `Diagnostic run for user ${userId}`,
+        });
 
-      return {
-        content: `✅ **Reset Complete**\n\nCleared all stored data for server \`${serverId}\`:\n- OAuth tokens\n- OAuth client info\n- Connection data\n\nYou can now connect fresh with \`/mcp connect ${serverId}\``,
-      };
+      return { content: '', embeds: [embed] };
     } catch (error) {
-      console.error(`Error resetting server ${serverId}:`, error);
+      console.error('Error getting connection diagnostics:', error);
       return {
-        content: `❌ Failed to reset server: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        content: '❌ Failed to get connection diagnostics. Please try again.',
       };
     }
   }
 
-  private handleHelp(): CommandResponse {
-    const embed = new EmbedBuilder()
-      .setTitle('🔌 MCP (Model Context Protocol) Commands')
-      .setDescription(
-        'Connect to and manage MCP servers for enhanced AI capabilities.',
-      )
-      .setColor(0x00ae86)
-      .addFields(
-        {
-          name: '🔍 Discovery',
-          value:
-            '`!mcp search <query>` - Search for MCP servers\n`!mcp search-page <query> <page>` - Navigate search pages\n`!mcp status` - Show system status',
-          inline: false,
-        },
-        {
-          name: '🔗 Connection Management',
-          value:
-            '`!mcp list` - List your connections\n`!mcp connect <id>` - Connect to server\n`!mcp disconnect <id>` - Disconnect from server',
-          inline: false,
-        },
-        {
-          name: '🛠️ Tools',
-          value:
-            '`!mcp tools` - List available tools\n\n💡 **Tip:** Connected MCP tools are automatically available in AI chats!',
-          inline: false,
-        },
-      );
+  private async handleCleanup(userId: string): Promise<CommandResponse> {
+    try {
+      const result = await this.mcpService.cleanupStaleConnections(userId);
 
-    return { content: '', embeds: [embed] };
+      const embed = new EmbedBuilder()
+        .setTitle('🧹 Connection Cleanup')
+        .setColor(result.cleanedCount > 0 ? 0x00ff00 : 0x808080)
+        .addFields(
+          {
+            name: '🗑️ Cleaned Up',
+            value:
+              result.cleanedCount > 0
+                ? `${result.cleanedCount} stale connections removed:\n${result.cleanedConnections.map((id: string) => `• ${id}`).join('\n')}`
+                : 'No stale connections found',
+            inline: false,
+          },
+          {
+            name: '✅ Remaining Active',
+            value:
+              result.remainingConnections > 0
+                ? `${result.remainingConnections} healthy connections`
+                : 'No active connections',
+            inline: false,
+          },
+        )
+        .setFooter({
+          text: 'Cleanup completed successfully',
+        });
+
+      return { content: '', embeds: [embed] };
+    } catch (error) {
+      console.error('Error cleaning up connections:', error);
+      return {
+        content: '❌ Failed to clean up connections. Please try again.',
+      };
+    }
+  }
+
+  private async handleRepair(userId: string): Promise<CommandResponse> {
+    try {
+      const result = await this.mcpService.repairCorruptedConnections(userId);
+
+      const embed = new EmbedBuilder()
+        .setTitle('🔧 Connection Repair')
+        .setColor(result.repairedCount > 0 ? 0x00ff00 : 0x808080)
+        .addFields(
+          {
+            name: '🔧 Repaired Connections',
+            value:
+              result.repairedCount > 0
+                ? result.repairedConnections
+                    .map(
+                      (repair: any) =>
+                        `• **${repair.id}**\n  Issues: ${repair.issues.join(', ')}\n  Fixes: ${repair.fixes.join(', ')}`,
+                    )
+                    .join('\n\n')
+                : 'No corrupted connections found',
+            inline: false,
+          },
+          {
+            name: '✅ Healthy Connections',
+            value:
+              result.healthyConnections > 0
+                ? `${result.healthyConnections} connections already healthy`
+                : 'No healthy connections',
+            inline: false,
+          },
+        )
+        .setFooter({
+          text:
+            result.repairedCount > 0
+              ? 'Restart bot to reconnect repaired connections'
+              : 'All connections are healthy',
+        });
+
+      return { content: '', embeds: [embed] };
+    } catch (error) {
+      console.error('Error repairing connections:', error);
+      return {
+        content: '❌ Failed to repair connections. Please try again.',
+      };
+    }
+  }
+
+  async handleAutocomplete(
+    interaction: AutocompleteInteraction,
+  ): Promise<void> {
+    console.log('🔗 MCP AUTOCOMPLETE HANDLER CALLED');
+    const focusedOption = interaction.options.getFocused(true);
+    console.log('🔗 FOCUSED OPTION:', focusedOption);
+
+    try {
+      if (focusedOption.name === 'server-name') {
+        console.log('🔗 FETCHING MCP CONNECTIONS FOR AUTOCOMPLETE...');
+
+        const subcommand = interaction.options.getSubcommand();
+        console.log('🔗 SUBCOMMAND FOR FILTERING:', subcommand);
+
+        // Get user's connections for autocomplete
+        const connections = await this.mcpService.getUserConnections(
+          interaction.user.id,
+        );
+        console.log('🔗 USER CONNECTIONS:', {
+          connectionCount: connections.length,
+          connections: connections.map((c) => ({
+            name: c.server_name,
+            status: c.status,
+          })),
+        });
+
+        let choices: { name: string; value: string }[] = [];
+
+        // Add a helpful suggestion if no text is entered yet
+        if (focusedOption.value.length === 0) {
+          choices.push({
+            name: '💡 Type to search your connections, or paste server ID from /mcp search',
+            value: 'search-for-servers',
+          });
+        }
+
+        if (connections.length > 0) {
+          const connectionChoices = connections
+            .filter((conn) => {
+              // Basic filters
+              if (!conn.server_name || conn.server_name.trim().length === 0) {
+                return false;
+              }
+
+              // Text search filter
+              if (
+                !conn.server_name
+                  .toLowerCase()
+                  .includes(focusedOption.value.toLowerCase())
+              ) {
+                return false;
+              }
+
+              // Subcommand-specific filters
+              switch (subcommand) {
+                case 'connect':
+                  // For connect, only show servers that are not connected
+                  return conn.status !== 'connected';
+
+                case 'disconnect':
+                  // For disconnect, only show connected servers
+                  return conn.status === 'connected';
+
+                case 'delete':
+                  // For delete, show all servers regardless of status
+                  return true;
+
+                default:
+                  return true;
+              }
+            })
+            .slice(0, 24) // Leave room for the suggestion
+            .map((conn) => ({
+              name: `${conn.server_name} (${conn.status})`,
+              value: conn.server_name,
+            }));
+
+          choices = choices.concat(connectionChoices);
+        }
+
+        console.log('🔗 AUTOCOMPLETE CHOICES:', choices);
+        await interaction.respond(choices);
+      }
+    } catch (error) {
+      console.error('🔗 Error in MCP autocomplete:', error);
+      // Fail gracefully with empty choices
+      await interaction.respond([]);
+    }
   }
 }

@@ -5,6 +5,7 @@ import { ConfigManager } from './config/index.js';
 import { CommandRegistryImpl } from './commands/registry.js';
 import { ChatCommand } from './commands/chat/chat.js';
 import { MCPCommand } from './commands/mcp/mcp.js';
+import { TasksCommand } from './commands/tasks/tasks.js';
 import { LLMService } from './services/llm.js';
 import { SupabaseService } from './services/database.js';
 import { AlertScheduler } from './services/scheduler.js';
@@ -40,12 +41,7 @@ class DiscordBot {
     this.config = new ConfigManager();
 
     this.client = new Client({
-      intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildIntegrations,
-      ],
+      intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildIntegrations],
     });
 
     this.commandRegistry = new CommandRegistryImpl();
@@ -124,12 +120,11 @@ class DiscordBot {
         this.client.guilds.cache.forEach((guild) => {
           console.log(`📍 Guild: ${guild.name} (${guild.id})`);
         });
-        console.log(
-          `🤖 AI Function Calling enabled with ${this.taskFunctions.getFunctions().length} functions`,
-        );
-        console.log(
-          `� Task management system ready with prompt-based monitoring`,
-        );
+
+        // Get current MCP tools available for chat
+        const mcpTools = await this.mcpService.getAvailableTools('system');
+        console.log(`🤖 AI Chat available with ${mcpTools.length} MCP tools`);
+        console.log(`⚡ Task management available via /tasks command`);
 
         // Check MCP system status
         try {
@@ -158,60 +153,67 @@ class DiscordBot {
       }
     });
 
-    this.client.on(Events.MessageCreate, async (message) => {
-      console.log(
-        `💬 MESSAGE: ${message.author.tag}: ${message.content.substring(0, 50)}${message.content.length > 50 ? '...' : ''}`,
-      );
-      if (message.author.bot) return;
-
-      // Handle text commands (starting with !)
-      if (message.content.startsWith('!')) {
-        const args = message.content.slice(1).split(' ');
-        const commandName = args.shift()?.toLowerCase();
-
-        if (commandName) {
-          const command = this.commandRegistry.getCommand(commandName);
-          if (command) {
-            const context: CommandContext = {
-              message,
-              args,
-              userId: message.author.id,
-              channelId: message.channel.id,
-              guildId: message.guild?.id,
-            };
-
-            try {
-              const response = await command.execute(context);
-              if (response) {
-                await message.reply({
-                  content: response.content || undefined,
-                  embeds: response.embeds || undefined,
-                  files: response.files || undefined,
-                  components: response.components || undefined,
-                });
-              }
-            } catch (error) {
-              console.error('Error executing command:', error);
-              await message.reply(
-                'Sorry, an error occurred while executing that command.',
-              );
-            }
-          }
-        }
-      }
-    });
-
     this.client.on(Events.InteractionCreate, async (interaction) => {
       console.log('🔔 INTERACTION RECEIVED:', {
         type: interaction.type,
         isSlash: interaction.isChatInputCommand(),
-        commandName: interaction.isChatInputCommand()
-          ? interaction.commandName
-          : 'N/A',
+        isAutocomplete: interaction.isAutocomplete(),
+        commandName:
+          interaction.isChatInputCommand() || interaction.isAutocomplete()
+            ? interaction.commandName
+            : 'N/A',
         userId: interaction.user.id,
         guildId: interaction.guildId,
         channelId: interaction.channelId,
       });
+
+      // Handle autocomplete interactions
+      if (interaction.isAutocomplete()) {
+        console.log('🔍 AUTOCOMPLETE DEBUG:', {
+          commandName: interaction.commandName,
+          focusedOption: interaction.options.getFocused(true),
+        });
+
+        const command = this.commandRegistry.getCommand(
+          interaction.commandName,
+        );
+        console.log('🔍 COMMAND LOOKUP:', {
+          commandFound: !!command,
+          commandName: command?.name,
+          hasAutocompleteMethod: command && 'handleAutocomplete' in command,
+          methodType: command && typeof (command as any).handleAutocomplete,
+          allCommandNames: this.commandRegistry
+            .getAllCommands()
+            .map((c) => c.name),
+        });
+
+        if (
+          command &&
+          'handleAutocomplete' in command &&
+          typeof command.handleAutocomplete === 'function'
+        ) {
+          try {
+            console.log('🔍 CALLING AUTOCOMPLETE HANDLER...');
+            await (command as any).handleAutocomplete(interaction);
+            console.log('🔍 AUTOCOMPLETE HANDLER COMPLETED');
+          } catch (error) {
+            console.error(
+              `Error handling autocomplete for ${interaction.commandName}:`,
+              error,
+            );
+            // Respond with empty choices on error
+            await interaction.respond([]);
+          }
+        } else {
+          console.log(
+            '🔍 NO AUTOCOMPLETE HANDLER FOUND - RESPONDING WITH EMPTY',
+          );
+          // No autocomplete handler found
+          await interaction.respond([]);
+        }
+        return;
+      }
+
       if (!interaction.isChatInputCommand()) return;
 
       const command = this.commandRegistry.getCommand(interaction.commandName);
@@ -232,28 +234,8 @@ class DiscordBot {
       }
 
       try {
-        // Check if the command has our new, slash-specific method
-        if (
-          'executeSlash' in command &&
-          typeof command.executeSlash === 'function'
-        ) {
-          // Call the new method designed for interactions
-          await command.executeSlash(interaction);
-        } else {
-          // This is a fallback for any commands you haven't updated yet
-          console.warn(
-            `Command '${command.name}' is not slash-command compatible (missing executeSlash).`,
-          );
-          try {
-            await interaction.reply({
-              content:
-                'This command is not properly configured to be run as a slash command.',
-              ephemeral: true,
-            });
-          } catch (error) {
-            console.error('Failed to reply to incompatible command:', error);
-          }
-        }
+        // Execute the slash command
+        await command.executeSlash(interaction);
       } catch (error) {
         console.error(
           `Error during interaction for command ${interaction.commandName}:`,
@@ -280,13 +262,18 @@ class DiscordBot {
   }
 
   private registerCommands(): void {
-    // Register AI-powered chat command with task management capabilities
+    // Register AI-powered chat command (now without task management)
     this.commandRegistry.register(
-      new ChatCommand(this.llmService, this.taskFunctions, this.database),
+      new ChatCommand(this.llmService, this.database),
     );
 
     // Register MCP management command
     this.commandRegistry.register(new MCPCommand(this.mcpService));
+
+    // Register dedicated tasks management command
+    this.commandRegistry.register(
+      new TasksCommand(this.taskFunctions, this.database),
+    );
 
     console.log(
       `📝 Registered ${this.commandRegistry.getAllCommands().length} commands`,

@@ -863,9 +863,7 @@ export class SupabaseService implements DatabaseService {
       updates,
     });
 
-    const updateData: any = {
-      updated_at: new Date().toISOString(),
-    };
+    const updateData: any = {};
 
     if (updates.status !== undefined) updateData.status = updates.status;
     if (updates.tools !== undefined) updateData.tools = updates.tools;
@@ -873,6 +871,10 @@ export class SupabaseService implements DatabaseService {
       updateData.error_message = updates.error_message;
     if (updates.last_used !== undefined)
       updateData.last_used = updates.last_used?.toISOString();
+    if (updates.server_url !== undefined)
+      updateData.server_url = updates.server_url;
+    if (updates.server_name !== undefined)
+      updateData.server_name = updates.server_name;
 
     const { error } = await this.client
       .from('mcp_connections')
@@ -925,6 +927,66 @@ export class SupabaseService implements DatabaseService {
       status,
       metadata,
     });
+
+    dbLogger.info(`🔗 [DB] storeConnectionDetails called:`, {
+      userId,
+      mcpServerConfigId,
+      status,
+      metadata,
+    });
+
+    // First check if connection already exists
+    const existingConnection = await this.getUserMCPConnection(
+      userId,
+      mcpServerConfigId,
+    );
+
+    if (existingConnection) {
+      // Update existing connection
+      const dbStatus = this.mapStatusToDatabase(status);
+      const updateData: any = {
+        status: dbStatus,
+      };
+
+      // Note: metadata and updated_at are not stored in the database schema, only logged for debugging
+
+      const { error } = await this.client
+        .from('mcp_connections')
+        .update(updateData)
+        .eq('user_id', userId)
+        .eq('server_id', mcpServerConfigId);
+
+      if (error) {
+        dbLogger.error(`🔗 [DB] Error updating connection details:`, error);
+        throw error;
+      }
+
+      dbLogger.info(`🔗 [DB] Connection details updated successfully`);
+    } else {
+      // Create new connection record (though this should rarely happen as connections are usually created via saveUserMCPConnection)
+      dbLogger.warn(
+        `🔗 [DB] Connection not found, cannot store details without server_url`,
+      );
+    }
+  }
+
+  // Map internal status values to database-allowed values
+  private mapStatusToDatabase(internalStatus: string): string {
+    const statusMap: { [key: string]: string } = {
+      ACTIVE: 'connected',
+      RECONNECTING: 'connected',
+      RECONNECTING_ON_STARTUP: 'connected',
+      CONNECTION_REQUESTED: 'connected',
+      DISCONNECTED_UNEXPECTEDLY: 'disconnected',
+      FAILED_CONNECTION: 'error',
+      AUTH_PENDING: 'auth-required',
+      connected: 'connected',
+      disconnected: 'disconnected',
+      error: 'error',
+      'auth-required': 'auth-required',
+    };
+
+    return statusMap[internalStatus] || 'error'; // Default to 'error' for unknown statuses
   }
 
   async updateConnectionStatus(
@@ -942,6 +1004,35 @@ export class SupabaseService implements DatabaseService {
       status,
       metadata,
     });
+
+    dbLogger.info(`🔗 [DB] updateConnectionStatus called:`, {
+      userId,
+      mcpServerConfigId,
+      mcpServerUrl,
+      status,
+      metadata,
+    });
+
+    const dbStatus = this.mapStatusToDatabase(status);
+    const updateData: any = {
+      status: dbStatus,
+      server_url: mcpServerUrl,
+    };
+
+    // Note: metadata and updated_at are not stored in the database schema, only logged for debugging
+
+    const { error } = await this.client
+      .from('mcp_connections')
+      .update(updateData)
+      .eq('user_id', userId)
+      .eq('server_id', mcpServerConfigId);
+
+    if (error) {
+      dbLogger.error(`🔗 [DB] Error updating connection status:`, error);
+      throw error;
+    }
+
+    dbLogger.info(`🔗 [DB] Connection status updated successfully`);
   }
 
   async getReconnectableConnections(): Promise<any[]> {

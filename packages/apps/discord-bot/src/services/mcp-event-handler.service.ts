@@ -194,6 +194,14 @@ export class MCPEventHandlerService {
         return;
       }
 
+      // Skip updating connections that have been explicitly deleted by user
+      if (existingConnection.status === 'DISCONNECTED_BY_USER') {
+        logger.info(
+          `[MCPEventHandler] Skipping status update for ${mcpServerConfigId} - connection was deleted by user`,
+        );
+        return;
+      }
+
       const validStatus = [
         'connected',
         'disconnected',
@@ -203,11 +211,28 @@ export class MCPEventHandlerService {
         ? (status as 'connected' | 'disconnected' | 'error' | 'auth-required')
         : 'error';
 
+      // When connection is successful, ensure we have the correct server_url
+      // This fixes cases where the database has an empty server_url but the connection used a corrected URL from registry
+      let updatedServerUrl = existingConnection.server_url;
+      if (validStatus === 'connected' && (!existingConnection.server_url || existingConnection.server_url.trim() === '')) {
+        // Try to get the corrected URL from the connection pool or registry
+        try {
+          const poolKey = `${userId}::${mcpServerConfigId}`;
+          // Note: This is a simple approach - in a more complex system, we'd get this from the connection pool
+          // For now, we'll let the repair command handle persistent fixes
+          logger.info(`[MCPEventHandler] Connection successful but database has empty server_url for ${poolKey}`);
+        } catch (error) {
+          logger.warn(`[MCPEventHandler] Could not retrieve corrected server_url for ${mcpServerConfigId}`);
+        }
+      }
+
       const connectionData: SavedMCPConnection = {
         ...existingConnection,
         status: validStatus,
         error_message: error?.message || null,
         last_used: new Date(),
+        // Keep the existing server_url - repair command will fix empty ones
+        server_url: updatedServerUrl,
       };
 
       await this.databaseService.saveUserMCPConnection(connectionData);

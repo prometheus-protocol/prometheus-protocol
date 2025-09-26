@@ -199,6 +199,18 @@ class CreateTaskHandler implements AIFunctionHandler {
       };
     }
 
+    // Check if task name already exists for this user
+    const existingTasks = await this.database.getUserTasks(context.userId);
+    const existingTask = existingTasks.find(
+      (task) => task.description === description,
+    );
+    if (existingTask) {
+      return {
+        success: false,
+        message: `A task named "${description}" already exists. Please choose a different name.`,
+      };
+    }
+
     // Create unique task ID
     const taskId = `${context.userId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 

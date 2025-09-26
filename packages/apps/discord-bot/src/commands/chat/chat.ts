@@ -12,21 +12,18 @@ import {
   DatabaseService,
 } from '../../types/index.js';
 import { LLMService } from '../../services/llm.js';
-import { TaskManagementFunctions } from '../../ai-functions/task-management.js';
 import { chatLogger } from '../../utils/logger.js';
 import { ErrorHandler, AuthenticationError } from '../../utils/errors.js';
 
 export class ChatCommand extends BaseCommand {
   name = 'chat';
   description =
-    'Chat with an AI assistant that can help manage monitoring tasks';
+    'Chat with an AI assistant that has access to your connected MCP tools';
   category = CommandCategory.CHAT;
-  aliases = ['ai', 'ask'];
 
   constructor(
     private llmService: LLMService,
-    private taskFunctions: TaskManagementFunctions,
-    private database: DatabaseService, // Add database service
+    private database: DatabaseService,
   ) {
     super();
   }
@@ -114,14 +111,6 @@ export class ChatCommand extends BaseCommand {
     }
   }
 
-  async execute(context: CommandContext): Promise<CommandResponse> {
-    const prompt = context.interaction
-      ? context.interaction.options.getString('message', true)
-      : context.args.join(' ');
-
-    return this.executeInternal(context, prompt);
-  }
-
   private async executeInternal(
     context: CommandContext,
     prompt: string,
@@ -140,18 +129,15 @@ export class ChatCommand extends BaseCommand {
     }
 
     try {
-      // Show typing indicator - but only if not already deferred
-      if (
-        context.interaction &&
-        !context.interaction.deferred &&
-        !context.interaction.replied
-      ) {
-        await context.interaction.deferReply();
-      }
+      // Since we're only supporting slash commands now, we don't need to check
+      // - the interaction is always deferred in executeSlash before calling this
 
-      // Get available AI functions
-      const functions = this.taskFunctions.getFunctions();
-      chatLogger.info('Retrieved AI functions', { count: functions.length });
+      // No longer include task management functions in chat
+      // Task management is now handled by the dedicated /tasks command
+      const functions: any[] = [];
+      chatLogger.info(
+        'Chat command no longer includes task management functions',
+      );
 
       // Load conversation history from database
       const history = await this.database.getConversationHistory(
@@ -264,22 +250,15 @@ export class ChatCommand extends BaseCommand {
       chatLogger.info('Executing MCP function', { name: functionCall.name });
       return await this.handleMCPFunction(functionCall, context);
     } else {
-      chatLogger.info('Executing local task function', {
+      // Task management functions are no longer available in chat
+      // They should be used via the dedicated /tasks command
+      chatLogger.warn('Non-MCP function call attempted in chat', {
         name: functionCall.name,
       });
-      return await this.taskFunctions.executeFunction(
-        functionCall.name,
-        functionCall.arguments,
-        {
-          userId: context.userId,
-          channelId: context.channelId,
-          guildId: context.guildId,
-          username:
-            context.interaction?.user.username ||
-            context.message?.author.username ||
-            'Unknown',
-        },
-      );
+      return {
+        success: false,
+        message: `Task management functions are no longer available in chat. Please use the \`/tasks\` command instead.`,
+      };
     }
   }
 

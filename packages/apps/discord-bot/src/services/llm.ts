@@ -214,6 +214,7 @@ export class OpenAIProvider implements LLMProvider {
             return {
               name: toolCall.function.name,
               arguments: JSON.parse(toolCall.function.arguments),
+              id: toolCall.id, // Include the tool call ID for continuing conversation
             };
           },
         );
@@ -248,25 +249,184 @@ export class OpenAIProvider implements LLMProvider {
     }
   }
 
+  async continueConversationWithToolResults(
+    originalPrompt: string,
+    context: ConversationContext | undefined,
+    functions: AIFunction[],
+    toolCalls: AIFunctionCall[],
+    toolResults: any[],
+    userId?: string,
+  ): Promise<string> {
+    openaiLogger.info('continueConversationWithToolResults called', {
+      metadata: {
+        toolCallsCount: toolCalls.length,
+        toolResultsCount: toolResults.length,
+        promptLength: originalPrompt.length,
+        userId,
+      },
+    });
+
+    // Build the message history including the original prompt, assistant tool calls, and tool results
+    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+      {
+        role: 'system',
+        content: this.getSystemPrompt(functions),
+      },
+    ];
+
+    // Add conversation history if available
+    if (context?.history) {
+      openaiLogger.debug(`Adding ${context.history.length} history messages`);
+      for (const msg of context.history.slice(-10)) {
+        messages.push({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+        });
+      }
+    }
+
+    // Add the original user prompt
+    messages.push({
+      role: 'user',
+      content: originalPrompt,
+    });
+
+    // Add the assistant's tool calls response
+    messages.push({
+      role: 'assistant',
+      content: null,
+      tool_calls: toolCalls.map((call, index) => ({
+        id: call.id || `call_${index}`,
+        type: 'function' as const,
+        function: {
+          name: call.name,
+          arguments: JSON.stringify(call.arguments),
+        },
+      })),
+    });
+
+    // Add the tool results
+    for (let i = 0; i < toolCalls.length; i++) {
+      const toolCall = toolCalls[i];
+      const result = toolResults[i];
+
+      let resultContent = '';
+      if (result.error) {
+        resultContent = `Error: ${result.error}`;
+      } else if (result.content && Array.isArray(result.content)) {
+        // Handle MCP content format
+        resultContent = result.content
+          .filter((item: any) => item.type === 'text')
+          .map((item: any) => item.text)
+          .join('\n');
+      } else if (result.message) {
+        resultContent = result.message;
+      } else {
+        resultContent = JSON.stringify(result);
+      }
+
+      messages.push({
+        role: 'tool',
+        content: resultContent,
+        tool_call_id: toolCall.id || `call_${i}`,
+      });
+    }
+
+    const completionParams: OpenAI.Chat.Completions.ChatCompletionCreateParams =
+      {
+        model: this.config.model || 'gpt-3.5-turbo',
+        messages,
+        max_completion_tokens: this.config.maxTokens || 1000,
+        temperature: this.config.temperature || 0.7,
+      };
+
+    // Include functions in case the AI wants to make more tool calls
+    if (functions && functions.length > 0) {
+      completionParams.tools = functions.map((func) => ({
+        type: 'function',
+        function: {
+          name: func.name,
+          description: func.description,
+          parameters: func.parameters,
+        },
+      }));
+      completionParams.tool_choice = 'auto';
+    }
+
+    try {
+      const completion =
+        await this.client.chat.completions.create(completionParams);
+      const choice = completion.choices[0];
+
+      if (!choice) {
+        return 'Sorry, I could not generate a response.';
+      }
+
+      // Check if the model wants to make additional tool calls
+      if (choice.message.tool_calls) {
+        openaiLogger.info(
+          `AI wants to make ${choice.message.tool_calls.length} additional tool calls`,
+        );
+
+        // Convert tool calls to AIFunctionCall format and throw to let service layer handle
+        const additionalCalls: AIFunctionCall[] = choice.message.tool_calls.map(
+          (toolCall) => ({
+            name: toolCall.function.name,
+            arguments: JSON.parse(toolCall.function.arguments),
+            id: toolCall.id,
+          }),
+        );
+
+        // Create a special error that indicates additional tool calls are needed
+        const error = new Error('ADDITIONAL_TOOL_CALLS_NEEDED');
+        (error as any).toolCalls = additionalCalls;
+        (error as any).currentMessages = messages;
+        (error as any).completionParams = completionParams;
+        throw error;
+      }
+
+      const textResponse =
+        choice.message.content ||
+        'I processed your request but did not generate a response.';
+
+      openaiLogger.info('Conversation continuation successful', {
+        metadata: { responseLength: textResponse.length },
+      });
+
+      return textResponse;
+    } catch (error) {
+      // Re-throw special errors that need to be handled at the service layer
+      if (
+        error instanceof Error &&
+        error.message === 'ADDITIONAL_TOOL_CALLS_NEEDED'
+      ) {
+        throw error;
+      }
+
+      openaiLogger.error(
+        'Failed to continue conversation with tool results',
+        error as Error,
+      );
+      return 'Sorry, I encountered an error while processing the tool results.';
+    }
+  }
+
   private getSystemPrompt(functions?: AIFunction[]): string {
-    let basePrompt = `You are an AI assistant for Prometheus Protocol Discord. You help users create monitoring tasks and access connected MCP (Model Context Protocol) tools.
+    let basePrompt = `You are an AI assistant for Prometheus Protocol Discord. You help users interact with their connected MCP (Model Context Protocol) tools and servers.
 
 Key Capabilities:
-- Create periodic monitoring tasks using the create_monitoring_task function
 - Access connected MCP servers and their tools for enhanced functionality
+- Execute tool functions to retrieve information and perform actions
 - Provide helpful responses based on available information and tool results
 
-When users ask to monitor, check, or track something regularly, use the create_monitoring_task function with:
-- prompt: What to check/monitor  
-- interval: How often (1 minute to daily)
-- description: Brief explanation
+For monitoring and task management, users should use the dedicated \`/tasks\` command.
 
-For other requests, I can help using any available MCP tools that are connected to your account.
+You can help users by:
+- Using their connected MCP tools to get information
+- Answering questions based on tool results
+- Explaining what tools are available and how to use them
 
-Common commands:
-- "List my current monitoring tasks"
-- "Stop monitoring the leaderboard"
-- "What MCP tools do I have access to?"`;
+Available MCP tools depend on what servers the user has connected via \`/mcp connect\`.`;
 
     if (functions && functions.length > 0) {
       basePrompt += `\n\nAvailable functions: ${functions.map((f) => f.name).join(', ')}`;
@@ -293,6 +453,91 @@ Common commands:
     }
 
     return sanitized;
+  }
+
+  public async continueWithAdditionalResults(
+    messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+    completionParams: OpenAI.Chat.Completions.ChatCompletionCreateParams,
+    toolCalls: AIFunctionCall[],
+    toolResults: any[],
+  ): Promise<string> {
+    openaiLogger.info('continueWithAdditionalResults called', {
+      metadata: {
+        toolCallsCount: toolCalls.length,
+        toolResultsCount: toolResults.length,
+      },
+    });
+
+    // Add the assistant's tool calls to the message history
+    messages.push({
+      role: 'assistant',
+      content: null,
+      tool_calls: toolCalls.map((call, index) => ({
+        id: call.id || `call_${index}`,
+        type: 'function' as const,
+        function: {
+          name: call.name,
+          arguments: JSON.stringify(call.arguments),
+        },
+      })),
+    });
+
+    // Add the tool results
+    for (let i = 0; i < toolCalls.length; i++) {
+      const toolCall = toolCalls[i];
+      const result = toolResults[i];
+
+      let resultContent = '';
+      if (result.error) {
+        resultContent = `Error: ${result.error}`;
+      } else if (result.content && Array.isArray(result.content)) {
+        resultContent = result.content
+          .filter((item: any) => item.type === 'text')
+          .map((item: any) => item.text)
+          .join('\n');
+      } else if (result.message) {
+        resultContent = result.message;
+      } else {
+        resultContent = JSON.stringify(result);
+      }
+
+      messages.push({
+        role: 'tool',
+        content: resultContent,
+        tool_call_id: toolCall.id || `call_${i}`,
+      });
+    }
+
+    // Make the final API call
+    try {
+      const finalCompletion = (await this.client.chat.completions.create({
+        ...completionParams,
+        messages,
+        stream: false, // Ensure we don't use streaming
+      })) as OpenAI.Chat.Completions.ChatCompletion;
+
+      const finalChoice = finalCompletion.choices[0];
+      if (!finalChoice) {
+        return 'Sorry, I could not generate a final response.';
+      }
+
+      // For now, just return the text response (no more recursive calls to avoid infinite loops)
+      const finalResponse =
+        finalChoice.message.content ||
+        'I processed your additional requests but did not generate a response.';
+
+      openaiLogger.info('Additional tool call continuation successful', {
+        metadata: { responseLength: finalResponse.length },
+      });
+
+      return finalResponse;
+    } catch (error) {
+      openaiLogger.error(
+        'Failed to continue with additional results',
+        error as Error,
+      );
+      return 'Sorry, I encountered an error while processing the additional tool results.';
+    }
   }
 }
 
@@ -459,6 +704,106 @@ export class LLMService {
     );
     // Handle local AI functions (existing implementation)
     throw new Error(`Unknown function: ${functionCall.name}`);
+  }
+
+  async continueConversationWithToolResults(
+    originalPrompt: string,
+    context: ConversationContext | undefined,
+    functions: AIFunction[],
+    toolCalls: AIFunctionCall[],
+    toolResults: any[],
+    userId?: string,
+  ): Promise<string> {
+    llmLogger.info('continueConversationWithToolResults called', {
+      userId,
+      metadata: {
+        toolCallsCount: toolCalls.length,
+        toolResultsCount: toolResults.length,
+        promptLength: originalPrompt.length,
+      },
+    });
+
+    try {
+      // Use the OpenAI provider's method to continue the conversation
+      if (this.provider instanceof OpenAIProvider) {
+        return await this.provider.continueConversationWithToolResults(
+          originalPrompt,
+          context,
+          functions,
+          toolCalls,
+          toolResults,
+          userId,
+        );
+      } else {
+        throw new Error(
+          'continueConversationWithToolResults not supported by current provider',
+        );
+      }
+    } catch (error) {
+      // Check if this is a request for additional tool calls
+      if (
+        error instanceof Error &&
+        error.message === 'ADDITIONAL_TOOL_CALLS_NEEDED'
+      ) {
+        const additionalCalls = (error as any).toolCalls as AIFunctionCall[];
+        const currentMessages = (error as any).currentMessages;
+        const completionParams = (error as any).completionParams;
+
+        llmLogger.info('Handling additional tool calls', {
+          userId,
+          metadata: { additionalCallsCount: additionalCalls.length },
+        });
+
+        // Execute the additional tool calls
+        const additionalResults: any[] = [];
+        for (const toolCall of additionalCalls) {
+          try {
+            llmLogger.debug(
+              `Executing additional tool call: ${toolCall.name}`,
+              { userId },
+            );
+            const result = await this.handleFunctionCall(toolCall, userId!);
+            additionalResults.push(result);
+          } catch (callError) {
+            llmLogger.error(
+              `Additional tool call failed: ${toolCall.name}`,
+              callError as Error,
+              { userId },
+            );
+            additionalResults.push({
+              error: `Failed to execute ${toolCall.name}`,
+            });
+          }
+        }
+
+        // Continue the conversation with the additional results
+        if (this.provider instanceof OpenAIProvider) {
+          return await this.provider.continueWithAdditionalResults(
+            currentMessages,
+            completionParams,
+            additionalCalls,
+            additionalResults,
+          );
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  async getMCPFunctions(userId: string): Promise<AIFunction[]> {
+    if (!this.mcpService) {
+      return [];
+    }
+
+    try {
+      return await this.mcpService.convertToolsToOpenAIFunctions(userId);
+    } catch (error) {
+      llmLogger.error('Failed to load MCP functions', error as Error, {
+        userId,
+      });
+      return [];
+    }
   }
 
   getProvider(): LLMProvider {

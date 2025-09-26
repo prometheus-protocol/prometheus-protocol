@@ -77,7 +77,17 @@ export class ConnectionPoolService {
 
   private getConnectionOrFail(poolKey: string): ActiveConnection {
     const conn = this.activeConnections.get(poolKey);
-    // logger.info(this.activeConnections); // Can be noisy, enable if debugging map state
+
+    // Debug logging for connection state
+    logger.info(
+      `[ConnPool-${poolKey}] Debug - Connection exists: ${!!conn}, isActiveAttempted: ${conn?.isActiveAttempted}, total active connections: ${this.activeConnections.size}`,
+    );
+    if (this.activeConnections.size > 0) {
+      logger.info(
+        `[ConnPool-${poolKey}] Active connection keys: ${Array.from(this.activeConnections.keys()).join(', ')}`,
+      );
+    }
+
     if (!conn || !conn.isActiveAttempted) {
       logger.warn(
         `[ConnPool-${poolKey}] No active or successfully attempted connection found.`,
@@ -1681,5 +1691,34 @@ export class ConnectionPoolService {
     logger.info(
       'Re-establishment of persistent connections attempt completed.',
     );
+  }
+
+  /**
+   * Get diagnostic information about the current state of active connections
+   */
+  public getDiagnosticInfo(): {
+    activeConnectionCount: number;
+    activeConnectionKeys: string[];
+    connectionDetails: Array<{
+      poolKey: string;
+      isActiveAttempted: boolean;
+      hasClient: boolean;
+      currentTransportType?: string;
+    }>;
+  } {
+    const connectionDetails = Array.from(this.activeConnections.entries()).map(
+      ([poolKey, connection]) => ({
+        poolKey,
+        isActiveAttempted: connection.isActiveAttempted,
+        hasClient: !!connection.client,
+        currentTransportType: connection.currentTransportType,
+      }),
+    );
+
+    return {
+      activeConnectionCount: this.activeConnections.size,
+      activeConnectionKeys: Array.from(this.activeConnections.keys()),
+      connectionDetails,
+    };
   }
 }

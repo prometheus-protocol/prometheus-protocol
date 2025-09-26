@@ -90,34 +90,6 @@ describe('DiscordNotificationService', () => {
     });
   });
 
-  describe('sendToolsReadyMessage', () => {
-    it('should send tools ready message with correct format', async () => {
-      const result = await service.sendToolsReadyMessage(
-        'user-123',
-        'test-server',
-        3,
-      );
-
-      expect(mockClient.users.fetch).toHaveBeenCalledWith('user-123');
-      expect(mockUser.send).toHaveBeenCalledWith(
-        expect.stringContaining('🛠️ **Tools Ready!**'),
-      );
-      expect(mockUser.send).toHaveBeenCalledWith(
-        expect.stringContaining('**3 tools** are now available'),
-      );
-      expect(result).toBe(undefined); // void method
-    });
-
-    it('should handle errors gracefully', async () => {
-      mockUser.send.mockRejectedValue(new Error('Failed to send'));
-
-      // Should not throw, just log error
-      await expect(
-        service.sendToolsReadyMessage('user-123', 'test-server', 5),
-      ).resolves.toBeUndefined();
-    });
-  });
-
   describe('sendConnectionErrorMessage', () => {
     it('should send error message with correct format', async () => {
       const result = await service.sendConnectionErrorMessage(

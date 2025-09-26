@@ -114,7 +114,8 @@ export class PendingToolInvocationsService {
    */
   getUserPendingInvocations(userId: string): Map<string, PendingInvocation> {
     const userInvocations = new Map<string, PendingInvocation>();
-    for (const [invocationId, pending] of this.pendingInvocations) {
+    const entriesArray = Array.from(this.pendingInvocations.entries());
+    for (const [invocationId, pending] of entriesArray) {
       if (pending.userId === userId) {
         userInvocations.set(invocationId, pending);
       }
@@ -148,7 +149,8 @@ export class PendingToolInvocationsService {
     let oldestTime = Date.now();
     let oldestId = '';
 
-    for (const [invocationId, pending] of this.pendingInvocations) {
+    const entriesArray = Array.from(this.pendingInvocations.entries());
+    for (const [invocationId, pending] of entriesArray) {
       const startTime = pending.startTime.getTime();
       if (startTime < oldestTime) {
         oldestTime = startTime;
@@ -174,7 +176,8 @@ export class PendingToolInvocationsService {
       `[PendingInvocations] Cleaning up ${this.pendingInvocations.size} pending invocations`,
     );
 
-    for (const [invocationId, pending] of this.pendingInvocations) {
+    const entriesArray = Array.from(this.pendingInvocations.entries());
+    for (const [invocationId, pending] of entriesArray) {
       clearTimeout(pending.timeout);
       pending.reject(new Error('Service is shutting down'));
     }

@@ -1,6 +1,12 @@
 import { schedulerLogger } from '../utils/logger.js';
 import * as cron from 'node-cron';
-import { AlertConfig, AlertResult, DatabaseService } from '../types/index.js';
+import {
+  AlertConfig,
+  AlertResult,
+  DatabaseService,
+  AIFunctionCall,
+  AIFunction,
+} from '../types/index.js';
 import { ConfigManager } from '../config/index.js';
 import { Client } from 'discord.js';
 import { LLMService } from './llm.js';
@@ -56,7 +62,8 @@ export class AlertScheduler {
     if (!this.running) return;
 
     // Stop all scheduled tasks
-    for (const task of this.tasks.values()) {
+    const taskArray = Array.from(this.tasks.values());
+    for (const task of taskArray) {
       task.stop();
     }
     this.tasks.clear();
@@ -209,8 +216,8 @@ export class AlertScheduler {
         history: [],
       };
 
-      schedulerLogger.info(`Executing alert with MCP access`, {
-        alertName: alert.name,
+      schedulerLogger.info(`Executing scheduled task with MCP access`, {
+        taskName: alert.name,
         userId: userId,
       });
 
@@ -221,51 +228,59 @@ export class AlertScheduler {
         userId, // Pass userId for MCP integration
       );
 
-      // Process the AI response
-      let shouldAlert = false;
-      let alertMessage = '';
+      // Process the AI response - handle tool calls if needed
+      let finalMessage = '';
 
       if (typeof result === 'string') {
-        // Check if this is an actual alert vs. instructions/debugging output
-        const isValidAlert = this.isValidAlertResponse(result);
+        finalMessage = result;
+      } else if (Array.isArray(result)) {
+        // AI returned function calls - execute them and continue the conversation
+        schedulerLogger.info(
+          `AI requested ${result.length} tool calls for task execution`,
+          {
+            taskName: alert.name,
+            toolCalls: result.map((fc) => fc.name),
+          },
+        );
 
-        if (isValidAlert) {
-          shouldAlert = true;
-          alertMessage = result;
+        const finalResult = await this.handleTaskFunctionCalls(
+          result,
+          userId,
+          alert.prompt,
+          alert.name,
+        );
+
+        if (finalResult && typeof finalResult === 'string') {
+          finalMessage = finalResult;
         } else {
-          // AI returned instructions/debugging info instead of executing tools
+          finalMessage = 'Task completed but no response was generated.';
           schedulerLogger.warn(
-            'AI returned non-alert text (likely due to missing MCP tools)',
+            'Failed to get final response after tool execution',
             {
               alertName: alert.name,
-              responsePreview:
-                result.substring(0, 200) + (result.length > 200 ? '...' : ''),
             },
           );
-          shouldAlert = false;
         }
-      } else if (Array.isArray(result)) {
-        // AI returned function calls - this shouldn't trigger alerts directly
-        // The function calls would handle their own outputs
-        shouldAlert = false;
       }
 
-      if (shouldAlert) {
-        // Send the alert message
+      // Always send the result (no validation needed)
+      if (finalMessage.trim()) {
         await this.sendAlertMessage(
           alert.channelId,
-          `🔔 **${alert.name}**\n\n${alertMessage}`,
+          `🔔 **${alert.name}**\n\n${finalMessage}`,
         );
 
         // Save the current state
         await this.database.saveAlertState(
           alert.id,
-          { message: alertMessage },
+          { message: finalMessage },
           new Date(),
         );
 
-        schedulerLogger.info(
-          `Alert "${alert.name}" triggered - AI response received`,
+        schedulerLogger.info(`Task "${alert.name}" completed - response sent`);
+      } else {
+        schedulerLogger.warn(
+          `Task "${alert.name}" completed but generated empty response`,
         );
       }
 
@@ -351,72 +366,119 @@ export class AlertScheduler {
     return this.alerts.get(alertId);
   }
 
-  private isValidAlertResponse(response: string): boolean {
-    // Check if the response looks like actual alert content vs. instructions/debugging
-    const trimmed = response.trim();
+  private async handleTaskFunctionCalls(
+    functionCalls: AIFunctionCall[],
+    userId: string,
+    originalPrompt: string,
+    alertName: string,
+  ): Promise<string | null> {
+    schedulerLogger.info('Executing function calls for scheduled task', {
+      taskName: alertName,
+      functionCount: functionCalls.length,
+      functions: functionCalls.map((fc) => fc.name),
+    });
 
-    // Skip empty responses
-    if (!trimmed) {
-      return false;
-    }
+    const functionResults = [];
 
-    // Check for common patterns that indicate this is instructions, not an alert
-    const instructionPatterns = [
-      /^Creating a periodic monitoring task/i,
-      /^Monitor.*weather.*and alert/i,
-      /^Instructions for each run:/i,
-      /^Periodic run instructions:/i,
-      /^\{.*"prompt".*"interval".*\}$/s, // JSON objects
-      /Call the MCP tool/i,
-      /Parse the response for:/i,
-      /Trigger an alert ONLY if/i,
-      /Your.*monitoring task is set to run/i,
-      /I'll alert only when/i,
-      /You can say.*monitoring tasks/i,
-    ];
+    // Execute each function call
+    for (const functionCall of functionCalls) {
+      schedulerLogger.info('Executing function call', {
+        alertName,
+        functionName: functionCall.name,
+      });
 
-    // If any instruction pattern matches, this is not a valid alert
-    for (const pattern of instructionPatterns) {
-      if (pattern.test(trimmed)) {
-        return false;
+      try {
+        const result = await this.llmService.handleFunctionCall(
+          functionCall,
+          userId,
+        );
+        functionResults.push(result);
+        schedulerLogger.info('Function call completed successfully', {
+          alertName,
+          functionName: functionCall.name,
+        });
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        functionResults.push({
+          error: errorMessage,
+        });
+        schedulerLogger.error(
+          'Function call failed',
+          error instanceof Error ? error : new Error(String(error)),
+          {
+            alertName,
+            functionName: functionCall.name,
+          },
+        );
       }
     }
 
-    // Valid alerts typically:
-    // - Start with "ALERT:" or similar urgent keywords
-    // - Are concise (under 500 chars typically)
-    // - Don't contain JSON or technical instructions
-
-    // Look for alert keywords
-    const alertKeywords = [
-      'ALERT:',
-      'WARNING:',
-      'SEVERE:',
-      'URGENT:',
-      'EMERGENCY:',
-      'CRITICAL:',
-    ];
-    const hasAlertKeyword = alertKeywords.some((keyword) =>
-      trimmed.toUpperCase().includes(keyword),
-    );
-
-    // If it has alert keywords, it's likely valid
-    if (hasAlertKeyword) {
-      return true;
+    // Get MCP functions for proper conversation continuation
+    let allFunctions: AIFunction[] = [];
+    try {
+      allFunctions = await this.llmService.getMCPFunctions(userId);
+    } catch (error) {
+      schedulerLogger.error(
+        'Failed to load MCP functions for conversation continuation',
+        error as Error,
+        {
+          alertName,
+        },
+      );
     }
 
-    // If it's very long (>1000 chars), probably instructions
-    if (trimmed.length > 1000) {
-      return false;
-    }
+    // Use proper OpenAI conversation continuation with tool results
+    try {
+      const contextualResponse =
+        await this.llmService.continueConversationWithToolResults(
+          originalPrompt,
+          {
+            userId,
+            channelId: 'scheduler',
+            history: [],
+          },
+          allFunctions,
+          functionCalls,
+          functionResults,
+          userId,
+        );
 
-    // If it contains quotes around JSON-looking content, probably instructions
-    if (trimmed.includes('"prompt"') || trimmed.includes('"interval"')) {
-      return false;
-    }
+      schedulerLogger.info(
+        'Generated final alert response using conversation continuation',
+        {
+          alertName,
+          responseLength: contextualResponse.length,
+          responsePreview: contextualResponse.substring(0, 200),
+        },
+      );
 
-    // For other cases, assume it's a valid alert if it's reasonably short
-    // and doesn't match obvious instruction patterns
-    return trimmed.length <= 500;
+      return contextualResponse;
+    } catch (error) {
+      schedulerLogger.error(
+        'Failed to continue conversation with tool results',
+        error instanceof Error ? error : new Error(String(error)),
+        { alertName },
+      );
+
+      // Fallback to simple result summary
+      let fallback = `Alert "${alertName}" executed:\n\n`;
+      for (let i = 0; i < functionCalls.length; i++) {
+        const call = functionCalls[i];
+        const result = functionResults[i];
+        if (result.error) {
+          fallback += `❌ ${call.name}: ${result.error}\n`;
+        } else if (result.content && Array.isArray(result.content)) {
+          const text = result.content
+            .filter((item: any) => item.type === 'text')
+            .map((item: any) => item.text)
+            .join(' ');
+          fallback += `✅ ${call.name}: ${text.slice(0, 200)}...\n`;
+        } else {
+          fallback += `✅ ${call.name}: Success\n`;
+        }
+      }
+      return fallback;
+    }
   }
 }

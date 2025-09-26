@@ -1,288 +1,200 @@
 import logger from '../utils/logger.js';
-import {
-  RegistryApiResponse,
-  RegistryAuthTypesResponse,
-  RegistryCategoriesResponse,
-  RegistrySearchParams,
-  RegistryServerObject,
-  RegistryServerResponse,
-} from '../types/registry.types.js';
+
+// ============================================================================
+// FINAL MINIMAL, SPEC-COMPLIANT TYPES
+// ============================================================================
 
 /**
- * Service for interacting with the external MCP Registry API
- * at https://remote-mcp-servers.com
+ * The absolute minimal set of properties our bot needs for server discovery,
+ * relying only on guaranteed fields from the official registry spec.
  */
+export type MinimalMCPServer = {
+  id: string; // The official, unique server UUID
+  name: string; // The full reverse-DNS name (e.g., "io.github.user/repo")
+  description: string;
+  url: string; // The primary connection URL from the 'remotes' array
+};
+
+/** The raw server object from the official registry API. */
+type OfficialServerObject = {
+  name: string;
+  description: string;
+  remotes?: { url: string }[];
+  _meta?: {
+    'io.modelcontextprotocol.registry/official'?: {
+      serverId: string;
+    };
+  };
+};
+
+/** The raw list response from the official registry API. */
+type OfficialApiResponse = {
+  servers: OfficialServerObject[];
+  metadata: {
+    next_cursor: string | null;
+  };
+};
+
+/** Search parameters supported by the official registry. */
+type SearchParams = {
+  limit?: number;
+  cursor?: string;
+  search?: string;
+};
+
+// ============================================================================
+// REFACTORED REGISTRY SERVICE
+// ============================================================================
+
 export class RegistryService {
-  private readonly baseUrl = 'https://remote-mcp-servers.com';
+  private readonly baseUrl: string;
   private readonly defaultHeaders = {
-    'Content-Type': 'application/json',
     'User-Agent': 'Prometheus-Discord-Bot/1.0',
   };
 
-  constructor() {
-    logger.info('RegistryService initialized', {
-      service: 'RegistryService',
-      baseUrl: this.baseUrl,
-    });
+  constructor(
+    registryUrl: string = 'https://registry.modelcontextprotocol.io',
+  ) {
+    this.baseUrl = registryUrl;
+    logger.info(
+      `RegistryService (final minimal) initialized for registry: ${this.baseUrl}`,
+      {
+        service: 'RegistryService',
+      },
+    );
   }
 
-  /**
-   * Make an HTTP request using fetch with error handling and logging
-   */
   private async makeRequest<T>(
     endpoint: string,
     params?: Record<string, any>,
   ): Promise<T> {
     const url = new URL(endpoint, this.baseUrl);
-
-    // Add query parameters
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null && value !== '') {
-          url.searchParams.append(key, value.toString());
-        }
+        if (value) url.searchParams.append(key, value.toString());
       });
     }
 
     logger.debug(`Registry API Request: GET ${url.toString()}`, {
       service: 'RegistryService',
-      params,
+    });
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: this.defaultHeaders,
+      signal: AbortSignal.timeout(10000),
     });
 
-    try {
-      const response = await fetch(url.toString(), {
-        method: 'GET',
-        headers: this.defaultHeaders,
-        // 10 second timeout
-        signal: AbortSignal.timeout(10000),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-
-      logger.debug(
-        `Registry API Response: ${response.status} ${url.pathname}`,
-        {
-          service: 'RegistryService',
-          dataLength: Array.isArray(data?.data) ? data.data.length : 'unknown',
-        },
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `HTTP ${response.status}: ${response.statusText} - ${errorText}`,
       );
-
-      return data;
-    } catch (error: any) {
-      logger.error(
-        `Registry API Error for ${url.toString()}: ${error.message}`,
-        error,
-        {
-          service: 'RegistryService',
-          url: url.toString(),
-        },
-      );
-      throw error;
     }
+    return response.json();
   }
 
   /**
-   * Search for MCP servers using the registry API
+   * Search for MCP servers. Returns minimal server objects and a pagination cursor.
    */
-  async searchServers(
-    params: RegistrySearchParams = {},
-  ): Promise<RegistryApiResponse> {
+  async searchServers(params: SearchParams = {}): Promise<{
+    servers: MinimalMCPServer[];
+    nextCursor: string | null;
+  }> {
     try {
-      logger.info('Searching MCP servers', {
-        service: 'RegistryService',
-        params,
-      });
-
-      const response = await this.makeRequest<RegistryApiResponse>(
-        '/api/servers',
-        this.cleanParams(params),
+      const apiParams = { ...params, version: 'latest' };
+      const response = await this.makeRequest<OfficialApiResponse>(
+        '/v0/servers',
+        apiParams,
       );
 
-      logger.info(`Found ${response.data.length} servers`, {
+      logger.debug(`Raw API response: ${response.servers.length} servers`, {
         service: 'RegistryService',
-        totalItems: response.pagination.totalItems,
-        currentPage: response.pagination.currentPage,
+        firstServer: response.servers[0] ? {
+          name: response.servers[0].name,
+          hasRemotes: !!response.servers[0].remotes,
+          remotesCount: response.servers[0].remotes?.length || 0,
+          hasMeta: !!response.servers[0]._meta,
+          serverId: response.servers[0]._meta?.['io.modelcontextprotocol.registry/official']?.serverId
+        } : null
       });
 
-      return response;
+      const minimalServers = response.servers
+        .map(this.convertToMinimalServer.bind(this))
+        .filter((s): s is MinimalMCPServer => s !== null);
+
+      logger.info(`Found ${minimalServers.length} connectable servers`, {
+        service: 'RegistryService',
+      });
+
+      return {
+        servers: minimalServers,
+        nextCursor: response.metadata.next_cursor,
+      };
     } catch (error: any) {
       logger.error('Error searching servers:', error);
-
-      // Return empty result on error to prevent Discord bot from crashing
-      return {
-        data: [],
-        pagination: {
-          currentPage: params.page || 1,
-          itemsPerPage: params.limit || 10,
-          totalItems: 0,
-          totalPages: 0,
-          hasNextPage: false,
-          hasPreviousPage: false,
-        },
-      };
+      return { servers: [], nextCursor: null };
     }
   }
 
   /**
-   * Get all available categories from the registry
+   * Get a single server by its official UUID.
    */
-  async getCategories(): Promise<string[]> {
+  async getServerById(serverId: string): Promise<MinimalMCPServer | null> {
     try {
-      logger.debug('Fetching available categories', {
-        service: 'RegistryService',
-      });
-
-      const response = await this.makeRequest<RegistryCategoriesResponse>(
-        '/api/servers/categories',
+      const server = await this.makeRequest<OfficialServerObject>(
+        `/v0/servers/${serverId}`,
       );
-
-      logger.debug(`Retrieved ${response.categories.length} categories`, {
-        service: 'RegistryService',
-        categories: response.categories,
-      });
-
-      return response.categories;
+      return this.convertToMinimalServer(server);
     } catch (error: any) {
-      logger.error('Error fetching categories:', error);
-      return [];
-    }
-  }
-
-  /**
-   * Get all available authentication types from the registry
-   */
-  async getAuthTypes(): Promise<string[]> {
-    try {
-      logger.debug('Fetching available auth types', {
-        service: 'RegistryService',
-      });
-
-      const response = await this.makeRequest<RegistryAuthTypesResponse>(
-        '/api/servers/auth-types',
-      );
-
-      logger.debug(`Retrieved ${response.authTypes.length} auth types`, {
-        service: 'RegistryService',
-        authTypes: response.authTypes,
-      });
-
-      return response.authTypes;
-    } catch (error: any) {
-      logger.error('Error fetching auth types:', error);
-      return [];
-    }
-  }
-
-  /**
-   * Get a specific server by ID using the direct endpoint
-   */
-  async getServerById(serverId: string): Promise<RegistryServerObject | null> {
-    try {
-      logger.debug(`Fetching server by ID: ${serverId}`, {
-        service: 'RegistryService',
-      });
-
-      // Use the direct server endpoint: /api/servers/{id}
-      const response = await this.makeRequest<RegistryServerResponse>(
-        `/api/servers/${serverId}`,
-      );
-
-      const server = response.data;
-
-      logger.debug(`Server response:`, {
-        service: 'RegistryService',
-        serverId,
-        serverData: JSON.stringify(server, null, 2),
-      });
-
-      if (server && server.name) {
-        logger.debug(`Found server: ${server.name}`, {
+      if (error.message.includes('404')) {
+        logger.warn(`Server with ID ${serverId} not found (404).`, {
           service: 'RegistryService',
-          serverId,
-          serverName: server.name,
-          serverUrl: server.mcp_url,
         });
+      } else {
+        logger.error(`Error fetching server by ID ${serverId}:`, error);
       }
-
-      return server;
-    } catch (error: any) {
-      logger.error(`Error fetching server by ID ${serverId}:`, error);
       return null;
     }
   }
 
   /**
-   * Check if the registry service is healthy
+   * The core transformation logic. Converts a full official object to our minimal type.
+   * Returns null if the server is not connectable.
    */
-  async healthCheck(): Promise<boolean> {
-    try {
-      logger.debug('Performing registry health check', {
-        service: 'RegistryService',
-      });
-
-      // Make a simple request to check if the service is responding
-      await this.makeRequest<RegistryApiResponse>('/api/servers', { limit: 1 });
-
-      logger.info('Registry health check passed', {
-        service: 'RegistryService',
-      });
-
-      return true;
-    } catch (error: any) {
-      logger.error('Registry health check failed:', error);
-      return false;
+  private convertToMinimalServer(
+    server: OfficialServerObject | null,
+  ): MinimalMCPServer | null {
+    if (!server) {
+      logger.debug('Server is null', { service: 'RegistryService' });
+      return null;
     }
-  }
 
-  /**
-   * Clean up search parameters, removing undefined values
-   */
-  private cleanParams(params: RegistrySearchParams): Record<string, any> {
-    const cleaned: Record<string, any> = {};
+    const canonicalId =
+      server._meta?.['io.modelcontextprotocol.registry/official']?.serverId;
+    const primaryRemoteUrl = server.remotes?.[0]?.url;
 
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        cleaned[key] = value;
-      }
+    logger.debug(`Converting server: ${server.name}`, {
+      service: 'RegistryService',
+      canonicalId,
+      primaryRemoteUrl,
+      hasRemotes: !!server.remotes,
+      remotesLength: server.remotes?.length || 0,
+      hasMeta: !!server._meta
     });
 
-    return cleaned;
-  }
+    // A server is only useful if it has a unique ID and a connection URL.
+    if (!canonicalId || !primaryRemoteUrl) {
+      logger.debug(`Skipping server ${server.name}: missing canonicalId (${!!canonicalId}) or primaryRemoteUrl (${!!primaryRemoteUrl})`, {
+        service: 'RegistryService'
+      });
+      return null;
+    }
 
-  /**
-   * Convert a RegistryServerObject to the format expected by MCPService
-   */
-  static convertToMCPServerResult(server: RegistryServerObject): {
-    id: string;
-    name: string;
-    description: string;
-    url: string;
-    category?: string;
-    author?: string;
-    isOAuthEnabled?: boolean;
-    tags?: string[];
-    auth_type?: string;
-    hosted_on?: string;
-  } {
     return {
-      id: server.id,
+      id: canonicalId,
       name: server.name,
       description: server.description,
-      url: server.mcp_url, // Use the correct field name
-      category: server.category,
-      author: server.maintainer_name || server.author,
-      isOAuthEnabled:
-        server.authentication_type === 'OAuth2' || server.authType === 'OAuth',
-      tags: server.tags || [],
-      auth_type:
-        server.authentication_type?.toLowerCase() ||
-        server.authType?.toLowerCase() ||
-        'none',
-      hosted_on: server.hostedOn || 'external',
+      url: primaryRemoteUrl,
     };
   }
 }

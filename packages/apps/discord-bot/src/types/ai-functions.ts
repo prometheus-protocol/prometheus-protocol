@@ -19,6 +19,7 @@ export interface AIFunction {
 export interface AIFunctionCall {
   name: string;
   arguments: Record<string, any>;
+  id?: string; // OpenAI tool call ID for continuing conversations
 }
 
 export interface AIFunctionResult {

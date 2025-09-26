@@ -193,7 +193,7 @@ export interface SavedMCPConnection {
   server_id: string;
   server_name: string;
   server_url: string;
-  status: 'connected' | 'disconnected' | 'error' | 'auth-required';
+  status: 'connected' | 'disconnected' | 'error' | 'auth-required' | 'DISCONNECTED_BY_USER';
   tools: string; // JSON string of MCPTool[]
   error_message?: string | null;
   connected_at?: Date | null;

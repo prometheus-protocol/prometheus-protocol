@@ -1,14 +1,13 @@
 import {
-  Message,
   ChatInputCommandInteraction,
+  AutocompleteInteraction,
   SlashCommandBuilder,
   SlashCommandOptionsOnlyBuilder,
   SlashCommandSubcommandsOnlyBuilder,
 } from 'discord.js';
 
 export interface CommandContext {
-  message?: Message;
-  interaction?: ChatInputCommandInteraction;
+  interaction: ChatInputCommandInteraction;
   args: string[];
   userId: string;
   channelId: string;
@@ -34,11 +33,13 @@ export abstract class BaseCommand {
     | SlashCommandOptionsOnlyBuilder
     | SlashCommandSubcommandsOnlyBuilder;
 
-  // For text commands
-  abstract aliases?: string[];
+  // Execute slash command - now required
+  abstract executeSlash(
+    interaction: ChatInputCommandInteraction,
+  ): Promise<void>;
 
-  // Execute the command
-  abstract execute(context: CommandContext): Promise<CommandResponse | void>;
+  // Handle autocomplete interactions - optional
+  handleAutocomplete?(interaction: AutocompleteInteraction): Promise<void>;
 
   // Permission check
   canExecute(context: CommandContext): boolean {
