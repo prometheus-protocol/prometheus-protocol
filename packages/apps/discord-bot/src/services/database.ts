@@ -921,7 +921,7 @@ export class SupabaseService implements DatabaseService {
     metadata?: any,
   ): Promise<void> {
     // Log the connection attempt for tracking purposes
-    console.log('Storing connection details:', {
+    dbLogger.info('🔗 [DB] Storing connection details:', {
       userId,
       mcpServerConfigId,
       status,
@@ -997,7 +997,7 @@ export class SupabaseService implements DatabaseService {
     metadata?: any,
   ): Promise<void> {
     // Log the connection status update for tracking purposes
-    console.log('Updating connection status:', {
+    dbLogger.info('🔗 [DB] Updating connection status:', {
       userId,
       mcpServerConfigId,
       mcpServerUrl,
@@ -1036,7 +1036,7 @@ export class SupabaseService implements DatabaseService {
   }
 
   async getReconnectableConnections(): Promise<any[]> {
-    console.log('Getting reconnectable connections');
+    dbLogger.info('🔗 [DB] Getting reconnectable connections');
     try {
       const { data, error } = await this.client
         .from('mcp_connections')

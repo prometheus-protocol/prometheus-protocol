@@ -57,9 +57,9 @@ export class ConnectionManagerOAuthProvider implements OAuthClientProvider {
       }
       return undefined;
     } catch (err) {
-      console.error(
-        `Failed to retrieve server metadata for ${this.dbServerId}:`,
-        err,
+      logger.error(
+        `❌ [OAuth] Failed to retrieve server metadata for ${this.dbServerId}:`,
+        err instanceof Error ? err : new Error(String(err)),
       );
       return undefined;
     }
@@ -143,7 +143,7 @@ export class ConnectionManagerOAuthProvider implements OAuthClientProvider {
       }
       return undefined;
     } catch (err) {
-      console.error(`Failed to retrieve tokens for ${this.dbServerId}:`, err);
+      logger.error(`❌ [OAuth] Failed to retrieve tokens for ${this.dbServerId}:`, err instanceof Error ? err : new Error(String(err)));
       return undefined;
     }
   }
@@ -165,7 +165,7 @@ export class ConnectionManagerOAuthProvider implements OAuthClientProvider {
         raw_tokens: tokens,
       });
     } catch (err) {
-      console.error(`Failed to save tokens for ${this.dbServerId}:`, err);
+      logger.error(`❌ [OAuth] Failed to save tokens for ${this.dbServerId}:`, err instanceof Error ? err : new Error(String(err)));
       throw err;
     }
   }
@@ -248,7 +248,7 @@ export class ConnectionManagerOAuthProvider implements OAuthClientProvider {
    */
   async saveResource(resource: URL): Promise<void> {
     try {
-      console.info(`Saving resource URL to DB: ${resource.toString()}`);
+      logger.info(`ℹ️ [OAuth] Saving resource URL to DB: ${resource.toString()}`);
 
       // Get existing oauth_pending record or create a new one
       const existing = await this.databaseService.getOAuthPending(
@@ -266,7 +266,7 @@ export class ConnectionManagerOAuthProvider implements OAuthClientProvider {
         auth_url: existing?.auth_url || resource.toString(), // Store resource URL here temporarily
       });
     } catch (err) {
-      console.error(`Failed to save resource URL for ${this.dbServerId}:`, err);
+      logger.error(`❌ [OAuth] Failed to save resource URL for ${this.dbServerId}:`, err instanceof Error ? err : new Error(String(err)));
       throw err;
     }
   }
@@ -281,7 +281,7 @@ export class ConnectionManagerOAuthProvider implements OAuthClientProvider {
         this.userId,
       );
       if (pending?.auth_url && pending.auth_url !== '') {
-        console.info(`Loaded resource URL from DB: ${pending.auth_url}`);
+        logger.info(`ℹ️ [OAuth] Loaded resource URL from DB: ${pending.auth_url}`);
         return new URL(pending.auth_url);
       }
       console.warn(

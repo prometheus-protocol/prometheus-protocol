@@ -18,6 +18,7 @@ import {
   InteractionContextType,
 } from 'discord.js';
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import logger from '../../utils/logger.js';
 
 export class MCPCommand extends BaseCommand {
   name = 'mcp';
@@ -124,7 +125,7 @@ export class MCPCommand extends BaseCommand {
     try {
       await interaction.deferReply();
     } catch (error) {
-      console.error('❌ Failed to defer reply immediately:', error);
+      logger.error('❌ [MCP] Failed to defer reply immediately:', error instanceof Error ? error : new Error(String(error)));
       // Try immediate reply as fallback
       try {
         await interaction.reply({
@@ -132,14 +133,15 @@ export class MCPCommand extends BaseCommand {
           ephemeral: true,
         });
       } catch (replyError) {
-        console.error('❌ Failed to send any response:', replyError);
+        logger.error('❌ [MCP] Failed to send any response:', replyError instanceof Error ? replyError : new Error(String(replyError)));
       }
       return;
     }
 
     const subcommand = interaction.options.getSubcommand();
 
-    console.log('🔍 MCP executeSlash called:', {
+    logger.info('🔍 [MCP] MCP executeSlash called', {
+      service: 'MCPCommand',
       interactionId: interaction.id,
       isDeferred: interaction.deferred,
       isReplied: interaction.replied,
@@ -212,7 +214,7 @@ export class MCPCommand extends BaseCommand {
         await interaction.editReply({ content: '✅ Done.' });
       }
     } catch (error) {
-      console.error(`Error executing /mcp ${subcommand}:`, error);
+            logger.error(`❌ [MCP] Error executing /mcp ${subcommand}:`, error instanceof Error ? error : new Error(String(error)));
 
       await interaction.editReply({
         content: '❌ An unexpected error occurred while running this command.',
@@ -275,7 +277,7 @@ export class MCPCommand extends BaseCommand {
 
       return { content: '', embeds: [embed] };
     } catch (error) {
-      console.error('MCP search error:', error);
+      logger.error('❌ [MCP] Search error:', error instanceof Error ? error : new Error(String(error)));
       return {
         content: '❌ Error searching MCP servers. Please try again later.',
       };
@@ -330,10 +332,10 @@ export class MCPCommand extends BaseCommand {
           }
         } catch (error) {
           // If registry lookup fails, use the stored data
-          console.warn(
-            'Could not fetch registry data for server:',
-            conn.server_id,
-          );
+          logger.warn('⚠️ [MCP] Could not fetch registry data for server', {
+            service: 'MCPCommand',
+            serverId: conn.server_id,
+          });
         }
 
         // Build value array with description and other details
@@ -359,7 +361,7 @@ export class MCPCommand extends BaseCommand {
 
       return { content: '', embeds: [embed] };
     } catch (error) {
-      console.error('MCP list error:', error);
+      logger.error('❌ [MCP] List error:', error instanceof Error ? error : new Error(String(error)));
       return {
         content:
           '❌ Error retrieving your connections. Please try again later.',
@@ -444,7 +446,7 @@ export class MCPCommand extends BaseCommand {
         };
       }
     } catch (error) {
-      console.error('MCP connect error:', error);
+      logger.error('❌ [MCP] Connect error:', error instanceof Error ? error : new Error(String(error)));
 
       if (error instanceof OAuthAuthorizationRequiredError) {
         const authUrl = error.authUrl;
@@ -535,7 +537,7 @@ export class MCPCommand extends BaseCommand {
         content: `✅ Disconnected from server: **${serverName}**`,
       };
     } catch (error) {
-      console.error('MCP disconnect error:', error);
+      logger.error('❌ [MCP] Disconnect error:', error instanceof Error ? error : new Error(String(error)));
       return {
         content: `❌ Error disconnecting from server: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
@@ -570,7 +572,7 @@ export class MCPCommand extends BaseCommand {
         content: `🗑️ Permanently deleted server connection: **${serverName}**\n\n⚠️ This action cannot be undone. All connection data and OAuth tokens have been removed.`,
       };
     } catch (error) {
-      console.error('MCP delete error:', error);
+      logger.error('❌ [MCP] Delete error:', error instanceof Error ? error : new Error(String(error)));
       return {
         content: `❌ Error deleting server connection: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
@@ -623,7 +625,7 @@ export class MCPCommand extends BaseCommand {
 
       return { content: '', embeds: [embed] };
     } catch (error) {
-      console.error('MCP tools error:', error);
+      logger.error('❌ [MCP] Tools error:', error instanceof Error ? error : new Error(String(error)));
       return {
         content: '❌ Error retrieving available tools. Please try again later.',
       };
@@ -664,7 +666,7 @@ export class MCPCommand extends BaseCommand {
 
       return { content: '', embeds: [embed] };
     } catch (error) {
-      console.error('MCP status error:', error);
+      logger.error('❌ [MCP] Status error:', error instanceof Error ? error : new Error(String(error)));
       return {
         content: '❌ Error retrieving system status. Please try again later.',
       };
@@ -724,7 +726,7 @@ export class MCPCommand extends BaseCommand {
 
       return { content: '', embeds: [embed] };
     } catch (error) {
-      console.error('Error getting connection diagnostics:', error);
+      logger.error('❌ [MCP] Error getting connection diagnostics:', error instanceof Error ? error : new Error(String(error)));
       return {
         content: '❌ Failed to get connection diagnostics. Please try again.',
       };
@@ -762,7 +764,7 @@ export class MCPCommand extends BaseCommand {
 
       return { content: '', embeds: [embed] };
     } catch (error) {
-      console.error('Error cleaning up connections:', error);
+      logger.error('❌ [MCP] Error cleaning up connections:', error instanceof Error ? error : new Error(String(error)));
       return {
         content: '❌ Failed to clean up connections. Please try again.',
       };
@@ -808,7 +810,7 @@ export class MCPCommand extends BaseCommand {
 
       return { content: '', embeds: [embed] };
     } catch (error) {
-      console.error('Error repairing connections:', error);
+      logger.error('❌ [MCP] Error repairing connections:', error instanceof Error ? error : new Error(String(error)));
       return {
         content: '❌ Failed to repair connections. Please try again.',
       };
@@ -818,22 +820,23 @@ export class MCPCommand extends BaseCommand {
   async handleAutocomplete(
     interaction: AutocompleteInteraction,
   ): Promise<void> {
-    console.log('🔗 MCP AUTOCOMPLETE HANDLER CALLED');
+    logger.debug('🔗 [MCP] Autocomplete handler called', { service: 'MCPCommand' });
     const focusedOption = interaction.options.getFocused(true);
-    console.log('🔗 FOCUSED OPTION:', focusedOption);
+    logger.debug('🔗 [MCP] Focused option', { service: 'MCPCommand', focusedOption });
 
     try {
       if (focusedOption.name === 'server-name') {
-        console.log('🔗 FETCHING MCP CONNECTIONS FOR AUTOCOMPLETE...');
+        logger.debug('🔗 [MCP] Fetching MCP connections for autocomplete', { service: 'MCPCommand' });
 
         const subcommand = interaction.options.getSubcommand();
-        console.log('🔗 SUBCOMMAND FOR FILTERING:', subcommand);
+        logger.debug('🔗 [MCP] Subcommand for filtering', { service: 'MCPCommand', subcommand });
 
         // Get user's connections for autocomplete
         const connections = await this.mcpService.getUserConnections(
           interaction.user.id,
         );
-        console.log('🔗 USER CONNECTIONS:', {
+        logger.debug('🔗 [MCP] User connections', {
+          service: 'MCPCommand',
           connectionCount: connections.length,
           connections: connections.map((c) => ({
             name: c.server_name,
@@ -895,11 +898,11 @@ export class MCPCommand extends BaseCommand {
           choices = choices.concat(connectionChoices);
         }
 
-        console.log('🔗 AUTOCOMPLETE CHOICES:', choices);
+        logger.debug('🔗 [MCP] Autocomplete choices', { service: 'MCPCommand', choices });
         await interaction.respond(choices);
       }
     } catch (error) {
-      console.error('🔗 Error in MCP autocomplete:', error);
+      logger.error('❌ [MCP] Error in MCP autocomplete:', error instanceof Error ? error : new Error(String(error)));
       // Fail gracefully with empty choices
       await interaction.respond([]);
     }

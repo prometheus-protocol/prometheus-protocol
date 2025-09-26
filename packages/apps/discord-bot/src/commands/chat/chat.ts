@@ -49,7 +49,7 @@ export class ChatCommand extends BaseCommand {
   async executeSlash(interaction: ChatInputCommandInteraction): Promise<void> {
     const prompt = interaction.options.getString('message', true);
 
-    console.log('🔍 Chat executeSlash called:', {
+    chatLogger.info('🔍 [Chat] Chat executeSlash called', {
       interactionId: interaction.id,
       isDeferred: interaction.deferred,
       isReplied: interaction.replied,
@@ -59,13 +59,13 @@ export class ChatCommand extends BaseCommand {
     // Acknowledge the interaction immediately - before any other processing
     try {
       await interaction.deferReply();
-      console.log(
-        '✅ Successfully deferred reply for interaction:',
-        interaction.id,
+      chatLogger.info(
+        '✅ [Chat] Successfully deferred reply for interaction',
+        { interactionId: interaction.id }
       );
     } catch (error) {
-      console.error('❌ Failed to defer reply:', error);
-      console.log('🔍 Interaction state when defer failed:', {
+      chatLogger.error('❌ [Chat] Failed to defer reply:', error instanceof Error ? error : new Error(String(error)));
+      chatLogger.debug('🔍 [Chat] Interaction state when defer failed', {
         interactionId: interaction.id,
         isDeferred: interaction.deferred,
         isReplied: interaction.replied,
