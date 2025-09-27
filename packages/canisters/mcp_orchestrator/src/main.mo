@@ -19,6 +19,11 @@ import Map "mo:map/Map";
 import Debug "mo:base/Debug";
 import Error "mo:base/Error";
 import Iter "mo:base/Iter";
+import Cycles "mo:base/ExperimentalCycles";
+import Time "mo:base/Time";
+import Int "mo:base/Int";
+import Star "mo:star/star";
+
 import { ic } "mo:ic";
 
 import McpRegistry "McpRegistry";
@@ -40,6 +45,14 @@ shared (deployer) actor class ICRC120Canister<system>(
   let thisPrincipal = Principal.fromActor(this);
   stable var _owner = deployer.caller;
   let CANISTER_PROVISION_CYCLES : Nat = 4_000_000_000_000; // 4T cycles to provision a new canister
+
+  // --- NEW: Cycle Top-Up Configuration ---
+  stable var _cycle_top_up_enabled : Bool = true; // Default to on
+  stable var TOP_UP_THRESHOLD : Nat = 1_000_000_000_000; // 1T cycles
+  stable var TOP_UP_AMOUNT : Nat = 3_000_000_000_000; // 3T cycles
+  stable var _cycle_check_interval_seconds : Nat = 21600; // 6 hours
+  let CYCLE_JOB_ACTION_TYPE : Text = "cycle_top_up_job";
+  stable var _cycle_job_action_id : ?TT.ActionId = null;
 
   let initManager = ClassPlus.ClassPlusInitializationManager(_owner, Principal.fromActor(this), true);
   let icrc120InitArgs = do ? { args!.icrc120Args! };
@@ -65,6 +78,48 @@ shared (deployer) actor class ICRC120Canister<system>(
 
   stable var tt_migration_state : TT.State = TT.Migration.migration.initialState;
 
+  /**
+   * [PRIVATE] Iterates through all managed canisters, checks their cycle balance,
+   * and tops them up if they are below the defined threshold.
+   */
+  private func _check_and_top_up_cycles() : async () {
+    if (not _cycle_top_up_enabled) {
+      D.print("Cycle top-up is disabled. Skipping check.");
+      return;
+    };
+
+    D.print("Starting cycle balance check for all managed canisters...");
+    let orchestrator_balance = Cycles.balance();
+    if (orchestrator_balance < TOP_UP_AMOUNT) {
+      D.print("Orchestrator has insufficient cycles (" # Nat.toText(orchestrator_balance) # ") to perform top-ups. Skipping.");
+      return;
+    };
+
+    let canisters_to_check = Iter.toArray(Map.vals(managed_canisters));
+
+    for (canister_id in canisters_to_check.vals()) {
+      try {
+        let status = await ic.canister_status({ canister_id = canister_id });
+        D.print("Checking canister " # Principal.toText(canister_id) # ". Balance: " # Nat.toText(status.cycles) # " cycles.");
+
+        if (status.cycles < TOP_UP_THRESHOLD) {
+          D.print("Canister " # Principal.toText(canister_id) # " is below threshold. Topping up...");
+          // This is a system API call that deposits cycles from this canister's balance.
+          await (with cycles = TOP_UP_AMOUNT) ic.deposit_cycles({ canister_id });
+          D.print("Deposited " # Nat.toText(TOP_UP_AMOUNT) # " cycles to " # Principal.toText(canister_id));
+        };
+      } catch (e) {
+        D.print("Failed to check or top up canister " # Principal.toText(canister_id) # ": " # Error.message(e));
+      };
+    };
+    D.print("Cycle balance check complete.");
+  };
+
+  private func _handle_cycle_top_up_action(actionId : TT.ActionId, action : TT.Action) : async* Star.Star<TT.ActionId, TT.Error> {
+    await _check_and_top_up_cycles();
+    return #trappable(actionId);
+  };
+
   let tt = TT.Init<system>({
     manager = initManager;
     initialState = tt_migration_state;
@@ -86,6 +141,8 @@ shared (deployer) actor class ICRC120Canister<system>(
         D.print("Initializing TimerTool");
         newClass.initialize<system>();
         //do any work here necessary for initialization
+
+        newClass.registerExecutionListenerAsync(?CYCLE_JOB_ACTION_TYPE, _handle_cycle_top_up_action);
       }
     );
     onStorageChange = func(state : TT.State) {
@@ -559,8 +616,96 @@ shared (deployer) actor class ICRC120Canister<system>(
   };
 
   // =====================================================================================
+  // NEW: CYCLE MANAGEMENT
+  // =====================================================================================
+
+  public type CycleTopUpConfig = {
+    enabled : Bool;
+    threshold : Nat;
+    amount : Nat;
+    interval_seconds : Nat;
+  };
+
+  /**
+   * Returns the current configuration for the automated cycle top-up feature.
+   */
+  public query func get_cycle_top_up_config() : async CycleTopUpConfig {
+    {
+      enabled = _cycle_top_up_enabled;
+      threshold = TOP_UP_THRESHOLD;
+      amount = TOP_UP_AMOUNT;
+      interval_seconds = _cycle_check_interval_seconds;
+    };
+  };
+
+  /**
+   * Sets the configuration for the automated cycle top-up feature.
+   * This function is restricted to the owner of the orchestrator canister.
+   * It will reschedule or remove the timer job based on the new settings.
+   */
+  public shared ({ caller }) func set_cycle_top_up_config(config : CycleTopUpConfig) : async Result.Result<(), Text> {
+    if (caller != _owner) {
+      return #err("Caller is not the owner");
+    };
+
+    _cycle_top_up_enabled := config.enabled;
+    TOP_UP_THRESHOLD := config.threshold;
+    TOP_UP_AMOUNT := config.amount;
+    _cycle_check_interval_seconds := config.interval_seconds;
+
+    // Cancel any existing job before making changes.
+    switch (_cycle_job_action_id) {
+      case (?actionId) {
+        D.print("Cancelling existing cycle top-up job.");
+        ignore tt().cancelAction<system>(actionId.id);
+        _cycle_job_action_id := null;
+      };
+      case (null) {};
+    };
+
+    // If the feature is enabled, schedule a new job immediately.
+    // The recurring logic in `reportTTExecution` will handle subsequent runs.
+    if (_cycle_top_up_enabled) {
+      D.print("Cycle top-up enabled. Scheduling new job.");
+      _schedule_cycle_top_up_job<system>();
+    } else {
+      D.print("Cycle top-up disabled.");
+    };
+
+    return #ok(());
+  };
+
+  // =====================================================================================
   // PRIVATE HELPERS
   // =====================================================================================
+
+  /**
+   * [PRIVATE] Schedules the cycle top-up job if one is not already scheduled.
+   */
+  private func _schedule_cycle_top_up_job<system>() {
+    // Prevent scheduling duplicates.
+    if (_cycle_job_action_id != null) {
+      return;
+    };
+
+    if (not _cycle_top_up_enabled) {
+      return;
+    };
+
+    let tt_instance = tt();
+    let schedule_time = Time.now() + Int.abs(_cycle_check_interval_seconds * 1_000_000_000);
+
+    D.print("Scheduling cycle top-up job for " # Int.toText(schedule_time));
+
+    let action : TT.ActionRequest = {
+      actionType = CYCLE_JOB_ACTION_TYPE;
+      params = Blob.fromArray([]);
+    };
+
+    // Use setActionAsync because our handler is async. A timeout of 0 means it can run as long as needed.
+    let actionId = tt_instance.setActionASync<system>(Int.abs(schedule_time), action, 0);
+    _cycle_job_action_id := ?actionId;
+  };
 
   private func _get_mode(namespace : Text) : async canister_install_mode {
     // Check if a canister is already managed for this namespace.
@@ -573,7 +718,7 @@ shared (deployer) actor class ICRC120Canister<system>(
         });
         switch (status_result.module_hash) {
           case (?installed_hash) {
-            if (installed_hash == wasmHash) {
+            if (?installed_hash == wasmHash) {
               // The same WASM is already installed. This is a reinstall.
               return #reinstall;
             } else {

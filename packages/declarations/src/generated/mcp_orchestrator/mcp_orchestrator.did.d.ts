@@ -42,6 +42,12 @@ export interface CreateSnapshotRequest {
 }
 export type CreateSnapshotResult = { 'Ok' : bigint } |
   { 'Err' : CreateSnapshotError };
+export interface CycleTopUpConfig {
+  'threshold' : bigint,
+  'enabled' : boolean,
+  'interval_seconds' : bigint,
+  'amount' : bigint,
+}
 export interface DataCertificate {
   'certificate' : Uint8Array | number[],
   'hash_tree' : Uint8Array | number[],
@@ -88,6 +94,7 @@ export interface GetTransactionsResult {
 export interface ICRC120Canister {
   'deploy_or_upgrade' : ActorMethod<[DeployOrUpgradeRequest], Result_1>,
   'get_canisters' : ActorMethod<[string], Array<Principal>>,
+  'get_cycle_top_up_config' : ActorMethod<[], CycleTopUpConfig>,
   'get_tip' : ActorMethod<[], Tip>,
   'hello' : ActorMethod<[], string>,
   'icrc120_clean_snapshot' : ActorMethod<
@@ -138,6 +145,7 @@ export interface ICRC120Canister {
     [InternalDeployRequest],
     undefined
   >,
+  'set_cycle_top_up_config' : ActorMethod<[CycleTopUpConfig], Result>,
   'set_mcp_registry_id' : ActorMethod<[Principal], Result>,
 }
 export type ICRC16 = { 'Int' : bigint } |

@@ -265,6 +265,8 @@ type ICRC120Canister =
    /// * The primary entry point for developers.
    deploy_or_upgrade: (request: DeployOrUpgradeRequest) -> (Result_1);
    get_canisters: (namespace: text) -> (vec principal) query;
+   /// * Returns the current configuration for the automated cycle top-up feature.
+   get_cycle_top_up_config: () -> (CycleTopUpConfig) query;
    get_tip: () -> (Tip) query;
    hello: () -> (text);
    icrc120_clean_snapshot: (requests: vec CleanSnapshotRequest) ->
@@ -295,6 +297,10 @@ type ICRC120Canister =
    icrc3_supported_block_types: () -> (vec BlockType) query;
    /// * [INTERNAL] A privileged endpoint for the MCP Registry.
    internal_deploy_or_upgrade: (request: InternalDeployRequest) -> ();
+   /// * Sets the configuration for the automated cycle top-up feature.
+   ///    * This function is restricted to the owner of the orchestrator canister.
+   ///    * It will reschedule or remove the timer job based on the new settings.
+   set_cycle_top_up_config: (config: CycleTopUpConfig) -> (Result);
    set_mcp_registry_id: (registryId: principal) -> (Result);
  };
 type GetTransactionsResult = 
@@ -352,6 +358,13 @@ type DataCertificate =
  record {
    certificate: blob;
    hash_tree: blob;
+ };
+type CycleTopUpConfig = 
+ record {
+   amount: nat;
+   enabled: bool;
+   interval_seconds: nat;
+   threshold: nat;
  };
 type CreateSnapshotResult = 
  variant {
