@@ -18,6 +18,7 @@ import {
   InteractionContextType,
 } from 'discord.js';
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { logger } from '../../utils/logger.js';
 
 export class MCPCommand extends BaseCommand {
   name = 'mcp';
@@ -72,12 +73,6 @@ export class MCPCommand extends BaseCommand {
               .setName('url')
               .setDescription('MCP server URL (http:// or https://)')
               .setRequired(true),
-          )
-          .addStringOption((option) =>
-            option
-              .setName('name')
-              .setDescription('Custom display name (optional - will auto-detect from server)')
-              .setRequired(false),
           ),
       )
       .addSubcommand((subcommand) =>
@@ -184,8 +179,7 @@ export class MCPCommand extends BaseCommand {
         }
         case 'connect-url': {
           const url = interaction.options.getString('url', true);
-          const customName = interaction.options.getString('name');
-          response = await this.handleConnectUrl(url, customName, interaction.user.id);
+          response = await this.handleConnectUrl(url, interaction.user.id);
           break;
         }
         case 'disconnect': {
@@ -359,6 +353,12 @@ export class MCPCommand extends BaseCommand {
           );
         }
 
+        // Truncate error message to prevent Discord field value limit issues
+        const truncatedError =
+          conn.error_message && conn.error_message.length > 200
+            ? conn.error_message.substring(0, 200) + '...'
+            : conn.error_message;
+
         // Build value array with description and other details
         const valueLines = [
           `**ID:** ${conn.server_id}`,
@@ -367,17 +367,26 @@ export class MCPCommand extends BaseCommand {
             : '',
           `**Status:** ${conn.status} | **Tools:** ${parsedTools.length}`,
           conn.server_url ? `**URL:** ${conn.server_url}` : '',
-          conn.error_message ? `**Error:** ${conn.error_message}` : '',
+          truncatedError ? `**Error:** ${truncatedError}` : '',
           conn.last_connected
             ? `**Last Connected:** ${conn.last_connected.toDateString()}`
             : '',
         ].filter(Boolean);
 
-        embed.addFields({
-          name: `${statusEmoji} ${displayName}`,
-          value: valueLines.join('\n'),
-          inline: false,
-        });
+        // Ensure the entire field value doesn't exceed Discord's 1024 character limit
+        const fieldValue = valueLines.join('\n');
+        const truncatedValue =
+          fieldValue.length > 1024
+            ? fieldValue.substring(0, 1021) + '...'
+            : fieldValue;
+
+        embed.addFields([
+          {
+            name: `${statusEmoji} ${displayName}`,
+            value: truncatedValue,
+            inline: false,
+          },
+        ]);
       }
 
       return { content: '', embeds: [embed] };
@@ -532,7 +541,6 @@ export class MCPCommand extends BaseCommand {
 
   private async handleConnectUrl(
     url: string,
-    customName: string | null,
     userId: string,
   ): Promise<CommandResponse> {
     if (!url) {
@@ -551,13 +559,18 @@ export class MCPCommand extends BaseCommand {
       }
     } catch (error) {
       return {
-        content: '❌ Invalid URL format. Please provide a valid HTTP/HTTPS URL.',
+        content:
+          '❌ Invalid URL format. Please provide a valid HTTP/HTTPS URL.',
       };
     }
 
     try {
       // Generate a unique server ID for this URL connection
       const serverId = `custom-url-${url.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}-${Date.now()}`;
+
+      logger.info(
+        `Attempting to connect to MCP server at ${url} for user ${userId}`,
+      );
 
       const connection = await this.mcpService.connectToServer(
         serverId,
@@ -573,86 +586,32 @@ export class MCPCommand extends BaseCommand {
             `Use \`/mcp tools\` to see what you can do.`,
         };
       } else if (connection.status === 'auth-required') {
-        const authUrl = (connection as any).auth_url;
-        if (authUrl) {
-          return {
-            content: '',
-            embeds: [
-              new EmbedBuilder()
-                .setTitle('🔐 Authorization Needed')
-                .setDescription(
-                  `You need to authorize **${connection.server_name}** before tools can be used.\n\n` +
-                    `**Next Steps:**\n` +
-                    `• Click the button below to authorize access.\n` +
-                    `• Complete the sign-in / consent flow.\n` +
-                    `• Then run \`/mcp connect ${connection.server_name}\` again.\n\n`,
-                )
-                .setColor(0xff9500)
-                .setFooter({
-                  text: 'OAuth flow in progress – callback & token persistence coming soon.',
-                }),
-            ],
-            components: [
-              new ActionRowBuilder<ButtonBuilder>().addComponents(
-                new ButtonBuilder()
-                  .setStyle(ButtonStyle.Link)
-                  .setLabel('Authorize Access')
-                  .setURL(authUrl),
-              ),
-            ],
-          };
-        } else {
-          return {
-            content: `🔐 Authorization required for **${connection.server_name}**. Awaiting authorization URL (try again shortly) then rerun \`/mcp connect ${connection.server_name}\`.`,
-          };
-        }
-      } else {
-        return {
-          content: `❌ Failed to connect to server: ${connection.error_message || 'Unknown error'}`,
-        };
-      }
-    } catch (error) {
-      console.error('MCP connect-url error:', error);
-
-      if (error instanceof OAuthAuthorizationRequiredError) {
-        const authUrl = error.authUrl;
-        const prettyUrl = (() => {
-          if (!authUrl) return 'Unknown URL';
-          try {
-            const u = new URL(authUrl);
-            return `${u.origin}${u.pathname}`;
-          } catch {
-            return authUrl.split('?')[0];
-          }
-        })();
         return {
           content: '',
           embeds: [
             new EmbedBuilder()
               .setTitle('🔐 Authorization Needed')
               .setDescription(
-                `The server requires you to authorize access before tools can be used.\n\n` +
+                `You need to authorize **${connection.server_name}** before tools can be used.\n\n` +
                   `**Next Steps:**\n` +
-                  `• Click the button below to open the authorization page.\n` +
-                  `• Complete the sign-in / consent flow.\n` +
-                  `• Return here and run \`/mcp connect-url ${url}\` again.\n\n` +
-                  `URL: ${prettyUrl}`,
+                  `• Check your DMs to authorize access.\n` +
+                  `• Complete the sign-in / consent flow.\n`,
               )
               .setColor(0xff9500)
               .setFooter({
                 text: 'OAuth flow in progress – callback & token persistence coming soon.',
               }),
           ],
-          components: [
-            new ActionRowBuilder<ButtonBuilder>().addComponents(
-              new ButtonBuilder()
-                .setStyle(ButtonStyle.Link)
-                .setLabel('Authorize Access')
-                .setURL(authUrl || 'https://example.com'),
-            ),
-          ],
+        };
+      } else {
+        return {
+          content: `❌ Failed to connect to server: ${connection.error_message || 'Unknown error'}`,
         };
       }
+    } catch (error) {
+      logger.error(
+        `MCP connect-url error for ${url}: ${error instanceof Error ? error.message : String(error)}`,
+      );
 
       return {
         content: `❌ Error connecting to server: ${error instanceof Error ? error.message : 'Unknown error'}`,

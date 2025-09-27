@@ -1021,18 +1021,40 @@ export class SupabaseService implements DatabaseService {
 
     // Note: metadata and updated_at are not stored in the database schema, only logged for debugging
 
-    const { error } = await this.client
+    // Use UPSERT to handle both insert and update cases
+    const connectionData: any = {
+      user_id: userId,
+      server_id: mcpServerConfigId,
+      server_url: mcpServerUrl,
+      server_name: mcpServerConfigId, // Use server ID as fallback name initially
+      status: dbStatus,
+      tools: '[]',
+      connected_at: new Date().toISOString(),
+    };
+
+    // Add error message if it's a failed connection
+    if ((dbStatus === 'error' || dbStatus === 'disconnected') && metadata?.lastFailureError) {
+      connectionData.error_message = metadata.lastFailureError;
+    }
+
+    const { data, error } = await this.client
       .from('mcp_connections')
-      .update(updateData)
-      .eq('user_id', userId)
-      .eq('server_id', mcpServerConfigId);
+      .upsert(connectionData, {
+        onConflict: 'user_id,server_id',
+        ignoreDuplicates: false
+      })
+      .select();
 
     if (error) {
-      dbLogger.error(`🔗 [DB] Error updating connection status:`, error);
+      dbLogger.error(`🔗 [DB] Error upserting connection status:`, error);
       throw error;
     }
 
-    dbLogger.info(`🔗 [DB] Connection status updated successfully`);
+    dbLogger.info(`🔗 [DB] Connection status upserted successfully`, { 
+      rowsAffected: data ? data.length : 0,
+      serverId: mcpServerConfigId,
+      status: dbStatus
+    });
   }
 
   async getReconnectableConnections(): Promise<any[]> {

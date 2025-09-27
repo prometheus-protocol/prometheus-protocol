@@ -383,23 +383,51 @@ export class MCPService {
     try {
       logger.info(`Connecting user ${userId} to server ${serverId}`);
 
-      // If no serverUrl provided, try to get it from the registry
+      // Check if this is a custom URL server (serverId starts with 'custom-url-')
+      const isCustomUrl = serverId.startsWith('custom-url-');
+
       let actualServerUrl = serverUrl;
       if (!actualServerUrl) {
-        const serverInfo = await this.registryService?.getServerById(serverId);
-        if (serverInfo && serverInfo.url) {
-          actualServerUrl = serverInfo.url;
-          logger.info(`Found server URL from registry: ${actualServerUrl}`, {
-            service: 'MCPService',
-            serverId,
-            serverUrl: actualServerUrl,
-          });
-        } else if (serverInfo) {
-          throw new Error(
-            `Server ${serverId} found in registry but has no url property`,
-          );
+        if (isCustomUrl) {
+          // For custom URLs, first try to get the URL from existing connection
+          // This handles the case where user is reconnecting via namespace
+          const existingConnection =
+            await this.databaseService.getUserMCPConnection(userId, serverId);
+
+          if (existingConnection && existingConnection.server_url) {
+            actualServerUrl = existingConnection.server_url;
+            logger.info(
+              `Found saved URL for custom server: ${actualServerUrl}`,
+              {
+                service: 'MCPService',
+                serverId,
+                serverUrl: actualServerUrl,
+              },
+            );
+          } else {
+            // If no saved URL and no serverUrl provided, this is an error
+            throw new Error(
+              `Custom URL server ${serverId} requires serverUrl parameter to be provided or have a saved connection with server_url`,
+            );
+          }
         } else {
-          throw new Error(`Server ${serverId} not found in registry`);
+          // For registry servers, look up the URL from the registry
+          const serverInfo =
+            await this.registryService?.getServerById(serverId);
+          if (serverInfo && serverInfo.url) {
+            actualServerUrl = serverInfo.url;
+            logger.info(`Found server URL from registry: ${actualServerUrl}`, {
+              service: 'MCPService',
+              serverId,
+              serverUrl: actualServerUrl,
+            });
+          } else if (serverInfo) {
+            throw new Error(
+              `Server ${serverId} found in registry but has no url property`,
+            );
+          } else {
+            throw new Error(`Server ${serverId} not found in registry`);
+          }
         }
       }
 
@@ -421,38 +449,95 @@ export class MCPService {
         mcpServerUrl: actualServerUrl,
       };
 
+      // Start the connection process
       await this.connectionPool.handleConnectionRequest(connectionPayload);
 
-      return {
-        success: true,
-        message:
-          'Connection established successfully, tools are being fetched...',
-        connectionId: serverId,
-        status: 'connected',
-        server_name: serverId,
-        tools: [], // Tools will be updated via Discord message when synced
-        connection: {
-          server_name: serverId,
-          tools: [],
-        },
-      };
+      // Wait for the connection to complete (or fail) by polling the database
+      const maxWaitTime = 120000; // 2 minutes
+      const pollInterval = 1000; // 1 second
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitTime) {
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+
+        try {
+          const connection = await this.databaseService.getUserMCPConnection(
+            userId,
+            serverId,
+          );
+          logger.info(
+            `Polling connection status: ${connection ? `status=${connection.status}` : 'not found'} (userId: ${userId}, serverId: ${serverId})`,
+          );
+          if (connection) {
+            if (connection.status === 'connected') {
+              return {
+                success: true,
+                message: 'Successfully connected to MCP server!',
+                connectionId: serverId,
+                status: 'connected',
+                server_name: connection.server_name || serverId,
+                tools: connection.tools ? JSON.parse(connection.tools) : [],
+                connection: {
+                  server_name: connection.server_name || serverId,
+                  tools: connection.tools ? JSON.parse(connection.tools) : [],
+                },
+              };
+            } else if (
+              connection.status === 'error' ||
+              connection.status === 'disconnected'
+            ) {
+              throw new Error(connection.error_message || 'Connection failed');
+            } else if (connection.status === 'auth-required') {
+              return {
+                success: false,
+                message: 'Authentication required',
+                authRequired: true,
+                status: 'auth-required',
+                connectionId: serverId,
+                server_name: connection.server_name || serverId,
+                // TODO: Include auth URL if available
+              };
+            }
+            // If status is 'reconnecting' or other intermediate state, continue polling
+          }
+        } catch (dbError) {
+          // If this is a connection error (not a database error), re-throw it to exit the polling loop
+          if (
+            dbError instanceof Error &&
+            !dbError.message.includes('DATABASE') &&
+            !dbError.message.includes('timeout')
+          ) {
+            throw dbError;
+          }
+          logger.warn(
+            `Error checking connection status: ${dbError instanceof Error ? dbError.message : String(dbError)}`,
+          );
+        }
+      }
+
+      // Timeout - check final status
+      try {
+        const finalConnection = await this.databaseService.getUserMCPConnection(
+          userId,
+          serverId,
+        );
+        if (finalConnection) {
+          throw new Error(
+            `Connection timeout. Final status: ${finalConnection.status}. ${finalConnection.error_message || ''}`,
+          );
+        }
+      } catch (dbError) {
+        // Ignore database errors at this point
+      }
+
+      throw new Error(
+        'Connection timeout - the server may be unreachable or taking too long to respond',
+      );
     } catch (error: any) {
       logger.error(
         `Error connecting to server ${serverId}:`,
         error instanceof Error ? error : new Error(String(error)),
       );
-
-      // Check if it's an auth error
-      if (error.message?.includes('auth') || error.message?.includes('oauth')) {
-        return {
-          success: false,
-          message: 'Authentication required',
-          authRequired: true,
-          authUrl: `/auth/oauth/${serverId}`, // Mock auth URL
-          status: 'auth-required',
-          server_name: serverId,
-        };
-      }
 
       return {
         success: false,
@@ -471,6 +556,9 @@ export class MCPService {
     try {
       logger.info(`Disconnecting user ${userId} from server ${serverId}`);
 
+      // Check if this is a custom URL server (serverId starts with 'custom-url-')
+      const isCustomUrl = serverId.startsWith('custom-url-');
+
       // Get the connection to find the server URL
       const connection = await this.databaseService.getUserMCPConnection(
         userId,
@@ -478,16 +566,27 @@ export class MCPService {
       );
       let serverUrl = connection?.server_url;
 
-      // If no saved server URL, try to get it from registry
+      // If no saved server URL, handle based on server type
       if (!serverUrl) {
-        const serverInfo = await this.registryService?.getServerById(serverId);
-        if (serverInfo) {
-          serverUrl = serverInfo.url;
-        } else {
+        if (isCustomUrl) {
+          // For custom URLs, we need the saved URL from the connection
+          // If it's missing, use a fallback that won't cause registry lookups
           logger.warn(
-            `Could not find server URL for ${serverId}, using fallback`,
+            `Custom URL server ${serverId} missing server_url, using fallback`,
           );
-          serverUrl = `https://unknown-server/${serverId}`;
+          serverUrl = `https://custom-server/${serverId}`;
+        } else {
+          // For registry servers, try to get it from registry
+          const serverInfo =
+            await this.registryService?.getServerById(serverId);
+          if (serverInfo) {
+            serverUrl = serverInfo.url;
+          } else {
+            logger.warn(
+              `Could not find server URL for ${serverId}, using fallback`,
+            );
+            serverUrl = `https://unknown-server/${serverId}`;
+          }
         }
       }
 
@@ -739,14 +838,22 @@ export class MCPService {
       }
 
       const serverId = connection.server_id;
+      const isCustomUrl = serverId.startsWith('custom-url-');
       let serverUrl = connection?.server_url;
 
       if (!serverUrl) {
-        const serverInfo = await this.registryService?.getServerById(serverId);
-        if (serverInfo) {
-          serverUrl = serverInfo.url;
+        if (isCustomUrl) {
+          throw new Error(
+            `Custom URL server ${serverId} is missing server_url in database`,
+          );
         } else {
-          throw new Error(`Server ${serverId} not found`);
+          const serverInfo =
+            await this.registryService?.getServerById(serverId);
+          if (serverInfo) {
+            serverUrl = serverInfo.url;
+          } else {
+            throw new Error(`Server ${serverId} not found`);
+          }
         }
       }
 
@@ -1025,59 +1132,79 @@ export class MCPService {
       const fixes: string[] = [];
       const poolKey = `${dbConn.user_id}::${dbConn.server_id}`;
 
+      // Check if this is a custom URL server
+      const isCustomUrl = dbConn.server_id.startsWith('custom-url-');
+
       // Check for missing or empty server_url
       if (!dbConn.server_url || dbConn.server_url.trim() === '') {
         issues.push('Missing server_url');
 
-        // Try to get the server_url from the registry based on server_id
-        try {
-          console.log('REGISTRY SERVICE:', this.registryService);
-          const serverInfo = await this.registryService?.getServerById(
-            dbConn.server_id,
+        if (isCustomUrl) {
+          // For custom URLs, we can't repair missing URLs from registry
+          // Mark as disconnected and require manual reconnection
+          fixes.push(
+            'Custom URL server missing URL - marked as disconnected (requires manual reconnection)',
           );
-          console.log('SERVER INFO:', serverInfo);
-          if (serverInfo && serverInfo.url) {
-            fixes.push(`Set server_url to: ${serverInfo.url}`);
-
-            // Update the database record
-            await this.databaseService.updateUserMCPConnection(
-              dbConn.user_id,
-              dbConn.server_id,
-              {
-                server_url: serverInfo.url,
-                error_message: null, // Clear any previous error
-              },
-            );
-          } else {
-            fixes.push(
-              'Could not find server URL in registry - marked as disconnected',
-            );
-
-            // If we can't find the server, mark it as disconnected
-            await this.databaseService.updateUserMCPConnection(
-              dbConn.user_id,
-              dbConn.server_id,
-              {
-                status: 'disconnected',
-                error_message: 'Server not found in registry - URL missing',
-              },
-            );
-          }
-        } catch (error) {
-          logger.error(
-            `[MCPService] Error repairing connection ${poolKey}:`,
-            error instanceof Error ? error : new Error(String(error)),
-          );
-          fixes.push('Error occurred during repair - marked as disconnected');
 
           await this.databaseService.updateUserMCPConnection(
             dbConn.user_id,
             dbConn.server_id,
             {
               status: 'disconnected',
-              error_message: 'Repair failed - please reconnect manually',
+              error_message: 'Custom URL missing - please reconnect manually',
             },
           );
+        } else {
+          // Try to get the server_url from the registry based on server_id (registry servers only)
+          try {
+            console.log('REGISTRY SERVICE:', this.registryService);
+            const serverInfo = await this.registryService?.getServerById(
+              dbConn.server_id,
+            );
+            console.log('SERVER INFO:', serverInfo);
+            if (serverInfo && serverInfo.url) {
+              fixes.push(`Set server_url to: ${serverInfo.url}`);
+
+              // Update the database record
+              await this.databaseService.updateUserMCPConnection(
+                dbConn.user_id,
+                dbConn.server_id,
+                {
+                  server_url: serverInfo.url,
+                  error_message: null, // Clear any previous error
+                },
+              );
+            } else {
+              fixes.push(
+                'Could not find server URL in registry - marked as disconnected',
+              );
+
+              // If we can't find the server, mark it as disconnected
+              await this.databaseService.updateUserMCPConnection(
+                dbConn.user_id,
+                dbConn.server_id,
+                {
+                  status: 'disconnected',
+                  error_message: 'Server not found in registry - URL missing',
+                },
+              );
+            }
+          } catch (error) {
+            logger.error(
+              `[MCPService] Error repairing connection ${poolKey}:`,
+              error instanceof Error ? error : new Error(String(error)),
+            );
+            fixes.push('Error occurred during repair - marked as disconnected');
+
+            await this.databaseService.updateUserMCPConnection(
+              dbConn.user_id,
+              dbConn.server_id,
+              {
+                status: 'disconnected',
+                error_message: 'Repair failed - please reconnect manually',
+              },
+            );
+          }
         }
       }
 
@@ -1085,21 +1212,34 @@ export class MCPService {
       if (!dbConn.server_name || dbConn.server_name.trim() === '') {
         issues.push('Missing server_name');
 
-        try {
-          const serverInfo = await this.registryService?.getServerById(
-            dbConn.server_id,
-          );
-          if (serverInfo && serverInfo.name) {
-            fixes.push(`Set server_name to: ${serverInfo.name}`);
+        if (isCustomUrl) {
+          // For custom URLs, generate a name from the server_id
+          const serverName = `Custom Server ${dbConn.server_id.replace('custom-url-', '').substring(0, 20)}`;
+          fixes.push(`Set server_name to: ${serverName}`);
 
-            await this.databaseService.updateUserMCPConnection(
-              dbConn.user_id,
+          await this.databaseService.updateUserMCPConnection(
+            dbConn.user_id,
+            dbConn.server_id,
+            { server_name: serverName },
+          );
+        } else {
+          // For registry servers, try to get name from registry
+          try {
+            const serverInfo = await this.registryService?.getServerById(
               dbConn.server_id,
-              { server_name: serverInfo.name },
             );
+            if (serverInfo && serverInfo.name) {
+              fixes.push(`Set server_name to: ${serverInfo.name}`);
+
+              await this.databaseService.updateUserMCPConnection(
+                dbConn.user_id,
+                dbConn.server_id,
+                { server_name: serverInfo.name },
+              );
+            }
+          } catch (error) {
+            fixes.push('Could not repair server_name');
           }
-        } catch (error) {
-          fixes.push('Could not repair server_name');
         }
       }
 
