@@ -18,7 +18,6 @@ import {
   InteractionContextType,
 } from 'discord.js';
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
-import logger from '../../utils/logger.js';
 
 export class MCPCommand extends BaseCommand {
   name = 'mcp';
@@ -62,6 +61,23 @@ export class MCPCommand extends BaseCommand {
               .setDescription('Name of the server to connect to')
               .setRequired(true)
               .setAutocomplete(true),
+          ),
+      )
+      .addSubcommand((subcommand) =>
+        subcommand
+          .setName('connect-url')
+          .setDescription('Connect to an MCP server via direct URL')
+          .addStringOption((option) =>
+            option
+              .setName('url')
+              .setDescription('MCP server URL (http:// or https://)')
+              .setRequired(true),
+          )
+          .addStringOption((option) =>
+            option
+              .setName('name')
+              .setDescription('Custom display name (optional - will auto-detect from server)')
+              .setRequired(false),
           ),
       )
       .addSubcommand((subcommand) =>
@@ -125,7 +141,7 @@ export class MCPCommand extends BaseCommand {
     try {
       await interaction.deferReply();
     } catch (error) {
-      logger.error('❌ [MCP] Failed to defer reply immediately:', error instanceof Error ? error : new Error(String(error)));
+      console.error('❌ Failed to defer reply immediately:', error);
       // Try immediate reply as fallback
       try {
         await interaction.reply({
@@ -133,15 +149,14 @@ export class MCPCommand extends BaseCommand {
           ephemeral: true,
         });
       } catch (replyError) {
-        logger.error('❌ [MCP] Failed to send any response:', replyError instanceof Error ? replyError : new Error(String(replyError)));
+        console.error('❌ Failed to send any response:', replyError);
       }
       return;
     }
 
     const subcommand = interaction.options.getSubcommand();
 
-    logger.info('🔍 [MCP] MCP executeSlash called', {
-      service: 'MCPCommand',
+    console.log('🔍 MCP executeSlash called:', {
       interactionId: interaction.id,
       isDeferred: interaction.deferred,
       isReplied: interaction.replied,
@@ -165,6 +180,12 @@ export class MCPCommand extends BaseCommand {
         case 'connect': {
           const serverName = interaction.options.getString('server-name', true);
           response = await this.handleConnect(serverName, interaction.user.id);
+          break;
+        }
+        case 'connect-url': {
+          const url = interaction.options.getString('url', true);
+          const customName = interaction.options.getString('name');
+          response = await this.handleConnectUrl(url, customName, interaction.user.id);
           break;
         }
         case 'disconnect': {
@@ -214,7 +235,7 @@ export class MCPCommand extends BaseCommand {
         await interaction.editReply({ content: '✅ Done.' });
       }
     } catch (error) {
-            logger.error(`❌ [MCP] Error executing /mcp ${subcommand}:`, error instanceof Error ? error : new Error(String(error)));
+      console.error(`Error executing /mcp ${subcommand}:`, error);
 
       await interaction.editReply({
         content: '❌ An unexpected error occurred while running this command.',
@@ -277,7 +298,7 @@ export class MCPCommand extends BaseCommand {
 
       return { content: '', embeds: [embed] };
     } catch (error) {
-      logger.error('❌ [MCP] Search error:', error instanceof Error ? error : new Error(String(error)));
+      console.error('MCP search error:', error);
       return {
         content: '❌ Error searching MCP servers. Please try again later.',
       };
@@ -332,10 +353,10 @@ export class MCPCommand extends BaseCommand {
           }
         } catch (error) {
           // If registry lookup fails, use the stored data
-          logger.warn('⚠️ [MCP] Could not fetch registry data for server', {
-            service: 'MCPCommand',
-            serverId: conn.server_id,
-          });
+          console.warn(
+            'Could not fetch registry data for server:',
+            conn.server_id,
+          );
         }
 
         // Build value array with description and other details
@@ -361,7 +382,7 @@ export class MCPCommand extends BaseCommand {
 
       return { content: '', embeds: [embed] };
     } catch (error) {
-      logger.error('❌ [MCP] List error:', error instanceof Error ? error : new Error(String(error)));
+      console.error('MCP list error:', error);
       return {
         content:
           '❌ Error retrieving your connections. Please try again later.',
@@ -446,7 +467,7 @@ export class MCPCommand extends BaseCommand {
         };
       }
     } catch (error) {
-      logger.error('❌ [MCP] Connect error:', error instanceof Error ? error : new Error(String(error)));
+      console.error('MCP connect error:', error);
 
       if (error instanceof OAuthAuthorizationRequiredError) {
         const authUrl = error.authUrl;
@@ -509,6 +530,136 @@ export class MCPCommand extends BaseCommand {
     }
   }
 
+  private async handleConnectUrl(
+    url: string,
+    customName: string | null,
+    userId: string,
+  ): Promise<CommandResponse> {
+    if (!url) {
+      return {
+        content: '❌ Please provide a valid MCP server URL.',
+      };
+    }
+
+    // Validate URL format
+    try {
+      const parsedUrl = new URL(url);
+      if (!parsedUrl.protocol.startsWith('http')) {
+        return {
+          content: '❌ URL must use HTTP or HTTPS protocol.',
+        };
+      }
+    } catch (error) {
+      return {
+        content: '❌ Invalid URL format. Please provide a valid HTTP/HTTPS URL.',
+      };
+    }
+
+    try {
+      // Generate a unique server ID for this URL connection
+      const serverId = `custom-url-${url.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}-${Date.now()}`;
+
+      const connection = await this.mcpService.connectToServer(
+        serverId,
+        userId,
+        url, // Pass the URL directly
+      );
+
+      if (connection.status === 'connected') {
+        return {
+          content:
+            `✅ Successfully connected to **${connection.server_name}**!\n` +
+            `🔗 URL: ${url}\n` +
+            `Use \`/mcp tools\` to see what you can do.`,
+        };
+      } else if (connection.status === 'auth-required') {
+        const authUrl = (connection as any).auth_url;
+        if (authUrl) {
+          return {
+            content: '',
+            embeds: [
+              new EmbedBuilder()
+                .setTitle('🔐 Authorization Needed')
+                .setDescription(
+                  `You need to authorize **${connection.server_name}** before tools can be used.\n\n` +
+                    `**Next Steps:**\n` +
+                    `• Click the button below to authorize access.\n` +
+                    `• Complete the sign-in / consent flow.\n` +
+                    `• Then run \`/mcp connect ${connection.server_name}\` again.\n\n`,
+                )
+                .setColor(0xff9500)
+                .setFooter({
+                  text: 'OAuth flow in progress – callback & token persistence coming soon.',
+                }),
+            ],
+            components: [
+              new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                  .setStyle(ButtonStyle.Link)
+                  .setLabel('Authorize Access')
+                  .setURL(authUrl),
+              ),
+            ],
+          };
+        } else {
+          return {
+            content: `🔐 Authorization required for **${connection.server_name}**. Awaiting authorization URL (try again shortly) then rerun \`/mcp connect ${connection.server_name}\`.`,
+          };
+        }
+      } else {
+        return {
+          content: `❌ Failed to connect to server: ${connection.error_message || 'Unknown error'}`,
+        };
+      }
+    } catch (error) {
+      console.error('MCP connect-url error:', error);
+
+      if (error instanceof OAuthAuthorizationRequiredError) {
+        const authUrl = error.authUrl;
+        const prettyUrl = (() => {
+          if (!authUrl) return 'Unknown URL';
+          try {
+            const u = new URL(authUrl);
+            return `${u.origin}${u.pathname}`;
+          } catch {
+            return authUrl.split('?')[0];
+          }
+        })();
+        return {
+          content: '',
+          embeds: [
+            new EmbedBuilder()
+              .setTitle('🔐 Authorization Needed')
+              .setDescription(
+                `The server requires you to authorize access before tools can be used.\n\n` +
+                  `**Next Steps:**\n` +
+                  `• Click the button below to open the authorization page.\n` +
+                  `• Complete the sign-in / consent flow.\n` +
+                  `• Return here and run \`/mcp connect-url ${url}\` again.\n\n` +
+                  `URL: ${prettyUrl}`,
+              )
+              .setColor(0xff9500)
+              .setFooter({
+                text: 'OAuth flow in progress – callback & token persistence coming soon.',
+              }),
+          ],
+          components: [
+            new ActionRowBuilder<ButtonBuilder>().addComponents(
+              new ButtonBuilder()
+                .setStyle(ButtonStyle.Link)
+                .setLabel('Authorize Access')
+                .setURL(authUrl || 'https://example.com'),
+            ),
+          ],
+        };
+      }
+
+      return {
+        content: `❌ Error connecting to server: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
+  }
+
   private async handleDisconnect(
     serverName: string,
     userId: string,
@@ -537,7 +688,7 @@ export class MCPCommand extends BaseCommand {
         content: `✅ Disconnected from server: **${serverName}**`,
       };
     } catch (error) {
-      logger.error('❌ [MCP] Disconnect error:', error instanceof Error ? error : new Error(String(error)));
+      console.error('MCP disconnect error:', error);
       return {
         content: `❌ Error disconnecting from server: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
@@ -572,7 +723,7 @@ export class MCPCommand extends BaseCommand {
         content: `🗑️ Permanently deleted server connection: **${serverName}**\n\n⚠️ This action cannot be undone. All connection data and OAuth tokens have been removed.`,
       };
     } catch (error) {
-      logger.error('❌ [MCP] Delete error:', error instanceof Error ? error : new Error(String(error)));
+      console.error('MCP delete error:', error);
       return {
         content: `❌ Error deleting server connection: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
@@ -625,7 +776,7 @@ export class MCPCommand extends BaseCommand {
 
       return { content: '', embeds: [embed] };
     } catch (error) {
-      logger.error('❌ [MCP] Tools error:', error instanceof Error ? error : new Error(String(error)));
+      console.error('MCP tools error:', error);
       return {
         content: '❌ Error retrieving available tools. Please try again later.',
       };
@@ -666,7 +817,7 @@ export class MCPCommand extends BaseCommand {
 
       return { content: '', embeds: [embed] };
     } catch (error) {
-      logger.error('❌ [MCP] Status error:', error instanceof Error ? error : new Error(String(error)));
+      console.error('MCP status error:', error);
       return {
         content: '❌ Error retrieving system status. Please try again later.',
       };
@@ -726,7 +877,7 @@ export class MCPCommand extends BaseCommand {
 
       return { content: '', embeds: [embed] };
     } catch (error) {
-      logger.error('❌ [MCP] Error getting connection diagnostics:', error instanceof Error ? error : new Error(String(error)));
+      console.error('Error getting connection diagnostics:', error);
       return {
         content: '❌ Failed to get connection diagnostics. Please try again.',
       };
@@ -764,7 +915,7 @@ export class MCPCommand extends BaseCommand {
 
       return { content: '', embeds: [embed] };
     } catch (error) {
-      logger.error('❌ [MCP] Error cleaning up connections:', error instanceof Error ? error : new Error(String(error)));
+      console.error('Error cleaning up connections:', error);
       return {
         content: '❌ Failed to clean up connections. Please try again.',
       };
@@ -810,7 +961,7 @@ export class MCPCommand extends BaseCommand {
 
       return { content: '', embeds: [embed] };
     } catch (error) {
-      logger.error('❌ [MCP] Error repairing connections:', error instanceof Error ? error : new Error(String(error)));
+      console.error('Error repairing connections:', error);
       return {
         content: '❌ Failed to repair connections. Please try again.',
       };
@@ -820,23 +971,22 @@ export class MCPCommand extends BaseCommand {
   async handleAutocomplete(
     interaction: AutocompleteInteraction,
   ): Promise<void> {
-    logger.debug('🔗 [MCP] Autocomplete handler called', { service: 'MCPCommand' });
+    console.log('🔗 MCP AUTOCOMPLETE HANDLER CALLED');
     const focusedOption = interaction.options.getFocused(true);
-    logger.debug('🔗 [MCP] Focused option', { service: 'MCPCommand', focusedOption });
+    console.log('🔗 FOCUSED OPTION:', focusedOption);
 
     try {
       if (focusedOption.name === 'server-name') {
-        logger.debug('🔗 [MCP] Fetching MCP connections for autocomplete', { service: 'MCPCommand' });
+        console.log('🔗 FETCHING MCP CONNECTIONS FOR AUTOCOMPLETE...');
 
         const subcommand = interaction.options.getSubcommand();
-        logger.debug('🔗 [MCP] Subcommand for filtering', { service: 'MCPCommand', subcommand });
+        console.log('🔗 SUBCOMMAND FOR FILTERING:', subcommand);
 
         // Get user's connections for autocomplete
         const connections = await this.mcpService.getUserConnections(
           interaction.user.id,
         );
-        logger.debug('🔗 [MCP] User connections', {
-          service: 'MCPCommand',
+        console.log('🔗 USER CONNECTIONS:', {
           connectionCount: connections.length,
           connections: connections.map((c) => ({
             name: c.server_name,
@@ -898,11 +1048,11 @@ export class MCPCommand extends BaseCommand {
           choices = choices.concat(connectionChoices);
         }
 
-        logger.debug('🔗 [MCP] Autocomplete choices', { service: 'MCPCommand', choices });
+        console.log('🔗 AUTOCOMPLETE CHOICES:', choices);
         await interaction.respond(choices);
       }
     } catch (error) {
-      logger.error('❌ [MCP] Error in MCP autocomplete:', error instanceof Error ? error : new Error(String(error)));
+      console.error('🔗 Error in MCP autocomplete:', error);
       // Fail gracefully with empty choices
       await interaction.respond([]);
     }

@@ -4,7 +4,6 @@ import { CommandRegistryImpl } from './commands/registry.js';
 import { ChatCommand } from './commands/chat/chat.js';
 import { MCPCommand } from './commands/mcp/mcp.js';
 import { TasksCommand } from './commands/tasks/tasks.js';
-import logger from './utils/logger.js';
 // You might need to import your services if the command constructors need them
 // For this script, we can often pass 'null' or a mock if the constructor allows it,
 // since we only need the command definition, not its execution logic.
@@ -42,32 +41,32 @@ const commands = commandRegistry
   })
   .filter(Boolean); // Filter out any commands that aren't slash commands
 
-logger.info(`📝 [Deploy] Found ${commands.length} slash commands to register`);
-logger.debug('📝 [Deploy] Commands to register', { service: 'CommandDeploy', commands });
+console.log(`Found ${commands.length} slash commands to register.`);
+console.log(commands);
 
 // --- DEPLOYMENT ---
 const rest = new REST({ version: '10' }).setToken(token);
 
 (async () => {
   try {
-    logger.info('🔄 [Deploy] Started refreshing application (/) commands');
+    console.log('Started refreshing application (/) commands.');
 
     // Deploy to guild for instant updates
-    logger.info('🏠 [Deploy] Deploying to guild...');
+    console.log('Deploying to guild...');
     await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
       body: commands,
     });
-    logger.info('✅ [Deploy] Guild commands deployed');
+    console.log('✅ Guild commands deployed');
 
     // Also deploy globally for better reliability
-    logger.info('🌐 [Deploy] Deploying globally...');
+    console.log('Deploying globally...');
     await rest.put(Routes.applicationCommands(clientId), {
       body: commands,
     });
-    logger.info('✅ [Deploy] Global commands deployed');
+    console.log('✅ Global commands deployed');
 
-    logger.info('✅ [Deploy] Successfully reloaded application (/) commands');
+    console.log('✅ Successfully reloaded application (/) commands.');
   } catch (error) {
-    logger.error('❌ [Deploy] Command deployment failed:', error instanceof Error ? error : new Error(String(error)));
+    console.error(error);
   }
 })();

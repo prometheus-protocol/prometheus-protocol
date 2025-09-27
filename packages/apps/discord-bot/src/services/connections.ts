@@ -605,6 +605,50 @@ export class ConnectionPoolService {
         )}`,
       );
 
+      // --- Extract and update server display name from MCP server metadata ---
+      if (serverInfo && typeof serverInfo === 'object') {
+        try {
+          // Get current connection data from database to preserve existing server_name as fallback
+          const existingConnection =
+            await this.databaseService.getUserMCPConnection(
+              payload.userId,
+              payload.mcpServerConfigId,
+            );
+
+          // Extract display name from MCP server metadata
+          // Priority: title > name > existing server_name > mcpServerConfigId
+          const serverTitle = (serverInfo as any).title;
+          const serverName = (serverInfo as any).name;
+          const currentServerName = existingConnection?.server_name;
+
+          const displayName =
+            serverTitle ||
+            serverName ||
+            currentServerName ||
+            payload.mcpServerConfigId;
+
+          logger.info(
+            `[ConnPool-${poolKey}] Server metadata: name="${serverName}", title="${serverTitle}", using="${displayName}"`,
+          );
+
+          // Update the database record with the proper display name if it's different
+          if (displayName !== currentServerName) {
+            await this.databaseService.updateUserMCPConnection(
+              payload.userId,
+              payload.mcpServerConfigId,
+              { server_name: displayName },
+            );
+            logger.info(
+              `[ConnPool-${poolKey}] Updated server display name from "${currentServerName}" to "${displayName}"`,
+            );
+          }
+        } catch (error) {
+          logger.warn(
+            `[ConnPool-${poolKey}] Failed to extract server metadata for display name: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          );
+        }
+      }
+
       // --- FIX FOR RACE CONDITION ---
       // Set the internal state flag NOW. Any incoming requests from this point
       // will see the connection as fully active.

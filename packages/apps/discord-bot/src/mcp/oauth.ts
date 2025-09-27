@@ -13,7 +13,6 @@ import {
   OAuthProtectedResourceMetadata,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { ConnectionManagerOAuthProvider } from './oauth-provider.js';
-import logger from '../utils/logger.js';
 
 /**
  * Checks if a JWT is expired or close to expiring.
@@ -26,7 +25,7 @@ function isTokenExpired(token: string, bufferSeconds = 30): boolean {
     // Get the payload part of the token (the middle part)
     const payloadBase64 = token.split('.')[1];
     if (!payloadBase64) {
-      logger.debug('🔐 [OAuth] Invalid token format - no payload section', { service: 'OAuth' });
+      console.log('DEBUG: Invalid token format - no payload section');
       return true; // Invalid token format
     }
 
@@ -36,7 +35,7 @@ function isTokenExpired(token: string, bufferSeconds = 30): boolean {
 
     // Check if the 'exp' claim exists
     if (!payload.exp || typeof payload.exp !== 'number') {
-      logger.debug('🔐 [OAuth] No exp claim found in token payload', { service: 'OAuth', payload });
+      console.log('DEBUG: No exp claim found in token payload:', payload);
       return true; // No expiration claim, treat as invalid/expired
     }
 
@@ -48,8 +47,7 @@ function isTokenExpired(token: string, bufferSeconds = 30): boolean {
     const timeUntilExpiry = expMillis - nowMillis;
     const isExpired = expMillis < nowMillis + bufferSeconds * 1000;
 
-    logger.debug('🔐 [OAuth] Token expiry check', {
-      service: 'OAuth',
+    console.log('DEBUG: Token expiry check:', {
       exp: payload.exp,
       expMillis,
       nowMillis,
@@ -62,7 +60,7 @@ function isTokenExpired(token: string, bufferSeconds = 30): boolean {
     // Check if the token is expired, including the buffer
     return isExpired;
   } catch (error) {
-    logger.error('❌ [OAuth] Error decoding token:', error instanceof Error ? error : new Error(String(error)));
+    console.error('Error decoding token:', error);
     return true; // If we can't parse it, assume it's expired/invalid
   }
 }
@@ -140,7 +138,7 @@ export async function auth(
     authorizationServerUrl = resourceMetadata.authorization_servers[0];
   }
 
-  logger.debug('🔐 [OAuth] Resource metadata', { service: 'OAuth', resourceMetadata });
+  console.log('resourceMetadata', resourceMetadata);
 
   // ... rest of your function unchanged ...
   const resource: URL | undefined = await selectResourceURL(
@@ -148,14 +146,14 @@ export async function auth(
     provider,
     resourceMetadata,
   );
-  logger.debug('🔐 [OAuth] Resource URL', { service: 'OAuth', resource: resource?.toString() });
+  console.log('resource', resource?.toString());
 
   // 1. First, try to get metadata from our DB cache.
   let metadata: OAuthMetadata | undefined = await provider.serverMetadata();
 
   // 2. If it's a cache miss, discover it from the network.
   if (!metadata) {
-    logger.debug('🔐 [OAuth] No cached metadata found, discovering from network', { service: 'OAuth' });
+    console.log('No cached metadata found, discovering from network...');
     try {
       const discoveredMetadata = await discoverAuthorizationServerMetadata(
         authorizationServerUrl,

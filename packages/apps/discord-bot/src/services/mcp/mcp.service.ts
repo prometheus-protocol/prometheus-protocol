@@ -1031,19 +1031,11 @@ export class MCPService {
 
         // Try to get the server_url from the registry based on server_id
         try {
-          logger.debug('📝 [MCPService] Registry service lookup', {
-            service: 'MCPService',
-            registryServiceAvailable: !!this.registryService,
-            serverId: dbConn.server_id
-          });
+          console.log('REGISTRY SERVICE:', this.registryService);
           const serverInfo = await this.registryService?.getServerById(
             dbConn.server_id,
           );
-          logger.debug('📝 [MCPService] Server info from registry', {
-            service: 'MCPService',
-            found: !!serverInfo,
-            serverInfo: serverInfo
-          });
+          console.log('SERVER INFO:', serverInfo);
           if (serverInfo && serverInfo.url) {
             fixes.push(`Set server_url to: ${serverInfo.url}`);
 

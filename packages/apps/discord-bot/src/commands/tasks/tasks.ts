@@ -167,8 +167,7 @@ export class TasksCommand extends BaseCommand {
   async executeSlash(interaction: ChatInputCommandInteraction): Promise<void> {
     const subcommand = interaction.options.getSubcommand();
 
-    logger.info('🔍 [Tasks] Tasks executeSlash called', {
-      service: 'TasksCommand',
+    console.log('🔍 Tasks executeSlash called:', {
       interactionId: interaction.id,
       isDeferred: interaction.deferred,
       isReplied: interaction.replied,
@@ -180,9 +179,8 @@ export class TasksCommand extends BaseCommand {
       // Defer the reply since some operations might take time
       if (!interaction.deferred && !interaction.replied) {
         await interaction.deferReply();
-        logger.info(
-          `✅ [Tasks] Successfully deferred reply for interaction: ${interaction.id}`, 
-          { service: 'TasksCommand' }
+        console.log(
+          `✅ Successfully deferred reply for interaction: ${interaction.id}`,
         );
       }
 
@@ -476,7 +474,7 @@ export class TasksCommand extends BaseCommand {
 
       case 'delete': {
         const taskName = interaction.options.getString('task_name', true);
-        logger.debug('🗑️ [Tasks] DELETE DEBUG: Attempting to delete task', { service: 'TasksCommand', taskName });
+        console.log('🗑️ DELETE DEBUG: Attempting to delete task:', taskName);
 
         // Get task ID from name
         const taskId = await this.getTaskIdFromName(
@@ -484,10 +482,10 @@ export class TasksCommand extends BaseCommand {
           functionContext.userId,
           functionContext.username,
         );
-        logger.debug('🗑️ [Tasks] DELETE DEBUG: Found task ID', { service: 'TasksCommand', taskId });
+        console.log('🗑️ DELETE DEBUG: Found task ID:', taskId);
 
         if (!taskId) {
-          logger.debug('🗑️ [Tasks] DELETE DEBUG: Task not found', { service: 'TasksCommand' });
+          console.log('🗑️ DELETE DEBUG: Task not found');
           return {
             content: '',
             embeds: [
@@ -502,14 +500,13 @@ export class TasksCommand extends BaseCommand {
           };
         }
 
-        logger.debug('🗑️ [Tasks] DELETE DEBUG: Calling delete_task function', { service: 'TasksCommand' });
+        console.log('🗑️ DELETE DEBUG: Calling delete_task function...');
         const result = await this.taskFunctions.executeFunction(
           'delete_task',
           { task_id: taskId },
           functionContext,
         );
-        logger.debug('🗑️ [Tasks] DELETE DEBUG: Delete result', {
-          service: 'TasksCommand',
+        console.log('🗑️ DELETE DEBUG: Delete result:', {
           success: result.success,
           message: result.message,
         });
@@ -590,16 +587,15 @@ export class TasksCommand extends BaseCommand {
     username: string,
   ): Promise<string | null> {
     try {
-      logger.debug(
-        '🔍 [Tasks] TASK LOOKUP DEBUG: Looking for task name or ID',
-        { service: 'TasksCommand', taskNameOrId }
+      console.log(
+        '🔍 TASK LOOKUP DEBUG: Looking for task name or ID:',
+        taskNameOrId,
       );
 
       // Check if input looks like a task ID (contains userId prefix)
       if (taskNameOrId.startsWith(userId + '_')) {
-        logger.debug(
-          '🔍 [Tasks] TASK LOOKUP DEBUG: Input appears to be a task ID, returning as-is',
-          { service: 'TasksCommand' }
+        console.log(
+          '🔍 TASK LOOKUP DEBUG: Input appears to be a task ID, returning as-is',
         );
         return taskNameOrId;
       }
@@ -612,24 +608,21 @@ export class TasksCommand extends BaseCommand {
       );
 
       if (!result.success || !result.data?.tasks) {
-        logger.debug('🔍 [Tasks] TASK LOOKUP DEBUG: No tasks found or error', { service: 'TasksCommand' });
+        console.log('🔍 TASK LOOKUP DEBUG: No tasks found or error');
         return null;
       }
 
-      logger.debug(
-        '🔍 [Tasks] TASK LOOKUP DEBUG: Available tasks',
-        { 
-          service: 'TasksCommand',
-          tasks: result.data.tasks.map((t: any) => ({
-            id: t.id,
-            description: t.description,
-          }))
-        }
+      console.log(
+        '🔍 TASK LOOKUP DEBUG: Available tasks:',
+        result.data.tasks.map((t: any) => ({
+          id: t.id,
+          description: t.description,
+        })),
       );
       const task = result.data.tasks.find(
         (t: any) => t.description === taskNameOrId,
       );
-      logger.debug('🔍 [Tasks] TASK LOOKUP DEBUG: Found matching task', { service: 'TasksCommand', task });
+      console.log('🔍 TASK LOOKUP DEBUG: Found matching task:', task);
       return task ? task.id : null;
     } catch (error) {
       return null;
@@ -639,13 +632,13 @@ export class TasksCommand extends BaseCommand {
   async handleAutocomplete(
     interaction: AutocompleteInteraction,
   ): Promise<void> {
-    logger.debug('🎯 [Tasks] Tasks autocomplete handler called', { service: 'TasksCommand' });
+    console.log('🎯 TASKS AUTOCOMPLETE HANDLER CALLED');
     const focusedOption = interaction.options.getFocused(true);
-    logger.debug('🎯 [Tasks] Focused option', { service: 'TasksCommand', focusedOption });
+    console.log('🎯 FOCUSED OPTION:', focusedOption);
 
     try {
       if (focusedOption.name === 'task_name') {
-        logger.debug('🎯 [Tasks] Fetching tasks for autocomplete', { service: 'TasksCommand' });
+        console.log('🎯 FETCHING TASKS FOR AUTOCOMPLETE...');
         // Get user's tasks for autocomplete
         const result = await this.taskFunctions.executeFunction(
           'list_user_tasks',
@@ -661,8 +654,7 @@ export class TasksCommand extends BaseCommand {
           },
         );
 
-        logger.debug('🎯 [Tasks] Task function result', {
-          service: 'TasksCommand',
+        console.log('🎯 TASK FUNCTION RESULT:', {
           success: result.success,
           hasData: !!result.data,
           taskCount: result.data?.tasks?.length || 0,
@@ -673,7 +665,7 @@ export class TasksCommand extends BaseCommand {
         if (result.success && result.data?.tasks) {
           // Get the subcommand to filter tasks appropriately
           const subcommand = interaction.options.getSubcommand();
-          logger.debug('🎯 [Tasks] Subcommand for filtering', { service: 'TasksCommand', subcommand });
+          console.log('🎯 SUBCOMMAND FOR FILTERING:', subcommand);
 
           choices = result.data.tasks
             .filter((task: any) => {
@@ -724,15 +716,15 @@ export class TasksCommand extends BaseCommand {
             });
         }
 
-        logger.debug('🎯 [Tasks] Autocomplete choices count', { service: 'TasksCommand', count: choices.length });
+        console.log('🎯 AUTOCOMPLETE CHOICES:', choices.length);
         await interaction.respond(choices);
-        logger.debug('🎯 [Tasks] Autocomplete response sent', { service: 'TasksCommand' });
+        console.log('🎯 AUTOCOMPLETE RESPONSE SENT');
       } else {
-        logger.debug('🎯 [Tasks] Non-task_name option, responding with empty', { service: 'TasksCommand' });
+        console.log('🎯 NON-TASK_NAME OPTION, RESPONDING WITH EMPTY');
         await interaction.respond([]);
       }
     } catch (error) {
-      logger.error('❌ [Tasks] Error in autocomplete:', error instanceof Error ? error : new Error(String(error)));
+      console.error('🎯 ERROR IN AUTOCOMPLETE:', error);
       await interaction.respond([]);
     }
   }

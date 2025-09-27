@@ -14,7 +14,6 @@ import { MCPService } from './services/mcp/index.js';
 import { DiscordNotificationService } from './services/discord-notification.service.js';
 import { MCPEventService } from './services/event-emitter.service.js';
 import { ConnectionPoolService } from './services/connections.js';
-import logger from './utils/logger.js';
 import { MCPCoordinatorService } from './services/mcp-coordinator.service.js';
 import { RegistryService } from './services/registry.service.js';
 import { CommandContext } from './types/index.js';
@@ -103,65 +102,64 @@ class DiscordBot {
     // Add comprehensive event logging
     this.client.on('debug', (info) => {
       if (info.includes('interaction') || info.includes('command')) {
-        logger.debug('🐛 [Discord] Debug info', { service: 'DiscordBot', info });
+        console.log('🐛 DEBUG:', info);
       }
     });
 
-    this.client.on('warn', (warning) => logger.warn('⚠️ [Discord] Warning', { service: 'DiscordBot', warning }));
-    this.client.on('error', (error) => logger.error('❌ [Discord] Error:', error));
+    this.client.on('warn', console.warn);
+    this.client.on('error', console.error);
 
     this.client.on(Events.ClientReady, async () => {
       if (this.client.user) {
-        logger.info(`✅ Bot logged in as ${this.client.user.tag}!`);
-        logger.info(`🤖 Bot ID: ${this.client.user.id}`);
-        logger.info(
+        console.log(`✅ Bot logged in as ${this.client.user.tag}!`);
+        console.log(`🤖 Bot ID: ${this.client.user.id}`);
+        console.log(
           `🔗 Invite URL: https://discord.com/api/oauth2/authorize?client_id=${this.client.user.id}&permissions=2147483648&scope=bot%20applications.commands`,
         );
 
         // Log gateway connection info
-        logger.info(`🌐 Gateway URL: ${this.client.ws.gateway}`);
-        logger.info(`🔗 Connected to ${this.client.guilds.cache.size} guilds`);
+        console.log(`🌐 Gateway URL: ${this.client.ws.gateway}`);
+        console.log(`🔗 Connected to ${this.client.guilds.cache.size} guilds`);
 
         // List guilds for debugging
         this.client.guilds.cache.forEach((guild) => {
-          logger.info(`📍 Guild: ${guild.name} (${guild.id})`);
+          console.log(`📍 Guild: ${guild.name} (${guild.id})`);
         });
 
         // Get current MCP tools available for chat
         const mcpTools = await this.mcpService.getAvailableTools('system');
-        logger.info(`🤖 AI Chat available with ${mcpTools.length} MCP tools`);
-        logger.info(`⚡ Task management available via /tasks command`);
+        console.log(`🤖 AI Chat available with ${mcpTools.length} MCP tools`);
+        console.log(`⚡ Task management available via /tasks command`);
 
         // Check MCP system status
         try {
           const mcpStatus = await this.mcpService.getSystemStatus();
-          logger.info(
+          console.log(
             `🔌 MCP Registry: ${mcpStatus.registryConnected ? 'Connected' : 'Disconnected'}`,
           );
-          logger.info(`🌐 Available MCP Servers: ${mcpStatus.totalServers}`);
+          console.log(`🌐 Available MCP Servers: ${mcpStatus.totalServers}`);
         } catch (error) {
-          logger.error('⚠️ [Bot] MCP system initialization error:', error instanceof Error ? error : new Error(String(error)));
+          console.error('⚠️ MCP system initialization error:', error);
         }
 
         // Start scheduler with alert loading
         try {
           await this.scheduler.start();
         } catch (error) {
-          logger.error('⚠️ [Bot] Scheduler initialization error:', error instanceof Error ? error : new Error(String(error)));
+          console.error('⚠️ Scheduler initialization error:', error);
         }
 
         // Reestablish persistent MCP connections
         try {
           await this.mcpService.reestablishPersistentConnections();
         } catch (error) {
-          logger.error('⚠️ [Bot] MCP connection reestablishment error:', error instanceof Error ? error : new Error(String(error)));
+          console.error('⚠️ MCP connection reestablishment error:', error);
         }
       }
     });
 
     this.client.on(Events.InteractionCreate, async (interaction) => {
-      logger.debug('🔔 [Bot] Interaction received', {
-        service: 'DiscordBot',
+      console.log('🔔 INTERACTION RECEIVED:', {
         type: interaction.type,
         isSlash: interaction.isChatInputCommand(),
         isAutocomplete: interaction.isAutocomplete(),
@@ -170,8 +168,8 @@ class DiscordBot {
             ? interaction.commandName
             : 'N/A',
         userId: interaction.user.id,
-        guildId: interaction.guildId || undefined,
-        channelId: interaction.channelId || undefined,
+        guildId: interaction.guildId,
+        channelId: interaction.channelId,
         isDM: !interaction.guildId, // Flag DM interactions
       });
 
