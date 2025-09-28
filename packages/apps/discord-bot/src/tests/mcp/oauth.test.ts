@@ -261,6 +261,9 @@ describe('auth function', () => {
         .fn()
         .mockResolvedValue(mockServerMetadata);
       mockProvider.tokens = vi.fn().mockResolvedValue(mockTokens);
+      mockProvider.clientInformation = vi
+        .fn()
+        .mockResolvedValue(mockClientInfo);
 
       const result = await auth(mockProvider, {
         serverUrl: 'https://api.example.com',
@@ -277,6 +280,9 @@ describe('auth function', () => {
       mockProvider.serverMetadata = vi.fn().mockResolvedValue(undefined);
       mockProvider.saveServerMetadata = vi.fn();
       mockProvider.tokens = vi.fn().mockResolvedValue(mockTokens);
+      mockProvider.clientInformation = vi
+        .fn()
+        .mockResolvedValue(mockClientInfo);
 
       vi.mocked(authSdk.discoverAuthorizationServerMetadata).mockResolvedValue(
         mockServerMetadata,
@@ -326,6 +332,9 @@ describe('auth function', () => {
 
     it('should return AUTHORIZED when valid tokens exist', async () => {
       mockProvider.tokens = vi.fn().mockResolvedValue(mockTokens);
+      mockProvider.clientInformation = vi
+        .fn()
+        .mockResolvedValue(mockClientInfo);
 
       const result = await auth(mockProvider, {
         serverUrl: 'https://api.example.com',
