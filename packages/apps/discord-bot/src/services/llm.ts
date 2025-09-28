@@ -79,7 +79,7 @@ export class OpenAIProvider implements LLMProvider {
   ): Promise<string | AIFunctionCall[]> {
     // Build the initial message list
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-      { role: 'system', content: this.getSystemPrompt(functions) },
+      { role: 'system', content: this.getSystemPrompt() },
     ];
     if (context?.history) {
       messages.push(
@@ -106,7 +106,7 @@ export class OpenAIProvider implements LLMProvider {
     return choice.message.content || 'Sorry, I could not generate a response.';
   }
 
-  private getSystemPrompt(functions?: AIFunction[]): string {
+  private getSystemPrompt(): string {
     let basePrompt = `You are an AI assistant for Prometheus Protocol Discord. You help users interact with their connected MCP (Model Context Protocol) tools and servers.
 
 Key Capabilities:
@@ -114,18 +114,12 @@ Key Capabilities:
 - Execute tool functions to retrieve information and perform actions
 - Provide helpful responses based on available information and tool results
 
-For monitoring and task management, users should use the dedicated \`/tasks\` command.
-
 You can help users by:
 - Using their connected MCP tools to get information
 - Answering questions based on tool results
 - Explaining what tools are available and how to use them
 
 Available MCP tools depend on what servers the user has connected via \`/mcp connect\`.`;
-
-    if (functions && functions.length > 0) {
-      basePrompt += `\n\nAvailable functions: ${functions.map((f) => f.name).join(', ')}`;
-    }
 
     return basePrompt;
   }
@@ -176,11 +170,10 @@ export class LLMService {
     if (statusCallback) {
       await statusCallback('Loading your connected tools...');
     }
-    const allFunctions = await this.getAllFunctions(userId, functions);
 
     // 2. Initialize conversation history
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-      { role: 'system', content: this.getSystemPrompt(allFunctions) },
+      { role: 'system', content: this.getSystemPrompt() },
     ];
     if (context?.history) {
       messages.push(
@@ -192,7 +185,7 @@ export class LLMService {
     }
     messages.push({ role: 'user', content: prompt });
 
-    const maxIterations = 5; // Safety break
+    const maxIterations = 10; // Safety break
 
     for (let i = 0; i < maxIterations; i++) {
       llmLogger.info(`Tool loop iteration ${i + 1}/${maxIterations}`, {
@@ -202,12 +195,11 @@ export class LLMService {
       try {
         // 3. Call the LLM with the current conversation history
         if (statusCallback) {
-          await statusCallback(i === 0 ? 'Thinking...' : `Continuing analysis (step ${i + 1})...`);
+          await statusCallback(
+            i === 0 ? 'Thinking...' : `Continuing analysis (step ${i + 1})...`,
+          );
         }
-        const choice = await this.provider.generateChatCompletion(
-          messages,
-          allFunctions,
-        );
+        const choice = await this.provider.generateChatCompletion(messages);
         const assistantMessage = choice.message;
         messages.push(assistantMessage); // Add assistant's response to history
 
@@ -235,10 +227,13 @@ export class LLMService {
         );
 
         if (statusCallback) {
-          const toolNames = assistantMessage.tool_calls.map(tc => tc.function.name);
-          const toolList = toolNames.length > 3 
-            ? `${toolNames.slice(0, 3).join(', ')} and ${toolNames.length - 3} more`
-            : toolNames.join(', ');
+          const toolNames = assistantMessage.tool_calls.map(
+            (tc) => tc.function.name,
+          );
+          const toolList =
+            toolNames.length > 3
+              ? `${toolNames.slice(0, 3).join(', ')} and ${toolNames.length - 3} more`
+              : toolNames.join(', ');
           await statusCallback(`Executing tools: ${toolList}...`);
         }
 
