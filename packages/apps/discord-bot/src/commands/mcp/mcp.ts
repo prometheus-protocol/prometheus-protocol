@@ -436,40 +436,6 @@ export class MCPCommand extends BaseCommand {
             `✅ Successfully connected to **${connection.server_name}**!\n` +
             `Use \`/mcp tools\` to see what you can do.`,
         };
-      } else if (connection.status === 'auth-required') {
-        const authUrl = (connection as any).auth_url;
-        if (authUrl) {
-          return {
-            content: '',
-            embeds: [
-              new EmbedBuilder()
-                .setTitle('🔐 Authorization Needed')
-                .setDescription(
-                  `You still need to authorize **${connection.server_name}** before tools can be used.\n\n` +
-                    `**Next Steps:**\n` +
-                    `• Click the button below to authorize access.\n` +
-                    `• Complete the sign-in / consent flow.\n` +
-                    `• Then run \`/mcp connect ${serverId}\` again.\n\n`,
-                )
-                .setColor(0xff9500)
-                .setFooter({
-                  text: 'OAuth flow in progress – callback & token persistence coming soon.',
-                }),
-            ],
-            components: [
-              new ActionRowBuilder<ButtonBuilder>().addComponents(
-                new ButtonBuilder()
-                  .setStyle(ButtonStyle.Link)
-                  .setLabel('Authorize Access')
-                  .setURL(authUrl),
-              ),
-            ],
-          };
-        } else {
-          return {
-            content: `🔐 Authorization required for **${connection.server_name}**. Awaiting authorization URL (try again shortly) then rerun \`/mcp connect ${serverId}\`.`,
-          };
-        }
       } else {
         return {
           content: `❌ Failed to connect to server: ${connection.error_message || 'Unknown error'}`,

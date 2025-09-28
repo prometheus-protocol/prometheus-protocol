@@ -136,6 +136,7 @@ export interface DatabaseService {
   getOAuthTokens(
     serverId: string,
     userId: string,
+    requestingUserId?: string,
   ): Promise<null | {
     server_id: string;
     user_id: string;
@@ -193,7 +194,12 @@ export interface SavedMCPConnection {
   server_id: string;
   server_name: string;
   server_url: string;
-  status: 'connected' | 'disconnected' | 'error' | 'auth-required' | 'DISCONNECTED_BY_USER';
+  status:
+    | 'connected'
+    | 'disconnected'
+    | 'error'
+    | 'auth-required'
+    | 'DISCONNECTED_BY_USER';
   tools: string; // JSON string of MCPTool[]
   error_message?: string | null;
   connected_at?: Date | null;

@@ -9,6 +9,7 @@ import {
   AlertConfig,
 } from '../types/index.js';
 import { dbLogger } from '../utils/logger.js';
+import { oauthSecurityService } from './oauth-security.service.js';
 
 export class SupabaseService implements DatabaseService {
   private client: SupabaseClient;
@@ -527,16 +528,54 @@ export class SupabaseService implements DatabaseService {
     raw_tokens: any;
   }): Promise<void> {
     try {
-      // The data to be inserted or updated
+      // Validate tokens before encrypting
+      const accessTokenValidation = oauthSecurityService.validateToken(
+        tokens.access_token,
+      );
+      if (!accessTokenValidation.isValid) {
+        throw new Error(
+          `Invalid access token: ${accessTokenValidation.reason}`,
+        );
+      }
+
+      if (tokens.refresh_token) {
+        const refreshTokenValidation = oauthSecurityService.validateToken(
+          tokens.refresh_token,
+        );
+        if (!refreshTokenValidation.isValid) {
+          throw new Error(
+            `Invalid refresh token: ${refreshTokenValidation.reason}`,
+          );
+        }
+      }
+
+      // Check rate limiting
+      const rateLimitCheck = oauthSecurityService.checkRateLimit(
+        tokens.user_id,
+        'token_save',
+      );
+      if (!rateLimitCheck.allowed) {
+        throw new Error('Rate limit exceeded for token operations');
+      }
+
+      // Encrypt sensitive tokens before storing
+      const encryptedAccessToken = oauthSecurityService.encryptToken(
+        tokens.access_token,
+      );
+      const encryptedRefreshToken = tokens.refresh_token
+        ? oauthSecurityService.encryptToken(tokens.refresh_token)
+        : null;
+
+      // The data to be inserted or updated (with encrypted tokens)
       const tokenData = {
         server_id: tokens.server_id,
         user_id: tokens.user_id,
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token || null,
+        access_token: encryptedAccessToken,
+        refresh_token: encryptedRefreshToken,
         expires_at: tokens.expires_at ? tokens.expires_at.toISOString() : null,
         scope: tokens.scope || null,
         token_type: tokens.token_type || null,
-        raw_tokens: tokens.raw_tokens,
+        raw_tokens: tokens.raw_tokens, // Note: Consider encrypting this too if it contains sensitive data
         updated_at: new Date().toISOString(),
       };
 
@@ -552,9 +591,22 @@ export class SupabaseService implements DatabaseService {
         throw error;
       }
 
-      dbLogger.info(`✅ [DB] Successfully saved OAuth tokens for:`, {
+      // Audit log the token save operation
+      oauthSecurityService.auditLog(
+        'SAVE_TOKENS',
+        tokens.user_id,
+        tokens.server_id,
+        {
+          hasRefreshToken: !!tokens.refresh_token,
+          expiresAt: tokens.expires_at?.toISOString(),
+          scope: tokens.scope,
+        },
+      );
+
+      dbLogger.info(`✅ [DB] Successfully saved encrypted OAuth tokens for:`, {
         server_id: tokens.server_id,
-        user_id: tokens.user_id,
+        user_id: tokens.user_id.substring(0, 8) + '...', // Partially redact user ID
+        hasRefreshToken: !!tokens.refresh_token,
       });
     } catch (error) {
       dbLogger.error(
@@ -565,33 +617,161 @@ export class SupabaseService implements DatabaseService {
     }
   }
 
-  async getOAuthTokens(serverId: string, userId: string) {
-    const { data, error } = await this.client
-      .from('oauth_tokens')
-      .select('*')
-      .eq('server_id', serverId)
-      .eq('user_id', userId)
-      .limit(1)
-      .single();
-    if (error || !data) return null;
-    return {
-      server_id: data.server_id,
-      user_id: data.user_id,
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-      expires_at: data.expires_at ? new Date(data.expires_at) : null,
-      scope: data.scope,
-      token_type: data.token_type,
-      raw_tokens: data.raw_tokens,
-    };
+  async getOAuthTokens(
+    serverId: string,
+    userId: string,
+    requestingUserId?: string,
+  ) {
+    try {
+      // Validate ownership if requesting user is provided
+      if (
+        requestingUserId &&
+        !oauthSecurityService.validateTokenOwnership(
+          serverId,
+          userId,
+          requestingUserId,
+        )
+      ) {
+        oauthSecurityService.auditLog(
+          'UNAUTHORIZED_TOKEN_ACCESS',
+          requestingUserId,
+          serverId,
+          {
+            targetUserId: userId,
+          },
+        );
+        throw new Error('Unauthorized: Cannot access tokens for another user');
+      }
+
+      // Check rate limiting
+      const rateLimitCheck = oauthSecurityService.checkRateLimit(
+        userId,
+        'token_retrieve',
+      );
+      if (!rateLimitCheck.allowed) {
+        throw new Error('Rate limit exceeded for token operations');
+      }
+
+      const { data, error } = await this.client
+        .from('oauth_tokens')
+        .select('*')
+        .eq('server_id', serverId)
+        .eq('user_id', userId)
+        .limit(1)
+        .single();
+
+      if (error || !data) {
+        return null;
+      }
+
+      // Decrypt the tokens before returning
+      let decryptedAccessToken: string;
+      let decryptedRefreshToken: string | null = null;
+
+      try {
+        decryptedAccessToken = oauthSecurityService.decryptToken(
+          data.access_token,
+        );
+        if (data.refresh_token) {
+          decryptedRefreshToken = oauthSecurityService.decryptToken(
+            data.refresh_token,
+          );
+        }
+      } catch (decryptionError) {
+        dbLogger.error(
+          'Failed to decrypt OAuth tokens - they may be corrupted, cleaning up old tokens',
+          new Error('Token decryption failed'),
+          {
+            service: 'SupabaseService',
+            server_id: serverId,
+            user_id: userId.substring(0, 8) + '...',
+          },
+        );
+        // Audit log the decryption failure
+        oauthSecurityService.auditLog(
+          'TOKEN_DECRYPTION_FAILED',
+          userId,
+          serverId,
+        );
+
+        // Clean up corrupted tokens to allow fresh authentication
+        try {
+          await this.client
+            .from('oauth_tokens')
+            .delete()
+            .eq('server_id', serverId)
+            .eq('user_id', userId);
+          dbLogger.info(
+            '🧹 Cleaned up corrupted OAuth tokens for fresh authentication',
+            {
+              service: 'SupabaseService',
+              server_id: serverId,
+              user_id: userId.substring(0, 8) + '...',
+            },
+          );
+        } catch (cleanupError) {
+          dbLogger.error(
+            'Failed to cleanup corrupted tokens:',
+            cleanupError instanceof Error
+              ? cleanupError
+              : new Error(String(cleanupError)),
+          );
+        }
+
+        return null;
+      }
+
+      // Note: Replay protection is handled during authentication, not retrieval
+      // Normal token retrievals during MCP operations are expected and safe
+
+      // Audit log successful token retrieval
+      oauthSecurityService.auditLog('RETRIEVE_TOKENS', userId, serverId);
+
+      return {
+        server_id: data.server_id,
+        user_id: data.user_id,
+        access_token: decryptedAccessToken,
+        refresh_token: decryptedRefreshToken,
+        expires_at: data.expires_at ? new Date(data.expires_at) : null,
+        scope: data.scope,
+        token_type: data.token_type,
+        raw_tokens: data.raw_tokens,
+      };
+    } catch (error) {
+      dbLogger.error(
+        'Error retrieving OAuth tokens:',
+        error instanceof Error ? error : new Error(String(error)),
+      );
+      throw error;
+    }
   }
 
   async deleteOAuthTokens(serverId: string, userId: string): Promise<void> {
-    await this.client
-      .from('oauth_tokens')
-      .delete()
-      .eq('server_id', serverId)
-      .eq('user_id', userId);
+    try {
+      // Audit log the token deletion
+      oauthSecurityService.auditLog('DELETE_TOKENS', userId, serverId);
+
+      const { error } = await this.client
+        .from('oauth_tokens')
+        .delete()
+        .eq('server_id', serverId)
+        .eq('user_id', userId);
+
+      if (error) {
+        throw error;
+      }
+
+      dbLogger.info('✅ [DB] Successfully deleted OAuth tokens', {
+        server_id: serverId,
+        user_id: userId.substring(0, 8) + '...',
+      });
+    } catch (error) {
+      dbLogger.error(
+        'Error deleting OAuth tokens:',
+        error instanceof Error ? error : new Error(String(error)),
+      );
+      throw error;
+    }
   }
 
   // === OAuth Client Information ===
@@ -1033,7 +1213,10 @@ export class SupabaseService implements DatabaseService {
     };
 
     // Add error message if it's a failed connection
-    if ((dbStatus === 'error' || dbStatus === 'disconnected') && metadata?.lastFailureError) {
+    if (
+      (dbStatus === 'error' || dbStatus === 'disconnected') &&
+      metadata?.lastFailureError
+    ) {
       connectionData.error_message = metadata.lastFailureError;
     }
 
@@ -1041,7 +1224,7 @@ export class SupabaseService implements DatabaseService {
       .from('mcp_connections')
       .upsert(connectionData, {
         onConflict: 'user_id,server_id',
-        ignoreDuplicates: false
+        ignoreDuplicates: false,
       })
       .select();
 
@@ -1050,10 +1233,10 @@ export class SupabaseService implements DatabaseService {
       throw error;
     }
 
-    dbLogger.info(`🔗 [DB] Connection status upserted successfully`, { 
+    dbLogger.info(`🔗 [DB] Connection status upserted successfully`, {
       rowsAffected: data ? data.length : 0,
       serverId: mcpServerConfigId,
-      status: dbStatus
+      status: dbStatus,
     });
   }
 
