@@ -71,6 +71,8 @@ const daoIdentity: Identity = createIdentity('dao-principal');
 const developerIdentity: Identity = createIdentity('developer-principal');
 const auditorIdentity: Identity = createIdentity('auditor-principal');
 const unauthorizedUser: Identity = createIdentity('unauthorized-user');
+// --- NEW: An identity for a regular user provisioning an instance ---
+const endUserIdentity: Identity = createIdentity('end-user-principal');
 
 // --- EXPANDED SETUP FUNCTION ---
 async function setupEnvironment(pic: PocketIc) {
@@ -703,4 +705,264 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       expect(balanceAfter).toBeLessThanOrEqual(managedCanisterBalanceBefore);
     });
   });
+
+  describe('Provisioned Instance Provisioning', () => {
+    let pic: PocketIc;
+    let orchestratorActor: Actor<OrchestratorService>;
+    let orchestratorCanisterId: Principal;
+    let registryActor: Actor<RegistryService>;
+    let auditHubActor: Actor<AuditHubService>;
+    let wasmId: string;
+
+    const globalNamespace = 'com.test.global-server';
+    const provisionedNamespace = 'com.test.private-vault';
+    const buildReproTokenId = 'build_reproducibility_v1';
+
+    beforeAll(async () => {
+      pic = await PocketIc.create(inject('PIC_URL'));
+      const env = await setupEnvironment(pic);
+      orchestratorActor = env.orchestratorActor;
+      orchestratorCanisterId = env.orchestratorCanisterId;
+      registryActor = env.registryActor;
+      auditHubActor = env.auditHubActor;
+
+      // --- Configure inter-canister dependencies ---
+      registryActor.setIdentity(daoIdentity);
+      await registryActor.set_auditor_credentials_canister_id(
+        env.auditHubCanisterId,
+      );
+      orchestratorActor.setIdentity(daoIdentity);
+      await orchestratorActor.set_mcp_registry_id(env.registryCanisterId);
+
+      auditHubActor.setIdentity(daoIdentity);
+      await auditHubActor.set_stake_requirement(buildReproTokenId, 50n);
+      await auditHubActor.mint_tokens(
+        auditorIdentity.getPrincipal(),
+        buildReproTokenId,
+        100n,
+      );
+
+      // --- Setup a verified WASM to be used by both app types ---
+      const wasmBytes = fs.readFileSync(MCP_SERVER_DUMMY_WASM_PATH);
+      const wasmHash = createHash('sha256').update(wasmBytes).digest();
+      wasmId = Buffer.from(wasmHash).toString('hex');
+
+      // --- 1. SETUP MULTI-TENANT (GLOBAL) APP ---
+      registryActor.setIdentity(developerIdentity);
+      await registryActor.icrc118_create_canister_type([
+        {
+          canister_type_namespace: globalNamespace,
+          controllers: [[developerIdentity.getPrincipal()]],
+          canister_type_name: 'Global Server',
+          description: '',
+          repo: '',
+          metadata: [],
+          forked_from: [],
+        },
+      ]);
+      await registryActor.icrc118_update_wasm({
+        canister_type_namespace: globalNamespace,
+        version_number: [0n, 0n, 1n],
+        expected_hash: wasmHash,
+        expected_chunks: [wasmHash],
+        // ... other fields
+        previous: [],
+        metadata: [],
+        repo: '',
+        description: '',
+      });
+      await registryActor.icrc118_upload_wasm_chunk({
+        canister_type_namespace: globalNamespace,
+        version_number: [0n, 0n, 1n],
+        wasm_chunk: wasmBytes,
+        chunk_id: 0n,
+        expected_chunk_hash: wasmHash,
+      });
+      // Verify it, marking it as 'global'
+      await verifyWasm(registryActor, auditHubActor, wasmHash, {
+        Text: 'global',
+      });
+
+      // --- 2. SETUP PROVISIONED (PRIVATE) APP ---
+      registryActor.setIdentity(developerIdentity);
+      await registryActor.icrc118_create_canister_type([
+        {
+          canister_type_namespace: provisionedNamespace,
+          controllers: [[developerIdentity.getPrincipal()]],
+          canister_type_name: 'Private Vault',
+          description: '',
+          repo: '',
+          metadata: [],
+          forked_from: [],
+        },
+      ]);
+      await registryActor.icrc118_update_wasm({
+        canister_type_namespace: provisionedNamespace,
+        version_number: [0n, 0n, 1n],
+        expected_hash: wasmHash,
+        expected_chunks: [wasmHash],
+        // ... other fields
+        previous: [],
+        metadata: [],
+        repo: '',
+        description: '',
+      });
+      await registryActor.icrc118_upload_wasm_chunk({
+        canister_type_namespace: provisionedNamespace,
+        version_number: [0n, 0n, 1n],
+        wasm_chunk: wasmBytes,
+        chunk_id: 0n,
+        expected_chunk_hash: wasmHash,
+      });
+      // Verify it, marking it as 'provisioned'
+      await verifyWasm(registryActor, auditHubActor, wasmHash, {
+        Text: 'provisioned',
+      });
+    });
+
+    afterAll(async () => {
+      await pic.tearDown();
+    });
+
+    it('should allow a user to provision an instance of a provisioned app', async () => {
+      // Arrange: Use the end-user identity
+      orchestratorActor.setIdentity(endUserIdentity);
+
+      // Act: Call the new provisioning endpoint
+      const result = await orchestratorActor.provision_instance(
+        provisionedNamespace,
+        wasmId,
+      );
+
+      // Assert
+      expect(result).toHaveProperty('ok');
+      // @ts-ignore
+      const newCanisterId = result.ok;
+
+      // Assert controllers: should be the user AND the orchestrator
+      const controllers = await pic.getControllers(newCanisterId);
+      expect(controllers).toHaveLength(1);
+      expect(controllers).toContainEqual(orchestratorCanisterId);
+
+      // Assert tracking: orchestrator should now track this new canister
+      const canisterList =
+        await orchestratorActor.get_canisters(provisionedNamespace);
+      expect(canisterList).toHaveLength(1);
+      expect(canisterList[0]).toEqual(newCanisterId);
+    });
+
+    it('should allow the Orchestrator owner to deploy a shared instance of a global app', async () => {
+      // Arrange: Use the developer identity
+      orchestratorActor.setIdentity(daoIdentity);
+      const wasmHash = createHash('sha256')
+        .update(fs.readFileSync(MCP_SERVER_DUMMY_WASM_PATH))
+        .digest();
+
+      // Act: Call the standard deploy endpoint
+      const result = await orchestratorActor.deploy_or_upgrade({
+        namespace: globalNamespace,
+        hash: wasmHash,
+        mode: { install: null },
+        args: [],
+        stop: false,
+        snapshot: false,
+        restart: false,
+        timeout: 0n,
+        parameters: [],
+      });
+
+      // Assert
+      expect(result).toHaveProperty('ok');
+      const canisterList =
+        await orchestratorActor.get_canisters(globalNamespace);
+      expect(canisterList).toHaveLength(1);
+    });
+
+    it('should REJECT developer deployment of a provisioned app via the standard endpoint', async () => {
+      // Arrange: Use the developer identity
+      orchestratorActor.setIdentity(developerIdentity);
+      const wasmHash = createHash('sha256')
+        .update(fs.readFileSync(MCP_SERVER_DUMMY_WASM_PATH))
+        .digest();
+
+      const initialCanisterList =
+        await orchestratorActor.get_canisters(provisionedNamespace);
+
+      // Act: Attempt to deploy a provisioned app as if it were global
+      const result = await orchestratorActor.deploy_or_upgrade({
+        namespace: provisionedNamespace,
+        hash: wasmHash,
+        mode: { install: null },
+        args: [],
+        stop: false,
+        snapshot: false,
+        restart: false,
+        timeout: 0n,
+        parameters: [],
+      });
+
+      // Assert: The call should fail because this endpoint is not for provisioning user instances
+      expect(result).toHaveProperty('err');
+      // @ts-ignore
+      expect(result.err).toMatch(
+        /Unauthorized: Only the owner can call this function./,
+      );
+
+      // Assert: No canister should have been created
+      const afteCanisterList =
+        await orchestratorActor.get_canisters(provisionedNamespace);
+      expect(afteCanisterList).toHaveLength(initialCanisterList.length);
+    });
+  });
+
+  // --- Helper function for WASM verification ---
+  async function verifyWasm(
+    registryActor: Actor<RegistryService>,
+    auditHubActor: Actor<AuditHubService>,
+    wasmHash: Uint8Array,
+    deploymentType: { Text: 'global' } | { Text: 'provisioned' },
+  ) {
+    const wasmId = Buffer.from(wasmHash).toString('hex');
+    if (await registryActor.is_wasm_verified(wasmId)) {
+      return;
+    }
+
+    registryActor.setIdentity(developerIdentity);
+    await registryActor.icrc126_verification_request({
+      wasm_hash: wasmHash,
+      repo: 'https://github.com/test/repo',
+      commit_hash: new Uint8Array([1]),
+      metadata: [],
+    });
+
+    registryActor.setIdentity(daoIdentity);
+    const createResult = await registryActor.icrc127_create_bounty({
+      challenge_parameters: {
+        Map: [['wasm_hash', { Blob: wasmHash }]],
+      },
+      timeout_date: BigInt(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      start_date: [],
+      bounty_id: [],
+      validation_canister_id: registryCanisterId,
+      bounty_metadata: [],
+    });
+    const bountyId = ('Ok' in createResult && createResult.Ok.bounty_id) || 0n;
+
+    auditHubActor.setIdentity(auditorIdentity);
+    await auditHubActor.reserve_bounty(bountyId, 'build_reproducibility_v1');
+
+    registryActor.setIdentity(auditorIdentity);
+    const attestRes = await registryActor.icrc126_file_attestation({
+      wasm_id: wasmId,
+      metadata: [
+        ['126:audit_type', { Text: 'build_reproducibility_v1' }],
+        ['bounty_id', { Nat: bountyId }],
+        // This is the key part: injecting the deployment type during attestation
+        ['deployment_type', deploymentType],
+      ],
+    });
+    expect(attestRes).toHaveProperty('Ok');
+
+    expect(await registryActor.is_wasm_verified(wasmId)).toBe(true);
+  }
 });

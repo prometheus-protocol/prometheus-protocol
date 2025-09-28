@@ -442,6 +442,7 @@ type ICRC118WasmRegistryCanister =
    ///    *
    ///    * @returns A status message indicating how many apps were successfully indexed.
    bootstrap_search_index: () -> (Result_4);
+   can_install_wasm: (caller: principal, wasm_id: text) -> (bool) query;
    /// * Fetches and assembles all data for an app's detail page using its stable namespace.
    ///    * This is the single, powerful query the frontend needs.
    get_app_details_by_namespace: (namespace: text, opt_wasm_id: opt text) ->

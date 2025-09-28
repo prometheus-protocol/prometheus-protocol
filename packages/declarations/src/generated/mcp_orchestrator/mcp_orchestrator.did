@@ -262,7 +262,7 @@ type ICRC16 =
  };
 type ICRC120Canister = 
  service {
-   /// * The primary entry point for developers.
+   /// * The primary entry point for the owner to debug/fix bad installs.
    deploy_or_upgrade: (request: DeployOrUpgradeRequest) -> (Result_1);
    get_canisters: (namespace: text) -> (vec principal) query;
    /// * Returns the current configuration for the automated cycle top-up feature.
@@ -297,6 +297,7 @@ type ICRC120Canister =
    icrc3_supported_block_types: () -> (vec BlockType) query;
    /// * [INTERNAL] A privileged endpoint for the MCP Registry.
    internal_deploy_or_upgrade: (request: InternalDeployRequest) -> ();
+   provision_instance: (namespace: text, wasmId: text) -> (Result_1);
    /// * Sets the configuration for the automated cycle top-up feature.
    ///    * This function is restricted to the owner of the orchestrator canister.
    ///    * It will reschedule or remove the timer job based on the new settings.

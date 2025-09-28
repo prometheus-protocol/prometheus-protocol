@@ -652,6 +652,11 @@ export const idlFactory = ({ IDL }) => {
   const Result = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   const ICRC118WasmRegistryCanister = IDL.Service({
     'bootstrap_search_index' : IDL.Func([], [Result_4], []),
+    'can_install_wasm' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Bool],
+        ['query'],
+      ),
     'get_app_details_by_namespace' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
         [Result_3],

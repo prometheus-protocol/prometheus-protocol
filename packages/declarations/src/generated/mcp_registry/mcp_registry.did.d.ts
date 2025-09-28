@@ -288,6 +288,7 @@ export type GetWasmsFilter = { 'canister_type_namespace' : string } |
   { 'version_min' : [bigint, [] | [bigint], [] | [bigint]] };
 export interface ICRC118WasmRegistryCanister {
   'bootstrap_search_index' : ActorMethod<[], Result_4>,
+  'can_install_wasm' : ActorMethod<[Principal, string], boolean>,
   'get_app_details_by_namespace' : ActorMethod<
     [string, [] | [string]],
     Result_3

@@ -341,6 +341,40 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     _is_wasm_verified(wasm_id);
   };
 
+  public shared query func can_install_wasm(caller : Principal, wasm_id : Text) : async Bool {
+    // First, check if the wasm has been explicitly finalized as verified.
+    if (_is_wasm_verified(wasm_id)) {
+      return true;
+    };
+
+    // Next, check build attestation for 'deployment_type' value.
+    // if it is 'global', and this canister is the caller, allow installation.
+    // If it is 'provisioned', then the caller can be any authenticated principal.
+    let latest_audit_records = _get_audit_records_for_wasm(wasm_id);
+
+    let build_att = _find_attestation_by_type(latest_audit_records, "build_reproducibility_v1");
+    switch (build_att) {
+      case (?att) {
+        let deployment_type = Option.get(AppStore.getICRC16TextOptional(att.metadata, "deployment_type"), "global");
+        if (deployment_type == "global" and caller == thisPrincipal) {
+          return true;
+        } else if (deployment_type == "provisioned") {
+          return true;
+        } else {
+          // Unknown deployment type, do not allow installation.
+          return false;
+        };
+      };
+      case (null) {
+        /* build has not been reproduced */
+        return false;
+      };
+    };
+
+    // No final verification and no attestations means installation is not allowed.
+    return false;
+  };
+
   /**
    * @notice Fetches the single most recent attestation for each audit type for a given WASM.
    * @dev This function has been refactored to IGNORE the finalization log. In a reputation-

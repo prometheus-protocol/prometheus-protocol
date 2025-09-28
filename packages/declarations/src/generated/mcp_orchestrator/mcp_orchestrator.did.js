@@ -387,6 +387,7 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'internal_deploy_or_upgrade' : IDL.Func([InternalDeployRequest], [], []),
+    'provision_instance' : IDL.Func([IDL.Text, IDL.Text], [Result_1], []),
     'set_cycle_top_up_config' : IDL.Func([CycleTopUpConfig], [Result], []),
     'set_mcp_registry_id' : IDL.Func([IDL.Principal], [Result], []),
   });

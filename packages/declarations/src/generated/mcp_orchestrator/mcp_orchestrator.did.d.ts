@@ -145,6 +145,7 @@ export interface ICRC120Canister {
     [InternalDeployRequest],
     undefined
   >,
+  'provision_instance' : ActorMethod<[string, string], Result_1>,
   'set_cycle_top_up_config' : ActorMethod<[CycleTopUpConfig], Result>,
   'set_mcp_registry_id' : ActorMethod<[Principal], Result>,
 }
