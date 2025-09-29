@@ -63,6 +63,21 @@ const ServerDetailsSkeleton = () => (
             <div className="h-12 w-36 bg-muted rounded-lg" />
             <div className="h-10 w-32 bg-muted/50 rounded-lg" />
           </div>
+          {/* Connection info placeholder */}
+          <div className="mt-12 p-6 border border-muted rounded-lg bg-card/30">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-6">
+              <div className="flex-shrink-0">
+                <div className="w-16 h-16 rounded-full bg-muted" />
+              </div>
+              <div className="flex-grow space-y-2">
+                <div className="h-5 w-32 bg-muted rounded" />
+                <div className="h-4 w-64 bg-muted rounded" />
+              </div>
+              <div className="flex-shrink-0">
+                <div className="h-12 w-32 bg-muted rounded-lg" />
+              </div>
+            </div>
+          </div>
         </div>
         {/* Content sections */}
         <div className="h-64 bg-muted rounded-lg" /> {/* About Section */}
@@ -112,7 +127,7 @@ export default function ServerDetailsPage() {
     isError,
     refetch,
   } = useGetAppDetailsByNamespace(appId, wasmId);
-  const { data: canisterId } = useGetCanisterId(
+  const { data: canisterId, isLoading: isLoadingCanisterId } = useGetCanisterId(
     server?.namespace,
     server?.latestVersion.wasmId,
   );
@@ -121,7 +136,10 @@ export default function ServerDetailsPage() {
   // --- 4. PROVISION HOOK ---
   const provisionMutation = useProvisionInstance(server?.namespace);
 
-  if (isLoading) {
+  // Combine loading states - show skeleton until all critical data is loaded
+  const isLoadingAnyData = isLoading || (server && isLoadingCanisterId);
+
+  if (isLoadingAnyData) {
     return <ServerDetailsSkeleton />;
   }
   if (isError) {
