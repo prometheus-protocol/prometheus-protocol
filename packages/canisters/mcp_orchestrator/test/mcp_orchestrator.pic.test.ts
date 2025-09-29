@@ -932,7 +932,10 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       wasm_hash: wasmHash,
       repo: 'https://github.com/test/repo',
       commit_hash: new Uint8Array([1]),
-      metadata: [],
+      metadata: [
+        // This is the key part: injecting the deployment type during attestation
+        ['deployment_type', deploymentType],
+      ],
     });
 
     registryActor.setIdentity(daoIdentity);
@@ -957,8 +960,6 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       metadata: [
         ['126:audit_type', { Text: 'build_reproducibility_v1' }],
         ['bounty_id', { Nat: bountyId }],
-        // This is the key part: injecting the deployment type during attestation
-        ['deployment_type', deploymentType],
       ],
     });
     expect(attestRes).toHaveProperty('Ok');

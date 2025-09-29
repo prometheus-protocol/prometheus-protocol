@@ -898,6 +898,7 @@ type AppListing =
  record {
    banner_url: text;
    category: text;
+   deployment_type: text;
    description: text;
    icon_url: text;
    latest_version: AppVersionSummary;
@@ -911,6 +912,7 @@ type AppDetailsResponse =
    all_versions: vec AppVersionSummary;
    banner_url: text;
    category: text;
+   deployment_type: text;
    description: text;
    gallery_images: vec text;
    icon_url: text;

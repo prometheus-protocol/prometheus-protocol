@@ -2,14 +2,19 @@ import { useParams, Link } from 'react-router-dom';
 import NotFoundPage from './NotFoundPage';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, ShieldCheck, Wallet, Wrench } from 'lucide-react';
+import { ImageWithFallback } from '@/components/ui/image-with-fallback';
+import { cn } from '@/lib/utils';
+import { getTierInfo } from '@/lib/get-tier-info';
 
 // Component Imports
-import { ServerHeader } from '@/components/server-details/ServerHeader';
 import { SimilarApps } from '@/components/server-details/SimilarApps';
 import { ToolsAndResources } from '@/components/server-details/ToolsAndResources';
 import { DataSafetySection } from '@/components/server-details/DataSafetySection';
-import { ReviewsSection } from '@/components/server-details/ReviewsSection';
 import { AboutSection } from '@/components/server-details/AboutSection';
+import { ConnectionInfo } from '@/components/server-details/ConnectionInfo';
+import { StatsStrip } from '@/components/server-details/StatsStrip';
+import { ProvisionInstance } from '@/components/server-details/ProvisionInstance';
+import { MediaGallery } from '@/components/server-details/MediaGallery';
 import { useGetAppDetailsByNamespace } from '@/hooks/useAppStore';
 import { InstallDialog } from '@/components/server-details/InstallDialog';
 import {
@@ -28,41 +33,48 @@ import { CreateBountyDialog } from '@/components/server-details/CreateBountyDial
 import { AccessAndBilling } from '@/components/server-details/AccessAndBilling';
 import { SponsorPrompt } from '@/components/server-details/SponsorPrompt';
 import { VersionSelector } from '@/components/server-details/VersionSelector';
+import {
+  useGetCanisterId,
+  useProvisionInstance,
+} from '@/hooks/useOrchestrator';
+import { useGetAppMetrics } from '@/hooks/useUsageTracker';
 
 // --- NEW High-Fidelity Skeleton Component ---
 const ServerDetailsSkeleton = () => (
   <div className="w-full max-w-6xl mx-auto py-12 pb-32 animate-pulse">
-    {/* Header Skeleton */}
-    <div className="grid grid-cols-1 lg:grid-cols-5 gap-x-12 gap-y-8">
-      <div className="lg:col-span-3 space-y-8">
-        <div className="h-4 w-1/4 bg-muted rounded" /> {/* Breadcrumbs */}
-        <div className="h-10 w-3/4 bg-muted rounded" /> {/* Title */}
-        <div className="flex items-center gap-6">
-          <div className="w-11 h-11 rounded-md bg-muted/50" />
-          <div className="flex-1 space-y-2">
-            <div className="h-4 w-1/2 bg-muted/50 rounded" />
-            <div className="h-3 w-1/3 bg-muted/50 rounded" />
+    {/* Breadcrumbs */}
+    <div className="h-4 w-1/4 bg-muted rounded mb-8" />
+
+    {/* Split columns layout */}
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-x-16 gap-y-8">
+      {/* Left column */}
+      <div className="lg:col-span-3 space-y-16">
+        {/* Title and info */}
+        <div className="space-y-8">
+          <div className="h-10 w-3/4 bg-muted rounded" /> {/* Title */}
+          <div className="flex items-center gap-6">
+            <div className="w-11 h-11 rounded-md bg-muted/50" />
+            <div className="flex-1 space-y-2">
+              <div className="h-4 w-1/2 bg-muted/50 rounded" />
+              <div className="h-3 w-1/3 bg-muted/50 rounded" />
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-36 bg-muted rounded-lg" />
+            <div className="h-10 w-32 bg-muted/50 rounded-lg" />
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-36 bg-muted rounded-lg" />
-          <div className="h-10 w-32 bg-muted/50 rounded-lg" />
-        </div>
-      </div>
-      <div className="lg:col-span-2 mt-8">
-        <div className="aspect-video w-full bg-muted rounded-lg" />
-      </div>
-    </div>
-
-    {/* Body Skeleton */}
-    <div className="mt-12 grid grid-cols-1 lg:grid-cols-5 gap-x-12">
-      <div className="lg:col-span-3 space-y-16 mt-8">
+        {/* Content sections */}
         <div className="h-64 bg-muted rounded-lg" /> {/* About Section */}
         <div className="h-48 bg-muted rounded-lg" /> {/* Tools Section */}
       </div>
-      <aside className="lg:col-span-2 mt-8">
+
+      {/* Right column */}
+      <div className="lg:col-span-2 space-y-8">
+        <div className="aspect-video w-full bg-muted rounded-lg" />{' '}
+        {/* Gallery */}
         <div className="h-96 bg-muted rounded-lg" /> {/* Similar Apps */}
-      </aside>
+      </div>
     </div>
   </div>
 );
@@ -100,6 +112,14 @@ export default function ServerDetailsPage() {
     isError,
     refetch,
   } = useGetAppDetailsByNamespace(appId, wasmId);
+  const { data: canisterId } = useGetCanisterId(
+    server?.namespace,
+    server?.latestVersion.wasmId,
+  );
+  const { data: appMetrics } = useGetAppMetrics(canisterId);
+
+  // --- 4. PROVISION HOOK ---
+  const provisionMutation = useProvisionInstance(server?.namespace);
 
   if (isLoading) {
     return <ServerDetailsSkeleton />;
@@ -115,6 +135,13 @@ export default function ServerDetailsPage() {
   // This is the key to making the rest of the component readable.
   const { latestVersion, allVersions } = server;
 
+  // Get tier info for display
+  const tierInfo = getTierInfo(latestVersion.securityTier);
+
+  // Helper to determine if the app is the 'Provisioned' type
+  const isProvisionedApp =
+    server.deploymentType && server.deploymentType === 'provisioned';
+
   const isViewingArchivedVersion =
     allVersions.length > 0 && latestVersion.wasmId !== allVersions[0].wasmId;
 
@@ -124,6 +151,21 @@ export default function ServerDetailsPage() {
       setDialogState('confirm');
     } else {
       setDialogState('install');
+    }
+  };
+
+  const handleProvisionClick = async (namespace: string) => {
+    if (!server) return;
+
+    try {
+      const canisterId = await provisionMutation.mutateAsync({
+        namespace,
+        wasmId: server.latestVersion.wasmId,
+      });
+      console.log('Successfully provisioned canister:', canisterId.toText());
+    } catch (error) {
+      // Error is handled by the custom mutation hook
+      console.error('Provisioning failed:', error);
     }
   };
 
@@ -154,24 +196,95 @@ export default function ServerDetailsPage() {
     (bounty) => bounty.challengeParameters.audit_type === 'data_safety_v1',
   );
 
-  const acceptsPayments = latestVersion.tools.some((tool) => !!tool.cost);
-
-  const similarAppsTopMargin = !server.metrics ? 'mt-16' : 'mt-0';
-
   return (
     <>
       <div className="w-full max-w-6xl mx-auto pt-12 pb-32">
-        {/* --- 5. UPDATE PROPS PASSED TO CHILD COMPONENTS --- */}
+        {/* Breadcrumbs - stays at the top, full width */}
+        <nav className="text-sm text-muted-foreground mb-8">
+          <Link to="/" className="hover:underline">
+            Home
+          </Link>
+          <span className="mx-2">/</span>
+          <span className="text-gray-200">App Info</span>
+        </nav>
 
-        {/* ServerHeader and AboutSection take the whole object, as they use both stable and versioned data. */}
-        <ServerHeader
-          server={server}
-          onInstallClick={handleInstallClick}
-          isArchived={isViewingArchivedVersion}
-        />
-
+        {/* Split columns from here down */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-x-16 gap-y-8">
-          <main className="lg:col-span-3 space-y-16 mt-16">
+          {/* Left column - Main content */}
+          <main className="lg:col-span-3 space-y-16">
+            {/* App Title and Info */}
+            <div className="space-y-8">
+              <h1 className="text-4xl font-bold tracking-tight">
+                {server.name}
+              </h1>
+
+              <div className="flex flex-wrap items-center gap-y-6 gap-x-6">
+                {/* Publisher info */}
+                <div className="flex gap-4 items-start">
+                  <ImageWithFallback
+                    src={server.iconUrl}
+                    alt={`${server.name} icon`}
+                    className="w-11 h-11 rounded-md"
+                  />
+                  <div>
+                    <span className="text-md font-bold">
+                      {server.publisher}
+                    </span>
+                    <p className="text-xs text-muted-foreground italic">
+                      In-app transactions available
+                    </p>
+                  </div>
+                </div>
+
+                <div className="hidden h-12 w-px bg-border sm:block" />
+
+                {/* Tier info */}
+                <div className="flex items-start gap-4">
+                  <div className="border border-gray-700 w-11 h-11 rounded-md flex items-center justify-center">
+                    <tierInfo.Icon
+                      className={cn('w-8 h-8', tierInfo.textColorClass)}
+                    />
+                  </div>
+                  <div>
+                    <span className="text-md font-bold">{tierInfo.name}</span>
+                    <Link
+                      to={`/certificate/${server.namespace}`}
+                      className="text-xs text-muted-foreground italic hover:underline">
+                      <p>{tierInfo.description}</p>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+
+              {/* Stats Strip */}
+              {appMetrics && (
+                <StatsStrip
+                  authenticatedUniqueUsers={
+                    appMetrics.authenticated_unique_users
+                  }
+                  anonymousInvocations={appMetrics.anonymous_invocations}
+                  totalTools={appMetrics.total_tools}
+                  totalInvocations={appMetrics.total_invocations}
+                />
+              )}
+
+              {/* Connection/Provision Info */}
+              {isProvisionedApp && !canisterId ? (
+                <ProvisionInstance
+                  namespace={server.namespace}
+                  onProvisionClick={handleProvisionClick}
+                  isProvisioning={provisionMutation.isPending}
+                />
+              ) : (
+                <ConnectionInfo
+                  namespace={server.namespace}
+                  allVersions={server.allVersions}
+                  latestVersion={server.latestVersion}
+                  onConnectClick={handleInstallClick}
+                  isArchived={isViewingArchivedVersion}
+                />
+              )}
+            </div>
             {/* Conditionally render the new container component */}
 
             {hasAppInfo ? (
@@ -189,8 +302,11 @@ export default function ServerDetailsPage() {
               />
             )}
 
-            {hasToolsInfo && acceptsPayments ? (
-              <AccessAndBilling latestVersion={server.latestVersion} />
+            {hasToolsInfo ? (
+              <AccessAndBilling
+                latestVersion={server.latestVersion}
+                canisterId={canisterId}
+              />
             ) : (
               <SponsorPrompt
                 icon={Wallet}
@@ -252,8 +368,9 @@ export default function ServerDetailsPage() {
             </div>
           </main>
 
-          <aside className={`lg:col-span-2 space-y-8 ${similarAppsTopMargin}`}>
-            {/* SimilarApps should use the STABLE namespace to find related apps. */}
+          {/* Right column - Sidebar */}
+          <aside className="lg:col-span-2 space-y-8">
+            <MediaGallery images={server.galleryImages} appName={server.name} />
             <SimilarApps currentServerNamespace={server.namespace} />
           </aside>
         </div>
@@ -269,11 +386,14 @@ export default function ServerDetailsPage() {
       />
 
       {/* InstallDialog takes the whole object and will need to be updated internally. */}
-      <InstallDialog
-        server={server}
-        open={dialogState === 'install'}
-        onOpenChange={(open) => !open && setDialogState('closed')}
-      />
+      {canisterId && (
+        <InstallDialog
+          server={server}
+          canisterId={canisterId}
+          open={dialogState === 'install'}
+          onOpenChange={(open) => !open && setDialogState('closed')}
+        />
+      )}
 
       <AlertDialog
         open={dialogState === 'confirm'}

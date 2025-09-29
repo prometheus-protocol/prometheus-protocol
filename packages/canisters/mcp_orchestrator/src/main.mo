@@ -37,34 +37,35 @@ import System "../../../../libs/icrc120/src/system";
 import ICRC120 "../../../../libs/icrc120/src";
 import ICRC120Types "../../../../libs/icrc120/src/migrations/types";
 
-(
-  with migration = func({ managed_canisters : Map.Map<Text, Principal> }) : {
-    managed_canisters : Map.Map<Text, [Principal]>;
-  } {
-    // This function runs during the `post_upgrade` hook to transform the stable state.
-    Debug.print("Starting stable state migration...");
+// (
+//   with migration = func({ managed_canisters : Map.Map<Text, Principal> }) : {
+//     managed_canisters : Map.Map<Text, [Principal]>;
+//     canister_owners : Map.Map<Principal, Principal>;
+//   } {
+//     // This function runs during the `post_upgrade` hook to transform the stable state.
+//     Debug.print("Starting stable state migration...");
 
-    // 1. Create a new map with the correct new type.
-    let new_managed_canisters = Map.new<Text, [Principal]>();
-    let canister_owners = Map.new<Principal, Principal>();
+//     // 1. Create a new map with the correct new type.
+//     let new_managed_canisters = Map.new<Text, [Principal]>();
+//     let canister_owners = Map.new<Principal, Principal>();
 
-    // 2. Iterate over the old map and transform each value.
-    for ((namespace, canister_id) in Map.entries(managed_canisters)) {
-      // The old value was a Principal. The new value must be a [Principal].
-      Map.set(new_managed_canisters, Map.thash, namespace, [canister_id]);
-      Map.set(canister_owners, Map.phash, canister_id, Principal.fromText("feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae"));
-    };
+//     // 2. Iterate over the old map and transform each value.
+//     for ((namespace, canister_id) in Map.entries(managed_canisters)) {
+//       // The old value was a Principal. The new value must be a [Principal].
+//       Map.set(new_managed_canisters, Map.thash, namespace, [canister_id]);
+//       Map.set(canister_owners, Map.phash, canister_id, Principal.fromText("feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae"));
+//     };
 
-    Debug.print("Migration complete. Returning new state.");
+//     Debug.print("Migration complete. Returning new state.");
 
-    // 3. Return the complete new state object.
-    {
-      // Set the transformed and new variables.
-      managed_canisters = new_managed_canisters;
-      canister_owners = canister_owners;
-    };
-  }
-)
+//     // 3. Return the complete new state object.
+//     {
+//       // Set the transformed and new variables.
+//       managed_canisters = new_managed_canisters;
+//       canister_owners = canister_owners;
+//     };
+//   }
+// )
 
 shared (deployer) actor class ICRC120Canister<system>(
   args : ?{
@@ -77,7 +78,7 @@ shared (deployer) actor class ICRC120Canister<system>(
   stable var _owner = deployer.caller;
   let CANISTER_PROVISION_CYCLES : Nat = 4_000_000_000_000; // 4T cycles to provision a new canister
 
-  // --- NEW: Cycle Top-Up Configuration ---
+  // --- Cycle Top-Up Configuration ---
   stable var _cycle_top_up_enabled : Bool = true; // Default to on
   stable var TOP_UP_THRESHOLD : Nat = 1_000_000_000_000; // 1T cycles
   stable var TOP_UP_AMOUNT : Nat = 3_000_000_000_000; // 3T cycles
@@ -90,6 +91,13 @@ shared (deployer) actor class ICRC120Canister<system>(
   let ttInitArgs : ?TT.InitArgList = do ? { args!.ttArgs! };
 
   stable var managed_canisters = Map.new<Text, [Principal]>();
+
+  // Map the wasm id to its deployment type (for Provisioned apps).
+  type CanisterDeploymentType = {
+    #global;
+    #provisioned;
+  };
+  stable var canister_deployment_types = Map.new<Text, CanisterDeploymentType>();
 
   // Maps a canister_id to the principal of the user who owns it (for Provisioned apps).
   stable var canister_owners = Map.new<Principal, Principal>();
@@ -556,6 +564,7 @@ shared (deployer) actor class ICRC120Canister<system>(
   // It's the standard UpgradeToRequest, but with `namespace` instead of `canister_id`.
   public type DeployOrUpgradeRequest = {
     namespace : Text;
+    deployment_type : CanisterDeploymentType;
     hash : Blob;
     args : Blob;
     stop : Bool;
@@ -624,6 +633,8 @@ shared (deployer) actor class ICRC120Canister<system>(
                 Map.set(managed_canisters, Map.thash, request.namespace, new_canister_list);
                 Map.set(reverse_managed_canisters, Map.phash, new_canister_id, request.namespace);
                 Map.set(canister_owners, Map.phash, new_canister_id, caller);
+                let wasm_id = Base16.encode(request.hash);
+                Map.set(canister_deployment_types, Map.thash, wasm_id, request.deployment_type);
                 Debug.print("Provisioned new canister " # Principal.toText(new_canister_id));
                 new_canister_id;
               };
@@ -653,6 +664,8 @@ shared (deployer) actor class ICRC120Canister<system>(
             Map.set(managed_canisters, Map.thash, request.namespace, new_canister_list);
             Map.set(reverse_managed_canisters, Map.phash, new_canister_id, request.namespace);
             Map.set(canister_owners, Map.phash, new_canister_id, caller);
+            let wasm_id = Base16.encode(request.hash);
+            Map.set(canister_deployment_types, Map.thash, wasm_id, request.deployment_type);
             Debug.print("Provisioned new canister " # Principal.toText(new_canister_id));
             new_canister_id;
           };
@@ -725,6 +738,44 @@ shared (deployer) actor class ICRC120Canister<system>(
   public query func get_canisters(namespace : Text) : async [Principal] {
     // With the new state structure, this is a simple and fast lookup.
     Option.get(Map.get(managed_canisters, Map.thash, namespace), []);
+  };
+
+  public query ({ caller }) func get_canister_id(namespace : Text, wasm_id : Text) : async ?Principal {
+    let canisters = Option.get(Map.get(managed_canisters, Map.thash, namespace), []);
+    Debug.print("Found " # Nat.toText(canisters.size()) # " canisters for namespace " # namespace);
+    if (canisters.size() > 0) {
+      let deploymentType = Option.get(Map.get(canister_deployment_types, Map.thash, wasm_id), #global);
+
+      Debug.print("Deployment type: " # debug_show (deploymentType));
+      let caller_canister = switch (deploymentType) {
+        case (#provisioned) {
+          Debug.print("Caller: " # Principal.toText(caller));
+          Debug.print("Searching for caller's provisioned canister...");
+          Debug.print(debug_show (Iter.toArray(Map.entries(canister_owners))));
+
+          let canister = Array.find(
+            canisters,
+            func(id : Principal) : Bool {
+              switch (Map.get(canister_owners, Map.phash, id)) {
+                case (?owner) { owner == caller };
+                case (null) { false };
+              };
+            },
+          );
+
+          Debug.print("Caller canister found: " # debug_show (canister));
+          canister;
+        };
+        case (#global) {
+          Debug.print("Returning first global canister...");
+          // For global canisters, return the first one in the list
+          ?canisters[0];
+        };
+      };
+      caller_canister;
+    } else {
+      null;
+    };
   };
 
   // =====================================================================================
@@ -861,6 +912,10 @@ shared (deployer) actor class ICRC120Canister<system>(
   public shared ({ caller }) func provision_instance(namespace : Text, wasmId : Text) : async Result.Result<Principal, Text> {
     // Check if caller already has a canister for this namespace.
 
+    if (Principal.isAnonymous(caller)) {
+      return #err("Unauthorized: Anonymous caller cannot provision an instance.");
+    };
+
     // If so, return it.
 
     // If not, provision a new canister with sensible defaults.
@@ -880,6 +935,7 @@ shared (deployer) actor class ICRC120Canister<system>(
     let hash = Option.get(Base16.decode(wasmId), Blob.fromArray([]));
     let full_request : DeployOrUpgradeRequest = {
       namespace = namespace;
+      deployment_type = #provisioned;
       hash = hash;
       args = encoded_args; // Automated deploys use the encoded owner as init args
       stop = false;
@@ -900,7 +956,7 @@ shared (deployer) actor class ICRC120Canister<system>(
     owner : Principal;
   };
   /**
-   * [INTERNAL] A privileged endpoint for the MCP Registry.
+   * [INTERNAL] A privileged endpoint for the MCP Registry, used for automated global deployments.
    */
   public shared ({ caller }) func internal_deploy_or_upgrade(request : InternalDeployRequest) : async () {
     // --- 1. CRITICAL SECURITY CHECK ---
@@ -928,6 +984,7 @@ shared (deployer) actor class ICRC120Canister<system>(
     // For an automated deploy, we use sensible defaults.
     let full_request : DeployOrUpgradeRequest = {
       namespace = request.namespace;
+      deployment_type = #global;
       hash = request.hash;
       args = encoded_args; // Automated deploys use the encoded owner as init args
       stop = false;

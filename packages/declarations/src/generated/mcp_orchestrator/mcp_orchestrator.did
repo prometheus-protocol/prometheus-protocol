@@ -264,6 +264,7 @@ type ICRC120Canister =
  service {
    /// * The primary entry point for the owner to debug/fix bad installs.
    deploy_or_upgrade: (request: DeployOrUpgradeRequest) -> (Result_1);
+   get_canister_id: (namespace: text, wasm_id: text) -> (opt principal) query;
    get_canisters: (namespace: text) -> (vec principal) query;
    /// * Returns the current configuration for the automated cycle top-up feature.
    get_cycle_top_up_config: () -> (CycleTopUpConfig) query;
@@ -295,7 +296,7 @@ type ICRC120Canister =
    icrc3_get_blocks: (args: GetBlocksArgs) -> (GetBlocksResult) query;
    icrc3_get_tip_certificate: () -> (opt DataCertificate) query;
    icrc3_supported_block_types: () -> (vec BlockType) query;
-   /// * [INTERNAL] A privileged endpoint for the MCP Registry.
+   /// * [INTERNAL] A privileged endpoint for the MCP Registry, used for automated global deployments.
    internal_deploy_or_upgrade: (request: InternalDeployRequest) -> ();
    provision_instance: (namespace: text, wasmId: text) -> (Result_1);
    /// * Sets the configuration for the automated cycle top-up feature.
@@ -343,6 +344,7 @@ type GetArchivesArgs = record {from: opt principal;};
 type DeployOrUpgradeRequest = 
  record {
    args: blob;
+   deployment_type: CanisterDeploymentType;
    hash: blob;
    mode: canister_install_mode;
    namespace: text;
@@ -418,6 +420,11 @@ type CleanSnapshotError =
    NotFound;
    TooManyRequests;
    Unauthorized;
+ };
+type CanisterDeploymentType = 
+ variant {
+   global;
+   provisioned;
  };
 type BlockType = 
  record {

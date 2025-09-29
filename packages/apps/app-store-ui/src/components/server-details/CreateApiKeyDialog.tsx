@@ -27,21 +27,24 @@ import { Input } from '@/components/ui/input';
 import { Loader2, Copy, AlertTriangle } from 'lucide-react';
 import { useCreateApiKey } from '@/hooks/useApiKeys';
 import { AppVersionDetails } from '@prometheus-protocol/ic-js';
+import { Principal } from '@dfinity/principal';
 
 const formSchema = z.object({
   name: z.string().min(3, { message: 'Name must be at least 3 characters.' }),
 });
 
 interface CreateApiKeyDialogProps {
-  latestVersion: AppVersionDetails;
-  open: boolean;
+  isOpen: boolean;
   onOpenChange: (open: boolean) => void;
+  latestVersion: AppVersionDetails;
+  canisterId: Principal;
 }
 
 export const CreateApiKeyDialog = ({
-  latestVersion,
-  open,
+  isOpen,
   onOpenChange,
+  latestVersion,
+  canisterId,
 }: CreateApiKeyDialogProps) => {
   const [newKey, setNewKey] = useState<string | null>(null);
   const { mutate: createKey, isPending: isCreatingKey } = useCreateApiKey();
@@ -63,7 +66,7 @@ export const CreateApiKeyDialog = ({
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
     createKey(
-      { serverPrincipal: latestVersion.canisterId, name: values.name },
+      { serverPrincipal: canisterId, name: values.name },
       {
         onSuccess: ({ raw_key }) => setNewKey(raw_key),
         onError: (error) =>
@@ -81,7 +84,7 @@ export const CreateApiKeyDialog = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle className="text-xl">

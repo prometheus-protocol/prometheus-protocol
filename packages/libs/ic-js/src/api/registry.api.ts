@@ -1,9 +1,5 @@
 import { Certificate, HttpAgent, Identity } from '@dfinity/agent';
-import {
-  getOrchestratorActor,
-  getRegistryActor,
-  getUsageTrackerActor,
-} from '../actors.js';
+import { getRegistryActor } from '../actors.js';
 import { Registry } from '@prometheus-protocol/declarations';
 import { Principal } from '@dfinity/principal';
 import {
@@ -15,7 +11,6 @@ import {
 import {
   AppStoreDetails,
   AppVersionDetails,
-  buildServerUrl,
   DataSafetyPoint,
 } from './audit.api.js';
 import {
@@ -543,7 +538,6 @@ export const getAppStoreListings = async (): Promise<AppStoreListing[]> => {
 
 function mapCanisterVersionToTS(
   canisterDetails: Registry.AppDetailsResponse, // This is the type from your .did.js file
-  canisterId: Principal,
 ): AppVersionDetails {
   const canisterVersion = canisterDetails.latest_version;
   return {
@@ -560,8 +554,6 @@ function mapCanisterVersionToTS(
       repoUrl: fromNullable(canisterVersion.build_info.repo_url),
       failureReason: fromNullable(canisterVersion.build_info.failure_reason),
     },
-    canisterId,
-    serverUrl: buildServerUrl(canisterId, canisterDetails.mcp_path),
     tools: canisterVersion.tools.map(processServerTool),
     dataSafety: {
       overallDescription: canisterVersion.data_safety.overall_description,
@@ -609,17 +601,14 @@ function mapCanisterVersionSummaryToTS(
 export const getAppDetailsByNamespace = async (
   namespace: string,
   wasmId?: string,
-  canisterId?: Principal,
 ): Promise<AppStoreDetails | null> => {
   const registryActor = getRegistryActor();
-  const orchestratorActor = getOrchestratorActor();
-  const usageTrackerActor = getUsageTrackerActor();
 
   try {
-    const [appDetailsReq, canisterIdsReq] = await Promise.all([
-      registryActor.get_app_details_by_namespace(namespace, toNullable(wasmId)),
-      orchestratorActor.get_canisters(namespace),
-    ]);
+    const appDetailsReq = await registryActor.get_app_details_by_namespace(
+      namespace,
+      toNullable(wasmId),
+    );
 
     if ('err' in appDetailsReq) {
       console.error(
@@ -630,27 +619,14 @@ export const getAppDetailsByNamespace = async (
     }
 
     const canisterDetails = appDetailsReq.ok;
-    const canisterId = canisterIdsReq[0];
-
-    let metrics = undefined;
-    if (canisterId) {
-      const res = await usageTrackerActor.get_app_metrics(canisterId);
-      const appMetrics = fromNullable(res);
-      metrics = appMetrics
-        ? {
-            totalInvocations: appMetrics.total_invocations,
-            totalTools: appMetrics.total_tools,
-            authenticatedUniqueUsers: appMetrics.authenticated_unique_users,
-            anonymousInvocations: appMetrics.anonymous_invocations,
-          }
-        : undefined;
-    }
 
     // --- 3. THE MAIN FUNCTION IS NOW CLEAN, SIMPLE, AND DECLARATIVE ---
     return {
       // --- A. Populate the Stable, Top-Level App Identity ---
       namespace: canisterDetails.namespace,
       name: canisterDetails.name,
+      path: canisterDetails.mcp_path,
+      deploymentType: canisterDetails.deployment_type,
       publisher: canisterDetails.publisher,
       category: canisterDetails.category,
       iconUrl: canisterDetails.icon_url,
@@ -663,11 +639,10 @@ export const getAppDetailsByNamespace = async (
       reviews: [], // Placeholder for reviews
 
       // --- B. Delegate all complex mapping to our new helper functions ---
-      latestVersion: mapCanisterVersionToTS(canisterDetails, canisterId),
+      latestVersion: mapCanisterVersionToTS(canisterDetails),
       allVersions: canisterDetails.all_versions.map(
         mapCanisterVersionSummaryToTS,
       ),
-      metrics,
     };
   } catch (error) {
     console.error(`Error calling get_app_details_by_namespace:`, error);

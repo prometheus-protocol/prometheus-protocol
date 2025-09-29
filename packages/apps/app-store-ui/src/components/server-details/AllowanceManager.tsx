@@ -1,20 +1,19 @@
 import { useMemo } from 'react';
 import { AppVersionDetails, Token, Tokens } from '@prometheus-protocol/ic-js';
+import { Principal } from '@dfinity/principal';
 import { TokenAllowanceItem } from './TokenAllowanceItem';
 
 // --- 1. Updated Props ---
 // The component now takes the AppVersionDetails object directly.
-interface AllowanceManagerProps {
+interface Props {
   latestVersion: AppVersionDetails;
-  onSuccess: () => void;
-  submitButtonText: string;
+  canisterId: Principal;
+  onSuccess?: () => void;
 }
 
-export function AllowanceManager({
-  latestVersion,
-  onSuccess,
-}: AllowanceManagerProps) {
-  const spenderPrincipal = latestVersion.canisterId;
+export const AllowanceManager = ({ latestVersion, canisterId, onSuccess }: Props) => {
+  const { tools } = latestVersion;
+  const spenderPrincipal = canisterId;
 
   // --- 2. NEW: Token Discovery Logic ---
   // We derive the list of accepted tokens by parsing the tools list,
@@ -54,7 +53,7 @@ export function AllowanceManager({
           key={token.symbol}
           token={token}
           spenderPrincipal={spenderPrincipal}
-          onSuccess={onSuccess}
+          onSuccess={onSuccess || (() => {})}
         />
       ))}
     </div>

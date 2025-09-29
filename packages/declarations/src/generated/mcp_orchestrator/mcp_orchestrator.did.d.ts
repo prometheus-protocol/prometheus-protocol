@@ -14,6 +14,8 @@ export interface ArchivedTransactionResponse {
   'callback' : GetTransactionsFn,
 }
 export interface BlockType { 'url' : string, 'block_type' : string }
+export type CanisterDeploymentType = { 'provisioned' : null } |
+  { 'global' : null };
 export type CleanSnapshotError = { 'TooManyRequests' : null } |
   { 'NotFound' : null } |
   { 'Generic' : string } |
@@ -60,6 +62,7 @@ export interface DeployOrUpgradeRequest {
   'stop' : boolean,
   'parameters' : [] | [Array<[string, ICRC16__1]>],
   'restart' : boolean,
+  'deployment_type' : CanisterDeploymentType,
   'timeout' : bigint,
   'namespace' : string,
 }
@@ -93,6 +96,7 @@ export interface GetTransactionsResult {
 }
 export interface ICRC120Canister {
   'deploy_or_upgrade' : ActorMethod<[DeployOrUpgradeRequest], Result_1>,
+  'get_canister_id' : ActorMethod<[string, string], [] | [Principal]>,
   'get_canisters' : ActorMethod<[string], Array<Principal>>,
   'get_cycle_top_up_config' : ActorMethod<[], CycleTopUpConfig>,
   'get_tip' : ActorMethod<[], Tip>,
