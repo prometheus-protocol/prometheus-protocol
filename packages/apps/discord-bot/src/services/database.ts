@@ -99,6 +99,32 @@ export class SupabaseService implements DatabaseService {
     }));
   }
 
+  async clearConversationHistory(
+    userId: string,
+    channelId: string,
+  ): Promise<number> {
+    const { data, error } = await this.client
+      .from('conversation_history')
+      .delete()
+      .eq('user_id', userId)
+      .eq('channel_id', channelId)
+      .select();
+
+    if (error) {
+      dbLogger.error('Error clearing conversation history:', error);
+      throw new Error('Failed to clear conversation history');
+    }
+
+    const deletedCount = data?.length || 0;
+    dbLogger.info('Conversation history cleared', {
+      userId,
+      channelId,
+      deletedCount,
+    });
+
+    return deletedCount;
+  }
+
   async saveAlertState(
     alertId: string,
     data: any,
