@@ -27,8 +27,6 @@ import {
 import { useSearchQuery } from '@/hooks/useSearch';
 import { cn } from '@/lib/utils';
 import React from 'react';
-import { CommandLoading } from 'cmdk';
-import { SearchInput } from '../SearchInput';
 import { Dialog, DialogContent } from '../ui/dialog';
 import { DialogTrigger } from '@radix-ui/react-dialog';
 

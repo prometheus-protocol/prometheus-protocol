@@ -404,6 +404,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       restart: false,
       timeout: 10_000n,
       parameters: [],
+      deployment_type: { global: null },
     };
     const result = await orchestratorActor.deploy_or_upgrade(upgradeRequest);
     expect(result).toHaveProperty('ok');
@@ -588,6 +589,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
           restart: false,
           timeout: 0n,
           parameters: [],
+          deployment_type: { global: null },
         });
         expect(deployResult).toHaveProperty('ok');
         // @ts-ignore
@@ -869,6 +871,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
         restart: false,
         timeout: 0n,
         parameters: [],
+        deployment_type: { global: null },
       });
 
       // Assert
@@ -899,6 +902,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
         restart: false,
         timeout: 0n,
         parameters: [],
+        deployment_type: { global: null },
       });
 
       // Assert: The call should fail because this endpoint is not for provisioning user instances
