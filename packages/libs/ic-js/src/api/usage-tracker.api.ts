@@ -1,5 +1,5 @@
 import { Principal } from '@dfinity/principal';
-import { getUsageTrackerActor } from '../actors';
+import { getUsageTrackerActor } from '../actors.js';
 
 import { fromNullable } from '@dfinity/utils';
 import { UsageTracker } from '@prometheus-protocol/declarations';

@@ -37,12 +37,10 @@ function HomePage() {
 
       // 1. Filter apps into primary groups
       const goldApps = allServers.filter(
-        (app) =>
-          app.latestVersion.status === 'Verified' &&
-          app.latestVersion.securityTier === 'Gold',
+        (app) => app.latestVersion.securityTier === 'Gold',
       );
       const pendingApps = allServers.filter(
-        (app) => app.latestVersion.status === 'Pending',
+        (app) => app.latestVersion.securityTier === 'Unranked',
       );
       const otherListedApps = allServers.filter(
         (app) => app.latestVersion.status === 'Verified',
