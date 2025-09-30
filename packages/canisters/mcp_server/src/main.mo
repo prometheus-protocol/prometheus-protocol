@@ -59,32 +59,32 @@ shared ({ caller = deployer }) persistent actor class McpServer(
   // See the README for more details.
   // =================================================================================
 
-  transient let authContext : ?AuthTypes.AuthContext = null;
+  // transient let authContext : ?AuthTypes.AuthContext = null;
 
   // --- UNCOMMENT THIS BLOCK TO ENABLE AUTHENTICATION ---
 
-  // let issuerUrl = "https://bfggx-7yaaa-aaaai-q32gq-cai.icp0.io";
-  // let allowanceUrl = "https://prometheusprotocol.org/connections";
-  // let requiredScopes = ["openid"];
+  let issuerUrl = "https://bfggx-7yaaa-aaaai-q32gq-cai.icp0.io";
+  let allowanceUrl = "https://prometheusprotocol.org/connections";
+  let requiredScopes = ["openid"];
 
-  // //function to transform the response for jwks client
-  // public query func transformJwksResponse({
-  //   context : Blob;
-  //   response : IC.HttpRequestResult;
-  // }) : async IC.HttpRequestResult {
-  //   {
-  //     response with headers = []; // not intersted in the headers
-  //   };
-  // };
+  //function to transform the response for jwks client
+  public query func transformJwksResponse({
+    context : Blob;
+    response : IC.HttpRequestResult;
+  }) : async IC.HttpRequestResult {
+    {
+      response with headers = []; // not intersted in the headers
+    };
+  };
 
-  // // Initialize the auth context with the issuer URL and required scopes.
-  // transient let authContext : ?AuthTypes.AuthContext = ?AuthState.init(
-  //   Principal.fromActor(self),
-  //   owner,
-  //   issuerUrl,
-  //   requiredScopes,
-  //   transformJwksResponse,
-  // );
+  // Initialize the auth context with the issuer URL and required scopes.
+  transient let authContext : ?AuthTypes.AuthContext = ?AuthState.init(
+    Principal.fromActor(self),
+    owner,
+    issuerUrl,
+    requiredScopes,
+    transformJwksResponse,
+  );
 
   // Initialize the auth context with the issuer URL and required scopes.
   // transient let authContext : ?AuthTypes.AuthContext = ?AuthState.initApiKey(owner);
@@ -92,7 +92,7 @@ shared ({ caller = deployer }) persistent actor class McpServer(
   let beaconCanisterId = Principal.fromText("vt46d-j7777-77774-qaagq-cai");
   transient let beaconContext : Beacon.BeaconContext = Beacon.init(
     beaconCanisterId, // Public beacon canister ID
-    ?60, // Send a beacon every minute
+    ?(15 * 60), // Send a beacon every 15 minutes
   );
 
   // --- END OF AUTHENTICATION BLOCK ---

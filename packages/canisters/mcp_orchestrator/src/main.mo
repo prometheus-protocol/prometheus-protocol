@@ -37,36 +37,6 @@ import System "../../../../libs/icrc120/src/system";
 import ICRC120 "../../../../libs/icrc120/src";
 import ICRC120Types "../../../../libs/icrc120/src/migrations/types";
 
-// (
-//   with migration = func({ managed_canisters : Map.Map<Text, Principal> }) : {
-//     managed_canisters : Map.Map<Text, [Principal]>;
-//     canister_owners : Map.Map<Principal, Principal>;
-//   } {
-//     // This function runs during the `post_upgrade` hook to transform the stable state.
-//     Debug.print("Starting stable state migration...");
-
-//     // 1. Create a new map with the correct new type.
-//     let new_managed_canisters = Map.new<Text, [Principal]>();
-//     let canister_owners = Map.new<Principal, Principal>();
-
-//     // 2. Iterate over the old map and transform each value.
-//     for ((namespace, canister_id) in Map.entries(managed_canisters)) {
-//       // The old value was a Principal. The new value must be a [Principal].
-//       Map.set(new_managed_canisters, Map.thash, namespace, [canister_id]);
-//       Map.set(canister_owners, Map.phash, canister_id, Principal.fromText("feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae"));
-//     };
-
-//     Debug.print("Migration complete. Returning new state.");
-
-//     // 3. Return the complete new state object.
-//     {
-//       // Set the transformed and new variables.
-//       managed_canisters = new_managed_canisters;
-//       canister_owners = canister_owners;
-//     };
-//   }
-// )
-
 shared (deployer) actor class ICRC120Canister<system>(
   args : ?{
     icrc120Args : ?ICRC120Types.Current.InitArgs;
