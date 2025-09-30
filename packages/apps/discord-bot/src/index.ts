@@ -4,6 +4,7 @@ import express, { Request, Response } from 'express';
 import { ConfigManager } from './config/index.js';
 import { CommandRegistryImpl } from './commands/registry.js';
 import { ChatCommand } from './commands/chat/chat.js';
+import { ClearChatCommand } from './commands/chat/clear.js';
 import { MCPCommand } from './commands/mcp/mcp.js';
 import { TasksCommand } from './commands/tasks/tasks.js';
 import { LLMService } from './services/llm.js';
@@ -16,7 +17,6 @@ import { MCPEventService } from './services/event-emitter.service.js';
 import { ConnectionPoolService } from './services/connections.js';
 import { MCPCoordinatorService } from './services/mcp-coordinator.service.js';
 import { RegistryService } from './services/registry.service.js';
-import { CommandContext } from './types/index.js';
 import { auth } from './mcp/oauth.js';
 import { ConnectionManagerOAuthProvider } from './mcp/oauth-provider.js';
 
@@ -272,6 +272,9 @@ class DiscordBot {
     this.commandRegistry.register(
       new ChatCommand(this.llmService, this.database),
     );
+
+    // Register clear chat memory command
+    this.commandRegistry.register(new ClearChatCommand(this.database));
 
     // Register MCP management command
     this.commandRegistry.register(

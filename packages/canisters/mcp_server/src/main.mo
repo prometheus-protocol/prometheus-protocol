@@ -183,8 +183,8 @@ shared ({ caller = deployer }) persistent actor class McpServer(
     // allowanceUrl = ?allowanceUrl; // Uncomment this line if using paid tools.
     serverInfo = {
       name = "full-onchain-mcp-server";
-      title = "App Three MCP Server";
-      version = "0.1.6";
+      title = "Provisioned MCP Server";
+      version = "0.1.2";
     };
     resources = resources;
     resourceReader = func(uri) {

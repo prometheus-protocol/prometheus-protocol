@@ -10,10 +10,11 @@ import { Drawer, DrawerContent } from '@/components/ui/drawer';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CodeBlock } from '@/components/ui/code-block';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
-import { AppStoreDetails } from '@prometheus-protocol/ic-js';
+import { AppStoreDetails, buildServerUrl } from '@prometheus-protocol/ic-js';
 import { Button } from '../ui/button';
 import { Copy } from 'lucide-react';
 import { toast } from 'sonner';
+import { Principal } from '@dfinity/principal';
 
 const clientSetups = [
   {
@@ -171,13 +172,18 @@ const clientSetups = [
 ];
 
 // --- 2. THE REFACTORED CONTENT COMPONENT ---
-function InstallDialogContent({ server }: { server: AppStoreDetails }) {
+function InstallDialogContent({
+  server,
+  serverUrl,
+}: {
+  server: AppStoreDetails;
+  serverUrl: string;
+}) {
   const [activeClientId, setActiveClientId] = React.useState(
     clientSetups[0].id,
   );
   const activeSetup = clientSetups.find((c) => c.id === activeClientId)!;
   const configKey = server.name.split(':')[0].replace(/\s+/g, '');
-  const serverUrl = server.latestVersion.serverUrl;
 
   // 3. Add the handler for the copy action
   const handleCopyToClipboard = () => {
@@ -257,7 +263,7 @@ function InstallDialogContent({ server }: { server: AppStoreDetails }) {
               )}
               {activeSetup.code && (
                 <CodeBlock
-                  code={activeSetup.code(configKey, serverUrl)}
+                  code={activeSetup.code(configKey, serverUrl || '')}
                   filename={activeSetup.filename}
                 />
               )}
@@ -271,22 +277,25 @@ function InstallDialogContent({ server }: { server: AppStoreDetails }) {
 
 export interface InstallDialogProps {
   server: AppStoreDetails;
+  canisterId: Principal;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 export function InstallDialog({
   server,
+  canisterId,
   open,
   onOpenChange,
 }: InstallDialogProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
+  const serverUrl = buildServerUrl(canisterId, server.path);
 
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="min-w-[90vw] lg:min-w-[75vw] xl:min-w-[60vw] p-0 gap-0">
-          <InstallDialogContent server={server} />
+          <InstallDialogContent server={server} serverUrl={serverUrl} />
         </DialogContent>
       </Dialog>
     );
@@ -296,7 +305,7 @@ export function InstallDialog({
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent>
         <div className="max-h-[80vh] overflow-y-auto">
-          <InstallDialogContent server={server} />
+          <InstallDialogContent server={server} serverUrl={serverUrl} />
         </div>
       </DrawerContent>
     </Drawer>

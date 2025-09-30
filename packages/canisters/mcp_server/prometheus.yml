@@ -1,15 +1,15 @@
 # Prometheus Application Manifest
 # This is the permanent, unique identifier for your application.
-namespace: com.example.app-three
+namespace: com.example.provisioned
 
 # This section contains all data for a specific version.
 submission:
-  name: App Three
+  name: Provisioned Test
   description: It helps you do some stuff
+  deployment_type: provisioned
   publisher: Jesse
   category: Utilities
   repo_url: https://github.com/jesse/app
-  canister_id: vb2j2-fp777-77774-qaafq-cai
   mcp_path: /mcp
   why_this_app: Its great
   key_features:
@@ -22,5 +22,6 @@ submission:
     icon_url: https://prometheusprotocol.org/icons/icon-007.png
     banner_url: https://prometheusprotocol.org/banners/pmp-faucet.webp
     gallery_images: [https://prometheusprotocol.org/banners/pmp-faucet.webp]
+
   git_commit: 'd8e1f951891731d7e43be1f55eebde2ec7c7707b'
   wasm_path: ../../../.dfx/local/canisters/mcp_server/mcp_server.wasm

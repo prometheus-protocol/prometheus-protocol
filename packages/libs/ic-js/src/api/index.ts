@@ -8,3 +8,4 @@ export * from './leaderboard.api.js';
 export * from './audit.api.js';
 export * from './apikey.api.js';
 export * from './search.api.js';
+export * from './usage-tracker.api.js';

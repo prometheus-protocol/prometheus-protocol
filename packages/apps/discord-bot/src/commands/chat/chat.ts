@@ -141,7 +141,6 @@ export class ChatCommand extends BaseCommand {
 
       // No longer include task management functions in chat
       // Task management is now handled by the dedicated /tasks command
-      const functions: any[] = [];
       chatLogger.info(
         'Chat command no longer includes task management functions',
       );
@@ -175,7 +174,6 @@ export class ChatCommand extends BaseCommand {
           channelId: context.channelId,
           history: history, // Use actual conversation history
         },
-        functions,
         context.userId, // Pass userId for MCP integration
         // Pass callback for status updates
         async (status: string) => {
@@ -513,7 +511,6 @@ export class ChatCommand extends BaseCommand {
             channelId: context.channelId,
             history: conversationHistory.slice(-10), // Keep recent context
           },
-          [], // Get available functions from MCP
           context.userId,
         );
 

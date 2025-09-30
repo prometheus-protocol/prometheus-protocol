@@ -1,12 +1,6 @@
 import { schedulerLogger } from '../utils/logger.js';
 import * as cron from 'node-cron';
-import {
-  AlertConfig,
-  AlertResult,
-  DatabaseService,
-  AIFunctionCall,
-  AIFunction,
-} from '../types/index.js';
+import { AlertConfig, AlertResult, DatabaseService } from '../types/index.js';
 import { ConfigManager } from '../config/index.js';
 import { Client } from 'discord.js';
 import { LLMService } from './llm.js';
@@ -203,67 +197,32 @@ export class AlertScheduler {
     try {
       schedulerLogger.info(`Executing alert: ${alert.name}`);
 
-      // Get last state from database
-      const lastState = await this.database.getLastAlertState(alert.id);
-
       // Extract userId for MCP server access
       const userId = alert.id.split('_')[0];
-
-      // Execute the AI prompt with MCP tools to get the result
-      const aiContext = {
-        userId: userId,
-        channelId: alert.channelId,
-        history: [],
-      };
 
       schedulerLogger.info(`Executing scheduled task with MCP access`, {
         taskName: alert.name,
         userId: userId,
       });
 
+      // Execute the AI prompt with MCP tools - generateResponse handles all tool calling internally
       const result = await this.llmService.generateResponse(
         alert.prompt,
-        aiContext,
-        undefined, // No AI functions for alerts
+        {
+          userId: userId,
+          channelId: alert.channelId,
+          history: [],
+        },
         userId, // Pass userId for MCP integration
       );
 
-      // Process the AI response - handle tool calls if needed
-      let finalMessage = '';
+      // The unified generateResponse always returns a string (tool calls are handled internally)
+      const finalMessage =
+        typeof result === 'string'
+          ? result
+          : 'Task completed but no response was generated.';
 
-      if (typeof result === 'string') {
-        finalMessage = result;
-      } else if (Array.isArray(result)) {
-        // AI returned function calls - execute them and continue the conversation
-        schedulerLogger.info(
-          `AI requested ${result.length} tool calls for task execution`,
-          {
-            taskName: alert.name,
-            toolCalls: result.map((fc) => fc.name),
-          },
-        );
-
-        const finalResult = await this.handleTaskFunctionCalls(
-          result,
-          userId,
-          alert.prompt,
-          alert.name,
-        );
-
-        if (finalResult && typeof finalResult === 'string') {
-          finalMessage = finalResult;
-        } else {
-          finalMessage = 'Task completed but no response was generated.';
-          schedulerLogger.warn(
-            'Failed to get final response after tool execution',
-            {
-              alertName: alert.name,
-            },
-          );
-        }
-      }
-
-      // Always send the result (no validation needed)
+      // Send the result if we have content
       if (finalMessage.trim()) {
         await this.sendAlertMessage(
           alert.channelId,
@@ -300,6 +259,54 @@ export class AlertScheduler {
         error instanceof Error ? error.message : String(error);
       const userId = alert.id.split('_')[0]; // Extract userId for context
 
+      // Check for permission/access errors first (Discord API errors)
+      if (
+        errorMessage.includes('Missing Access') ||
+        errorMessage.includes('50001') ||
+        errorMessage.includes('does not have permission') ||
+        errorMessage.includes('Bot is not a member') ||
+        (errorMessage.includes('Channel') && errorMessage.includes('not found'))
+      ) {
+        schedulerLogger.warn(
+          'Alert failed due to permission or access issues',
+          {
+            alertName: alert.name,
+            channelId: alert.channelId,
+            error: errorMessage,
+          },
+        );
+
+        // Send a helpful notification explaining the permission issue
+        // Try to send to the user via DM if possible, otherwise log the issue
+        try {
+          const user = await this.client.users.fetch(userId);
+          const permissionErrorMessage =
+            `🚫 **Alert Permission Error**\n\n` +
+            `Your alert "${alert.name}" failed because:\n` +
+            `${errorMessage}\n\n` +
+            `**To fix this:**\n` +
+            `• Ensure the bot is still in the server\n` +
+            `• Check the bot has "View Channel" and "Send Messages" permissions\n` +
+            `• Re-invite the bot if needed: Use \`/help\` command for the invite link\n\n` +
+            `The alert will keep trying to run. Once permissions are fixed, it will work automatically.`;
+
+          await user.send(permissionErrorMessage);
+          schedulerLogger.info('Sent permission error notification via DM', {
+            userId,
+            alertName: alert.name,
+          });
+        } catch (dmError) {
+          schedulerLogger.warn('Could not send DM about permission error', {
+            userId,
+            alertName: alert.name,
+            dmError:
+              dmError instanceof Error ? dmError.message : String(dmError),
+          });
+        }
+
+        return; // Don't treat as a regular error - this is a configuration issue
+      }
+
       // Check if this is an OAuth/authentication error
       if (
         errorMessage.includes('OAUTH_AUTHORIZATION_REQUIRED') ||
@@ -317,9 +324,27 @@ export class AlertScheduler {
         // Send a helpful notification to the user
         const authErrorMessage =
           `🔐 Alert "${alert.name}" requires re-authentication.\n\n` +
-          `Your MCP server connection has expired. Please reconnect your services using the \`!mcp connect\` command to resume automated alerts.`;
+          `Your MCP server connection has expired. Please reconnect your services using the \`/mcp connect\` command to resume automated alerts.`;
 
-        await this.sendAlertMessage(alert.channelId, authErrorMessage);
+        try {
+          await this.sendAlertMessage(alert.channelId, authErrorMessage);
+        } catch (sendError) {
+          // If we can't send to the channel, try DM
+          try {
+            const user = await this.client.users.fetch(userId);
+            await user.send(authErrorMessage);
+            schedulerLogger.info(
+              'Sent auth error notification via DM instead',
+              { userId, alertName: alert.name },
+            );
+          } catch (dmError) {
+            schedulerLogger.error(
+              'Could not notify user about auth error',
+              dmError instanceof Error ? dmError : new Error(String(dmError)),
+              { userId, alertName: alert.name },
+            );
+          }
+        }
 
         // Don't disable the alert - user can fix auth and it will resume
         schedulerLogger.info(
@@ -333,9 +358,19 @@ export class AlertScheduler {
           { alertName: alert.name },
         );
 
-        // Send error notification to the channel
+        // Send error notification to the channel (if possible)
         const regularErrorMessage = `⚠️ Alert "${alert.name}" failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-        await this.sendAlertMessage(alert.channelId, regularErrorMessage);
+        try {
+          await this.sendAlertMessage(alert.channelId, regularErrorMessage);
+        } catch (sendError) {
+          schedulerLogger.error(
+            'Could not send error notification to channel',
+            sendError instanceof Error
+              ? sendError
+              : new Error(String(sendError)),
+            { alertName: alert.name },
+          );
+        }
       }
     }
   }
@@ -346,15 +381,116 @@ export class AlertScheduler {
   ): Promise<void> {
     try {
       const channel = await this.client.channels.fetch(channelId);
-      if (channel?.isTextBased() && 'send' in channel) {
-        await channel.send(message);
+
+      if (!channel) {
+        schedulerLogger.error(
+          'Channel not found',
+          new Error('Channel not found'),
+          { channelId },
+        );
+        throw new Error(
+          `Channel ${channelId} not found. The bot may have been removed from the server or the channel may have been deleted.`,
+        );
       }
+
+      if (!channel.isTextBased() || !('send' in channel)) {
+        schedulerLogger.error(
+          'Channel is not text-based',
+          new Error('Channel is not text-based'),
+          { channelId },
+        );
+        throw new Error(`Channel ${channelId} is not a text channel.`);
+      }
+
+      // Check if the bot has permission to send messages in this channel
+      if ('guild' in channel && channel.guild) {
+        const botMember = channel.guild.members.me;
+        if (!botMember) {
+          schedulerLogger.error(
+            'Bot member not found in guild',
+            new Error('Bot member not found'),
+            { channelId },
+          );
+          throw new Error('Bot is not a member of this server.');
+        }
+
+        const permissions = channel.permissionsFor(botMember);
+        if (!permissions || !permissions.has('SendMessages')) {
+          schedulerLogger.error(
+            'Bot lacks SendMessages permission',
+            new Error('Missing SendMessages permission'),
+            { channelId },
+          );
+          throw new Error(
+            `Bot does not have permission to send messages in channel ${channel.name || channelId}. Please ensure the bot has the "Send Messages" permission in this channel.`,
+          );
+        }
+
+        if (!permissions.has('ViewChannel')) {
+          schedulerLogger.error(
+            'Bot lacks ViewChannel permission',
+            new Error('Missing ViewChannel permission'),
+            { channelId },
+          );
+          throw new Error(
+            `Bot does not have permission to view channel ${channel.name || channelId}. Please ensure the bot has the "View Channel" permission.`,
+          );
+        }
+      }
+
+      await channel.send(message);
+      schedulerLogger.info('Alert message sent successfully', { channelId });
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+
+      // Check for specific Discord API errors
+      if (
+        errorMessage.includes('Missing Access') ||
+        errorMessage.includes('50001')
+      ) {
+        schedulerLogger.error(
+          'Bot missing access to channel - permission denied',
+          new Error('Missing Access'),
+          { channelId },
+        );
+        throw new Error(
+          `Bot does not have permission to access channel ${channelId}. Please check the bot's permissions or invite the bot to the server with proper permissions.`,
+        );
+      } else if (
+        errorMessage.includes('Unknown Channel') ||
+        errorMessage.includes('10003')
+      ) {
+        schedulerLogger.error(
+          'Channel not found or deleted',
+          new Error('Unknown Channel'),
+          { channelId },
+        );
+        throw new Error(
+          `Channel ${channelId} not found. The channel may have been deleted or the bot may have been removed from the server.`,
+        );
+      } else if (
+        errorMessage.includes('Cannot send messages to this user') ||
+        errorMessage.includes('50007')
+      ) {
+        schedulerLogger.error(
+          'Cannot send DM to user',
+          new Error('Cannot send DM'),
+          { channelId },
+        );
+        throw new Error(
+          `Cannot send direct message to user. The user may have DMs disabled.`,
+        );
+      }
+
       schedulerLogger.error(
         'Failed to send alert message to channel',
         error instanceof Error ? error : new Error(String(error)),
         { channelId },
       );
+
+      // Re-throw with the original error message if it's not a known Discord error
+      throw error;
     }
   }
 
@@ -364,129 +500,5 @@ export class AlertScheduler {
 
   getAlert(alertId: string): AlertConfig | undefined {
     return this.alerts.get(alertId);
-  }
-
-  private async handleTaskFunctionCalls(
-    functionCalls: AIFunctionCall[],
-    userId: string,
-    originalPrompt: string,
-    alertName: string,
-  ): Promise<string | null> {
-    schedulerLogger.info('Executing function calls for scheduled task', {
-      taskName: alertName,
-      functionCount: functionCalls.length,
-      functions: functionCalls.map((fc) => fc.name),
-    });
-
-    const functionResults = [];
-
-    // Execute each function call
-    for (const functionCall of functionCalls) {
-      schedulerLogger.info('Executing function call', {
-        alertName,
-        functionName: functionCall.name,
-      });
-
-      try {
-        const result = await this.llmService.handleFunctionCall(
-          functionCall,
-          userId,
-        );
-        functionResults.push(result);
-        schedulerLogger.info('Function call completed successfully', {
-          alertName,
-          functionName: functionCall.name,
-        });
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        functionResults.push({
-          error: errorMessage,
-        });
-        schedulerLogger.error(
-          'Function call failed',
-          error instanceof Error ? error : new Error(String(error)),
-          {
-            alertName,
-            functionName: functionCall.name,
-          },
-        );
-      }
-    }
-
-    // Get MCP functions for proper conversation continuation
-    let allFunctions: AIFunction[] = [];
-    try {
-      allFunctions = await this.llmService.getMCPFunctions(userId);
-    } catch (error) {
-      schedulerLogger.error(
-        'Failed to load MCP functions for conversation continuation',
-        error as Error,
-        {
-          alertName,
-        },
-      );
-    }
-
-    // Use the centralized generateResponse method which handles tool execution internally
-    try {
-      const contextualResponse = await this.llmService.generateResponse(
-        originalPrompt,
-        {
-          userId,
-          channelId: 'scheduler',
-          history: [],
-        },
-        allFunctions,
-        userId,
-      );
-
-      schedulerLogger.info(
-        'Generated final alert response using centralized LLM service',
-        {
-          alertName,
-          responseLength:
-            typeof contextualResponse === 'string'
-              ? contextualResponse.length
-              : contextualResponse.length,
-          responsePreview:
-            typeof contextualResponse === 'string'
-              ? contextualResponse.substring(0, 200)
-              : 'Function calls executed',
-        },
-      );
-
-      // Convert function calls to a descriptive string for the alert
-      if (Array.isArray(contextualResponse)) {
-        return `Executed ${contextualResponse.length} function calls: ${contextualResponse.map((fc) => fc.name).join(', ')}`;
-      }
-
-      return contextualResponse;
-    } catch (error) {
-      schedulerLogger.error(
-        'Failed to continue conversation with tool results',
-        error instanceof Error ? error : new Error(String(error)),
-        { alertName },
-      );
-
-      // Fallback to simple result summary
-      let fallback = `Alert "${alertName}" executed:\n\n`;
-      for (let i = 0; i < functionCalls.length; i++) {
-        const call = functionCalls[i];
-        const result = functionResults[i];
-        if (result.error) {
-          fallback += `❌ ${call.name}: ${result.error}\n`;
-        } else if (result.content && Array.isArray(result.content)) {
-          const text = result.content
-            .filter((item: any) => item.type === 'text')
-            .map((item: any) => item.text)
-            .join(' ');
-          fallback += `✅ ${call.name}: ${text.slice(0, 200)}...\n`;
-        } else {
-          fallback += `✅ ${call.name}: Success\n`;
-        }
-      }
-      return fallback;
-    }
   }
 }

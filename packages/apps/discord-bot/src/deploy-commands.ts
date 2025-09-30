@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { REST, Routes, SlashCommandBuilder } from 'discord.js';
 import { CommandRegistryImpl } from './commands/registry.js';
 import { ChatCommand } from './commands/chat/chat.js';
+import { ClearChatCommand } from './commands/chat/clear.js';
 import { MCPCommand } from './commands/mcp/mcp.js';
 import { TasksCommand } from './commands/tasks/tasks.js';
 // You might need to import your services if the command constructors need them
@@ -24,6 +25,7 @@ if (!token || !clientId || !guildId) {
 // We pass 'null as any' because we don't need the full services for just building the command data.
 const commandRegistry = new CommandRegistryImpl();
 commandRegistry.register(new ChatCommand(null as any, null as any));
+commandRegistry.register(new ClearChatCommand(null as any));
 commandRegistry.register(new MCPCommand(null as any, null as any));
 commandRegistry.register(new TasksCommand(null as any, null as any));
 
