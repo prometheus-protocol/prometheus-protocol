@@ -1,16 +1,8 @@
-import { AIFunction, AIFunctionCall } from './ai-functions.js';
-import { MCPServer } from './mcp.js';
 import { OAuthClientInformation } from '@modelcontextprotocol/sdk/shared/auth.js';
 
 // LLM Service Types
 export interface LLMProvider {
   name: string;
-  generateResponse(
-    prompt: string,
-    context?: ConversationContext,
-    functions?: AIFunction[],
-    mcpServers?: MCPServer[],
-  ): Promise<string | AIFunctionCall[]>;
   supports: {
     streaming?: boolean;
     functions?: boolean;
@@ -69,6 +61,7 @@ export interface DatabaseService {
     channelId: string,
     limit?: number,
   ): Promise<ConversationMessage[]>;
+  clearConversationHistory(userId: string, channelId: string): Promise<number>;
 
   // Alert management
   saveAlertState(alertId: string, data: any, timestamp: Date): Promise<void>;
@@ -136,6 +129,7 @@ export interface DatabaseService {
   getOAuthTokens(
     serverId: string,
     userId: string,
+    requestingUserId?: string,
   ): Promise<null | {
     server_id: string;
     user_id: string;
@@ -193,7 +187,12 @@ export interface SavedMCPConnection {
   server_id: string;
   server_name: string;
   server_url: string;
-  status: 'connected' | 'disconnected' | 'error' | 'auth-required' | 'DISCONNECTED_BY_USER';
+  status:
+    | 'connected'
+    | 'disconnected'
+    | 'error'
+    | 'auth-required'
+    | 'DISCONNECTED_BY_USER';
   tools: string; // JSON string of MCPTool[]
   error_message?: string | null;
   connected_at?: Date | null;

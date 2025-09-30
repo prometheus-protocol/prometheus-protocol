@@ -62,6 +62,7 @@ const createMockDatabaseService = (): DatabaseService => ({
   getUserMCPConnections: vi.fn(),
   updateUserMCPConnection: vi.fn(),
   deleteUserMCPConnection: vi.fn(),
+  clearConversationHistory: vi.fn(),
 });
 
 // Mock the event service

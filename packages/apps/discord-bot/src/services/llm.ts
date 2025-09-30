@@ -68,67 +68,6 @@ export class OpenAIProvider implements LLMProvider {
       throw error;
     }
   }
-
-  // This method is now deprecated and will be removed once native MCP is stable.
-  // It's kept for now to avoid breaking existing logic.
-  async generateResponse(
-    prompt: string,
-    context?: ConversationContext,
-    functions?: AIFunction[],
-    mcpServers?: MCPServer[],
-  ): Promise<string | AIFunctionCall[]> {
-    // Build the initial message list
-    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-      { role: 'system', content: this.getSystemPrompt(functions) },
-    ];
-    if (context?.history) {
-      messages.push(
-        ...context.history.slice(-10).map((msg) => ({
-          role: msg.role as 'user' | 'assistant',
-          content: msg.content,
-        })),
-      );
-    }
-    messages.push({ role: 'user', content: prompt });
-
-    // Call the primary method
-    const choice = await this.generateChatCompletion(messages, functions);
-
-    // Process the result
-    if (choice.message.tool_calls) {
-      return choice.message.tool_calls.map((toolCall) => ({
-        name: toolCall.function.name,
-        arguments: JSON.parse(toolCall.function.arguments),
-        id: toolCall.id,
-      }));
-    }
-
-    return choice.message.content || 'Sorry, I could not generate a response.';
-  }
-
-  private getSystemPrompt(functions?: AIFunction[]): string {
-    let basePrompt = `You are an AI assistant for Prometheus Protocol Discord. You help users interact with their connected MCP (Model Context Protocol) tools and servers.
-
-Key Capabilities:
-- Access connected MCP servers and their tools for enhanced functionality
-- Execute tool functions to retrieve information and perform actions
-- Provide helpful responses based on available information and tool results
-
-For monitoring and task management, users should use the dedicated \`/tasks\` command.
-
-You can help users by:
-- Using their connected MCP tools to get information
-- Answering questions based on tool results
-- Explaining what tools are available and how to use them
-
-Available MCP tools depend on what servers the user has connected via \`/mcp connect\`.`;
-
-    if (functions && functions.length > 0) {
-      basePrompt += `\n\nAvailable functions: ${functions.map((f) => f.name).join(', ')}`;
-    }
-
-    return basePrompt;
-  }
 }
 
 export class LLMService {
@@ -156,7 +95,6 @@ export class LLMService {
   async generateResponse(
     prompt: string,
     context?: ConversationContext,
-    functions?: AIFunction[],
     userId?: string,
     statusCallback?: (status: string) => Promise<void>,
   ): Promise<string | AIFunctionCall[]> {
@@ -176,11 +114,19 @@ export class LLMService {
     if (statusCallback) {
       await statusCallback('Loading your connected tools...');
     }
-    const allFunctions = await this.getAllFunctions(userId, functions);
+
+    // Load all available functions including MCP tools
+    const allFunctions = await this.getAllFunctions(userId);
+
+    llmLogger.info('Functions loaded for tool loop', {
+      userId,
+      totalFunctions: allFunctions.length,
+      mcpFunctions: allFunctions.length,
+    });
 
     // 2. Initialize conversation history
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-      { role: 'system', content: this.getSystemPrompt(allFunctions) },
+      { role: 'system', content: this.getSystemPrompt() },
     ];
     if (context?.history) {
       messages.push(
@@ -192,7 +138,7 @@ export class LLMService {
     }
     messages.push({ role: 'user', content: prompt });
 
-    const maxIterations = 5; // Safety break
+    const maxIterations = 10; // Safety break
 
     for (let i = 0; i < maxIterations; i++) {
       llmLogger.info(`Tool loop iteration ${i + 1}/${maxIterations}`, {
@@ -202,7 +148,9 @@ export class LLMService {
       try {
         // 3. Call the LLM with the current conversation history
         if (statusCallback) {
-          await statusCallback(i === 0 ? 'Thinking...' : `Continuing analysis (step ${i + 1})...`);
+          await statusCallback(
+            i === 0 ? 'Thinking...' : `Continuing analysis (step ${i + 1})...`,
+          );
         }
         const choice = await this.provider.generateChatCompletion(
           messages,
@@ -235,10 +183,13 @@ export class LLMService {
         );
 
         if (statusCallback) {
-          const toolNames = assistantMessage.tool_calls.map(tc => tc.function.name);
-          const toolList = toolNames.length > 3 
-            ? `${toolNames.slice(0, 3).join(', ')} and ${toolNames.length - 3} more`
-            : toolNames.join(', ');
+          const toolNames = assistantMessage.tool_calls.map(
+            (tc) => tc.function.name,
+          );
+          const toolList =
+            toolNames.length > 3
+              ? `${toolNames.slice(0, 3).join(', ')} and ${toolNames.length - 3} more`
+              : toolNames.join(', ');
           await statusCallback(`Executing tools: ${toolList}...`);
         }
 
@@ -305,11 +256,8 @@ export class LLMService {
   }
 
   // Helper to consolidate function loading logic
-  private async getAllFunctions(
-    userId?: string,
-    localFunctions: AIFunction[] = [],
-  ): Promise<AIFunction[]> {
-    let allFunctions = [...localFunctions];
+  private async getAllFunctions(userId?: string): Promise<AIFunction[]> {
+    let allFunctions: AIFunction[] = [];
     if (this.mcpService && userId) {
       try {
         const mcpFunctions =
@@ -326,14 +274,12 @@ export class LLMService {
     return allFunctions;
   }
 
-  private getSystemPrompt(functions?: AIFunction[]): string {
+  private getSystemPrompt(): string {
     let basePrompt = `You are an AI assistant for Prometheus Protocol Discord. You help users interact with their connected tools.
 
 Key Capabilities:
 - Execute tool functions to retrieve information and perform actions
 - Provide helpful responses based on available information and tool results
-
-For monitoring and task management, users should use the dedicated \`/tasks\` command.
 
 You can help users by:
 - Answering questions based on tool results

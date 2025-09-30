@@ -19,7 +19,6 @@ import {
   Wallet,
   Info,
   PackageCheckIcon,
-  BadgeCheck,
   ToolCase,
   BookLock,
 } from 'lucide-react';

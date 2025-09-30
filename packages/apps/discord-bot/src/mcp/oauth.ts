@@ -54,7 +54,7 @@ function isTokenExpired(token: string, bufferSeconds = 30): boolean {
       timeUntilExpirySeconds: Math.floor(timeUntilExpiry / 1000),
       bufferSeconds,
       isExpired,
-      tokenPreview: token.substring(0, 50) + '...',
+      // Token preview removed for security
     });
 
     // Check if the token is expired, including the buffer
@@ -223,7 +223,11 @@ export async function auth(
         clientMetadata: provider.clientMetadata,
       });
 
-      console.log('Registered new OAuth client:', fullInformation);
+      console.log('Registered new OAuth client:', {
+        client_id: fullInformation.client_id ? '[REDACTED]' : 'none',
+        hasClientSecret: !!fullInformation.client_secret,
+        // Sensitive client data removed for security
+      });
       await provider.saveClientInformation(fullInformation);
       clientInformation = fullInformation;
     } catch (e) {
@@ -256,10 +260,12 @@ export async function auth(
       // Attempt to refresh the token
       console.log('Attempting to refresh OAuth tokens...');
       console.log('DEBUG: Refresh token details:', {
-        refreshTokenPreview: tokens.refresh_token.substring(0, 50) + '...',
-        authorizationServerUrl: authorizationServerUrl.toString(),
-        clientId: clientInformation?.client_id,
-        resourceUrl: resource?.toString(),
+        hasRefreshToken: !!tokens.refresh_token,
+        expiresIn: tokens.expires_in,
+        hasExpiryInfo: tokens.expires_in !== undefined,
+        hasMetadata: !!metadata,
+        hasClientInformation: !!clientInformation,
+        // Sensitive token data removed for security
       });
 
       const newTokens = await refreshAuthorization(authorizationServerUrl, {

@@ -16,5 +16,8 @@ module {
 
     // Checks if a Wasm has been officially verified by the DAO.
     is_wasm_verified : (wasm_id : Text) -> async Bool;
+
+    // Checks if a caller can install a specific Wasm.
+    can_install_wasm : (caller : Principal, wasm_id : Text) -> async Bool;
   };
 };
