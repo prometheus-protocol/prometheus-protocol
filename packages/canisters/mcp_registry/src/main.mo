@@ -1172,38 +1172,38 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
 
     var latest_version = canister_type.versions[0];
-    if (canister_type.versions.size() > 1) {
-      for (i in Iter.range(1, canister_type.versions.size() - 1)) {
-        if (ICRC118WasmRegistry.canisterVersionCompare(canister_type.versions[i], latest_version) == #greater) {
-          latest_version := canister_type.versions[i];
-        };
+    var has_any_verified_version = _is_wasm_verified(Base16.encode(latest_version.calculated_hash));
+
+    // Check all versions, updating latest and accumulating verification
+    for (v in canister_type.versions.vals()) {
+      if (ICRC118WasmRegistry.canisterVersionCompare(v, latest_version) == #greater) {
+        latest_version := v;
       };
+      if (_is_wasm_verified(Base16.encode(v.calculated_hash))) {
+        has_any_verified_version := true;
+      };
+    };
+
+    // If you want to list the app only when at least one version is verified:
+    if (not has_any_verified_version) {
+      Debug.print("Canister type " # canister_type.canister_type_namespace # " has no verified versions.");
+      return null;
     };
 
     // 2. Get the wasm_id and apply the verification gateway check.
     let wasm_id = Base16.encode(latest_version.calculated_hash);
-    if (not _is_wasm_verified(wasm_id)) {
-      Debug.print("WASM not verified: " # wasm_id);
-      return null; // The latest version is not verified, so we don't list the app.
-    };
+    let is_latest_verified = _is_wasm_verified(wasm_id);
 
     // 3. Determine status (Pending vs. Verified) and build the listing object.
     let audit_records = _get_audit_records_for_wasm(wasm_id);
-    let app_info_attestation = Array.find<ICRC126.AuditRecord>(
-      audit_records,
-      func(rec) {
-        switch (rec) {
-          case (#Attestation(att)) { att.audit_type == "app_info_v1" };
-          case (_) { false };
-        };
-      },
-    );
+    let completed_audits = AppStore.get_completed_audit_types(audit_records);
 
     let verification_request = Map.get(icrc126().state.requests, Map.thash, wasm_id);
     switch (verification_request) {
       case (?req) {
         let meta = req.metadata;
         let visuals_map = AppStore.getICRC16MapOptional(meta, "visuals");
+
         return ?{
           // Stable app identity from the verification request
           namespace = canister_type.canister_type_namespace;
@@ -1226,12 +1226,15 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           latest_version = {
             wasm_id = wasm_id;
             version_string = _format_version_number(latest_version.version_number);
-            security_tier = #Unranked;
-            status = #Pending;
+            security_tier = AppStore.calculate_security_tier(is_latest_verified, completed_audits);
+            status = if (is_latest_verified) #Verified else #Pending;
           };
         };
       };
-      case (null) { return null };
+      case (null) {
+        Debug.print("No verification request found for wasm_id " # wasm_id # ". Skipping listing.");
+        return null;
+      };
     };
   };
 
@@ -1439,11 +1442,13 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
 
     // 5. Assemble the detailed object for the LATEST version.
     let latest_build_info = _build_build_info(latest_audit_records);
+    let is_verified = _is_wasm_verified(wasm_id_to_load);
+    let status = if (is_verified) { #Verified } else { #Pending };
     let latest_version_details : AppStore.AppVersionDetails = {
       wasm_id = wasm_id_to_load;
       version_string = _format_version_number(version_to_load_record.version_number);
-      status = #Verified; // If we got this far, it must be at least Pending/Verified
-      security_tier = AppStore.calculate_security_tier(true, AppStore.get_completed_audit_types(latest_audit_records));
+      status = status;
+      security_tier = AppStore.calculate_security_tier(is_verified, AppStore.get_completed_audit_types(latest_audit_records));
       build_info = latest_build_info;
       tools = _get_tools_from_records(latest_audit_records);
       data_safety = _get_data_safety_from_records(latest_audit_records);
@@ -1453,6 +1458,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
 
     // 6. Assemble the stable, top-level app information.
     //    This comes from the  the verification request.
+    Debug.print("Loading app details for namespace " # namespace # " using wasm_id " # wasm_id_to_load);
 
     let verification_request = _get_verification_request(wasm_id_to_load);
     switch (verification_request) {
@@ -1482,7 +1488,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
             case (?v) { AppStore.getICRC16TextArray(v, "gallery_images") };
             case (_) { [] };
           };
-          latest_version = { latest_version_details with status = #Pending };
+          latest_version = latest_version_details;
           all_versions = Buffer.toArray(all_versions_summary);
         });
       };

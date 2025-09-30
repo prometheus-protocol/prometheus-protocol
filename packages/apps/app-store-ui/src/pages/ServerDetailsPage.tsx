@@ -176,11 +176,10 @@ export default function ServerDetailsPage() {
     if (!server) return;
 
     try {
-      const canisterId = await provisionMutation.mutateAsync({
+      await provisionMutation.mutateAsync({
         namespace,
         wasmId: server.latestVersion.wasmId,
       });
-      console.log('Successfully provisioned canister:', canisterId.toText());
     } catch (error) {
       // Error is handled by the custom mutation hook
       console.error('Provisioning failed:', error);

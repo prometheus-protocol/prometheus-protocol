@@ -10,13 +10,13 @@ interface FeaturedServerCardProps {
 }
 
 const statusMap: Record<string, string> = {
-  Pending: 'Coming Soon',
-  Verified: 'Recommended',
+  Unranked: 'Coming Soon',
+  Gold: 'Recommended',
 };
 
 export function FeaturedServerCard({ server }: FeaturedServerCardProps) {
   // This logic is fine, an "Unranked" tier can be considered "Coming Soon" in terms of full certification.
-  const status = server.latestVersion.status;
+  const status = server.latestVersion.securityTier;
 
   return (
     <Link to={`/app/${server.namespace}`} className="block group">
@@ -49,7 +49,7 @@ export function FeaturedServerCard({ server }: FeaturedServerCardProps) {
               <p className="text-sm text-muted-foreground">{server.category}</p>
             </div>
             <Button variant="secondary" size="sm">
-              {status === 'Verified' ? 'Connect' : 'Details'}
+              {status === 'Gold' ? 'Connect' : 'Details'}
             </Button>
           </div>
         </CardContent>
