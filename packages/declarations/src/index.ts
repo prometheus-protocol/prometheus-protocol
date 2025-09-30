@@ -9,7 +9,7 @@ import * as McpServer from './generated/mcp_server/mcp_server.did.js';
 import * as SearchIndex from './generated/search_index/search_index.did.js';
 import * as UsageTracker from './generated/usage_tracker/usage_tracker.did.js';
 
-// Centralized export for all canister interfaces
+// Centralized export for all canisters
 export {
   Registry,
   Orchestrator,
