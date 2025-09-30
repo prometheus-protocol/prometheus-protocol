@@ -68,6 +68,10 @@ export const idlFactory = ({ IDL }) => {
       'Class' : IDL.Vec(ICRC16Property__1),
     })
   );
+  const CanisterDeploymentType = IDL.Variant({
+    'provisioned' : IDL.Null,
+    'global' : IDL.Null,
+  });
   const DeployOrUpgradeRequest = IDL.Record({
     'snapshot' : IDL.Bool,
     'args' : IDL.Vec(IDL.Nat8),
@@ -76,10 +80,17 @@ export const idlFactory = ({ IDL }) => {
     'stop' : IDL.Bool,
     'parameters' : IDL.Opt(IDL.Vec(IDL.Tuple(IDL.Text, ICRC16__1))),
     'restart' : IDL.Bool,
+    'deployment_type' : CanisterDeploymentType,
     'timeout' : IDL.Nat,
     'namespace' : IDL.Text,
   });
   const Result_1 = IDL.Variant({ 'ok' : IDL.Principal, 'err' : IDL.Text });
+  const CycleTopUpConfig = IDL.Record({
+    'threshold' : IDL.Nat,
+    'enabled' : IDL.Bool,
+    'interval_seconds' : IDL.Nat,
+    'amount' : IDL.Nat,
+  });
   const Tip = IDL.Record({
     'last_block_index' : IDL.Vec(IDL.Nat8),
     'hash_tree' : IDL.Vec(IDL.Nat8),
@@ -308,7 +319,13 @@ export const idlFactory = ({ IDL }) => {
   const Result = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   const ICRC120Canister = IDL.Service({
     'deploy_or_upgrade' : IDL.Func([DeployOrUpgradeRequest], [Result_1], []),
+    'get_canister_id' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Opt(IDL.Principal)],
+        ['query'],
+      ),
     'get_canisters' : IDL.Func([IDL.Text], [IDL.Vec(IDL.Principal)], ['query']),
+    'get_cycle_top_up_config' : IDL.Func([], [CycleTopUpConfig], ['query']),
     'get_tip' : IDL.Func([], [Tip], ['query']),
     'hello' : IDL.Func([], [IDL.Text], []),
     'icrc120_clean_snapshot' : IDL.Func(
@@ -380,6 +397,8 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'internal_deploy_or_upgrade' : IDL.Func([InternalDeployRequest], [], []),
+    'provision_instance' : IDL.Func([IDL.Text, IDL.Text], [Result_1], []),
+    'set_cycle_top_up_config' : IDL.Func([CycleTopUpConfig], [Result], []),
     'set_mcp_registry_id' : IDL.Func([IDL.Principal], [Result], []),
   });
   return ICRC120Canister;

@@ -380,6 +380,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       snapshot: false,
       stop: false,
       timeout: 0n,
+      deployment_type: { global: null },
     });
 
     // @ts-ignore

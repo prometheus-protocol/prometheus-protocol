@@ -37,6 +37,7 @@ module {
     // --- Stable App Identity ---
     namespace : Text; // The new primary identifier
     name : Text;
+    deployment_type : Text; // "global" or "provisioned"
     description : Text;
     category : Text;
     publisher : Text;
@@ -83,6 +84,7 @@ module {
     category : Text;
     icon_url : Text;
     banner_url : Text;
+    deployment_type : Text;
     gallery_images : [Text];
     description : Text;
     key_features : [Text];

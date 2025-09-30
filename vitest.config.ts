@@ -69,7 +69,10 @@ export default defineConfig({
         // --- Project 3: Unit tests ---
         test: {
           name: 'unit-tests',
-          include: ['packages/libs/**/test/**/*.test.ts'],
+          include: [
+            'packages/libs/**/test/**/*.test.ts',
+            'packages/apps/**/src/tests/**/*.test.ts',
+          ],
 
           server: {
             deps: {

@@ -19,6 +19,13 @@ import Map "mo:map/Map";
 import Debug "mo:base/Debug";
 import Error "mo:base/Error";
 import Iter "mo:base/Iter";
+import Cycles "mo:base/ExperimentalCycles";
+import Time "mo:base/Time";
+import Int "mo:base/Int";
+import Star "mo:star/star";
+import Option "mo:base/Option";
+import Array "mo:base/Array";
+
 import { ic } "mo:ic";
 
 import McpRegistry "McpRegistry";
@@ -29,6 +36,36 @@ import ICRC118WasmRegistry "../../../../libs/icrc118/src/service";
 import System "../../../../libs/icrc120/src/system";
 import ICRC120 "../../../../libs/icrc120/src";
 import ICRC120Types "../../../../libs/icrc120/src/migrations/types";
+
+// (
+//   with migration = func({ managed_canisters : Map.Map<Text, Principal> }) : {
+//     managed_canisters : Map.Map<Text, [Principal]>;
+//     canister_owners : Map.Map<Principal, Principal>;
+//   } {
+//     // This function runs during the `post_upgrade` hook to transform the stable state.
+//     Debug.print("Starting stable state migration...");
+
+//     // 1. Create a new map with the correct new type.
+//     let new_managed_canisters = Map.new<Text, [Principal]>();
+//     let canister_owners = Map.new<Principal, Principal>();
+
+//     // 2. Iterate over the old map and transform each value.
+//     for ((namespace, canister_id) in Map.entries(managed_canisters)) {
+//       // The old value was a Principal. The new value must be a [Principal].
+//       Map.set(new_managed_canisters, Map.thash, namespace, [canister_id]);
+//       Map.set(canister_owners, Map.phash, canister_id, Principal.fromText("feh5k-2fozc-ujrsf-otek5-pcla7-rmdtc-gwhmo-r2kct-iwtqr-xxzei-cae"));
+//     };
+
+//     Debug.print("Migration complete. Returning new state.");
+
+//     // 3. Return the complete new state object.
+//     {
+//       // Set the transformed and new variables.
+//       managed_canisters = new_managed_canisters;
+//       canister_owners = canister_owners;
+//     };
+//   }
+// )
 
 shared (deployer) actor class ICRC120Canister<system>(
   args : ?{
@@ -41,13 +78,31 @@ shared (deployer) actor class ICRC120Canister<system>(
   stable var _owner = deployer.caller;
   let CANISTER_PROVISION_CYCLES : Nat = 4_000_000_000_000; // 4T cycles to provision a new canister
 
+  // --- Cycle Top-Up Configuration ---
+  stable var _cycle_top_up_enabled : Bool = true; // Default to on
+  stable var TOP_UP_THRESHOLD : Nat = 1_000_000_000_000; // 1T cycles
+  stable var TOP_UP_AMOUNT : Nat = 3_000_000_000_000; // 3T cycles
+  stable var _cycle_check_interval_seconds : Nat = 21600; // 6 hours
+  let CYCLE_JOB_ACTION_TYPE : Text = "cycle_top_up_job";
+  stable var _cycle_job_action_id : ?TT.ActionId = null;
+
   let initManager = ClassPlus.ClassPlusInitializationManager(_owner, Principal.fromActor(this), true);
   let icrc120InitArgs = do ? { args!.icrc120Args! };
   let ttInitArgs : ?TT.InitArgList = do ? { args!.ttArgs! };
 
-  stable var managed_canisters = Map.new<Text, Principal>();
+  stable var managed_canisters = Map.new<Text, [Principal]>();
 
-  // --- NEW: A reverse-lookup map for finding a namespace by its canister ID ---
+  // Map the wasm id to its deployment type (for Provisioned apps).
+  type CanisterDeploymentType = {
+    #global;
+    #provisioned;
+  };
+  stable var canister_deployment_types = Map.new<Text, CanisterDeploymentType>();
+
+  // Maps a canister_id to the principal of the user who owns it (for Provisioned apps).
+  stable var canister_owners = Map.new<Principal, Principal>();
+
+  // --- A reverse-lookup map for finding a namespace by its canister ID ---
   // This provides a fast, O(1) lookup for the security hooks.
   stable var reverse_managed_canisters = Map.new<Principal, Text>();
 
@@ -64,6 +119,71 @@ shared (deployer) actor class ICRC120Canister<system>(
   };
 
   stable var tt_migration_state : TT.State = TT.Migration.migration.initialState;
+
+  /**
+   * [PRIVATE] Iterates through all managed canisters, checks their cycle balance,
+   * and tops them up if they are below the defined threshold.
+   */
+  private func _check_and_top_up_cycles() : async () {
+    if (not _cycle_top_up_enabled) {
+      D.print("Cycle top-up is disabled. Skipping check.");
+      return;
+    };
+
+    D.print("Starting cycle balance check for all managed canisters...");
+    let orchestrator_balance = Cycles.balance();
+    if (orchestrator_balance < TOP_UP_AMOUNT) {
+      D.print("Orchestrator has insufficient cycles (" # Nat.toText(orchestrator_balance) # ") to perform top-ups. Skipping.");
+      return;
+    };
+
+    let canisters_to_check = Array.flatten(Iter.toArray(Map.vals(managed_canisters)));
+
+    for (canister_id in canisters_to_check.vals()) {
+      try {
+        let status = await ic.canister_status({ canister_id = canister_id });
+        D.print("Checking canister " # Principal.toText(canister_id) # ". Balance: " # Nat.toText(status.cycles) # " cycles.");
+
+        if (status.cycles < TOP_UP_THRESHOLD) {
+          D.print("Canister " # Principal.toText(canister_id) # " is below threshold. Topping up...");
+          // This is a system API call that deposits cycles from this canister's balance.
+          await (with cycles = TOP_UP_AMOUNT) ic.deposit_cycles({ canister_id });
+          D.print("Deposited " # Nat.toText(TOP_UP_AMOUNT) # " cycles to " # Principal.toText(canister_id));
+        };
+      } catch (e) {
+        D.print("Failed to check or top up canister " # Principal.toText(canister_id) # ": " # Error.message(e));
+      };
+    };
+    D.print("Cycle balance check complete.");
+  };
+
+  /**
+   * [PRIVATE] Schedules the cycle top-up job if one is not already scheduled.
+   */
+  private func _schedule_cycle_top_up_job<system>(tt : TT.TimerTool) {
+    // Prevent scheduling duplicates.
+    if (_cycle_job_action_id != null) {
+      return;
+    };
+
+    if (not _cycle_top_up_enabled) {
+      return;
+    };
+
+    let tt_instance = tt;
+    let schedule_time = Time.now() + Int.abs(_cycle_check_interval_seconds * 1_000_000_000);
+
+    D.print("Scheduling cycle top-up job for " # Int.toText(schedule_time));
+
+    let action : TT.ActionRequest = {
+      actionType = CYCLE_JOB_ACTION_TYPE;
+      params = Blob.fromArray([]);
+    };
+
+    // Use setActionAsync because our handler is async. A timeout of 0 means it can run as long as needed.
+    let actionId = tt_instance.setActionASync<system>(Int.abs(schedule_time), action, 0);
+    _cycle_job_action_id := ?actionId;
+  };
 
   let tt = TT.Init<system>({
     manager = initManager;
@@ -85,7 +205,18 @@ shared (deployer) actor class ICRC120Canister<system>(
       func(newClass : TT.TimerTool) : async* () {
         D.print("Initializing TimerTool");
         newClass.initialize<system>();
-        //do any work here necessary for initialization
+        // do any work here necessary for initialization
+
+        func _handle_cycle_top_up_action(actionId : TT.ActionId, action : TT.Action) : async* Star.Star<TT.ActionId, TT.Error> {
+          await _check_and_top_up_cycles();
+          // Schedule the next run
+          _schedule_cycle_top_up_job<system>(newClass);
+          return #trappable(actionId);
+        };
+
+        // Ensure a job is scheduled if the feature is enabled
+        _schedule_cycle_top_up_job<system>(newClass);
+        newClass.registerExecutionListenerAsync(?CYCLE_JOB_ACTION_TYPE, _handle_cycle_top_up_action);
       }
     );
     onStorageChange = func(state : TT.State) {
@@ -146,16 +277,17 @@ shared (deployer) actor class ICRC120Canister<system>(
           return true;
         };
 
-        switch (Map.get(reverse_managed_canisters, Map.phash, canisterId)) {
-          case (?namespace) {
-            let registry : McpRegistry.Service = actor (Principal.toText(registryId));
-            switch (await registry.is_controller_of_type(namespace, caller)) {
-              case (#ok(is_controller)) { return is_controller };
-              case (#err(_)) { return false };
+        switch (Map.get(canister_owners, Map.phash, canisterId)) {
+          case (?exists) {
+            if (exists == caller) {
+              Debug.print("Caller is the owner of the canister, allowing admin.");
+              return true;
+            } else {
+              Debug.print("Caller is NOT the owner of the canister, denying admin.");
+              return false;
             };
           };
-
-          case (_) {
+          case (null) {
             Debug.print("Cannot admin canister: Unknown canister.");
             return false;
           };
@@ -183,7 +315,13 @@ shared (deployer) actor class ICRC120Canister<system>(
         return false;
       }; // Cannot install if registry is not set
       case (?registryId) {
-        if (caller != registryId and caller != _owner) {
+
+        let isCanisterOwner = switch (Map.get(canister_owners, Map.phash, canisterId)) {
+          case (?owner) { owner == caller };
+          case (null) { false };
+        };
+
+        if (caller != registryId and caller != _owner and not isCanisterOwner) {
           Debug.print("Caller is not the Owner and not the MCP Registry itself, denying install.");
           return false;
         };
@@ -192,7 +330,7 @@ shared (deployer) actor class ICRC120Canister<system>(
           case (?namespace) {
             let registry : McpRegistry.Service = actor (Principal.toText(registryId));
             let wasm_id = Base16.encode(args.wasm_module_hash);
-            let verified_check = await registry.is_wasm_verified(wasm_id);
+            let verified_check = await registry.can_install_wasm(caller, wasm_id);
             if (not verified_check) {
               Debug.print("Cannot install canister: Wasm module is not verified.");
               return false;
@@ -426,6 +564,7 @@ shared (deployer) actor class ICRC120Canister<system>(
   // It's the standard UpgradeToRequest, but with `namespace` instead of `canister_id`.
   public type DeployOrUpgradeRequest = {
     namespace : Text;
+    deployment_type : CanisterDeploymentType;
     hash : Blob;
     args : Blob;
     stop : Bool;
@@ -458,10 +597,50 @@ shared (deployer) actor class ICRC120Canister<system>(
 
     // --- 2. Determine Canister ID (Deploy vs. Upgrade) ---
     let canister_id_to_upgrade = switch (Map.get(managed_canisters, Map.thash, request.namespace)) {
-      case (?existing_canister_id) {
-        // --- UPGRADE PATH ---
-        Debug.print("Found existing canister for namespace " # request.namespace # ". Upgrading...");
-        existing_canister_id;
+      case (?existing_canister_ids) {
+        // Find the caller's canister if they have one.
+        let existing_canister = Array.find(
+          existing_canister_ids,
+          func(id : Principal) : Bool {
+            switch (Map.get(canister_owners, Map.phash, id)) {
+              case (?owner) { owner == caller };
+              case (null) { false };
+            };
+          },
+        );
+
+        switch (existing_canister) {
+          case (?exists) { exists };
+          case (null) {
+            // --- DEPLOY PATH ---
+            Debug.print("No canister found for namespace " # request.namespace # ". Provisioning a new one...");
+
+            // Provision a new, empty canister using the factory module.
+            let provision_result = await CanisterFactory.provision_canister(
+              thisPrincipal,
+              CANISTER_PROVISION_CYCLES,
+            );
+
+            switch (provision_result) {
+              case (#err(e)) {
+                return #err(e);
+              };
+              case (#ok(new_canister_id)) {
+                // IMPORTANT: Track the new canister before proceeding.
+                let old_canister_list = Option.get(Map.get(managed_canisters, Map.thash, request.namespace), []);
+                let new_canister_list = Array.append(old_canister_list, [new_canister_id]);
+
+                Map.set(managed_canisters, Map.thash, request.namespace, new_canister_list);
+                Map.set(reverse_managed_canisters, Map.phash, new_canister_id, request.namespace);
+                Map.set(canister_owners, Map.phash, new_canister_id, caller);
+                let wasm_id = Base16.encode(request.hash);
+                Map.set(canister_deployment_types, Map.thash, wasm_id, request.deployment_type);
+                Debug.print("Provisioned new canister " # Principal.toText(new_canister_id));
+                new_canister_id;
+              };
+            };
+          };
+        };
       };
       case (null) {
         // --- DEPLOY PATH ---
@@ -479,8 +658,14 @@ shared (deployer) actor class ICRC120Canister<system>(
           };
           case (#ok(new_canister_id)) {
             // IMPORTANT: Track the new canister before proceeding.
-            Map.set(managed_canisters, Map.thash, request.namespace, new_canister_id);
+            let old_canister_list = Option.get(Map.get(managed_canisters, Map.thash, request.namespace), []);
+            let new_canister_list = Array.append(old_canister_list, [new_canister_id]);
+
+            Map.set(managed_canisters, Map.thash, request.namespace, new_canister_list);
             Map.set(reverse_managed_canisters, Map.phash, new_canister_id, request.namespace);
+            Map.set(canister_owners, Map.phash, new_canister_id, caller);
+            let wasm_id = Base16.encode(request.hash);
+            Map.set(canister_deployment_types, Map.thash, wasm_id, request.deployment_type);
             Debug.print("Provisioned new canister " # Principal.toText(new_canister_id));
             new_canister_id;
           };
@@ -552,38 +737,148 @@ shared (deployer) actor class ICRC120Canister<system>(
   // Get canisters for a given namespace
   public query func get_canisters(namespace : Text) : async [Principal] {
     // With the new state structure, this is a simple and fast lookup.
-    switch (Map.get(managed_canisters, Map.thash, namespace)) {
-      case (?canister_id) { return [canister_id] };
-      case (null) { return [] };
+    Option.get(Map.get(managed_canisters, Map.thash, namespace), []);
+  };
+
+  public query ({ caller }) func get_canister_id(namespace : Text, wasm_id : Text) : async ?Principal {
+    let canisters = Option.get(Map.get(managed_canisters, Map.thash, namespace), []);
+    Debug.print("Found " # Nat.toText(canisters.size()) # " canisters for namespace " # namespace);
+    if (canisters.size() > 0) {
+      let deploymentType = Option.get(Map.get(canister_deployment_types, Map.thash, wasm_id), #global);
+
+      Debug.print("Deployment type: " # debug_show (deploymentType));
+      let caller_canister = switch (deploymentType) {
+        case (#provisioned) {
+          Debug.print("Caller: " # Principal.toText(caller));
+          Debug.print("Searching for caller's provisioned canister...");
+          Debug.print(debug_show (Iter.toArray(Map.entries(canister_owners))));
+
+          let canister = Array.find(
+            canisters,
+            func(id : Principal) : Bool {
+              switch (Map.get(canister_owners, Map.phash, id)) {
+                case (?owner) { owner == caller };
+                case (null) { false };
+              };
+            },
+          );
+
+          Debug.print("Caller canister found: " # debug_show (canister));
+          canister;
+        };
+        case (#global) {
+          Debug.print("Returning first global canister...");
+          // For global canisters, return the first one in the list
+          ?canisters[0];
+        };
+      };
+      caller_canister;
+    } else {
+      null;
     };
+  };
+
+  // =====================================================================================
+  // NEW: CYCLE MANAGEMENT
+  // =====================================================================================
+
+  public type CycleTopUpConfig = {
+    enabled : Bool;
+    threshold : Nat;
+    amount : Nat;
+    interval_seconds : Nat;
+  };
+
+  /**
+   * Returns the current configuration for the automated cycle top-up feature.
+   */
+  public query func get_cycle_top_up_config() : async CycleTopUpConfig {
+    {
+      enabled = _cycle_top_up_enabled;
+      threshold = TOP_UP_THRESHOLD;
+      amount = TOP_UP_AMOUNT;
+      interval_seconds = _cycle_check_interval_seconds;
+    };
+  };
+
+  /**
+   * Sets the configuration for the automated cycle top-up feature.
+   * This function is restricted to the owner of the orchestrator canister.
+   * It will reschedule or remove the timer job based on the new settings.
+   */
+  public shared ({ caller }) func set_cycle_top_up_config(config : CycleTopUpConfig) : async Result.Result<(), Text> {
+    if (caller != _owner) {
+      return #err("Caller is not the owner");
+    };
+
+    _cycle_top_up_enabled := config.enabled;
+    TOP_UP_THRESHOLD := config.threshold;
+    TOP_UP_AMOUNT := config.amount;
+    _cycle_check_interval_seconds := config.interval_seconds;
+
+    // Cancel any existing job before making changes.
+    switch (_cycle_job_action_id) {
+      case (?actionId) {
+        D.print("Cancelling existing cycle top-up job.");
+        ignore tt().cancelAction<system>(actionId.id);
+        _cycle_job_action_id := null;
+      };
+      case (null) {};
+    };
+
+    // If the feature is enabled, schedule a new job immediately.
+    if (_cycle_top_up_enabled) {
+      D.print("Cycle top-up enabled. Scheduling new job.");
+      _schedule_cycle_top_up_job<system>(tt());
+    } else {
+      D.print("Cycle top-up disabled.");
+    };
+
+    return #ok(());
   };
 
   // =====================================================================================
   // PRIVATE HELPERS
   // =====================================================================================
 
-  private func _get_mode(namespace : Text) : async canister_install_mode {
+  private func _get_mode(caller : Principal, namespace : Text) : async canister_install_mode {
     // Check if a canister is already managed for this namespace.
     switch (Map.get(managed_canisters, Map.thash, namespace)) {
-      case (?existing_canister_id) {
-        // A canister exists. This COULD be an upgrade.
-        // Lets check the wasm hash to determine if it's a reinstall or an upgrade.
-        let status_result = await ic.canister_status({
-          canister_id = existing_canister_id;
-        });
-        switch (status_result.module_hash) {
-          case (?installed_hash) {
-            if (installed_hash == wasmHash) {
-              // The same WASM is already installed. This is a reinstall.
-              return #reinstall;
-            } else {
-              // A different WASM is installed. This is an upgrade.
-              return #upgrade(null);
+      case (?existing_canister_ids) {
+        // Find the caller's canister if they have one.
+        let existing_canister = Array.find(
+          existing_canister_ids,
+          func(id : Principal) : Bool {
+            switch (Map.get(canister_owners, Map.phash, id)) {
+              case (?owner) { owner == caller };
+              case (null) { false };
             };
-          };
-          case (null) {
-            // No WASM is installed. This is effectively a first-time install.
-            return #install;
+          },
+        );
+
+        switch (existing_canister) {
+          case (null) { return #install }; // No canister for this caller, so it's an install.
+          case (?existing_canister_id) {
+            // A canister exists. This COULD be an upgrade.
+            // Lets check the wasm hash to determine if it's a reinstall or an upgrade.
+            let status_result = await ic.canister_status({
+              canister_id = existing_canister_id;
+            });
+            switch (status_result.module_hash) {
+              case (?installed_hash) {
+                if (?installed_hash == wasmHash) {
+                  // The same WASM is already installed. This is a reinstall.
+                  return #reinstall;
+                } else {
+                  // A different WASM is installed. This is an upgrade.
+                  return #upgrade(null);
+                };
+              };
+              case (null) {
+                // No WASM is installed. This is effectively a first-time install.
+                return #install;
+              };
+            };
           };
         };
       };
@@ -599,13 +894,60 @@ shared (deployer) actor class ICRC120Canister<system>(
   // =====================================================================================
 
   /**
-   * The primary entry point for developers.
+   * The primary entry point for the owner to debug/fix bad installs.
    */
   public shared ({ caller }) func deploy_or_upgrade(
     request : DeployOrUpgradeRequest
   ) : async Result.Result<Principal, Text> {
+    // --- 1. CRITICAL SECURITY CHECK ---
+    // Only the owner can call this function.
+    if (caller != _owner) {
+      return #err("Unauthorized: Only the owner can call this function.");
+    };
+
     // This is now a thin wrapper that uses the `caller` as the developer identity.
     await _do_deploy_or_upgrade(caller, request);
+  };
+
+  public shared ({ caller }) func provision_instance(namespace : Text, wasmId : Text) : async Result.Result<Principal, Text> {
+    // Check if caller already has a canister for this namespace.
+
+    if (Principal.isAnonymous(caller)) {
+      return #err("Unauthorized: Anonymous caller cannot provision an instance.");
+    };
+
+    // If so, return it.
+
+    // If not, provision a new canister with sensible defaults.
+
+    // And install the wasm with caller as the owner.
+
+    let mode = await _get_mode(caller, namespace);
+
+    // We encode the developer's principal as the init arg.
+    let args = ?{
+      owner = ?caller;
+    };
+    let encoded_args : Blob = to_candid (args);
+
+    // --- 2. Construct the full request and delegate to the core logic ---
+    // For an automated deploy, we use sensible defaults.
+    let hash = Option.get(Base16.decode(wasmId), Blob.fromArray([]));
+    let full_request : DeployOrUpgradeRequest = {
+      namespace = namespace;
+      deployment_type = #provisioned;
+      hash = hash;
+      args = encoded_args; // Automated deploys use the encoded owner as init args
+      stop = false;
+      restart = false;
+      snapshot = false;
+      timeout = 0;
+      mode = mode; // Automated deploys are either install or upgrade with defaults
+      parameters = null;
+    };
+
+    // Call the core logic, passing the developer principal from the request.
+    await _do_deploy_or_upgrade(caller, full_request);
   };
 
   type InternalDeployRequest = {
@@ -614,7 +956,7 @@ shared (deployer) actor class ICRC120Canister<system>(
     owner : Principal;
   };
   /**
-   * [INTERNAL] A privileged endpoint for the MCP Registry.
+   * [INTERNAL] A privileged endpoint for the MCP Registry, used for automated global deployments.
    */
   public shared ({ caller }) func internal_deploy_or_upgrade(request : InternalDeployRequest) : async () {
     // --- 1. CRITICAL SECURITY CHECK ---
@@ -629,7 +971,7 @@ shared (deployer) actor class ICRC120Canister<system>(
       };
     };
 
-    let mode = await _get_mode(request.namespace);
+    let mode = await _get_mode(request.owner, request.namespace);
 
     // --- 3. THE FIX: Prepare init args based on context ---
     // We encode the developer's principal as the init arg.
@@ -642,6 +984,7 @@ shared (deployer) actor class ICRC120Canister<system>(
     // For an automated deploy, we use sensible defaults.
     let full_request : DeployOrUpgradeRequest = {
       namespace = request.namespace;
+      deployment_type = #global;
       hash = request.hash;
       args = encoded_args; // Automated deploys use the encoded owner as init args
       stop = false;

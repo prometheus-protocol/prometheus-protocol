@@ -16,22 +16,19 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-import {
-  useListApiKeys,
-  useCreateApiKey,
-  useRevokeApiKey,
-} from '@/hooks/useApiKeys';
+import { useListApiKeys, useRevokeApiKey } from '@/hooks/useApiKeys';
 import { AppVersionDetails } from '@prometheus-protocol/ic-js';
+import { Principal } from '@dfinity/principal';
 import { CreateApiKeyDialog } from './CreateApiKeyDialog'; // Import the new dialog
 import { AllowanceManager } from './AllowanceManager';
 
 export const AccessAndBilling = ({
   latestVersion,
+  canisterId,
 }: {
   latestVersion: AppVersionDetails;
+  canisterId?: Principal;
 }) => {
-  const canisterId = latestVersion.canisterId;
-
   const { data: apiKeys = [], isLoading: isLoadingKeys } =
     useListApiKeys(canisterId);
   // We no longer need the create mutation here, it's in the dialog
@@ -43,6 +40,11 @@ export const AccessAndBilling = ({
     open: boolean;
     keyToRevoke: { hash: string; name: string } | null;
   }>({ open: false, keyToRevoke: null });
+
+  // Don't try to access canisterId from latestVersion anymore
+  if (!canisterId) {
+    return null; // Don't render if no canister ID available
+  }
 
   const handleRevokeKey = () => {
     if (!revokeDialogState.keyToRevoke) return;
@@ -98,8 +100,8 @@ export const AccessAndBilling = ({
             </p>
             <AllowanceManager
               latestVersion={latestVersion}
+              canisterId={canisterId}
               onSuccess={() => toast.success('Allowance updated successfully!')}
-              submitButtonText={'Submit'}
             />
           </TabsContent>
 
@@ -166,7 +168,8 @@ export const AccessAndBilling = ({
       {/* --- Dialogs are now rendered here, outside the main layout flow --- */}
       <CreateApiKeyDialog
         latestVersion={latestVersion}
-        open={isCreateDialogOpen}
+        canisterId={canisterId}
+        isOpen={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
       />
 

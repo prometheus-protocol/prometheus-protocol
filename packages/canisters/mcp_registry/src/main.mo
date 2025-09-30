@@ -341,6 +341,39 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     _is_wasm_verified(wasm_id);
   };
 
+  public shared query func can_install_wasm(caller : Principal, wasm_id : Text) : async Bool {
+    // First, check if the wasm has been explicitly finalized as verified.
+    if (_is_wasm_verified(wasm_id)) {
+      return true;
+    };
+
+    // Next, check for 'deployment_type' value.
+    // if it is 'global', and this canister is the caller, allow installation.
+    // If it is 'provisioned', then the caller can be any authenticated principal.
+    let verification = _get_verification_request(wasm_id);
+
+    switch (verification) {
+      case (?exists) {
+        let deployment_type = Option.get(AppStore.getICRC16TextOptional(exists.metadata, "deployment_type"), "global");
+        if (deployment_type == "global" and caller == thisPrincipal) {
+          return true;
+        } else if (deployment_type == "provisioned") {
+          return true;
+        } else {
+          // Unknown deployment type, do not allow installation.
+          return false;
+        };
+      };
+      case (null) {
+        /* build has not been reproduced */
+        return false;
+      };
+    };
+
+    // No final verification and no attestations means installation is not allowed.
+    return false;
+  };
+
   /**
    * @notice Fetches the single most recent attestation for each audit type for a given WASM.
    * @dev This function has been refactored to IGNORE the finalization log. In a reputation-
@@ -926,6 +959,12 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
               switch (request_record_opt) {
                 case (?request_record) {
 
+                  let deployment_type = Option.get(AppStore.getICRC16TextOptional(request_record.metadata, "deployment_type"), "global");
+                  if (deployment_type != "global") {
+                    Debug.print("Auto-deployment skipped: deployment_type is '" # deployment_type # "', not 'global'.");
+                    return trx_id;
+                  };
+
                   // --- c. Decode wasm_id and construct the request ---
                   let wasm_hash : Blob = switch (Base16.decode(wasm_id)) {
                     case (?b) { b };
@@ -1160,69 +1199,39 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       },
     );
 
-    // --- 4. Restructure the return object based on status ---
-    switch (app_info_attestation) {
-      case (?#Attestation(att)) {
-        // --- PATH A: APP IS FULLY LISTED ---
-        let completed_audits = AppStore.get_completed_audit_types(audit_records);
-        let tier = AppStore.calculate_security_tier(true, completed_audits);
-
+    let verification_request = Map.get(icrc126().state.requests, Map.thash, wasm_id);
+    switch (verification_request) {
+      case (?req) {
+        let meta = req.metadata;
+        let visuals_map = AppStore.getICRC16MapOptional(meta, "visuals");
         return ?{
-          // Stable app identity from the attestation
+          // Stable app identity from the verification request
           namespace = canister_type.canister_type_namespace;
-          name = AppStore.getICRC16Text(att.metadata, "name");
-          description = AppStore.getICRC16Text(att.metadata, "description");
-          category = AppStore.getICRC16Text(att.metadata, "category");
-          tags = AppStore.getICRC16TextArray(att.metadata, "tags");
-          publisher = AppStore.getICRC16Text(att.metadata, "publisher");
-          icon_url = AppStore.getICRC16Text(att.metadata, "icon_url");
-          banner_url = AppStore.getICRC16Text(att.metadata, "banner_url");
+          name = AppStore.getICRC16Text(meta, "name");
+          deployment_type = Option.get(AppStore.getICRC16TextOptional(meta, "deployment_type"), "global");
+          description = AppStore.getICRC16Text(meta, "description");
+          category = AppStore.getICRC16Text(meta, "category");
+          tags = AppStore.getICRC16TextArray(meta, "tags");
+          publisher = AppStore.getICRC16Text(meta, "publisher");
+          icon_url = switch (visuals_map) {
+            case (?v) { AppStore.getICRC16Text(v, "icon_url") };
+            case (_) { "" };
+          };
+          banner_url = switch (visuals_map) {
+            case (?v) { AppStore.getICRC16Text(v, "banner_url") };
+            case (_) { "" };
+          };
 
           // Nested object with version-specific details
           latest_version = {
             wasm_id = wasm_id;
             version_string = _format_version_number(latest_version.version_number);
-            security_tier = tier;
-            status = #Verified;
+            security_tier = #Unranked;
+            status = #Pending;
           };
         };
       };
-      case (_) {
-        // --- PATH B: APP IS PENDING ---
-        let verification_request = Map.get(icrc126().state.requests, Map.thash, wasm_id);
-        switch (verification_request) {
-          case (?req) {
-            let meta = req.metadata;
-            let visuals_map = AppStore.getICRC16MapOptional(meta, "visuals");
-            return ?{
-              // Stable app identity from the verification request
-              namespace = canister_type.canister_type_namespace;
-              name = AppStore.getICRC16Text(meta, "name");
-              description = AppStore.getICRC16Text(meta, "description");
-              category = AppStore.getICRC16Text(meta, "category");
-              tags = AppStore.getICRC16TextArray(meta, "tags");
-              publisher = AppStore.getICRC16Text(meta, "publisher");
-              icon_url = switch (visuals_map) {
-                case (?v) { AppStore.getICRC16Text(v, "icon_url") };
-                case (_) { "" };
-              };
-              banner_url = switch (visuals_map) {
-                case (?v) { AppStore.getICRC16Text(v, "banner_url") };
-                case (_) { "" };
-              };
-
-              // Nested object with version-specific details
-              latest_version = {
-                wasm_id = wasm_id;
-                version_string = _format_version_number(latest_version.version_number);
-                security_tier = #Unranked;
-                status = #Pending;
-              };
-            };
-          };
-          case (null) { return null };
-        };
-      };
+      case (null) { return null };
     };
   };
 
@@ -1443,66 +1452,44 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
 
     // 6. Assemble the stable, top-level app information.
-    //    This comes from the app_info attestation, with a fallback to the verification request.
-    let app_info_att = _find_attestation_by_type(latest_audit_records, "app_info_v1");
-    switch (app_info_att) {
-      case (?att) {
-        // Path A: Fully listed app, use attestation as source of truth.
+    //    This comes from the  the verification request.
+
+    let verification_request = _get_verification_request(wasm_id_to_load);
+    switch (verification_request) {
+      case (?req) {
+        let meta = req.metadata;
+        let visuals_map = AppStore.getICRC16MapOptional(meta, "visuals");
         return #ok({
           namespace = namespace;
-          name = AppStore.getICRC16Text(att.metadata, "name");
-          mcp_path = AppStore.getICRC16Text(att.metadata, "mcp_path");
-          publisher = AppStore.getICRC16Text(att.metadata, "publisher");
-          category = AppStore.getICRC16Text(att.metadata, "category");
-          icon_url = AppStore.getICRC16Text(att.metadata, "icon_url");
-          banner_url = AppStore.getICRC16Text(att.metadata, "banner_url");
-          gallery_images = AppStore.getICRC16TextArray(att.metadata, "gallery_images");
-          description = AppStore.getICRC16Text(att.metadata, "description");
-          key_features = AppStore.getICRC16TextArray(att.metadata, "key_features");
-          why_this_app = AppStore.getICRC16Text(att.metadata, "why_this_app");
-          tags = AppStore.getICRC16TextArray(att.metadata, "tags");
-          latest_version = latest_version_details;
+          name = AppStore.getICRC16Text(meta, "name");
+          deployment_type = Option.get(AppStore.getICRC16TextOptional(meta, "deployment_type"), "global");
+          mcp_path = AppStore.getICRC16Text(meta, "mcp_path");
+          publisher = AppStore.getICRC16Text(meta, "publisher");
+          category = AppStore.getICRC16Text(meta, "category");
+          description = AppStore.getICRC16Text(meta, "description");
+          key_features = AppStore.getICRC16TextArray(meta, "key_features");
+          why_this_app = AppStore.getICRC16Text(meta, "why_this_app");
+          tags = AppStore.getICRC16TextArray(meta, "tags");
+          icon_url = switch (visuals_map) {
+            case (?v) { AppStore.getICRC16Text(v, "icon_url") };
+            case (_) { "" };
+          };
+          banner_url = switch (visuals_map) {
+            case (?v) { AppStore.getICRC16Text(v, "banner_url") };
+            case (_) { "" };
+          };
+          gallery_images = switch (visuals_map) {
+            case (?v) { AppStore.getICRC16TextArray(v, "gallery_images") };
+            case (_) { [] };
+          };
+          latest_version = { latest_version_details with status = #Pending };
           all_versions = Buffer.toArray(all_versions_summary);
         });
       };
       case (null) {
-        // Path B: Pending app, use original verification request as source of truth.
-        let verification_request = _get_verification_request(wasm_id_to_load);
-        switch (verification_request) {
-          case (?req) {
-            let meta = req.metadata;
-            let visuals_map = AppStore.getICRC16MapOptional(meta, "visuals");
-            return #ok({
-              namespace = namespace;
-              name = AppStore.getICRC16Text(meta, "name");
-              mcp_path = AppStore.getICRC16Text(meta, "mcp_path");
-              publisher = AppStore.getICRC16Text(meta, "publisher");
-              category = AppStore.getICRC16Text(meta, "category");
-              description = AppStore.getICRC16Text(meta, "description");
-              key_features = AppStore.getICRC16TextArray(meta, "key_features");
-              why_this_app = AppStore.getICRC16Text(meta, "why_this_app");
-              tags = AppStore.getICRC16TextArray(meta, "tags");
-              icon_url = switch (visuals_map) {
-                case (?v) { AppStore.getICRC16Text(v, "icon_url") };
-                case (_) { "" };
-              };
-              banner_url = switch (visuals_map) {
-                case (?v) { AppStore.getICRC16Text(v, "banner_url") };
-                case (_) { "" };
-              };
-              gallery_images = switch (visuals_map) {
-                case (?v) { AppStore.getICRC16TextArray(v, "gallery_images") };
-                case (_) { [] };
-              };
-              latest_version = { latest_version_details with status = #Pending };
-              all_versions = Buffer.toArray(all_versions_summary);
-            });
-          };
-          case (null) {
-            return #err(#NotFound("Verification request not found for pending app"));
-          };
-        };
+        return #err(#NotFound("Verification request not found for pending app"));
       };
+
     };
   };
 

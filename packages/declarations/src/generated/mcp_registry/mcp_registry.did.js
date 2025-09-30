@@ -198,6 +198,7 @@ export const idlFactory = ({ IDL }) => {
     'icon_url' : IDL.Text,
     'all_versions' : IDL.Vec(AppVersionSummary),
     'key_features' : IDL.Vec(IDL.Text),
+    'deployment_type' : IDL.Text,
     'category' : IDL.Text,
     'latest_version' : AppVersionDetails,
     'namespace' : IDL.Text,
@@ -227,6 +228,7 @@ export const idlFactory = ({ IDL }) => {
     'tags' : IDL.Vec(IDL.Text),
     'description' : IDL.Text,
     'icon_url' : IDL.Text,
+    'deployment_type' : IDL.Text,
     'category' : IDL.Text,
     'latest_version' : AppVersionSummary,
     'namespace' : IDL.Text,
@@ -652,6 +654,11 @@ export const idlFactory = ({ IDL }) => {
   const Result = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   const ICRC118WasmRegistryCanister = IDL.Service({
     'bootstrap_search_index' : IDL.Func([], [Result_4], []),
+    'can_install_wasm' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [IDL.Bool],
+        ['query'],
+      ),
     'get_app_details_by_namespace' : IDL.Func(
         [IDL.Text, IDL.Opt(IDL.Text)],
         [Result_3],

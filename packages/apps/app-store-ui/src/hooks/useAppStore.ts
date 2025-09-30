@@ -33,7 +33,9 @@ export const useGetAppDetailsByNamespace = (
   wasmId?: string,
 ) => {
   return useQuery<AppStoreDetails>({
-    queryKey: ['appDetails', namespace, wasmId], // The key correctly uses both
+    queryKey: wasmId
+      ? ['appDetails', namespace, wasmId]
+      : ['appDetails', namespace], // The key correctly uses both
     queryFn: async () => {
       if (!namespace) {
         throw new Error('Namespace not available');

@@ -610,11 +610,10 @@ export type DataSafetyInfo = {
 export interface AppVersionDetails {
   wasmId: string;
   versionString: string;
+  deploymentType?: string;
   status: 'Rejected' | 'Verified' | 'Pending';
   securityTier: SecurityTier;
   buildInfo: BuildInfo;
-  serverUrl: string;
-  canisterId: Principal;
   tools: ServerTool[];
   dataSafety: DataSafetyInfo;
   bounties: AuditBounty[];
@@ -628,7 +627,9 @@ export interface AppStoreDetails {
   // These properties describe the app as a whole and rarely change.
   namespace: string; // The new, stable, primary identifier.
   name: string;
+  path: string; // The MCP path, e.g., "/my-app"
   publisher: string;
+  deploymentType: string;
   category: string;
   iconUrl: string;
   bannerUrl: string;
@@ -645,15 +646,6 @@ export interface AppStoreDetails {
 
   // A list of all other available versions to populate the version selector dropdown.
   allVersions: AppVersionSummary[];
-
-  // --- Metrics ---
-  // These metrics are aggregated across all versions of the app.
-  metrics?: {
-    totalInvocations: bigint;
-    totalTools: bigint;
-    authenticatedUniqueUsers: bigint;
-    anonymousInvocations: bigint;
-  };
 }
 
 // 1. Define the new, more powerful filter types that match the canister.

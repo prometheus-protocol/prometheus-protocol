@@ -2,6 +2,7 @@ import { Identity } from '@dfinity/agent';
 import { getOrchestratorActor } from '../actors.js';
 import { Principal } from '@dfinity/principal';
 import { Orchestrator } from '@prometheus-protocol/declarations';
+import { fromNullable } from '@dfinity/utils';
 
 export interface RequestUpgradeArgs {
   canister_id: string;
@@ -74,4 +75,32 @@ export const getUpgradeStatus = async (
   const orchestratorActor = getOrchestratorActor(identity);
   const result = await orchestratorActor.icrc120_upgrade_finished();
   return result;
+};
+
+/**
+ * Provisions a new instance of an MCP server for the authenticated user.
+ * This is used for "provisioned" apps where users get their own private instance.
+ */
+export const provisionInstance = async (
+  identity: Identity,
+  namespace: string,
+  wasmId: string,
+): Promise<Principal> => {
+  const orchestratorActor = getOrchestratorActor(identity);
+  const result = await orchestratorActor.provision_instance(namespace, wasmId);
+
+  if ('err' in result) {
+    throw new Error(`Provision failed: ${result.err}`);
+  }
+
+  return result.ok;
+};
+
+export const getServerCanisterId = async (
+  namespace: string,
+  wasmId: string,
+): Promise<Principal | undefined> => {
+  const orchestratorActor = getOrchestratorActor();
+  const res = await orchestratorActor.get_canister_id(namespace, wasmId);
+  return fromNullable(res);
 };

@@ -3,8 +3,6 @@
 import { Identity } from '@dfinity/agent';
 import { getLeaderboardActor } from '../actors.js';
 import { Leaderboard } from '@prometheus-protocol/declarations';
-import { Principal } from '@dfinity/principal';
-import { processToolInvocation } from '../utils.js';
 
 export type { Leaderboard };
 
