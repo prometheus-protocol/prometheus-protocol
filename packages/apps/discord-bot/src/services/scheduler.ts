@@ -115,7 +115,7 @@ export class AlertScheduler {
     const alert = this.alerts.get(alertId);
     if (alert) {
       alert.enabled = true;
-      
+
       // Clear error state when manually enabling
       if (alert.errorState?.disabledDueToError) {
         alert.errorState = undefined;
@@ -178,19 +178,19 @@ export class AlertScheduler {
     const alert = this.alerts.get(alertId);
     if (alert && alert.errorState?.hasError) {
       alert.errorState = undefined;
-      
+
       try {
         await this.database.updateAlert(alert);
         schedulerLogger.info('Alert error state cleared', {
           alertId,
           alertName: alert.name,
         });
-        
+
         // If the alert was disabled due to error and should be re-enabled
         if (alert.enabled && this.running) {
           this.scheduleAlert(alert);
         }
-        
+
         return true;
       } catch (error) {
         schedulerLogger.error(
@@ -208,11 +208,11 @@ export class AlertScheduler {
     alert: AlertConfig,
     errorType: 'permission' | 'auth' | 'other',
     errorMessage: string,
-    disableAlert: boolean = false
+    disableAlert: boolean = false,
   ): Promise<void> {
     const currentError = alert.errorState;
     const errorCount = (currentError?.errorCount || 0) + 1;
-    
+
     alert.errorState = {
       hasError: true,
       errorType,
@@ -331,10 +331,13 @@ export class AlertScheduler {
         alert.errorState = undefined;
         try {
           await this.database.updateAlert(alert);
-          schedulerLogger.info('Cleared error state after successful execution', {
-            alertId: alert.id,
-            alertName: alert.name,
-          });
+          schedulerLogger.info(
+            'Cleared error state after successful execution',
+            {
+              alertId: alert.id,
+              alertName: alert.name,
+            },
+          );
         } catch (dbError) {
           schedulerLogger.error(
             'Failed to clear error state in database',
@@ -523,22 +526,20 @@ export class AlertScheduler {
   private async handlePermissionError(
     alert: AlertConfig,
     errorMessage: string,
-    userId: string
+    userId: string,
   ): Promise<void> {
     // Check if we've already notified about this permission error
     const existingError = alert.errorState;
-    const shouldDisable = !existingError || (existingError.errorCount || 0) >= 2;
+    const shouldDisable =
+      !existingError || (existingError.errorCount || 0) >= 2;
 
     if (!existingError || existingError.errorType !== 'permission') {
       // First time encountering this permission error - send notification
-      schedulerLogger.warn(
-        'Alert failed due to permission or access issues',
-        {
-          alertName: alert.name,
-          channelId: alert.channelId,
-          error: errorMessage,
-        },
-      );
+      schedulerLogger.warn('Alert failed due to permission or access issues', {
+        alertName: alert.name,
+        channelId: alert.channelId,
+        error: errorMessage,
+      });
 
       const permissionErrorMessage =
         `🚫 **Alert Disabled Due to Permission Error**\n\n` +
@@ -564,16 +565,26 @@ export class AlertScheduler {
       } catch (dmError) {
         try {
           await this.sendAlertMessage(alert.channelId, permissionErrorMessage);
-          schedulerLogger.info('Sent permission error notification to channel', {
-            alertName: alert.name,
-          });
+          schedulerLogger.info(
+            'Sent permission error notification to channel',
+            {
+              alertName: alert.name,
+            },
+          );
         } catch (channelError) {
-          schedulerLogger.warn('Could not send permission error notification anywhere', {
-            userId,
-            alertName: alert.name,
-            dmError: dmError instanceof Error ? dmError.message : String(dmError),
-            channelError: channelError instanceof Error ? channelError.message : String(channelError),
-          });
+          schedulerLogger.warn(
+            'Could not send permission error notification anywhere',
+            {
+              userId,
+              alertName: alert.name,
+              dmError:
+                dmError instanceof Error ? dmError.message : String(dmError),
+              channelError:
+                channelError instanceof Error
+                  ? channelError.message
+                  : String(channelError),
+            },
+          );
         }
       }
     }
@@ -585,14 +596,15 @@ export class AlertScheduler {
   private async handleAuthError(
     alert: AlertConfig,
     errorMessage: string,
-    userId: string
+    userId: string,
   ): Promise<void> {
     // Check if we've already notified about this auth error recently
     const existingError = alert.errorState;
-    const shouldNotify = !existingError || 
+    const shouldNotify =
+      !existingError ||
       existingError.errorType !== 'auth' ||
       !existingError.lastErrorDate ||
-      (Date.now() - existingError.lastErrorDate.getTime()) > 24 * 60 * 60 * 1000; // 24 hours
+      Date.now() - existingError.lastErrorDate.getTime() > 24 * 60 * 60 * 1000; // 24 hours
 
     if (shouldNotify) {
       schedulerLogger.warn('Alert failed due to expired authentication', {
@@ -614,10 +626,10 @@ export class AlertScheduler {
         try {
           const user = await this.client.users.fetch(userId);
           await user.send(authErrorMessage);
-          schedulerLogger.info(
-            'Sent auth error notification via DM instead',
-            { userId, alertName: alert.name },
-          );
+          schedulerLogger.info('Sent auth error notification via DM instead', {
+            userId,
+            alertName: alert.name,
+          });
         } catch (dmError) {
           schedulerLogger.error(
             'Could not notify user about auth error',
@@ -635,13 +647,13 @@ export class AlertScheduler {
   private async handleRegularError(
     alert: AlertConfig,
     error: unknown,
-    userId: string
+    userId: string,
   ): Promise<void> {
     // Regular error - log and notify, with retry limits
     const errorMessage = error instanceof Error ? error.message : String(error);
     const existingError = alert.errorState;
     const errorCount = (existingError?.errorCount || 0) + 1;
-    
+
     schedulerLogger.error(
       'Error executing alert',
       error instanceof Error ? error : new Error(String(error)),
@@ -656,9 +668,7 @@ export class AlertScheduler {
       } catch (sendError) {
         schedulerLogger.error(
           'Could not send error notification to channel',
-          sendError instanceof Error
-            ? sendError
-            : new Error(String(sendError)),
+          sendError instanceof Error ? sendError : new Error(String(sendError)),
           { alertName: alert.name },
         );
       }
@@ -667,7 +677,7 @@ export class AlertScheduler {
     // Disable alert after 5 consecutive failures
     const shouldDisable = errorCount >= 5;
     if (shouldDisable) {
-      const disableMessage = 
+      const disableMessage =
         `🚫 **Alert Disabled After Repeated Failures**\n\n` +
         `Your alert "${alert.name}" has been disabled after ${errorCount} consecutive failures.\n\n` +
         `Last error: ${errorMessage}\n\n` +
@@ -682,7 +692,9 @@ export class AlertScheduler {
         } catch (channelError) {
           schedulerLogger.error(
             'Could not send alert disable notification',
-            channelError instanceof Error ? channelError : new Error(String(channelError)),
+            channelError instanceof Error
+              ? channelError
+              : new Error(String(channelError)),
             { alertName: alert.name },
           );
         }

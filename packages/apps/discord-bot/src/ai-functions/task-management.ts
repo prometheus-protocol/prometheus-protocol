@@ -23,7 +23,10 @@ export class TaskManagementFunctions {
       'create_monitoring_task',
       new CreateTaskHandler(this.scheduler, this.database),
     );
-    this.functions.set('list_user_tasks', new ListTasksHandler(this.scheduler, this.database));
+    this.functions.set(
+      'list_user_tasks',
+      new ListTasksHandler(this.scheduler, this.database),
+    );
     this.functions.set(
       'modify_task',
       new ModifyTaskHandler(this.scheduler, this.database),
@@ -271,7 +274,10 @@ class CreateTaskHandler implements AIFunctionHandler {
 }
 
 class ListTasksHandler implements AIFunctionHandler {
-  constructor(private scheduler: AlertScheduler, private database: DatabaseService) {}
+  constructor(
+    private scheduler: AlertScheduler,
+    private database: DatabaseService,
+  ) {}
 
   async execute(
     args: Record<string, any>,
@@ -293,10 +299,10 @@ class ListTasksHandler implements AIFunctionHandler {
         .map((task) => {
           const alert = this.scheduler.getAlert(task.id);
           const errorState = alert?.errorState;
-          
+
           let statusIcon = task.enabled ? '✅ Active' : '❌ Disabled';
           let errorInfo = '';
-          
+
           if (errorState?.hasError) {
             if (errorState.errorType === 'permission') {
               statusIcon = '🚫 Permission Error';
@@ -311,7 +317,7 @@ class ListTasksHandler implements AIFunctionHandler {
               }
             }
           }
-          
+
           return (
             `• **${task.description}** (${statusIcon})\n` +
             `  ID: \`${task.id}\`\n` +
@@ -467,7 +473,10 @@ class DeleteTaskHandler implements AIFunctionHandler {
 }
 
 class GetTaskStatusHandler implements AIFunctionHandler {
-  constructor(private scheduler: AlertScheduler, private database: DatabaseService) {}
+  constructor(
+    private scheduler: AlertScheduler,
+    private database: DatabaseService,
+  ) {}
 
   async execute(
     args: Record<string, any>,
@@ -486,10 +495,10 @@ class GetTaskStatusHandler implements AIFunctionHandler {
 
       const alert = this.scheduler.getAlert(task_id);
       const errorState = alert?.errorState;
-      
+
       let status = task.enabled ? '✅ Active' : '❌ Disabled';
       let errorInfo = '';
-      
+
       if (errorState?.hasError) {
         if (errorState.errorType === 'permission') {
           status = '🚫 Permission Error (Disabled)';
@@ -505,7 +514,7 @@ class GetTaskStatusHandler implements AIFunctionHandler {
           errorInfo = `\nLast Error: ${errorState.errorMessage}\nOccurred: ${errorState.lastErrorDate?.toLocaleString() || 'Unknown'}\nSuggestion: Check your task configuration and re-enable if needed`;
         }
       }
-      
+
       const lastRun = task.lastRun ? task.lastRun.toLocaleString() : 'Never';
       const nextRun =
         task.enabled && task.lastRun && !errorState?.disabledDueToError
