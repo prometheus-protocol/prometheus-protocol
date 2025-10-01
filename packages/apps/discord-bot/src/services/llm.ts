@@ -138,7 +138,7 @@ export class LLMService {
     }
     messages.push({ role: 'user', content: prompt });
 
-    const maxIterations = 10; // Safety break
+    const maxIterations = 100; // Safety break
 
     for (let i = 0; i < maxIterations; i++) {
       llmLogger.info(`Tool loop iteration ${i + 1}/${maxIterations}`, {
