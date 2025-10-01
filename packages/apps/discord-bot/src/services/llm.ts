@@ -130,7 +130,7 @@ export class LLMService {
     ];
     if (context?.history) {
       messages.push(
-        ...context.history.slice(-10).map((msg) => ({
+        ...context.history.map((msg) => ({
           role: msg.role as 'user' | 'assistant',
           content: msg.content,
         })),
@@ -138,7 +138,7 @@ export class LLMService {
     }
     messages.push({ role: 'user', content: prompt });
 
-    const maxIterations = 10; // Safety break
+    const maxIterations = 100; // Safety break
 
     for (let i = 0; i < maxIterations; i++) {
       llmLogger.info(`Tool loop iteration ${i + 1}/${maxIterations}`, {

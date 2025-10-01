@@ -35,6 +35,14 @@ export interface AlertConfig {
   prompt: string; // AI prompt to execute with MCP tools
   lastRun?: Date;
   lastData?: any;
+  errorState?: {
+    hasError: boolean;
+    errorType?: 'permission' | 'auth' | 'other';
+    errorMessage?: string;
+    errorCount?: number;
+    lastErrorDate?: Date;
+    disabledDueToError?: boolean;
+  };
 }
 
 export interface AlertResult {

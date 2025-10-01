@@ -95,7 +95,8 @@ export interface GetTransactionsResult {
   'archived_blocks' : Array<ArchivedTransactionResponse>,
 }
 export interface ICRC120Canister {
-  'deploy_or_upgrade' : ActorMethod<[DeployOrUpgradeRequest], Result_1>,
+  'deploy_or_upgrade' : ActorMethod<[DeployOrUpgradeRequest], Result_2>,
+  'get_auth_server_id' : ActorMethod<[], [] | [Principal]>,
   'get_canister_id' : ActorMethod<[string, string], [] | [Principal]>,
   'get_canisters' : ActorMethod<[string], Array<Principal>>,
   'get_cycle_top_up_config' : ActorMethod<[], CycleTopUpConfig>,
@@ -149,7 +150,12 @@ export interface ICRC120Canister {
     [InternalDeployRequest],
     undefined
   >,
-  'provision_instance' : ActorMethod<[string, string], Result_1>,
+  'provision_instance' : ActorMethod<[string, string], Result_2>,
+  'register_oauth_resource' : ActorMethod<
+    [Principal, RegisterResourceServerArgs],
+    Result_1
+  >,
+  'set_auth_server_id' : ActorMethod<[Principal], Result>,
   'set_cycle_top_up_config' : ActorMethod<[CycleTopUpConfig], Result>,
   'set_mcp_registry_id' : ActorMethod<[Principal], Result>,
 }
@@ -246,9 +252,33 @@ export type OrchestrationEventType = { 'upgrade_initiated' : null } |
   { 'canister_started' : null } |
   { 'snapshot_created' : null } |
   { 'canister_stopped' : null };
+export interface RegisterResourceServerArgs {
+  'initial_service_principal' : Principal,
+  'scopes' : Array<[string, string]>,
+  'name' : string,
+  'uris' : Array<string>,
+  'accepted_payment_canisters' : Array<Principal>,
+  'logo_uri' : string,
+  'frontend_host' : [] | [string],
+}
+export interface ResourceServer {
+  'status' : { 'active' : null } |
+    { 'pending' : null },
+  'resource_server_id' : string,
+  'owner' : Principal,
+  'scopes' : Array<[string, string]>,
+  'name' : string,
+  'uris' : Array<string>,
+  'accepted_payment_canisters' : Array<Principal>,
+  'logo_uri' : string,
+  'frontend_host' : [] | [string],
+  'service_principals' : Array<Principal>,
+}
 export type Result = { 'ok' : null } |
   { 'err' : string };
-export type Result_1 = { 'ok' : Principal } |
+export type Result_1 = { 'ok' : ResourceServer } |
+  { 'err' : string };
+export type Result_2 = { 'ok' : Principal } |
   { 'err' : string };
 export type RevertSnapshotError = { 'TooManyRequests' : null } |
   { 'NotFound' : null } |

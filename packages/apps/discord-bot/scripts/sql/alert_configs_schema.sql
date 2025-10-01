@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS alert_configs (
     prompt TEXT NOT NULL,                           -- AI prompt to execute
     last_run TIMESTAMP WITH TIME ZONE,              -- Last execution timestamp
     last_data JSONB,                                -- Last execution data
+    error_state JSONB,                              -- Error state information (prevents spam)
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -19,6 +20,7 @@ CREATE TABLE IF NOT EXISTS alert_configs (
 CREATE INDEX IF NOT EXISTS idx_alert_configs_enabled ON alert_configs(enabled);
 CREATE INDEX IF NOT EXISTS idx_alert_configs_channel_id ON alert_configs(channel_id);
 CREATE INDEX IF NOT EXISTS idx_alert_configs_last_run ON alert_configs(last_run);
+CREATE INDEX IF NOT EXISTS idx_alert_configs_error_state ON alert_configs USING GIN (error_state);
 
 -- RLS (Row Level Security) policies if needed
 -- ALTER TABLE alert_configs ENABLE ROW LEVEL SECURITY;
@@ -34,3 +36,4 @@ COMMENT ON COLUMN alert_configs.enabled IS 'Whether the alert is currently activ
 COMMENT ON COLUMN alert_configs.prompt IS 'AI prompt that will be executed with MCP tools';
 COMMENT ON COLUMN alert_configs.last_run IS 'Timestamp of the last successful execution';
 COMMENT ON COLUMN alert_configs.last_data IS 'JSON data from the last execution result';
+COMMENT ON COLUMN alert_configs.error_state IS 'JSON object storing error state information including error type, message, count, and timestamps';

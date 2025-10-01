@@ -97,10 +97,11 @@ export const provisionInstance = async (
 };
 
 export const getServerCanisterId = async (
+  identity: Identity,
   namespace: string,
   wasmId: string,
 ): Promise<Principal | undefined> => {
-  const orchestratorActor = getOrchestratorActor();
+  const orchestratorActor = getOrchestratorActor(identity);
   const res = await orchestratorActor.get_canister_id(namespace, wasmId);
   return fromNullable(res);
 };

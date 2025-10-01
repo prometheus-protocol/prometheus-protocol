@@ -131,7 +131,7 @@ export const AppInfoAttestation = ({
                         <ImageWithFallback
                           src={imgUrl}
                           alt={`Gallery image ${index + 1}`}
-                          className="w-full rounded-lg object-cover aspect-video transition-opacity hover:opacity-90"
+                          className="w-full rounded-lg object-cover aspect-[16/10] transition-opacity hover:opacity-90"
                         />
                       </a>
                     </div>

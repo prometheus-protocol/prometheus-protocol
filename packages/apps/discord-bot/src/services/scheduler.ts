@@ -116,6 +116,15 @@ export class AlertScheduler {
     if (alert) {
       alert.enabled = true;
 
+      // Clear error state when manually enabling
+      if (alert.errorState?.disabledDueToError) {
+        alert.errorState = undefined;
+        schedulerLogger.info('Cleared error state when enabling alert', {
+          alertId,
+          alertName: alert.name,
+        });
+      }
+
       // Update in database
       try {
         await this.database.updateAlert(alert);
@@ -162,6 +171,80 @@ export class AlertScheduler {
         task.stop();
         this.tasks.delete(alertId);
       }
+    }
+  }
+
+  async clearAlertError(alertId: string): Promise<boolean> {
+    const alert = this.alerts.get(alertId);
+    if (alert && alert.errorState?.hasError) {
+      alert.errorState = undefined;
+
+      try {
+        await this.database.updateAlert(alert);
+        schedulerLogger.info('Alert error state cleared', {
+          alertId,
+          alertName: alert.name,
+        });
+
+        // If the alert was disabled due to error and should be re-enabled
+        if (alert.enabled && this.running) {
+          this.scheduleAlert(alert);
+        }
+
+        return true;
+      } catch (error) {
+        schedulerLogger.error(
+          'Failed to clear alert error state in database',
+          error instanceof Error ? error : new Error(String(error)),
+          { alertId },
+        );
+        return false;
+      }
+    }
+    return false;
+  }
+
+  private async setAlertError(
+    alert: AlertConfig,
+    errorType: 'permission' | 'auth' | 'other',
+    errorMessage: string,
+    disableAlert: boolean = false,
+  ): Promise<void> {
+    const currentError = alert.errorState;
+    const errorCount = (currentError?.errorCount || 0) + 1;
+
+    alert.errorState = {
+      hasError: true,
+      errorType,
+      errorMessage,
+      errorCount,
+      lastErrorDate: new Date(),
+      disabledDueToError: disableAlert,
+    };
+
+    if (disableAlert) {
+      alert.enabled = false;
+      const task = this.tasks.get(alert.id);
+      if (task) {
+        task.stop();
+        this.tasks.delete(alert.id);
+      }
+      schedulerLogger.warn('Alert disabled due to persistent error', {
+        alertId: alert.id,
+        alertName: alert.name,
+        errorType,
+        errorCount,
+      });
+    }
+
+    try {
+      await this.database.updateAlert(alert);
+    } catch (dbError) {
+      schedulerLogger.error(
+        'Failed to save alert error state to database',
+        dbError instanceof Error ? dbError : new Error(String(dbError)),
+        { alertId: alert.id },
+      );
     }
   }
 
@@ -243,6 +326,27 @@ export class AlertScheduler {
         );
       }
 
+      // Clear any existing error state on successful execution
+      if (alert.errorState?.hasError) {
+        alert.errorState = undefined;
+        try {
+          await this.database.updateAlert(alert);
+          schedulerLogger.info(
+            'Cleared error state after successful execution',
+            {
+              alertId: alert.id,
+              alertName: alert.name,
+            },
+          );
+        } catch (dbError) {
+          schedulerLogger.error(
+            'Failed to clear error state in database',
+            dbError instanceof Error ? dbError : new Error(String(dbError)),
+            { alertId: alert.id },
+          );
+        }
+      }
+
       // Update last run time and save to database
       alert.lastRun = new Date();
       try {
@@ -267,44 +371,8 @@ export class AlertScheduler {
         errorMessage.includes('Bot is not a member') ||
         (errorMessage.includes('Channel') && errorMessage.includes('not found'))
       ) {
-        schedulerLogger.warn(
-          'Alert failed due to permission or access issues',
-          {
-            alertName: alert.name,
-            channelId: alert.channelId,
-            error: errorMessage,
-          },
-        );
-
-        // Send a helpful notification explaining the permission issue
-        // Try to send to the user via DM if possible, otherwise log the issue
-        try {
-          const user = await this.client.users.fetch(userId);
-          const permissionErrorMessage =
-            `🚫 **Alert Permission Error**\n\n` +
-            `Your alert "${alert.name}" failed because:\n` +
-            `${errorMessage}\n\n` +
-            `**To fix this:**\n` +
-            `• Ensure the bot is still in the server\n` +
-            `• Check the bot has "View Channel" and "Send Messages" permissions\n` +
-            `• Re-invite the bot if needed: Use \`/help\` command for the invite link\n\n` +
-            `The alert will keep trying to run. Once permissions are fixed, it will work automatically.`;
-
-          await user.send(permissionErrorMessage);
-          schedulerLogger.info('Sent permission error notification via DM', {
-            userId,
-            alertName: alert.name,
-          });
-        } catch (dmError) {
-          schedulerLogger.warn('Could not send DM about permission error', {
-            userId,
-            alertName: alert.name,
-            dmError:
-              dmError instanceof Error ? dmError.message : String(dmError),
-          });
-        }
-
-        return; // Don't treat as a regular error - this is a configuration issue
+        await this.handlePermissionError(alert, errorMessage, userId);
+        return;
       }
 
       // Check if this is an OAuth/authentication error
@@ -315,63 +383,12 @@ export class AlertScheduler {
         errorMessage.includes('401') ||
         errorMessage.includes('Unauthorized')
       ) {
-        schedulerLogger.warn('Alert failed due to expired authentication', {
-          alertName: alert.name,
-          userId: userId,
-          error: errorMessage,
-        });
-
-        // Send a helpful notification to the user
-        const authErrorMessage =
-          `🔐 Alert "${alert.name}" requires re-authentication.\n\n` +
-          `Your MCP server connection has expired. Please reconnect your services using the \`/mcp connect\` command to resume automated alerts.`;
-
-        try {
-          await this.sendAlertMessage(alert.channelId, authErrorMessage);
-        } catch (sendError) {
-          // If we can't send to the channel, try DM
-          try {
-            const user = await this.client.users.fetch(userId);
-            await user.send(authErrorMessage);
-            schedulerLogger.info(
-              'Sent auth error notification via DM instead',
-              { userId, alertName: alert.name },
-            );
-          } catch (dmError) {
-            schedulerLogger.error(
-              'Could not notify user about auth error',
-              dmError instanceof Error ? dmError : new Error(String(dmError)),
-              { userId, alertName: alert.name },
-            );
-          }
-        }
-
-        // Don't disable the alert - user can fix auth and it will resume
-        schedulerLogger.info(
-          `Alert "${alert.name}" paused due to auth issues - will retry on next run`,
-        );
-      } else {
-        // Regular error - log and notify
-        schedulerLogger.error(
-          'Error executing alert',
-          error instanceof Error ? error : new Error(String(error)),
-          { alertName: alert.name },
-        );
-
-        // Send error notification to the channel (if possible)
-        const regularErrorMessage = `⚠️ Alert "${alert.name}" failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
-        try {
-          await this.sendAlertMessage(alert.channelId, regularErrorMessage);
-        } catch (sendError) {
-          schedulerLogger.error(
-            'Could not send error notification to channel',
-            sendError instanceof Error
-              ? sendError
-              : new Error(String(sendError)),
-            { alertName: alert.name },
-          );
-        }
+        await this.handleAuthError(alert, errorMessage, userId);
+        return;
       }
+
+      // Regular error - handle with retry logic
+      await this.handleRegularError(alert, error, userId);
     }
   }
 
@@ -500,5 +517,190 @@ export class AlertScheduler {
 
   getAlert(alertId: string): AlertConfig | undefined {
     return this.alerts.get(alertId);
+  }
+
+  async clearError(alertId: string): Promise<boolean> {
+    return await this.clearAlertError(alertId);
+  }
+
+  private async handlePermissionError(
+    alert: AlertConfig,
+    errorMessage: string,
+    userId: string,
+  ): Promise<void> {
+    // Check if we've already notified about this permission error
+    const existingError = alert.errorState;
+    const shouldDisable =
+      !existingError || (existingError.errorCount || 0) >= 2;
+
+    if (!existingError || existingError.errorType !== 'permission') {
+      // First time encountering this permission error - send notification
+      schedulerLogger.warn('Alert failed due to permission or access issues', {
+        alertName: alert.name,
+        channelId: alert.channelId,
+        error: errorMessage,
+      });
+
+      const permissionErrorMessage =
+        `🚫 **Alert Disabled Due to Permission Error**\n\n` +
+        `Your alert "${alert.name}" has been disabled because:\n` +
+        `${errorMessage}\n\n` +
+        `**To fix this:**\n` +
+        `• Ensure the bot is still in the server\n` +
+        `• Check the bot has "View Channel" and "Send Messages" permissions in the target channel\n` +
+        `• Re-invite the bot if needed: Use \`/help\` command for the invite link\n\n` +
+        `**To re-enable the alert:**\n` +
+        `• Fix the permissions as described above\n` +
+        `• Use the \`/alert enable\` command to reactivate the alert\n\n` +
+        `The alert will not run again until you manually re-enable it.`;
+
+      // Try to send to the user via DM first, then try the channel
+      try {
+        const user = await this.client.users.fetch(userId);
+        await user.send(permissionErrorMessage);
+        schedulerLogger.info('Sent permission error notification via DM', {
+          userId,
+          alertName: alert.name,
+        });
+      } catch (dmError) {
+        try {
+          await this.sendAlertMessage(alert.channelId, permissionErrorMessage);
+          schedulerLogger.info(
+            'Sent permission error notification to channel',
+            {
+              alertName: alert.name,
+            },
+          );
+        } catch (channelError) {
+          schedulerLogger.warn(
+            'Could not send permission error notification anywhere',
+            {
+              userId,
+              alertName: alert.name,
+              dmError:
+                dmError instanceof Error ? dmError.message : String(dmError),
+              channelError:
+                channelError instanceof Error
+                  ? channelError.message
+                  : String(channelError),
+            },
+          );
+        }
+      }
+    }
+
+    // Set error state and disable the alert
+    await this.setAlertError(alert, 'permission', errorMessage, shouldDisable);
+  }
+
+  private async handleAuthError(
+    alert: AlertConfig,
+    errorMessage: string,
+    userId: string,
+  ): Promise<void> {
+    // Check if we've already notified about this auth error recently
+    const existingError = alert.errorState;
+    const shouldNotify =
+      !existingError ||
+      existingError.errorType !== 'auth' ||
+      !existingError.lastErrorDate ||
+      Date.now() - existingError.lastErrorDate.getTime() > 24 * 60 * 60 * 1000; // 24 hours
+
+    if (shouldNotify) {
+      schedulerLogger.warn('Alert failed due to expired authentication', {
+        alertName: alert.name,
+        userId: userId,
+        error: errorMessage,
+      });
+
+      const authErrorMessage =
+        `🔐 **Alert Authentication Required**\n\n` +
+        `Your alert "${alert.name}" requires re-authentication.\n\n` +
+        `Your MCP server connection has expired. Please reconnect your services using the \`/mcp connect\` command to resume automated alerts.\n\n` +
+        `The alert will continue trying to run and will work automatically once you reconnect.`;
+
+      try {
+        await this.sendAlertMessage(alert.channelId, authErrorMessage);
+      } catch (sendError) {
+        // If we can't send to the channel, try DM
+        try {
+          const user = await this.client.users.fetch(userId);
+          await user.send(authErrorMessage);
+          schedulerLogger.info('Sent auth error notification via DM instead', {
+            userId,
+            alertName: alert.name,
+          });
+        } catch (dmError) {
+          schedulerLogger.error(
+            'Could not notify user about auth error',
+            dmError instanceof Error ? dmError : new Error(String(dmError)),
+            { userId, alertName: alert.name },
+          );
+        }
+      }
+    }
+
+    // Set error state but don't disable - user can fix auth and it will resume
+    await this.setAlertError(alert, 'auth', errorMessage, false);
+  }
+
+  private async handleRegularError(
+    alert: AlertConfig,
+    error: unknown,
+    userId: string,
+  ): Promise<void> {
+    // Regular error - log and notify, with retry limits
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const existingError = alert.errorState;
+    const errorCount = (existingError?.errorCount || 0) + 1;
+
+    schedulerLogger.error(
+      'Error executing alert',
+      error instanceof Error ? error : new Error(String(error)),
+      { alertName: alert.name, errorCount },
+    );
+
+    // Only send notifications for the first few errors to avoid spam
+    if (errorCount <= 3) {
+      const regularErrorMessage = `⚠️ Alert "${alert.name}" failed: ${errorMessage}`;
+      try {
+        await this.sendAlertMessage(alert.channelId, regularErrorMessage);
+      } catch (sendError) {
+        schedulerLogger.error(
+          'Could not send error notification to channel',
+          sendError instanceof Error ? sendError : new Error(String(sendError)),
+          { alertName: alert.name },
+        );
+      }
+    }
+
+    // Disable alert after 5 consecutive failures
+    const shouldDisable = errorCount >= 5;
+    if (shouldDisable) {
+      const disableMessage =
+        `🚫 **Alert Disabled After Repeated Failures**\n\n` +
+        `Your alert "${alert.name}" has been disabled after ${errorCount} consecutive failures.\n\n` +
+        `Last error: ${errorMessage}\n\n` +
+        `Please check your alert configuration and use \`/alert enable\` to reactivate it once the issue is resolved.`;
+
+      try {
+        const user = await this.client.users.fetch(userId);
+        await user.send(disableMessage);
+      } catch (dmError) {
+        try {
+          await this.sendAlertMessage(alert.channelId, disableMessage);
+        } catch (channelError) {
+          schedulerLogger.error(
+            'Could not send alert disable notification',
+            channelError instanceof Error
+              ? channelError
+              : new Error(String(channelError)),
+            { alertName: alert.name },
+          );
+        }
+      }
+    }
+
+    await this.setAlertError(alert, 'other', errorMessage, shouldDisable);
   }
 }

@@ -36,17 +36,19 @@ export const useProvisionInstance = (namespace?: string) => {
  * This is used for the main discovery/landing page.
  */
 export const useGetCanisterId = (namespace?: string, wasmId?: string) => {
+  const { identity } = useInternetIdentity();
+
   return useQuery<Principal | undefined>({
     // The query is public, but we include the principal to maintain a consistent
     // pattern and ensure reactivity if the identity changes.
     queryKey: ['serverCanisterId', namespace, wasmId],
     queryFn: async () => {
-      if (!namespace || !wasmId) {
+      if (!namespace || !wasmId || !identity) {
         throw new Error('Namespace and wasmId must be provided');
       }
 
-      return getServerCanisterId(namespace, wasmId);
+      return getServerCanisterId(identity, namespace, wasmId);
     },
-    enabled: !!namespace && !!wasmId,
+    enabled: !!namespace && !!wasmId && !!identity,
   });
 };
