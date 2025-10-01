@@ -123,15 +123,52 @@ type RevertSnapshotError =
    TooManyRequests;
    Unauthorized;
  };
-type Result_1 = 
+type Result_2 = 
  variant {
    err: text;
    ok: principal;
+ };
+type Result_1 = 
+ variant {
+   err: text;
+   ok: ResourceServer;
  };
 type Result = 
  variant {
    err: text;
    ok;
+ };
+type ResourceServer = 
+ record {
+   accepted_payment_canisters: vec principal;
+   frontend_host: opt text;
+   logo_uri: text;
+   name: text;
+   owner: principal;
+   resource_server_id: text;
+   scopes: vec record {
+                 text;
+                 text;
+               };
+   service_principals: vec principal;
+   status: variant {
+             active;
+             pending;
+           };
+   uris: vec text;
+ };
+type RegisterResourceServerArgs = 
+ record {
+   accepted_payment_canisters: vec principal;
+   frontend_host: opt text;
+   initial_service_principal: principal;
+   logo_uri: text;
+   name: text;
+   scopes: vec record {
+                 text;
+                 text;
+               };
+   uris: vec text;
  };
 type OrchestrationEventType = 
  variant {
@@ -263,7 +300,10 @@ type ICRC16 =
 type ICRC120Canister = 
  service {
    /// * The primary entry point for the owner to debug/fix bad installs.
-   deploy_or_upgrade: (request: DeployOrUpgradeRequest) -> (Result_1);
+   deploy_or_upgrade: (request: DeployOrUpgradeRequest) -> (Result_2);
+   /// * [PUBLIC] Get the current auth server configuration.
+   ///    * This helps with debugging and verification of the setup.
+   get_auth_server_id: () -> (opt principal) query;
    get_canister_id: (namespace: text, wasm_id: text) -> (opt principal) query;
    get_canisters: (namespace: text) -> (vec principal) query;
    /// * Returns the current configuration for the automated cycle top-up feature.
@@ -298,7 +338,12 @@ type ICRC120Canister =
    icrc3_supported_block_types: () -> (vec BlockType) query;
    /// * [INTERNAL] A privileged endpoint for the MCP Registry, used for automated global deployments.
    internal_deploy_or_upgrade: (request: InternalDeployRequest) -> ();
-   provision_instance: (namespace: text, wasmId: text) -> (Result_1);
+   provision_instance: (namespace: text, wasmId: text) -> (Result_2);
+   /// * [PUBLIC] Manually register a canister as an OAuth resource server.
+   ///    * This can be used if automatic registration fails or for manual configuration.
+   register_oauth_resource: (canister_id: principal, args:
+    RegisterResourceServerArgs) -> (Result_1);
+   set_auth_server_id: (authServerId: principal) -> (Result);
    /// * Sets the configuration for the automated cycle top-up feature.
    ///    * This function is restricted to the owner of the orchestrator canister.
    ///    * It will reschedule or remove the timer job based on the new settings.

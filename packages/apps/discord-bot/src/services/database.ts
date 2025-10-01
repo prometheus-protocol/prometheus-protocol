@@ -170,6 +170,7 @@ export class SupabaseService implements DatabaseService {
         prompt: alert.prompt,
         last_run: alert.lastRun?.toISOString() || null,
         last_data: alert.lastData ? JSON.stringify(alert.lastData) : null,
+        error_state: alert.errorState ? JSON.stringify(alert.errorState) : null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
@@ -217,6 +218,7 @@ export class SupabaseService implements DatabaseService {
         prompt: row.prompt,
         lastRun: row.last_run ? new Date(row.last_run) : undefined,
         lastData: row.last_data ? JSON.parse(row.last_data) : undefined,
+        errorState: row.error_state ? JSON.parse(row.error_state) : undefined,
       }));
 
       dbLogger.info('Alert configurations loaded successfully', {
@@ -246,6 +248,7 @@ export class SupabaseService implements DatabaseService {
           prompt: alert.prompt,
           last_run: alert.lastRun?.toISOString() || null,
           last_data: alert.lastData ? JSON.stringify(alert.lastData) : null,
+          error_state: alert.errorState ? JSON.stringify(alert.errorState) : null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', alert.id);

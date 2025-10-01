@@ -23,7 +23,7 @@ export class TaskManagementFunctions {
       'create_monitoring_task',
       new CreateTaskHandler(this.scheduler, this.database),
     );
-    this.functions.set('list_user_tasks', new ListTasksHandler(this.database));
+    this.functions.set('list_user_tasks', new ListTasksHandler(this.scheduler, this.database));
     this.functions.set(
       'modify_task',
       new ModifyTaskHandler(this.scheduler, this.database),
@@ -34,7 +34,7 @@ export class TaskManagementFunctions {
     );
     this.functions.set(
       'get_task_status',
-      new GetTaskStatusHandler(this.database),
+      new GetTaskStatusHandler(this.scheduler, this.database),
     );
   }
 
@@ -271,7 +271,7 @@ class CreateTaskHandler implements AIFunctionHandler {
 }
 
 class ListTasksHandler implements AIFunctionHandler {
-  constructor(private database: DatabaseService) {}
+  constructor(private scheduler: AlertScheduler, private database: DatabaseService) {}
 
   async execute(
     args: Record<string, any>,
@@ -290,14 +290,37 @@ class ListTasksHandler implements AIFunctionHandler {
       }
 
       const taskList = tasks
-        .map(
-          (task) =>
-            `• **${task.description}** (${task.enabled ? '✅ Active' : '❌ Disabled'})\n` +
+        .map((task) => {
+          const alert = this.scheduler.getAlert(task.id);
+          const errorState = alert?.errorState;
+          
+          let statusIcon = task.enabled ? '✅ Active' : '❌ Disabled';
+          let errorInfo = '';
+          
+          if (errorState?.hasError) {
+            if (errorState.errorType === 'permission') {
+              statusIcon = '🚫 Permission Error';
+              errorInfo = '\n  ⚠️ Alert disabled due to permission issues';
+            } else if (errorState.errorType === 'auth') {
+              statusIcon = '🔐 Auth Required';
+              errorInfo = '\n  ⚠️ Authentication needed';
+            } else if (errorState.errorType === 'other') {
+              statusIcon = `⚠️ Error (${errorState.errorCount || 1}x)`;
+              if (errorState.disabledDueToError) {
+                errorInfo = '\n  🚫 Alert disabled due to repeated failures';
+              }
+            }
+          }
+          
+          return (
+            `• **${task.description}** (${statusIcon})\n` +
             `  ID: \`${task.id}\`\n` +
             `  Prompt: ${task.prompt.length > 100 ? task.prompt.substring(0, 100) + '...' : task.prompt}\n` +
             `  Interval: ${this.formatInterval(task.interval)}\n` +
-            `  ${task.lastRun ? `Last run: ${task.lastRun.toLocaleString()}` : 'Never run'}`,
-        )
+            `  ${task.lastRun ? `Last run: ${task.lastRun.toLocaleString()}` : 'Never run'}` +
+            errorInfo
+          );
+        })
         .join('\n\n');
 
       return {
@@ -444,7 +467,7 @@ class DeleteTaskHandler implements AIFunctionHandler {
 }
 
 class GetTaskStatusHandler implements AIFunctionHandler {
-  constructor(private database: DatabaseService) {}
+  constructor(private scheduler: AlertScheduler, private database: DatabaseService) {}
 
   async execute(
     args: Record<string, any>,
@@ -461,10 +484,31 @@ class GetTaskStatusHandler implements AIFunctionHandler {
         };
       }
 
-      const status = task.enabled ? '✅ Active' : '❌ Disabled';
+      const alert = this.scheduler.getAlert(task_id);
+      const errorState = alert?.errorState;
+      
+      let status = task.enabled ? '✅ Active' : '❌ Disabled';
+      let errorInfo = '';
+      
+      if (errorState?.hasError) {
+        if (errorState.errorType === 'permission') {
+          status = '🚫 Permission Error (Disabled)';
+          errorInfo = `\nError: ${errorState.errorMessage}\nOccurred: ${errorState.lastErrorDate?.toLocaleString() || 'Unknown'}\nSuggestion: Fix bot permissions and use /modify_task to re-enable`;
+        } else if (errorState.errorType === 'auth') {
+          status = '🔐 Authentication Required';
+          errorInfo = `\nError: ${errorState.errorMessage}\nOccurred: ${errorState.lastErrorDate?.toLocaleString() || 'Unknown'}\nSuggestion: Reconnect your MCP services using /mcp connect`;
+        } else if (errorState.errorType === 'other') {
+          status = `⚠️ Error (${errorState.errorCount || 1}x failures)`;
+          if (errorState.disabledDueToError) {
+            status += ' - Disabled';
+          }
+          errorInfo = `\nLast Error: ${errorState.errorMessage}\nOccurred: ${errorState.lastErrorDate?.toLocaleString() || 'Unknown'}\nSuggestion: Check your task configuration and re-enable if needed`;
+        }
+      }
+      
       const lastRun = task.lastRun ? task.lastRun.toLocaleString() : 'Never';
       const nextRun =
-        task.enabled && task.lastRun
+        task.enabled && task.lastRun && !errorState?.disabledDueToError
           ? new Date(task.lastRun.getTime() + task.interval).toLocaleString()
           : 'N/A';
 
@@ -476,8 +520,9 @@ class GetTaskStatusHandler implements AIFunctionHandler {
           `Prompt: ${task.prompt}\n` +
           `Interval: ${this.formatInterval(task.interval)}\n` +
           `Last run: ${lastRun}\n` +
-          `Next run: ${nextRun}`,
-        data: { task },
+          `Next run: ${nextRun}` +
+          errorInfo,
+        data: { task, alert },
       };
     } catch (error) {
       return {

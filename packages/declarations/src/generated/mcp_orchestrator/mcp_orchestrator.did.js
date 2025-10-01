@@ -84,7 +84,7 @@ export const idlFactory = ({ IDL }) => {
     'timeout' : IDL.Nat,
     'namespace' : IDL.Text,
   });
-  const Result_1 = IDL.Variant({ 'ok' : IDL.Principal, 'err' : IDL.Text });
+  const Result_2 = IDL.Variant({ 'ok' : IDL.Principal, 'err' : IDL.Text });
   const CycleTopUpConfig = IDL.Record({
     'threshold' : IDL.Nat,
     'enabled' : IDL.Bool,
@@ -316,9 +316,32 @@ export const idlFactory = ({ IDL }) => {
     'hash' : IDL.Vec(IDL.Nat8),
     'namespace' : IDL.Text,
   });
+  const RegisterResourceServerArgs = IDL.Record({
+    'initial_service_principal' : IDL.Principal,
+    'scopes' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text)),
+    'name' : IDL.Text,
+    'uris' : IDL.Vec(IDL.Text),
+    'accepted_payment_canisters' : IDL.Vec(IDL.Principal),
+    'logo_uri' : IDL.Text,
+    'frontend_host' : IDL.Opt(IDL.Text),
+  });
+  const ResourceServer = IDL.Record({
+    'status' : IDL.Variant({ 'active' : IDL.Null, 'pending' : IDL.Null }),
+    'resource_server_id' : IDL.Text,
+    'owner' : IDL.Principal,
+    'scopes' : IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text)),
+    'name' : IDL.Text,
+    'uris' : IDL.Vec(IDL.Text),
+    'accepted_payment_canisters' : IDL.Vec(IDL.Principal),
+    'logo_uri' : IDL.Text,
+    'frontend_host' : IDL.Opt(IDL.Text),
+    'service_principals' : IDL.Vec(IDL.Principal),
+  });
+  const Result_1 = IDL.Variant({ 'ok' : ResourceServer, 'err' : IDL.Text });
   const Result = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   const ICRC120Canister = IDL.Service({
-    'deploy_or_upgrade' : IDL.Func([DeployOrUpgradeRequest], [Result_1], []),
+    'deploy_or_upgrade' : IDL.Func([DeployOrUpgradeRequest], [Result_2], []),
+    'get_auth_server_id' : IDL.Func([], [IDL.Opt(IDL.Principal)], ['query']),
     'get_canister_id' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Opt(IDL.Principal)],
@@ -397,7 +420,13 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'internal_deploy_or_upgrade' : IDL.Func([InternalDeployRequest], [], []),
-    'provision_instance' : IDL.Func([IDL.Text, IDL.Text], [Result_1], []),
+    'provision_instance' : IDL.Func([IDL.Text, IDL.Text], [Result_2], []),
+    'register_oauth_resource' : IDL.Func(
+        [IDL.Principal, RegisterResourceServerArgs],
+        [Result_1],
+        [],
+      ),
+    'set_auth_server_id' : IDL.Func([IDL.Principal], [Result], []),
     'set_cycle_top_up_config' : IDL.Func([CycleTopUpConfig], [Result], []),
     'set_mcp_registry_id' : IDL.Func([IDL.Principal], [Result], []),
   });

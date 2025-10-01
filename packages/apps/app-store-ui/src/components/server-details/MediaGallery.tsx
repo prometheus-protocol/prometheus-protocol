@@ -36,7 +36,7 @@ export function MediaGallery({ images, appName }: MediaGalleryProps) {
                 <ImageWithFallback
                   src={image}
                   alt={`Screenshot ${index + 1} of ${appName}`}
-                  className="aspect-video w-full rounded-xl object-cover transition-opacity hover:opacity-90"
+                  className="aspect-[16/10] w-full rounded-xl object-cover transition-opacity hover:opacity-90"
                 />
               </a>
             </CarouselItem>

@@ -31,6 +31,7 @@ import { ic } "mo:ic";
 import McpRegistry "McpRegistry";
 import CanisterFactory "CanisterFactory";
 import McpServer "McpServer";
+import AuthServer "AuthServer";
 
 import ICRC118WasmRegistry "../../../../libs/icrc118/src/service";
 import System "../../../../libs/icrc120/src/system";
@@ -225,11 +226,28 @@ shared (deployer) actor class ICRC120Canister<system>(
   // --- FIX 1: The stable variable to hold the registry ID ---
   stable var _mcp_registry_id : ?Principal = null;
 
+  // --- OAuth Auth Server Configuration ---
+  stable var _auth_server_id : ?Principal = null;
+
   // --- FIX 2: A post-deployment, one-time setter for the registry ID ---
   public shared ({ caller }) func set_mcp_registry_id(registryId : Principal) : async Result.Result<(), Text> {
     if (caller != _owner) { return #err("Caller is not the owner") };
     _mcp_registry_id := ?registryId;
     return #ok(());
+  };
+
+  public shared ({ caller }) func set_auth_server_id(authServerId : Principal) : async Result.Result<(), Text> {
+    if (caller != _owner) { return #err("Caller is not the owner") };
+    _auth_server_id := ?authServerId;
+    return #ok(());
+  };
+
+  /**
+   * [PUBLIC] Get the current auth server configuration.
+   * This helps with debugging and verification of the setup.
+   */
+  public query func get_auth_server_id() : async ?Principal {
+    _auth_server_id;
   };
 
   func canAdminCanister({
@@ -606,6 +624,10 @@ shared (deployer) actor class ICRC120Canister<system>(
                 let wasm_id = Base16.encode(request.hash);
                 Map.set(canister_deployment_types, Map.thash, wasm_id, request.deployment_type);
                 Debug.print("Provisioned new canister " # Principal.toText(new_canister_id));
+
+                // Auto-register canister with OAuth server after successful provision
+                ignore _register_oauth_resource(new_canister_id, request.namespace, caller);
+
                 new_canister_id;
               };
             };
@@ -637,6 +659,10 @@ shared (deployer) actor class ICRC120Canister<system>(
             let wasm_id = Base16.encode(request.hash);
             Map.set(canister_deployment_types, Map.thash, wasm_id, request.deployment_type);
             Debug.print("Provisioned new canister " # Principal.toText(new_canister_id));
+
+            // Auto-register canister with OAuth server after successful provision
+            ignore _register_oauth_resource(new_canister_id, request.namespace, caller);
+
             new_canister_id;
           };
         };
@@ -709,6 +735,27 @@ shared (deployer) actor class ICRC120Canister<system>(
     // With the new state structure, this is a simple and fast lookup.
     Option.get(Map.get(managed_canisters, Map.thash, namespace), []);
   };
+
+  // /**
+  //  * Debug function to help troubleshoot canister tracking issues
+  //  */
+  // public query ({ caller }) func debug_canister_info(namespace : Text) : async {
+  //   canisters : [Principal];
+  //   canister_owners : [(Principal, Principal)];
+  //   canister_deployment_types : [(Text, CanisterDeploymentType)];
+  //   caller_principal : Principal;
+  // } {
+  //   let canisters = Option.get(Map.get(managed_canisters, Map.thash, namespace), []);
+  //   let owners = Iter.toArray(Map.entries(canister_owners));
+  //   let deployment_types = Iter.toArray(Map.entries(canister_deployment_types));
+
+  //   {
+  //     canisters = canisters;
+  //     canister_owners = owners;
+  //     canister_deployment_types = deployment_types;
+  //     caller_principal = caller;
+  //   };
+  // };
 
   public query ({ caller }) func get_canister_id(namespace : Text, wasm_id : Text) : async ?Principal {
     let canisters = Option.get(Map.get(managed_canisters, Map.thash, namespace), []);
@@ -805,6 +852,115 @@ shared (deployer) actor class ICRC120Canister<system>(
     };
 
     return #ok(());
+  };
+
+  // =====================================================================================
+  // OAUTH REGISTRATION AUTOMATION
+  // =====================================================================================
+
+  /**
+   * [PRIVATE] Automatically registers a newly provisioned canister as an OAuth resource server.
+   * This is called after successful canister provision to automate the OAuth setup.
+   */
+  private func _register_oauth_resource(
+    canister_id : Principal,
+    namespace : Text,
+    owner : Principal,
+  ) : async () {
+    switch (_auth_server_id) {
+      case (null) {
+        Debug.print("OAuth registration skipped: Auth server ID not configured");
+        return;
+      };
+      case (?auth_server_id) {
+        try {
+          let auth_server : AuthServer.Service = actor (Principal.toText(auth_server_id));
+
+          // Construct the canister URL based on deployment environment
+          // Check if we're in local development by looking at common local canister IDs
+          let canister_text = Principal.toText(canister_id);
+
+          // TODO: Currently we're hardcoding the path (/mcp). In the future, this could be made configurable.
+          // OR it should be documented that MCP canisters always use /mcp as the path.
+          let canister_url = "https://" # canister_text # ".icp0.io/mcp";
+
+          let register_args : AuthServer.RegisterResourceServerArgs = {
+            name = namespace;
+            logo_uri = "";
+            uris = [canister_url];
+            initial_service_principal = canister_id;
+            scopes = [
+              ("openid", "Grants access to the user's unique identifier (Principal)."),
+            ];
+            accepted_payment_canisters = []; // Default to no payment canisters
+            frontend_host = ?"https://prometheusprotocol.org/oauth"; // Default frontend host
+          };
+
+          let registration_result = await auth_server.register_resource_server(register_args);
+
+          switch (registration_result) {
+            case (#ok(resource_server)) {
+              Debug.print("Successfully registered OAuth resource server: " # resource_server.resource_server_id # " for canister " # Principal.toText(canister_id));
+            };
+            case (#err(error)) {
+              Debug.print("Failed to register OAuth resource server for canister " # Principal.toText(canister_id) # ": " # error);
+            };
+          };
+        } catch (e) {
+          Debug.print("Error registering OAuth resource server for canister " # Principal.toText(canister_id) # ": " # Error.message(e));
+        };
+      };
+    };
+  };
+
+  /**
+   * [PUBLIC] Manually register a canister as an OAuth resource server.
+   * This can be used if automatic registration fails or for manual configuration.
+   */
+  public shared ({ caller }) func register_oauth_resource(
+    canister_id : Principal,
+    args : AuthServer.RegisterResourceServerArgs,
+  ) : async Result.Result<AuthServer.ResourceServer, Text> {
+    // Check authorization - only owner or canister owner can register
+    let can_register = if (caller == _owner) {
+      true;
+    } else {
+      switch (Map.get(canister_owners, Map.phash, canister_id)) {
+        case (?owner) { owner == caller };
+        case (null) { false };
+      };
+    };
+
+    if (not can_register) {
+      return #err("Unauthorized: Only the orchestrator owner or canister owner can register OAuth resources");
+    };
+
+    switch (_auth_server_id) {
+      case (null) {
+        return #err("Auth server ID not configured");
+      };
+      case (?auth_server_id) {
+        try {
+          let auth_server : AuthServer.Service = actor (Principal.toText(auth_server_id));
+          let result = await auth_server.register_resource_server(args);
+
+          switch (result) {
+            case (#ok(resource_server)) {
+              Debug.print("Successfully registered OAuth resource server: " # resource_server.resource_server_id # " for canister " # Principal.toText(canister_id));
+              return #ok(resource_server);
+            };
+            case (#err(error)) {
+              Debug.print("Failed to register OAuth resource server for canister " # Principal.toText(canister_id) # ": " # error);
+              return #err(error);
+            };
+          };
+        } catch (e) {
+          let error_msg = "Error calling auth server: " # Error.message(e);
+          Debug.print(error_msg);
+          return #err(error_msg);
+        };
+      };
+    };
   };
 
   // =====================================================================================

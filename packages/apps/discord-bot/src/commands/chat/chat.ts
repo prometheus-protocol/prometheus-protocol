@@ -149,7 +149,7 @@ export class ChatCommand extends BaseCommand {
       const history = await this.database.getConversationHistory(
         context.userId,
         context.channelId,
-        10, // Keep last 10 messages for context
+        50, // Keep last 50 messages for context
       );
       chatLogger.info('Loaded conversation history', {
         userId: context.userId,

@@ -130,7 +130,7 @@ export class LLMService {
     ];
     if (context?.history) {
       messages.push(
-        ...context.history.slice(-10).map((msg) => ({
+        ...context.history.map((msg) => ({
           role: msg.role as 'user' | 'assistant',
           content: msg.content,
         })),
