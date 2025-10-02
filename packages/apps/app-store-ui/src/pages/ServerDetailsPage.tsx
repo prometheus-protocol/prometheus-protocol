@@ -33,6 +33,7 @@ import { CreateBountyDialog } from '@/components/server-details/CreateBountyDial
 import { AccessAndBilling } from '@/components/server-details/AccessAndBilling';
 import { SponsorPrompt } from '@/components/server-details/SponsorPrompt';
 import { VersionSelector } from '@/components/server-details/VersionSelector';
+import { WasmHashDetails } from '@/components/server-details/WasmHashDetails';
 import {
   useGetCanisterId,
   useProvisionInstance,
@@ -186,6 +187,21 @@ export default function ServerDetailsPage() {
     }
   };
 
+  const handleUpgradeClick = async () => {
+    if (!server) return;
+
+    try {
+      // For provisioned instances, we use provision_instance which handles upgrades
+      await provisionMutation.mutateAsync({
+        namespace: server.namespace,
+        wasmId: server.latestVersion.wasmId,
+      });
+    } catch (error) {
+      // Error is handled by the custom mutation hook
+      console.error('Upgrade failed:', error);
+    }
+  };
+
   // --- 1. Determine which sections have data ---
   // The presence of a description indicates the 'app_info_v1' attestation is complete.
   const hasAppInfo = server.latestVersion.auditRecords.some(
@@ -299,6 +315,9 @@ export default function ServerDetailsPage() {
                   latestVersion={server.latestVersion}
                   onConnectClick={handleInstallClick}
                   isArchived={isViewingArchivedVersion}
+                  canisterId={canisterId}
+                  onUpgradeClick={handleUpgradeClick}
+                  isUpgrading={provisionMutation.isPending}
                 />
               )}
             </div>
@@ -380,9 +399,26 @@ export default function ServerDetailsPage() {
                   allVersions={allVersions}
                   currentVersionWasmId={latestVersion.wasmId}
                   namespace={server.namespace}
+                  canisterId={canisterId}
                 />
               </div>
             </div>
+
+            {/* WASM Hash Verification Details (for development/debugging) */}
+            {canisterId && (
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">
+                  Developer Information
+                </label>
+                <div className="mt-2">
+                  <WasmHashDetails
+                    canisterId={canisterId}
+                    expectedWasmId={latestVersion.wasmId}
+                    namespace={server.namespace}
+                  />
+                </div>
+              </div>
+            )}
           </main>
 
           {/* Right column - Sidebar */}

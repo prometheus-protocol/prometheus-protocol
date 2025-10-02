@@ -11,8 +11,11 @@ interface Props {
   onSuccess?: () => void;
 }
 
-export const AllowanceManager = ({ latestVersion, canisterId, onSuccess }: Props) => {
-  const { tools } = latestVersion;
+export const AllowanceManager = ({
+  latestVersion,
+  canisterId,
+  onSuccess,
+}: Props) => {
   const spenderPrincipal = canisterId;
 
   // --- 2. NEW: Token Discovery Logic ---
@@ -24,11 +27,7 @@ export const AllowanceManager = ({ latestVersion, canisterId, onSuccess }: Props
     // Use a Set to find all unique ledger canister IDs from the tools list.
     const acceptedTokens = new Set<Token>();
     for (const tool of latestVersion.tools) {
-      if (
-        tool.tokenSymbol &&
-        Tokens[tool.tokenSymbol] &&
-        Number(tool.cost) > 0
-      ) {
+      if (tool.tokenSymbol && Tokens[tool.tokenSymbol]) {
         acceptedTokens.add(Tokens[tool.tokenSymbol]);
       }
     }
@@ -58,4 +57,4 @@ export const AllowanceManager = ({ latestVersion, canisterId, onSuccess }: Props
       ))}
     </div>
   );
-}
+};

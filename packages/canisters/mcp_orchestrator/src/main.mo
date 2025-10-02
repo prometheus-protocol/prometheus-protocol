@@ -736,32 +736,33 @@ shared (deployer) actor class ICRC120Canister<system>(
     Option.get(Map.get(managed_canisters, Map.thash, namespace), []);
   };
 
-  // /**
-  //  * Debug function to help troubleshoot canister tracking issues
-  //  */
-  // public query ({ caller }) func debug_canister_info(namespace : Text) : async {
-  //   canisters : [Principal];
-  //   canister_owners : [(Principal, Principal)];
-  //   canister_deployment_types : [(Text, CanisterDeploymentType)];
-  //   caller_principal : Principal;
-  // } {
-  //   let canisters = Option.get(Map.get(managed_canisters, Map.thash, namespace), []);
-  //   let owners = Iter.toArray(Map.entries(canister_owners));
-  //   let deployment_types = Iter.toArray(Map.entries(canister_deployment_types));
+  /**
+   * Debug function to help troubleshoot canister tracking issues
+   */
+  public query ({ caller }) func debug_canister_info(namespace : Text) : async {
+    canisters : [Principal];
+    canister_owners : [(Principal, Principal)];
+    canister_deployment_types : [(Text, CanisterDeploymentType)];
+    caller_principal : Principal;
+  } {
+    let canisters = Option.get(Map.get(managed_canisters, Map.thash, namespace), []);
+    let owners = Iter.toArray(Map.entries(canister_owners));
+    let deployment_types = Iter.toArray(Map.entries(canister_deployment_types));
 
-  //   {
-  //     canisters = canisters;
-  //     canister_owners = owners;
-  //     canister_deployment_types = deployment_types;
-  //     caller_principal = caller;
-  //   };
-  // };
+    {
+      canisters = canisters;
+      canister_owners = owners;
+      canister_deployment_types = deployment_types;
+      caller_principal = caller;
+    };
+  };
 
   public query ({ caller }) func get_canister_id(namespace : Text, wasm_id : Text) : async ?Principal {
     let canisters = Option.get(Map.get(managed_canisters, Map.thash, namespace), []);
     Debug.print("Found " # Nat.toText(canisters.size()) # " canisters for namespace " # namespace);
     if (canisters.size() > 0) {
-      let deploymentType = Option.get(Map.get(canister_deployment_types, Map.thash, wasm_id), #global);
+      // Fallback to #provisioned since #global is set automatically during a deploy
+      let deploymentType = Option.get(Map.get(canister_deployment_types, Map.thash, wasm_id), #provisioned);
 
       Debug.print("Deployment type: " # debug_show (deploymentType));
       let caller_canister = switch (deploymentType) {
@@ -963,6 +964,17 @@ shared (deployer) actor class ICRC120Canister<system>(
     };
   };
 
+  public shared ({ caller }) func set_canister_owner(canister_id : Principal, new_owner : Principal) : async Result.Result<(), Text> {
+    // Only the current owner or orchestrator owner can change ownership
+    let current_owner = Map.get(canister_owners, Map.phash, canister_id);
+    if (caller != _owner and current_owner != ?caller) {
+      return #err("Unauthorized: Only the orchestrator owner or current canister owner can change ownership");
+    };
+
+    Map.set(canister_owners, Map.phash, canister_id, new_owner);
+    return #ok(());
+  };
+
   // =====================================================================================
   // PRIVATE HELPERS
   // =====================================================================================
@@ -997,7 +1009,12 @@ shared (deployer) actor class ICRC120Canister<system>(
                   return #reinstall;
                 } else {
                   // A different WASM is installed. This is an upgrade.
-                  return #upgrade(null);
+                  return #upgrade(
+                    ?{
+                      wasm_memory_persistence = ?#keep;
+                      skip_pre_upgrade = null;
+                    }
+                  );
                 };
               };
               case (null) {
@@ -1123,7 +1140,7 @@ shared (deployer) actor class ICRC120Canister<system>(
 
     // Call the core logic, passing the developer principal from the request.
     // We use `ignore` because the registry doesn't need a response.
-    ignore _do_deploy_or_upgrade(caller, full_request);
+    ignore _do_deploy_or_upgrade(request.owner, full_request);
   };
 
   //------------------- Test FUNCTION -------------------//
