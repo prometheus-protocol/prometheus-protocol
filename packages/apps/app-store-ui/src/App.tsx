@@ -27,7 +27,6 @@ import AppBountiesPage from './pages/AppBountiesPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import AuditHubPage from './pages/AuditHubPage';
 import AuditDetailsPage from './pages/AuditDetailsPage';
-import TokenDemoPage from './pages/TokenDemoPage';
 import WalletPage from './pages/WalletPage';
 import LoginPage from './pages/LoginPage';
 import SetupPage from './pages/SetupPage';

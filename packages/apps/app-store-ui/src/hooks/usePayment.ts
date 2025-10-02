@@ -5,6 +5,7 @@ import {
   getBalanceOf,
   icrc1Transfer,
   Token,
+  withdraw as mcpWithdraw,
 } from '@prometheus-protocol/ic-js';
 import { Principal } from '@dfinity/principal';
 import { useQuery } from '@tanstack/react-query';
@@ -88,6 +89,48 @@ export const useTransfer = () => {
       }
       // Perform the transfer using the shared library function
       return await icrc1Transfer(identity, args.token, args.to, args.amount);
+    },
+  });
+};
+
+interface WithdrawArgs {
+  token: Token;
+  canisterPrincipal: Principal;
+  to: Principal;
+  amount: number;
+}
+
+export const useWithdraw = () => {
+  const { identity } = useInternetIdentity();
+
+  return useMutation<WithdrawArgs, bigint>({
+    queryKeysToRefetch: [['tokenBalance']],
+    successMessage: 'Tokens withdrawn successfully!',
+    errorMessage: 'Failed to withdraw tokens',
+    mutationFn: async (args: WithdrawArgs) => {
+      if (!identity) {
+        throw new Error('User is not authenticated');
+      }
+
+      // Convert amount from human-readable to atomic units
+      const atomicAmount = args.token.toAtomic(args.amount);
+
+      // Create the destination object with the correct format
+      const destination = {
+        owner: args.to,
+        subaccount: [] as [] | [Uint8Array], // No subaccount
+      };
+
+      // Use the ic-js mcp-server API
+      const result = await mcpWithdraw(
+        identity,
+        args.canisterPrincipal,
+        args.token.canisterId,
+        atomicAmount,
+        destination,
+      );
+
+      return result;
     },
   });
 };

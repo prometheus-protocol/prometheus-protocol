@@ -23,9 +23,11 @@ import {
   Shield,
   Plus,
   Check,
+  ChevronsUpDown,
   X,
   Copy,
   Send,
+  ArrowUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Token } from '@prometheus-protocol/ic-js';
@@ -47,6 +49,7 @@ interface TokenManagerProps {
   principalIdLabel?: string;
   principalIdDescription?: string;
   onTransfer?: (token: Token) => void;
+  onWithdraw?: (token: Token, canisterPrincipal: Principal) => void;
 }
 
 // Local storage for token watchlist
@@ -81,8 +84,9 @@ const TokenBalanceItem: React.FC<{
   token: Token;
   onRemove?: () => void;
   onTransfer?: (token: Token) => void;
+  onWithdraw?: (token: Token, canisterPrincipal: Principal) => void;
   targetPrincipal?: Principal;
-}> = ({ token, onRemove, onTransfer, targetPrincipal }) => {
+}> = ({ token, onRemove, onTransfer, onWithdraw, targetPrincipal }) => {
   // Use different hook based on whether we're checking user balance or app canister balance
   const {
     data: userBalance,
@@ -133,6 +137,16 @@ const TokenBalanceItem: React.FC<{
           <div className="text-xs md:text-sm text-amber-600">
             Local network - balance unavailable
           </div>
+          {onWithdraw && targetPrincipal && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => onWithdraw(token, targetPrincipal)}
+              title={`Withdraw ${token.symbol} from canister`}>
+              <ArrowUp className="h-4 w-4" />
+            </Button>
+          )}
           {onTransfer && (
             <Button
               variant="ghost"
@@ -204,6 +218,16 @@ const TokenBalanceItem: React.FC<{
           </div>
         </div>
         <div className="flex items-center gap-1">
+          {onWithdraw && targetPrincipal && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => onWithdraw(token, targetPrincipal)}
+              title={`Withdraw ${token.symbol} from canister`}>
+              <ArrowUp className="h-4 w-4" />
+            </Button>
+          )}
           {onTransfer && (
             <Button
               variant="ghost"
@@ -398,6 +422,7 @@ export const TokenManager: React.FC<TokenManagerProps> = ({
   principalIdLabel = 'Principal ID',
   principalIdDescription = 'Send tokens to this address',
   onTransfer,
+  onWithdraw,
 }) => {
   const { identity } = useInternetIdentity();
 
@@ -797,6 +822,7 @@ export const TokenManager: React.FC<TokenManagerProps> = ({
                     token={token}
                     targetPrincipal={targetPrincipal}
                     onTransfer={onTransfer}
+                    onWithdraw={onWithdraw}
                     onRemove={() => {
                       removeWatchedToken(token.canisterId.toText());
                       toast.success(`${token.symbol} removed from watchlist`);

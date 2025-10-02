@@ -1,10 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Principal } from '@dfinity/principal';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import { TokenManager } from '../TokenManager';
+import { WithdrawDialog } from '../WithdrawDialog';
 import { useTokenRegistry } from '@/hooks/useTokenRegistry';
+import { useGetTokenBalanceForPrincipal } from '@/hooks/usePayment';
 import { Section } from '../Section';
 import { Wallet } from 'lucide-react';
+import { Token } from '@prometheus-protocol/ic-js';
 
 interface AppTokenSectionProps {
   targetPrincipal: Principal;
@@ -18,6 +21,29 @@ export const AppTokenSection: React.FC<AppTokenSectionProps> = ({
 }) => {
   const { identity } = useInternetIdentity();
   const { isLoading, error } = useTokenRegistry();
+  const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
+  const [selectedWithdrawToken, setSelectedWithdrawToken] = useState<{
+    token: Token;
+    canisterPrincipal: Principal;
+  } | null>(null);
+
+  // Get balance for the selected token if withdraw dialog is open
+  const { data: selectedTokenBalance } = useGetTokenBalanceForPrincipal(
+    selectedWithdrawToken?.token,
+    selectedWithdrawToken?.canisterPrincipal,
+  );
+
+  const handleWithdraw = (token: Token, canisterPrincipal: Principal) => {
+    setSelectedWithdrawToken({ token, canisterPrincipal });
+    setWithdrawDialogOpen(true);
+  };
+
+  const handleWithdrawDialogClose = (isOpen: boolean) => {
+    setWithdrawDialogOpen(isOpen);
+    if (!isOpen) {
+      setSelectedWithdrawToken(null);
+    }
+  };
 
   // Don't render if user is not logged in
   if (!identity) {
@@ -59,6 +85,26 @@ export const AppTokenSection: React.FC<AppTokenSectionProps> = ({
             showPrincipalId={true}
             principalIdLabel="App Canister Principal ID"
             principalIdDescription="Send tokens to this address to top up the app's balance"
+            onWithdraw={handleWithdraw}
+          />
+        )}
+
+        {/* Withdraw Dialog */}
+        {selectedWithdrawToken && (
+          <WithdrawDialog
+            token={selectedWithdrawToken.token}
+            canisterPrincipal={selectedWithdrawToken.canisterPrincipal}
+            isOpen={withdrawDialogOpen}
+            onOpenChange={handleWithdrawDialogClose}
+            currentBalance={
+              selectedTokenBalance
+                ? Number(
+                    selectedWithdrawToken.token.fromAtomic(
+                      selectedTokenBalance,
+                    ),
+                  )
+                : 0
+            }
           />
         )}
       </div>
