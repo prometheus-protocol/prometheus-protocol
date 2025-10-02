@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useInternetIdentity } from 'ic-use-internet-identity';
+import { Link } from 'react-router-dom';
 import { Button } from './ui/button';
 import {
   DropdownMenu,
@@ -179,6 +180,14 @@ export function LoginButton() {
                   {usdcBalanceNum.toFixed(2) ?? '0.00'}
                 </span>
               )}
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link
+                to="/wallet"
+                className="cursor-pointer flex items-center gap-2">
+                <Wallet className="h-4 w-4 text-muted-foreground" />
+                <span>Open Wallet</span>
+              </Link>
             </DropdownMenuItem>
             {/* --- Reputation Section --- */}
             <DropdownMenuSeparator />

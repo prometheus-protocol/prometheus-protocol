@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useInternetIdentity } from 'ic-use-internet-identity';
 import { LoginButton } from '../LoginButton';
 import { Logo } from '../Logo';
 import { Search, X, Menu } from 'lucide-react';
@@ -88,6 +89,7 @@ export function AppBar() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const { pathname } = useLocation();
+  const { identity } = useInternetIdentity();
 
   const { data: searchResults, isLoading: isSearchLoading } =
     useSearchQuery(searchQuery);
@@ -168,17 +170,6 @@ export function AppBar() {
               <NavigationMenuList>
                 <NavigationMenuItem>
                   {/* --- 3. THE CORRECT IMPLEMENTATION --- */}
-                  <NavigationMenuLink asChild active={pathname === '/bounties'}>
-                    <Link
-                      to="/bounties"
-                      className={cn(navigationMenuTriggerStyle(), 'text-base')}>
-                      App Bounties
-                    </Link>
-                  </NavigationMenuLink>
-                </NavigationMenuItem>
-
-                <NavigationMenuItem>
-                  {/* --- 3. THE CORRECT IMPLEMENTATION --- */}
                   <NavigationMenuLink
                     asChild
                     active={pathname === '/audit-hub'}>
@@ -202,6 +193,22 @@ export function AppBar() {
                     </Link>
                   </NavigationMenuLink>
                 </NavigationMenuItem>
+
+                {/* Wallet link - only show for logged-in users */}
+                {identity && (
+                  <NavigationMenuItem>
+                    <NavigationMenuLink asChild active={pathname === '/wallet'}>
+                      <Link
+                        to="/wallet"
+                        className={cn(
+                          navigationMenuTriggerStyle(),
+                          'text-base',
+                        )}>
+                        Wallet
+                      </Link>
+                    </NavigationMenuLink>
+                  </NavigationMenuItem>
+                )}
               </NavigationMenuList>
             </NavigationMenu>
           </div>
@@ -317,13 +324,7 @@ export function AppBar() {
                 to="/"
                 className="text-lg font-medium"
                 onClick={() => setIsMobileMenuOpen(false)}>
-                Discover Apps
-              </Link>
-              <Link
-                to="/bounties"
-                className="text-lg font-medium"
-                onClick={() => setIsMobileMenuOpen(false)}>
-                App Bounties
+                Home
               </Link>
               <Link
                 to="/audit-hub"
@@ -337,6 +338,14 @@ export function AppBar() {
                 onClick={() => setIsMobileMenuOpen(false)}>
                 Leaderboard
               </Link>
+              {identity && (
+                <Link
+                  to="/wallet"
+                  className="text-lg font-medium"
+                  onClick={() => setIsMobileMenuOpen(false)}>
+                  Wallet
+                </Link>
+              )}
             </nav>
           </div>
         </div>

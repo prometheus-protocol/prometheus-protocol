@@ -2,6 +2,7 @@ import {
   approveAllowance,
   getAllowance,
   getBalance,
+  getBalanceOf,
   icrc1Transfer,
   Token,
 } from '@prometheus-protocol/ic-js';
@@ -36,6 +37,36 @@ export const useGetTokenBalance = (token: Token | undefined) => {
     // The query is only enabled when both the user and the token are defined.
     enabled: !!principal && !!token,
     // Optional: Refetch periodically to keep the balance fresh.
+    refetchInterval: 30000,
+  });
+};
+
+/**
+ * Hook to get token balance for a specific principal (e.g., app canister)
+ *
+ * @param token The Token object for which to fetch the balance
+ * @param targetPrincipal The principal whose balance to check
+ */
+export const useGetTokenBalanceForPrincipal = (
+  token: Token | undefined,
+  targetPrincipal: Principal | undefined,
+) => {
+  const { identity } = useInternetIdentity();
+
+  return useQuery({
+    queryKey: [
+      'tokenBalance',
+      targetPrincipal?.toText(),
+      token?.canisterId?.toText(),
+    ],
+    queryFn: async () => {
+      if (!targetPrincipal || !token || !identity) {
+        throw new Error('Principal, token, or identity is not available.');
+      }
+      // Use the new getBalanceOf function to check balance of the target principal
+      return getBalanceOf(identity!, token, targetPrincipal);
+    },
+    enabled: !!targetPrincipal && !!token && !!identity,
     refetchInterval: 30000,
   });
 };

@@ -1,8 +1,7 @@
 // src/components/server-details/AccessAndBilling.tsx
 
 import { useState } from 'react';
-import { Wallet, KeyRound, Trash2, Loader2 } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { KeyRound, Trash2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import {
@@ -19,8 +18,7 @@ import {
 import { useListApiKeys, useRevokeApiKey } from '@/hooks/useApiKeys';
 import { AppVersionDetails } from '@prometheus-protocol/ic-js';
 import { Principal } from '@dfinity/principal';
-import { CreateApiKeyDialog } from './CreateApiKeyDialog'; // Import the new dialog
-import { AllowanceManager } from './AllowanceManager';
+import { CreateApiKeyDialog } from './CreateApiKeyDialog';
 
 export const AccessAndBilling = ({
   latestVersion,
@@ -77,92 +75,63 @@ export const AccessAndBilling = ({
       <div className="space-y-4">
         <div className="space-y-1">
           <h2 className="text-2xl font-bold tracking-tight flex items-center gap-3 mb-4">
-            <Wallet className="w-6 h-6" />
-            Access & Billing
+            <KeyRound className="w-6 h-6" />
+            API Keys
           </h2>
           <p className="text-muted-foreground">
-            Manage your spending allowance and create API keys for programmatic
-            access.
+            Create API keys for programmatic access to this app. These keys will
+            use your token allowances managed in the Token Management section.
           </p>
         </div>
 
-        <Tabs defaultValue="allowance" className="pt-2">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="allowance">Wallet Allowance</TabsTrigger>
-            <TabsTrigger value="keys">API Keys</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="allowance" className="pt-6">
-            <p className="text-sm text-muted-foreground mb-6">
-              Set a spending limit for your wallet when using this app. This
-              allowance is used for both interactive calls and by any API keys
-              you create.
-            </p>
-            <AllowanceManager
-              latestVersion={latestVersion}
-              canisterId={canisterId}
-              onSuccess={() => toast.success('Allowance updated successfully!')}
-            />
-          </TabsContent>
-
-          <TabsContent value="keys" className="pt-6">
-            <div className="space-y-4">
-              <div className="flex flex-col md:flex-row justify-between items-start gap-4">
-                <p className="text-sm text-muted-foreground max-w-prose">
-                  Create API keys for programmatic use in scripts or AI agents.
-                  These keys will use your main wallet's spending allowance set
-                  in the previous tab.
-                </p>
-                <Button onClick={() => setIsCreateDialogOpen(true)}>
-                  <KeyRound className="mr-2 h-4 w-4" />
-                  Create New Key
-                </Button>
+        <div className="space-y-4 ">
+          <Button onClick={() => setIsCreateDialogOpen(true)}>
+            <KeyRound className="mr-2 h-4 w-4" />
+            Create New Key
+          </Button>
+          <div className="border rounded-lg min-h-[10rem] flex flex-col">
+            {isLoadingKeys ? (
+              <div className="flex-1 flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
-              <div className="border rounded-lg min-h-[10rem] flex flex-col">
-                {isLoadingKeys ? (
-                  <div className="flex-1 flex items-center justify-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                  </div>
-                ) : apiKeys.length > 0 ? (
-                  <ul className="divide-y">
-                    {apiKeys.map((key) => (
-                      <li
-                        key={key.hashed_key}
-                        className="p-4 flex justify-between items-center">
-                        <div>
-                          <p className="font-medium">{key.info.name}</p>
-                          <p className="font-mono text-xs text-muted-foreground mt-1">
-                            {key.hashed_key.substring(0, 24)}...
-                          </p>
-                        </div>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() =>
-                            setRevokeDialogState({
-                              open: true,
-                              keyToRevoke: {
-                                hash: key.hashed_key,
-                                name: key.info.name,
-                              },
-                            })
-                          }
-                          disabled={isRevoking}>
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Revoke
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className="flex-1 flex items-center justify-center text-center text-muted-foreground">
-                    You have not created any API keys for this service yet.
-                  </div>
-                )}
+            ) : apiKeys.length > 0 ? (
+              <ul className="divide-y">
+                {apiKeys.map((key) => (
+                  <li
+                    key={key.hashed_key}
+                    className="p-4 flex justify-between items-center">
+                    <div>
+                      <p className="font-medium">{key.info.name}</p>
+                      <p className="font-mono text-xs text-muted-foreground mt-1">
+                        {key.hashed_key.substring(0, 24)}...
+                      </p>
+                    </div>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() =>
+                        setRevokeDialogState({
+                          open: true,
+                          keyToRevoke: {
+                            hash: key.hashed_key,
+                            name: key.info.name,
+                          },
+                        })
+                      }
+                      disabled={isRevoking}>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Revoke
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-center text-muted-foreground p-3">
+                You have not created any API keys for this service yet.
               </div>
-            </div>
-          </TabsContent>
-        </Tabs>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* --- Dialogs are now rendered here, outside the main layout flow --- */}

@@ -3,7 +3,6 @@ import { AppVersionSummary } from '@prometheus-protocol/ic-js';
 import { useInstalledVersion } from '@/hooks/useInstalledVersion';
 import { Button } from '@/components/ui/button';
 import { ArrowUp, Loader2, AlertTriangle } from 'lucide-react';
-import { getTierInfo } from '@/lib/get-tier-info';
 import { cn } from '@/lib/utils';
 import {
   Tooltip,
@@ -63,11 +62,7 @@ export function UpgradePrompt({
 
   if (!installedVersion) {
     return (
-      <div
-        className={cn(
-          'p-4 border border-gray-200 rounded-lg bg-gray-50',
-          className,
-        )}>
+      <div className={cn('p-4 border border-gray-200 rounded-lg', className)}>
         <div className="flex items-center gap-2 text-gray-600">
           <AlertTriangle className="h-4 w-4" />
           <span className="text-sm font-medium">Version Unknown</span>

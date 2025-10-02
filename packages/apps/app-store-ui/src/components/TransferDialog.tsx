@@ -67,12 +67,12 @@ export function TransferDialog({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Transfer USDC</DialogTitle>
+          <DialogTitle>Transfer {token.symbol}</DialogTitle>
           <DialogDescription>
-            Send USDC from your balance to another Principal. Your current
-            balance is{' '}
+            Send {token.symbol} from your balance to another Principal. Your
+            current balance is{' '}
             <span className="font-semibold">
-              {currentBalance.toFixed(4)} USDC
+              {currentBalance.toFixed(4)} {token.symbol}
             </span>
             .
           </DialogDescription>
