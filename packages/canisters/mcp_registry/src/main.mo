@@ -974,10 +974,15 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
                   let state = icrc118wasmregistry().state;
                   // Find the canister type by its namespace using the library's internal map.
                   let owner = switch (BTree.get(state.canister_types, Text.compare, namespace)) {
-                    case (null) { thisPrincipal }; // Should not happen if the namespace is valid.
+                    case (null) {
+                      Debug.print("Internal error: Canister type not found for namespace " # namespace);
+                      return trx_id;
+                    }; // Should not happen if the namespace is valid.
                     case (?canister_type) {
                       if (canister_type.controllers.size() == 0) {
-                        thisPrincipal; // No controllers defined, cannot determine owner.
+                        // This should never happen
+                        Debug.print("Cannot determine owner: No controllers defined for canister type " # namespace);
+                        return trx_id;
                       } else {
                         // For simplicity, we take the first controller as the owner.
                         // In a real-world scenario, this logic might be more complex.

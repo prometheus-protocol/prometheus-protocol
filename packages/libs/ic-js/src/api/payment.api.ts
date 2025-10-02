@@ -96,6 +96,28 @@ export const getBalance = async (
 };
 
 /**
+ * Gets the balance of a specific principal for a given token.
+ * @param identity The identity to use for authentication (not the owner we're checking)
+ * @param token The token to check the balance for
+ * @param owner The principal whose balance to check
+ * @returns The balance as a bigint in the token's atomic unit.
+ */
+export const getBalanceOf = async (
+  identity: Identity,
+  token: Token,
+  owner: Principal,
+): Promise<bigint> => {
+  const icrcActor = getIcrcActor(token.canisterId, identity);
+
+  const balanceBigInt = await icrcActor.icrc1_balance_of({
+    owner,
+    subaccount: toNullable(),
+  });
+
+  return balanceBigInt;
+};
+
+/**
  * Performs a generic ICRC-1 transfer.
  * @param amount The human-readable amount to transfer (e.g., 10.5).
  * @returns The transaction ID (`bigint`) of the successful transfer.

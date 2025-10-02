@@ -13,6 +13,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '../ui/tooltip';
+import { UpgradePrompt } from './UpgradePrompt';
+import { Principal } from '@dfinity/principal';
 
 interface ConnectionInfoProps {
   namespace: string;
@@ -20,6 +22,9 @@ interface ConnectionInfoProps {
   latestVersion: AppVersionDetails;
   onConnectClick: () => void;
   isArchived?: boolean;
+  canisterId?: Principal; // Add canisterId for WASM verification
+  onUpgradeClick?: () => void; // Simplified upgrade handler
+  isUpgrading?: boolean; // Add upgrading state
 }
 
 export function ConnectionInfo({
@@ -28,6 +33,9 @@ export function ConnectionInfo({
   latestVersion,
   onConnectClick,
   isArchived,
+  canisterId,
+  onUpgradeClick,
+  isUpgrading,
 }: ConnectionInfoProps) {
   const navigate = useNavigate();
 
@@ -51,9 +59,7 @@ export function ConnectionInfo({
                 <Button
                   size="lg"
                   className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold min-w-[150px]"
-                  onClick={onConnectClick}
-                  disabled={isArchived} // Use the new prop here
-                >
+                  onClick={onConnectClick}>
                   <Usb className="mr-2 h-5 w-5" />
                   Connect
                 </Button>
@@ -74,6 +80,17 @@ export function ConnectionInfo({
           View security certificate
         </Button>
       </div>
+
+      {/* Upgrade Prompt */}
+      {canisterId && (
+        <UpgradePrompt
+          canisterId={canisterId}
+          allVersions={allVersions}
+          namespace={namespace}
+          onUpgradeClick={onUpgradeClick}
+          isUpgrading={isUpgrading}
+        />
+      )}
     </div>
   );
 }

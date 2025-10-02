@@ -376,9 +376,9 @@ export const getCanisterWasmHash = async (
     });
   }
 
-  const canisterSegment = Buffer.from('canister');
+  const canisterSegment = new TextEncoder().encode('canister');
   const principalSegment = canisterId.toUint8Array();
-  const moduleHashSegment = Buffer.from('module_hash');
+  const moduleHashSegment = new TextEncoder().encode('module_hash');
 
   const path: ArrayBuffer[] = [
     canisterSegment.buffer.slice(

@@ -20,23 +20,26 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Loader2 } from 'lucide-react';
-import { useTransfer } from '@/hooks/usePayment'; // This hook needs to be created
+import { useWithdraw } from '@/hooks/usePayment';
 import { Principal } from '@dfinity/principal';
 import { Token } from '@prometheus-protocol/ic-js';
+import { toast } from 'sonner';
 
-interface TransferUsdcDialogProps {
+interface WithdrawDialogProps {
   token: Token;
+  canisterPrincipal: Principal;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   currentBalance: number;
 }
 
-export function TransferDialog({
+export function WithdrawDialog({
   token,
+  canisterPrincipal,
   isOpen,
   onOpenChange,
   currentBalance,
-}: TransferUsdcDialogProps) {
+}: WithdrawDialogProps) {
   // Zod schema for form validation
   const formSchema = z.object({
     recipient: z
@@ -45,32 +48,42 @@ export function TransferDialog({
     amount: z.coerce
       .number()
       .positive('Amount must be greater than zero.')
-      .max(currentBalance, 'Amount cannot exceed your balance.'),
+      .max(currentBalance, 'Amount cannot exceed canister balance.'),
   });
 
-  const { mutate: transfer, isPending } = useTransfer();
+  const { mutateAsync: withdraw, isPending } = useWithdraw();
 
   const form = useForm<z.input<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: { recipient: '', amount: 0 },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    transfer({
-      token: token,
-      to: Principal.fromText(values.recipient),
-      amount: values.amount,
-    });
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    try {
+      await withdraw({
+        token: token,
+        canisterPrincipal: canisterPrincipal,
+        to: Principal.fromText(values.recipient),
+        amount: values.amount,
+      });
+
+      // Close dialog and reset form on successful submission
+      onOpenChange(false);
+      form.reset();
+    } catch (error) {
+      // Error is already handled by useMutation
+      console.error('Withdraw failed:', error);
+    }
   }
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Transfer {token.symbol}</DialogTitle>
+          <DialogTitle>Withdraw {token.symbol}</DialogTitle>
           <DialogDescription>
-            Send {token.symbol} from your balance to another Principal. Your
-            current balance is{' '}
+            Withdraw {token.symbol} from the canister's treasury to another
+            Principal. The canister currently holds{' '}
             <span className="font-semibold">
               {currentBalance.toFixed(4)} {token.symbol}
             </span>
@@ -116,7 +129,7 @@ export function TransferDialog({
             <DialogFooter>
               <Button type="submit" disabled={isPending} className="w-full">
                 {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Send Transfer
+                Withdraw from Canister
               </Button>
             </DialogFooter>
           </form>

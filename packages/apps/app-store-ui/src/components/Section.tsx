@@ -10,7 +10,7 @@ export const Section = ({
   children: ReactNode;
 }) => (
   <div>
-    <h2 className="flex items-center gap-3 text-xl font-semibold text-white mb-4">
+    <h2 className="flex items-center gap-3 text-2xl font-semibold text-white mb-8">
       {icon}
       <span>{title}</span>
     </h2>

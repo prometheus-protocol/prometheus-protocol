@@ -9,3 +9,4 @@ export * from './audit.api.js';
 export * from './apikey.api.js';
 export * from './search.api.js';
 export * from './usage-tracker.api.js';
+export * from './mcp-server.api.js';

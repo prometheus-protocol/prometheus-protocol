@@ -5,6 +5,8 @@ import { AlertTriangle, ShieldCheck, Wallet, Wrench } from 'lucide-react';
 import { ImageWithFallback } from '@/components/ui/image-with-fallback';
 import { cn } from '@/lib/utils';
 import { getTierInfo } from '@/lib/get-tier-info';
+import { useInternetIdentity } from 'ic-use-internet-identity';
+import { useMemo } from 'react';
 
 // Component Imports
 import { SimilarApps } from '@/components/server-details/SimilarApps';
@@ -33,6 +35,8 @@ import { CreateBountyDialog } from '@/components/server-details/CreateBountyDial
 import { AccessAndBilling } from '@/components/server-details/AccessAndBilling';
 import { SponsorPrompt } from '@/components/server-details/SponsorPrompt';
 import { VersionSelector } from '@/components/server-details/VersionSelector';
+import { WasmHashDetails } from '@/components/server-details/WasmHashDetails';
+import { AppTokenSection } from '@/components/server-details/AppTokenSection';
 import {
   useGetCanisterId,
   useProvisionInstance,
@@ -132,9 +136,31 @@ export default function ServerDetailsPage() {
     server?.latestVersion.wasmId,
   );
   const { data: appMetrics } = useGetAppMetrics(canisterId);
+  const { identity } = useInternetIdentity();
 
   // --- 4. PROVISION HOOK ---
   const provisionMutation = useProvisionInstance(server?.namespace);
+
+  // --- 5. OWNERSHIP LOGIC ---
+  const isOwnerOrDeveloper = useMemo(() => {
+    if (!identity || !server) return false;
+
+    // For global apps: check if user is the developer/publisher
+    if (server.deploymentType === 'global') {
+      // For now, return false as we need publisher principal logic
+      // TODO: Implement publisher principal comparison when available
+      return false;
+    }
+
+    // For provisioned apps: check if user is the owner of this instance
+    if (server.deploymentType === 'provisioned' && canisterId) {
+      // For provisioned instances, the user who can access it is typically the owner
+      // This is a simplified check - in practice you might need to call a canister method
+      return true;
+    }
+
+    return false;
+  }, [identity, server, canisterId]);
 
   // Combine loading states - show skeleton until all critical data is loaded
   const isLoadingAnyData = isLoading || (server && isLoadingCanisterId);
@@ -183,6 +209,21 @@ export default function ServerDetailsPage() {
     } catch (error) {
       // Error is handled by the custom mutation hook
       console.error('Provisioning failed:', error);
+    }
+  };
+
+  const handleUpgradeClick = async () => {
+    if (!server) return;
+
+    try {
+      // For provisioned instances, we use provision_instance which handles upgrades
+      await provisionMutation.mutateAsync({
+        namespace: server.namespace,
+        wasmId: server.latestVersion.wasmId,
+      });
+    } catch (error) {
+      // Error is handled by the custom mutation hook
+      console.error('Upgrade failed:', error);
     }
   };
 
@@ -286,21 +327,24 @@ export default function ServerDetailsPage() {
               )}
 
               {/* Connection/Provision Info */}
-              {isProvisionedApp && !canisterId ? (
+              {isProvisionedApp && !canisterId && (
                 <ProvisionInstance
                   namespace={server.namespace}
                   onProvisionClick={handleProvisionClick}
                   isProvisioning={provisionMutation.isPending}
                 />
-              ) : (
-                <ConnectionInfo
-                  namespace={server.namespace}
-                  allVersions={server.allVersions}
-                  latestVersion={server.latestVersion}
-                  onConnectClick={handleInstallClick}
-                  isArchived={isViewingArchivedVersion}
-                />
               )}
+
+              <ConnectionInfo
+                namespace={server.namespace}
+                allVersions={server.allVersions}
+                latestVersion={server.latestVersion}
+                onConnectClick={handleInstallClick}
+                isArchived={isViewingArchivedVersion}
+                canisterId={canisterId}
+                onUpgradeClick={handleUpgradeClick}
+                isUpgrading={provisionMutation.isPending}
+              />
             </div>
             {/* Conditionally render the new container component */}
 
@@ -371,6 +415,15 @@ export default function ServerDetailsPage() {
               />
             )}
 
+            {/* Token Management Section */}
+            {identity && canisterId && (
+              <AppTokenSection
+                targetPrincipal={canisterId}
+                isOwnerOrDeveloper={isOwnerOrDeveloper}
+                appName={server.name}
+              />
+            )}
+
             <div>
               <label className="text-sm font-medium text-muted-foreground">
                 Version
@@ -380,9 +433,26 @@ export default function ServerDetailsPage() {
                   allVersions={allVersions}
                   currentVersionWasmId={latestVersion.wasmId}
                   namespace={server.namespace}
+                  canisterId={canisterId}
                 />
               </div>
             </div>
+
+            {/* WASM Hash Verification Details (for development/debugging) */}
+            {canisterId && (
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">
+                  Developer Information
+                </label>
+                <div className="mt-2">
+                  <WasmHashDetails
+                    canisterId={canisterId}
+                    expectedWasmId={latestVersion.wasmId}
+                    namespace={server.namespace}
+                  />
+                </div>
+              </div>
+            )}
           </main>
 
           {/* Right column - Sidebar */}

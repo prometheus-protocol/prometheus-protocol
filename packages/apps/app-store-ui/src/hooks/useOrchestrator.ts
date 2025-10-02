@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 /**
  * React Query mutation hook to provision a new instance of an MCP server.
  * This is used for "provisioned" apps where users get their own private instance.
+ * For existing instances, this will upgrade them to the new WASM version.
  */
 export const useProvisionInstance = (namespace?: string) => {
   const { identity } = useInternetIdentity();
@@ -22,11 +23,12 @@ export const useProvisionInstance = (namespace?: string) => {
       return provisionInstance(identity, namespace, wasmId);
     },
     successMessage:
-      'Instance provisioned successfully! Your private canister is ready.',
-    errorMessage: 'Failed to provision instance',
+      'Operation completed successfully! Your private canister is ready.',
+    errorMessage: 'Failed to complete operation',
     queryKeysToRefetch: [
       ['appDetails', namespace],
       ['serverCanisterId', namespace],
+      ['canisterWasmHash'],
     ],
   });
 };

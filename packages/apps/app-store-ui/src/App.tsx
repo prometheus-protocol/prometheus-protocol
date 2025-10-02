@@ -27,6 +27,7 @@ import AppBountiesPage from './pages/AppBountiesPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import AuditHubPage from './pages/AuditHubPage';
 import AuditDetailsPage from './pages/AuditDetailsPage';
+import WalletPage from './pages/WalletPage';
 import LoginPage from './pages/LoginPage';
 import SetupPage from './pages/SetupPage';
 import ConsentPage from './pages/ConsentPage';
@@ -112,6 +113,7 @@ function App() {
               {/* Main pages */}
               <Route path="bounties" element={<AppBountiesPage />} />
               <Route path="leaderboard" element={<LeaderboardPage />} />
+              <Route path="wallet" element={<WalletPage />} />
 
               {/* Static informational pages */}
               <Route path="about" element={<AboutPage />} />
