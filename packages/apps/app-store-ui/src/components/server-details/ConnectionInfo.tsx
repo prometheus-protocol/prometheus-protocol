@@ -25,6 +25,7 @@ interface ConnectionInfoProps {
   canisterId?: Principal; // Add canisterId for WASM verification
   onUpgradeClick?: () => void; // Simplified upgrade handler
   isUpgrading?: boolean; // Add upgrading state
+  isPollingForCanister?: boolean; // Add polling state
 }
 
 export function ConnectionInfo({
@@ -36,6 +37,7 @@ export function ConnectionInfo({
   canisterId,
   onUpgradeClick,
   isUpgrading,
+  isPollingForCanister,
 }: ConnectionInfoProps) {
   const navigate = useNavigate();
 
@@ -89,6 +91,7 @@ export function ConnectionInfo({
           namespace={namespace}
           onUpgradeClick={onUpgradeClick}
           isUpgrading={isUpgrading}
+          isPollingForCanister={isPollingForCanister}
         />
       )}
     </div>

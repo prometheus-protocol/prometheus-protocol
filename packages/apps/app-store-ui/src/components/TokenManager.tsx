@@ -23,14 +23,13 @@ import {
   Shield,
   Plus,
   Check,
-  ChevronsUpDown,
   X,
   Copy,
   Send,
   ArrowUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Token } from '@prometheus-protocol/ic-js';
+import { Token, getCanisterId } from '@prometheus-protocol/ic-js';
 import {
   useGetTokenBalance,
   useGetTokenBalanceForPrincipal,
@@ -58,9 +57,25 @@ const WATCHED_TOKENS_KEY = 'prometheus_watched_tokens';
 const getWatchedTokens = (): string[] => {
   try {
     const stored = localStorage.getItem(WATCHED_TOKENS_KEY);
-    return stored ? JSON.parse(stored) : [];
+    const storedTokens = stored ? JSON.parse(stored) : [];
+
+    // Get the environment-specific USDC canister ID
+    const usdcCanisterId = getCanisterId('USDC_LEDGER');
+
+    // Default tokens to include - always include environment-appropriate USDC
+    const defaultTokens = [usdcCanisterId];
+
+    // Merge stored tokens with defaults, avoiding duplicates
+    const allTokens = [...new Set([...defaultTokens, ...storedTokens])];
+
+    return allTokens;
   } catch {
-    return [];
+    // Fallback to environment-specific USDC if everything fails
+    try {
+      return [getCanisterId('USDC_LEDGER')];
+    } catch {
+      return [];
+    }
   }
 };
 
@@ -68,15 +83,6 @@ const setWatchedTokens = (tokenIds: string[]) => {
   localStorage.setItem(WATCHED_TOKENS_KEY, JSON.stringify(tokenIds));
   // Dispatch custom event for same-tab synchronization
   window.dispatchEvent(new CustomEvent('watchlistChanged'));
-};
-
-// Check if we're on local network to prevent failed canister calls
-const isLocalNetwork = () => {
-  return (
-    process.env.DFX_NETWORK === 'local' ||
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1'
-  );
 };
 
 // Component to display a single token balance
@@ -104,74 +110,6 @@ const TokenBalanceItem: React.FC<{
   const isLoading = targetPrincipal ? isLoadingTarget : isLoadingUser;
   const error = targetPrincipal ? targetError : userError;
 
-  if (isLocalNetwork()) {
-    return (
-      <div className="flex items-center justify-between p-3 border rounded">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center">
-            <TokenLogo token={token} size="sm" />
-          </div>
-          <div>
-            <div className="font-small">{token.name}</div>
-            <div className="flex items-center gap-1">
-              <div className="text-xs text-muted-foreground font-mono">
-                {truncatePrincipal(token.canisterId.toText())}
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-4 w-4 p-0 text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  navigator.clipboard.writeText(token.canisterId.toText());
-                  toast.success(
-                    `${token.symbol} canister ID copied to clipboard`,
-                  );
-                }}
-                title={`Copy ${token.symbol} canister ID`}>
-                <Copy className="h-3 w-3" />
-              </Button>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-1 md:gap-2">
-          <div className="text-xs md:text-sm text-amber-600">
-            Local network - balance unavailable
-          </div>
-          {onWithdraw && targetPrincipal && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0"
-              onClick={() => onWithdraw(token, targetPrincipal)}
-              title={`Withdraw ${token.symbol} from canister`}>
-              <ArrowUp className="h-4 w-4" />
-            </Button>
-          )}
-          {onTransfer && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0"
-              onClick={() => onTransfer(token)}
-              title={`Transfer ${token.symbol}`}>
-              <Send className="h-4 w-4" />
-            </Button>
-          )}
-          {onRemove && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-              onClick={onRemove}
-              title={`Remove ${token.symbol} from watchlist`}>
-              <X className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   if (isLoading)
     return (
       <div className="flex items-center gap-2 p-3">
@@ -183,7 +121,7 @@ const TokenBalanceItem: React.FC<{
     return <div className="text-red-500 p-3">Error loading balance</div>;
 
   return (
-    <div className="flex items-center justify-between p-3 border rounded">
+    <div className="flex items-center justify-between p-3 border rounded-lg">
       <div className="flex items-center gap-3">
         <TokenLogo token={token} size="md" />
         <div>
@@ -281,54 +219,6 @@ const TokenAllowanceItem: React.FC<{
     }
   };
 
-  if (isLocalNetwork()) {
-    return (
-      <div className="flex items-center justify-between p-3 border rounded">
-        <div className="flex md:flex-row flex-col md:items-center gap-3">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center">
-            <TokenLogo token={token} size="sm" />
-          </div>
-          <div>
-            <div className="font-small">{token.name}</div>
-            <div className="flex items-center gap-1">
-              <div className="text-xs text-muted-foreground font-mono">
-                {truncatePrincipal(token.canisterId.toText())}
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-4 w-4 p-0 text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  navigator.clipboard.writeText(token.canisterId.toText());
-                  toast.success(
-                    `${token.symbol} canister ID copied to clipboard`,
-                  );
-                }}
-                title={`Copy ${token.symbol} canister ID`}>
-                <Copy className="h-3 w-3" />
-              </Button>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="text-sm text-amber-600">
-            Local network - balance & allowance unavailable
-          </div>
-          {onRemove && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-              onClick={onRemove}
-              title={`Remove ${token.symbol} from watchlist`}>
-              <X className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   if (isLoadingAllowance || isLoadingBalance)
     return (
       <div className="flex items-center gap-2 p-3">
@@ -338,7 +228,7 @@ const TokenAllowanceItem: React.FC<{
     );
 
   return (
-    <div className="p-3 border rounded space-y-3">
+    <div className="p-3 border rounded-lg space-y-3">
       {/* Token info row with X button in top-right */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
@@ -731,7 +621,7 @@ export const TokenManager: React.FC<TokenManagerProps> = ({
       <CardContent className="px-0">
         {/* Principal ID display - configurable for different contexts */}
         {showPrincipalId && (
-          <div className="mb-3 md:mb-4 p-3 border rounded bg-muted/50">
+          <div className="mb-3 md:mb-4 p-3 border rounded-lg bg-muted/50">
             <div className="flex items-center justify-between">
               <div className="flex-1">
                 <p className="text-xs md:text-sm font-medium mb-1">
@@ -794,15 +684,6 @@ export const TokenManager: React.FC<TokenManagerProps> = ({
               </div>
             </div>
           )}
-
-        {isLocalNetwork() && (
-          <div className="mb-4 p-3 border border-yellow-200 rounded">
-            <p className="text-sm text-amber-700">
-              <strong>Local Network:</strong> Token balances and allowances are
-              not available on local development network.
-            </p>
-          </div>
-        )}
 
         {isLoadingTokens && watchedTokens.length === 0 ? (
           <div className="text-center text-muted-foreground py-8">
