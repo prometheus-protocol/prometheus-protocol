@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { getTierInfo } from '@/lib/get-tier-info';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import { useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
 // Component Imports
 import { SimilarApps } from '@/components/server-details/SimilarApps';
@@ -123,6 +124,7 @@ export default function ServerDetailsPage() {
   const [dialogState, setDialogState] = useState<
     'closed' | 'install' | 'confirm'
   >('closed');
+  const [isPollingForCanister, setIsPollingForCanister] = useState(false);
 
   // --- 3. CALL THE NEW, CORRECT HOOK ---
   const {
@@ -131,12 +133,14 @@ export default function ServerDetailsPage() {
     isError,
     refetch,
   } = useGetAppDetailsByNamespace(appId, wasmId);
-  const { data: canisterId, isLoading: isLoadingCanisterId } = useGetCanisterId(
-    server?.namespace,
-    server?.latestVersion.wasmId,
-  );
+  const {
+    data: canisterId,
+    isLoading: isLoadingCanisterId,
+    refetch: refetchCanisterId,
+  } = useGetCanisterId(server?.namespace, server?.latestVersion.wasmId);
   const { data: appMetrics } = useGetAppMetrics(canisterId);
   const { identity } = useInternetIdentity();
+  const queryClient = useQueryClient();
 
   // --- 4. PROVISION HOOK ---
   const provisionMutation = useProvisionInstance(server?.namespace);
@@ -206,9 +210,112 @@ export default function ServerDetailsPage() {
         namespace,
         wasmId: server.latestVersion.wasmId,
       });
+
+      // Start polling for the canister ID after successful provisioning
+      setIsPollingForCanister(true);
+
+      // Poll every 2 seconds for up to 60 seconds
+      const pollForCanister = async () => {
+        const maxAttempts = 30; // 30 attempts * 2 seconds = 60 seconds
+        let attempts = 0;
+
+        const poll = async (): Promise<void> => {
+          attempts++;
+
+          try {
+            const result = await refetchCanisterId();
+
+            if (result.data) {
+              // Canister ID found, continue polling for WASM hash verification
+              const canisterId = result.data; // Store the canister ID to avoid undefined issues
+              const pollForWasmHash = async () => {
+                const wasmMaxAttempts = 15; // 15 attempts * 2 seconds = 30 seconds
+                let wasmAttempts = 0;
+
+                const wasmPoll = async (): Promise<void> => {
+                  wasmAttempts++;
+
+                  try {
+                    // Force refetch of WASM hash query
+                    await queryClient.invalidateQueries({
+                      queryKey: ['canisterWasmHash', canisterId.toText()],
+                    });
+
+                    // Check if we have WASM hash data now
+                    const wasmHashData = queryClient.getQueryData([
+                      'canisterWasmHash',
+                      canisterId.toText(),
+                    ]);
+
+                    if (wasmHashData !== undefined && wasmHashData !== null) {
+                      // WASM hash available, stop all polling
+                      setIsPollingForCanister(false);
+                      return;
+                    }
+
+                    if (wasmAttempts < wasmMaxAttempts) {
+                      // Continue polling for WASM hash
+                      setTimeout(wasmPoll, 2000);
+                    } else {
+                      // WASM hash polling timeout, but canister is available
+                      setIsPollingForCanister(false);
+                      console.warn(
+                        'WASM hash polling timeout: Hash not available after maximum attempts',
+                      );
+                    }
+                  } catch (error) {
+                    if (wasmAttempts < wasmMaxAttempts) {
+                      // Retry on error
+                      setTimeout(wasmPoll, 2000);
+                    } else {
+                      setIsPollingForCanister(false);
+                      console.error(
+                        'WASM hash polling failed after maximum attempts:',
+                        error,
+                      );
+                    }
+                  }
+                };
+
+                // Start WASM hash polling after a short delay
+                setTimeout(wasmPoll, 1000);
+              };
+
+              // Start WASM hash polling
+              pollForWasmHash();
+              return;
+            }
+
+            if (attempts < maxAttempts) {
+              // Continue polling
+              setTimeout(poll, 2000);
+            } else {
+              // Max attempts reached, stop polling
+              setIsPollingForCanister(false);
+              console.warn(
+                'Polling timeout: Canister ID not found after maximum attempts',
+              );
+            }
+          } catch (error) {
+            if (attempts < maxAttempts) {
+              // Retry on error
+              setTimeout(poll, 2000);
+            } else {
+              setIsPollingForCanister(false);
+              console.error('Polling failed after maximum attempts:', error);
+            }
+          }
+        };
+
+        // Start polling after a short delay to allow for immediate availability
+        setTimeout(poll, 1000);
+      };
+
+      pollForCanister();
     } catch (error) {
       // Error is handled by the custom mutation hook
       console.error('Provisioning failed:', error);
+      setIsPollingForCanister(false);
     }
   };
 
@@ -327,24 +434,26 @@ export default function ServerDetailsPage() {
               )}
 
               {/* Connection/Provision Info */}
-              {isProvisionedApp && !canisterId && (
+              {isProvisionedApp && !canisterId ? (
                 <ProvisionInstance
                   namespace={server.namespace}
                   onProvisionClick={handleProvisionClick}
                   isProvisioning={provisionMutation.isPending}
+                  isPollingForCanister={isPollingForCanister}
+                />
+              ) : (
+                <ConnectionInfo
+                  namespace={server.namespace}
+                  allVersions={server.allVersions}
+                  latestVersion={server.latestVersion}
+                  onConnectClick={handleInstallClick}
+                  isArchived={isViewingArchivedVersion}
+                  canisterId={canisterId}
+                  onUpgradeClick={handleUpgradeClick}
+                  isUpgrading={provisionMutation.isPending}
+                  isPollingForCanister={isPollingForCanister}
                 />
               )}
-
-              <ConnectionInfo
-                namespace={server.namespace}
-                allVersions={server.allVersions}
-                latestVersion={server.latestVersion}
-                onConnectClick={handleInstallClick}
-                isArchived={isViewingArchivedVersion}
-                canisterId={canisterId}
-                onUpgradeClick={handleUpgradeClick}
-                isUpgrading={provisionMutation.isPending}
-              />
             </div>
             {/* Conditionally render the new container component */}
 
@@ -439,7 +548,7 @@ export default function ServerDetailsPage() {
             </div>
 
             {/* WASM Hash Verification Details (for development/debugging) */}
-            {canisterId && (
+            {canisterId && !isPollingForCanister && (
               <div>
                 <label className="text-sm font-medium text-muted-foreground">
                   Developer Information

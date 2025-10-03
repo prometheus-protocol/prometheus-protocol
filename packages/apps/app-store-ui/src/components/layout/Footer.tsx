@@ -8,6 +8,7 @@ const DOCS_LINK = 'https://docs.prometheusprotocol.org';
 
 const protocolLinks = [
   { href: '/about', label: 'About Us' },
+  { href: '/gold-verified-server', label: 'Gold Verified Server' },
   {
     href: `${DOCS_LINK}/introduction`,
     label: 'Protocol Overview',
