@@ -82,7 +82,9 @@ export const useTransfer = () => {
   const { identity } = useInternetIdentity();
 
   return useMutation<TransferArgs, bigint>({
-    queryKeysToRefetch: [['tokenBalance', identity?.getPrincipal().toText()]],
+    queryKeysToRefetch: [['tokenBalance']],
+    successMessage: 'Transfer completed successfully!',
+    errorMessage: 'Failed to transfer tokens',
     mutationFn: async (args: TransferArgs) => {
       if (!identity) {
         throw new Error('User is not authenticated');

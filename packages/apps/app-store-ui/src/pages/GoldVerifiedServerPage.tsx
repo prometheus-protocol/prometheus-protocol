@@ -1,4 +1,5 @@
-import { BadgeCheck, Star, ExternalLink } from 'lucide-react';
+import { BadgeCheck, Star, ExternalLink, FileText } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -151,6 +152,18 @@ export default function GoldVerifiedServerPage() {
               Developer Documentation
               <ExternalLink className="ml-2 h-4 w-4" />
             </a>
+          </Button>
+        </div>
+
+        {/* Terms and Conditions Link */}
+        <div className="mt-8 text-center">
+          <Button variant="link" size="sm" asChild>
+            <Link
+              to="/gold-verified-terms"
+              className="flex items-center justify-center">
+              <FileText className="mr-2 h-4 w-4" />
+              Read Full Terms and Conditions
+            </Link>
           </Button>
         </div>
       </div>

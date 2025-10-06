@@ -1,16 +1,17 @@
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { TokenManager } from '@/components/TokenManager';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Wallet, Info, Send } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { TransferDialog } from '@/components/TransferDialog';
 import { Token, Tokens } from '@prometheus-protocol/ic-js';
 import { useGetTokenBalance } from '@/hooks/usePayment';
 import { useState } from 'react';
+import { WalletTokenList } from '@/components/wallet';
 
 export default function WalletPage() {
   const { identity } = useInternetIdentity();
+  const navigate = useNavigate();
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
   const [selectedTransferToken, setSelectedTransferToken] =
     useState<Token | null>(null);
@@ -54,11 +55,9 @@ export default function WalletPage() {
     <div className="max-w-4xl mx-auto py-8 md:py-12 space-y-8 md:space-y-12">
       {/* Header */}
       <div className="flex flex-col items-start  gap-8">
-        <Button variant="ghost" size="sm" asChild>
-          <Link to="/">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Link>
+        <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back
         </Button>
         <div>
           <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
@@ -123,27 +122,10 @@ export default function WalletPage() {
       </div>
 
       {/* Token Management */}
-      <Card className="p-0 border-none mt-12">
-        <CardHeader className="px-0 pt-0">
-          <CardTitle className="text-lg md:text-xl flex items-center gap-2">
-            <Wallet className="h-5 w-5" />
-            Your Tokens
-          </CardTitle>
-          <p className="text-xs md:text-sm text-muted-foreground">
-            View and manage all your token balances
-          </p>
-        </CardHeader>
-        <CardContent className="px-0 pb-4">
-          <TokenManager
-            mode="balance"
-            targetPrincipal={identity.getPrincipal()}
-            showPrincipalId={true}
-            principalIdLabel="Your Wallet Principal ID"
-            principalIdDescription="This is your wallet address for receiving tokens"
-            onTransfer={handleTransferToken}
-          />
-        </CardContent>
-      </Card>
+      <WalletTokenList
+        showPrincipalId={true}
+        onTransfer={handleTransferToken}
+      />
 
       {/* Transfer Dialog */}
       {selectedTransferToken && (

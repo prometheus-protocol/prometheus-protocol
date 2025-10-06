@@ -757,6 +757,20 @@ shared (deployer) actor class ICRC120Canister<system>(
     };
   };
 
+  public shared ({ caller }) func set_deployment_type(
+    namespace : Text,
+    wasm_id : Text,
+    deployment_type : CanisterDeploymentType,
+  ) : async Result.Result<(), Text> {
+    // Only the owner can change deployment types
+    if (caller != _owner) {
+      return #err("Caller is not the owner");
+    };
+
+    Map.set(canister_deployment_types, Map.thash, wasm_id, deployment_type);
+    return #ok(());
+  };
+
   public query ({ caller }) func get_canister_id(namespace : Text, wasm_id : Text) : async ?Principal {
     let canisters = Option.get(Map.get(managed_canisters, Map.thash, namespace), []);
     Debug.print("Found " # Nat.toText(canisters.size()) # " canisters for namespace " # namespace);

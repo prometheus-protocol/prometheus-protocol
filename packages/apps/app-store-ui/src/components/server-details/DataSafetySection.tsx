@@ -23,7 +23,7 @@ export function DataSafetySection({ safetyInfo }: DataSafetySectionProps) {
         {safetyInfo.overallDescription}
       </p>
       <div className="border border-border rounded-lg p-6 space-y-4">
-        <ul className="list-disc list-inside space-y-3">
+        <ul className="list-disc list-outside pl-5 space-y-2">
           {safetyInfo.dataPoints.map((point, index) => (
             <li key={index}>
               <span className="font-semibold">{point.title}:</span>{' '}

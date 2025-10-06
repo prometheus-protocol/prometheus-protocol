@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import { LoginButton } from '../LoginButton';
 import { Logo } from '../Logo';
-import { Search, X, Menu } from 'lucide-react';
+import { Search, X, Menu, Home, Shield, Trophy, Wallet } from 'lucide-react';
 import { Button } from '../ui/button';
 import {
   NavigationMenu,
@@ -307,46 +307,78 @@ export function AppBar() {
         </div>
       )}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm md:hidden">
-          <div className="fixed right-0 top-0 h-full w-full max-w-xs bg-background p-6">
-            <div className="flex items-center justify-between mb-8">
-              <Logo />
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsMobileMenuOpen(false)}>
-                <X className="h-5 w-5" />
-                <span className="sr-only">Close menu</span>
-              </Button>
+        <div className="fixed inset-0 z-40 bg-background/95 backdrop-blur-sm md:hidden">
+          <div className="fixed right-0 top-0 h-full w-full max-w-sm bg-background shadow-xl border-l">
+            <div className="flex flex-col h-full">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b">
+                <Logo />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="hover:bg-accent">
+                  <X className="h-5 w-5" />
+                  <span className="sr-only">Close menu</span>
+                </Button>
+              </div>
+
+              {/* Navigation Links */}
+              <nav className="flex-1 overflow-y-auto py-6">
+                <div className="space-y-1 px-3">
+                  <Link
+                    to="/"
+                    className={cn(
+                      'flex items-center gap-3 px-3 py-3 rounded-lg text-base font-medium transition-colors',
+                      pathname === '/'
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-foreground hover:bg-accent hover:text-accent-foreground',
+                    )}
+                    onClick={() => setIsMobileMenuOpen(false)}>
+                    <Home className="h-5 w-5" />
+                    Home
+                  </Link>
+                  <Link
+                    to="/audit-hub"
+                    className={cn(
+                      'flex items-center gap-3 px-3 py-3 rounded-lg text-base font-medium transition-colors',
+                      pathname === '/audit-hub'
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-foreground hover:bg-accent hover:text-accent-foreground',
+                    )}
+                    onClick={() => setIsMobileMenuOpen(false)}>
+                    <Shield className="h-5 w-5" />
+                    Audit Hub
+                  </Link>
+                  <Link
+                    to="/leaderboard"
+                    className={cn(
+                      'flex items-center gap-3 px-3 py-3 rounded-lg text-base font-medium transition-colors',
+                      pathname === '/leaderboard'
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-foreground hover:bg-accent hover:text-accent-foreground',
+                    )}
+                    onClick={() => setIsMobileMenuOpen(false)}>
+                    <Trophy className="h-5 w-5" />
+                    Leaderboard
+                  </Link>
+                  {identity && (
+                    <Link
+                      to="/wallet"
+                      className={cn(
+                        'flex items-center gap-3 px-3 py-3 rounded-lg text-base font-medium transition-colors',
+                        pathname === '/wallet'
+                          ? 'bg-primary/10 text-primary'
+                          : 'text-foreground hover:bg-accent hover:text-accent-foreground',
+                      )}
+                      onClick={() => setIsMobileMenuOpen(false)}>
+                      <Wallet className="h-5 w-5" />
+                      Wallet
+                    </Link>
+                  )}
+                </div>
+              </nav>
             </div>
-            <nav className="flex flex-col space-y-4">
-              <Link
-                to="/"
-                className="text-lg font-medium"
-                onClick={() => setIsMobileMenuOpen(false)}>
-                Home
-              </Link>
-              <Link
-                to="/audit-hub"
-                className="text-lg font-medium"
-                onClick={() => setIsMobileMenuOpen(false)}>
-                Audit Hub
-              </Link>
-              <Link
-                to="/leaderboard"
-                className="text-lg font-medium"
-                onClick={() => setIsMobileMenuOpen(false)}>
-                Leaderboard
-              </Link>
-              {identity && (
-                <Link
-                  to="/wallet"
-                  className="text-lg font-medium"
-                  onClick={() => setIsMobileMenuOpen(false)}>
-                  Wallet
-                </Link>
-              )}
-            </nav>
           </div>
         </div>
       )}

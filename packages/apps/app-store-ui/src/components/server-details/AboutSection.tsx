@@ -20,7 +20,7 @@ export function AboutSection({ server }: AboutSectionProps) {
 
       {/* 3. Key Features */}
       <h3 className="text-lg font-semibold mb-4">Key Features</h3>
-      <ul className="list-disc list-inside space-y-2 text-muted-foreground mb-8">
+      <ul className="list-disc list-outside pl-5 space-y-2 text-muted-foreground mb-8">
         {server.keyFeatures.map((feature, index) => (
           <li key={index}>{feature}</li>
         ))}
