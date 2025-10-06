@@ -255,7 +255,7 @@ function InstallDialogContent({
                 {activeSetup.instructionsTitle || 'For manual setup:'}
               </h3>
               {activeSetup.instructions && (
-                <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground mb-6">
+                <ol className="list-decimal list-outside pl-5 space-y-2 text-sm text-muted-foreground mb-6">
                   {activeSetup.instructions.map((step, index) => (
                     <li key={index}>{step}</li>
                   ))}

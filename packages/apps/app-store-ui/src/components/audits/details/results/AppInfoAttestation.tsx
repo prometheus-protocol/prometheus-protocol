@@ -81,7 +81,7 @@ export const AppInfoAttestation = ({
             </InfoBlock>
 
             <InfoBlock title="Key Features">
-              <ul className="list-disc list-inside">
+              <ul className="list-disc list-outside pl-5 space-y-2">
                 {data.key_features.map((feature, index) => (
                   <li key={index}>{feature}</li>
                 ))}

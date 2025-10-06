@@ -20,13 +20,12 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Loader2 } from 'lucide-react';
-import { useWithdraw } from '@/hooks/usePayment';
-import { useInternetIdentity } from 'ic-use-internet-identity';
+import { useTransfer } from '@/hooks/usePayment';
 import { Principal } from '@dfinity/principal';
 import { Token } from '@prometheus-protocol/ic-js';
 import { toast } from 'sonner';
 
-interface WithdrawDialogProps {
+interface DepositDialogProps {
   token: Token;
   canisterPrincipal: Principal;
   isOpen: boolean;
@@ -34,61 +33,60 @@ interface WithdrawDialogProps {
   currentBalance: number;
 }
 
-export function WithdrawDialog({
+export function DepositDialog({
   token,
   canisterPrincipal,
   isOpen,
   onOpenChange,
   currentBalance,
-}: WithdrawDialogProps) {
-  const { identity } = useInternetIdentity();
-
+}: DepositDialogProps) {
   // Zod schema for form validation
   const formSchema = z.object({
     amount: z.coerce
       .number()
       .positive('Amount must be greater than zero.')
-      .max(currentBalance, 'Amount cannot exceed canister balance.'),
+      .max(currentBalance, 'Amount cannot exceed your balance.'),
   });
 
-  const { mutateAsync: withdraw, isPending } = useWithdraw();
+  const { mutate: transfer, isPending } = useTransfer();
 
   const form = useForm<z.input<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: { amount: 0 },
+    defaultValues: {
+      amount: 0,
+    },
   });
 
-  async function onSubmit(values: z.infer<typeof formSchema>) {
-    if (!identity) {
-      toast.error('User is not authenticated');
-      return;
-    }
-
-    try {
-      await withdraw({
-        token: token,
-        canisterPrincipal: canisterPrincipal,
-        to: identity.getPrincipal(),
+  function onSubmit(values: z.infer<typeof formSchema>) {
+    transfer(
+      {
+        token,
+        to: canisterPrincipal,
         amount: values.amount,
-      });
-
-      // Close dialog and reset form on successful submission
-      onOpenChange(false);
-      form.reset();
-    } catch (error) {
-      // Error is already handled by useMutation
-      console.error('Withdraw failed:', error);
-    }
+      },
+      {
+        onSuccess: () => {
+          toast.success(
+            `Successfully deposited ${values.amount} ${token.symbol} to app canister`,
+          );
+          form.reset();
+          onOpenChange(false);
+        },
+        onError: (error) => {
+          toast.error(`Deposit failed: ${error.message}`);
+        },
+      },
+    );
   }
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Withdraw {token.symbol}</DialogTitle>
+          <DialogTitle>Deposit {token.symbol}</DialogTitle>
           <DialogDescription>
-            Withdraw {token.symbol} from the app canister to your wallet. The
-            canister currently holds{' '}
+            Deposit {token.symbol} from your wallet to the app canister. You
+            currently hold{' '}
             <span className="font-semibold">
               {currentBalance.toFixed(4)} {token.symbol}
             </span>
@@ -121,7 +119,7 @@ export function WithdrawDialog({
             <DialogFooter>
               <Button type="submit" disabled={isPending} className="w-full">
                 {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Withdraw to Your Wallet
+                Deposit to Canister
               </Button>
             </DialogFooter>
           </form>

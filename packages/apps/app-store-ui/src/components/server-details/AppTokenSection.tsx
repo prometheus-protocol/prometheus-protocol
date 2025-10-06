@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import { Principal } from '@dfinity/principal';
 import { useInternetIdentity } from 'ic-use-internet-identity';
-import { TokenManager } from '../TokenManager';
 import { WithdrawDialog } from '../WithdrawDialog';
+import { DepositDialog } from '../DepositDialog';
 import { useTokenRegistry } from '@/hooks/useTokenRegistry';
-import { useGetTokenBalanceForPrincipal } from '@/hooks/usePayment';
+import {
+  useGetTokenBalanceForPrincipal,
+  useGetTokenBalance,
+} from '@/hooks/usePayment';
 import { Section } from '../Section';
 import { Wallet } from 'lucide-react';
 import { Token } from '@prometheus-protocol/ic-js';
+import { TokenManager } from '../token-manager';
 
 interface AppTokenSectionProps {
   targetPrincipal: Principal;
@@ -22,10 +26,13 @@ export const AppTokenSection: React.FC<AppTokenSectionProps> = ({
   const { identity } = useInternetIdentity();
   const { isLoading, error } = useTokenRegistry();
   const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
+  const [depositDialogOpen, setDepositDialogOpen] = useState(false);
   const [selectedWithdrawToken, setSelectedWithdrawToken] = useState<{
     token: Token;
     canisterPrincipal: Principal;
   } | null>(null);
+  const [selectedDepositToken, setSelectedDepositToken] =
+    useState<Token | null>(null);
 
   // Get balance for the selected token if withdraw dialog is open
   const { data: selectedTokenBalance } = useGetTokenBalanceForPrincipal(
@@ -33,15 +40,32 @@ export const AppTokenSection: React.FC<AppTokenSectionProps> = ({
     selectedWithdrawToken?.canisterPrincipal,
   );
 
+  // Get user's balance for the selected deposit token
+  const { data: userTokenBalance } = useGetTokenBalance(
+    selectedDepositToken || undefined,
+  );
+
   const handleWithdraw = (token: Token, canisterPrincipal: Principal) => {
     setSelectedWithdrawToken({ token, canisterPrincipal });
     setWithdrawDialogOpen(true);
+  };
+
+  const handleDeposit = (token: Token) => {
+    setSelectedDepositToken(token);
+    setDepositDialogOpen(true);
   };
 
   const handleWithdrawDialogClose = (isOpen: boolean) => {
     setWithdrawDialogOpen(isOpen);
     if (!isOpen) {
       setSelectedWithdrawToken(null);
+    }
+  };
+
+  const handleDepositDialogClose = (isOpen: boolean) => {
+    setDepositDialogOpen(isOpen);
+    if (!isOpen) {
+      setSelectedDepositToken(null);
     }
   };
 
@@ -74,20 +98,15 @@ export const AppTokenSection: React.FC<AppTokenSectionProps> = ({
   return (
     <Section title="Token Management" icon={<Wallet className="h-5 w-5" />}>
       <div className="space-y-6">
-        {/* Token Allowances - Always visible for logged-in users */}
-        <TokenManager mode="allowance" targetPrincipal={targetPrincipal} />
-
-        {/* Canister Wallet - Only visible for owners/developers */}
-        {isOwnerOrDeveloper && (
-          <TokenManager
-            mode="balance"
-            targetPrincipal={targetPrincipal}
-            showPrincipalId={true}
-            principalIdLabel="App Canister Principal ID"
-            principalIdDescription="Send tokens to this address to top up the app's balance"
-            onWithdraw={handleWithdraw}
-          />
-        )}
+        {/* Unified Token Management - Always visible for logged-in users */}
+        <TokenManager
+          targetPrincipal={targetPrincipal}
+          showPrincipalId={isOwnerOrDeveloper}
+          principalIdLabel="App Canister Principal ID"
+          principalIdDescription="Send tokens to this address to top up the app's balance"
+          onDeposit={handleDeposit}
+          onWithdraw={isOwnerOrDeveloper ? handleWithdraw : undefined}
+        />
 
         {/* Withdraw Dialog */}
         {selectedWithdrawToken && (
@@ -103,6 +122,21 @@ export const AppTokenSection: React.FC<AppTokenSectionProps> = ({
                       selectedTokenBalance,
                     ),
                   )
+                : 0
+            }
+          />
+        )}
+
+        {/* Deposit Dialog (Transfer to App Canister) */}
+        {selectedDepositToken && (
+          <DepositDialog
+            token={selectedDepositToken}
+            canisterPrincipal={targetPrincipal}
+            isOpen={depositDialogOpen}
+            onOpenChange={handleDepositDialogClose}
+            currentBalance={
+              userTokenBalance
+                ? Number(selectedDepositToken.fromAtomic(userTokenBalance))
                 : 0
             }
           />
