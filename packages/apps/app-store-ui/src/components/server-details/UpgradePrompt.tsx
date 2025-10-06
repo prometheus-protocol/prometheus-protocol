@@ -3,21 +3,21 @@ import { AppVersionSummary } from '@prometheus-protocol/ic-js';
 import { useInstalledVersion } from '@/hooks/useInstalledVersion';
 import { Button } from '@/components/ui/button';
 import { ArrowUp, Loader2, AlertTriangle } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface UpgradePromptProps {
   canisterId: Principal | undefined;
   allVersions: AppVersionSummary[];
   namespace: string;
   onUpgradeClick?: () => void;
-  className?: string;
   isUpgrading?: boolean;
+  isPollingForCanister?: boolean;
 }
 
 export function UpgradePrompt({
@@ -25,15 +25,14 @@ export function UpgradePrompt({
   allVersions,
   namespace,
   onUpgradeClick,
-  className,
   isUpgrading,
+  isPollingForCanister,
 }: UpgradePromptProps) {
   const { installedVersion, isLoading, isError } = useInstalledVersion(
     canisterId,
     allVersions,
   );
 
-  // Get the latest version (first in the array)
   const latestVersion = allVersions[0];
 
   if (!canisterId || !latestVersion || isLoading) {
@@ -42,53 +41,51 @@ export function UpgradePrompt({
 
   if (isError) {
     return (
-      <div
-        className={cn(
-          'p-4 border border-orange-200 rounded-lg bg-orange-50',
-          className,
-        )}>
-        <div className="flex items-center gap-2 text-orange-600">
-          <AlertTriangle className="h-4 w-4" />
-          <span className="text-sm font-medium">
-            Unable to check for updates
-          </span>
-        </div>
-        <p className="text-sm text-orange-600 mt-1">
+      <Alert variant="destructive">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertTitle>Unable to check for updates</AlertTitle>
+        <AlertDescription>
           Could not verify the current version installed on the canister.
-        </p>
-      </div>
+        </AlertDescription>
+      </Alert>
     );
   }
 
   if (!installedVersion) {
+    if (isPollingForCanister) {
+      return (
+        // REFACTOR: Added blue informational coloring
+        <Alert className="border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200 [&>svg]:text-blue-500">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <AlertTitle>Verifying Deployment</AlertTitle>
+          <AlertDescription>
+            Checking canister version and verifying deployment integrity...
+          </AlertDescription>
+        </Alert>
+      );
+    }
+
     return (
-      <div className={cn('p-4 border border-gray-200 rounded-lg', className)}>
-        <div className="flex items-center gap-2 text-gray-600">
-          <AlertTriangle className="h-4 w-4" />
-          <span className="text-sm font-medium">Version Unknown</span>
-        </div>
-        <p className="text-sm text-gray-600 mt-1">
+      // REFACTOR: Added yellow warning coloring
+      <Alert className="border-yellow-200 bg-yellow-50 text-yellow-800 dark:border-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-200 [&>svg]:text-yellow-500">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertTitle>Version Unknown</AlertTitle>
+        <AlertDescription>
           Could not detect which version is currently installed on the canister.
-        </p>
-      </div>
+        </AlertDescription>
+      </Alert>
     );
   }
 
-  // Check if an upgrade is available
   const isUpgradeAvailable = installedVersion.wasmId !== latestVersion.wasmId;
 
   if (!isUpgradeAvailable) {
     return null;
   }
 
-  const handleUpgrade = () => {
-    if (onUpgradeClick) {
-      onUpgradeClick();
-    }
-  };
-
+  // This is an actionable prompt, so a custom div is still the best choice here.
   return (
-    <div className={cn('p-4 border rounded-lg', className)}>
+    <div className="p-4 border rounded-lg">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <ArrowUp className="h-4 w-4 text-primary-600 flex-shrink-0" />
@@ -112,7 +109,7 @@ export function UpgradePrompt({
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={handleUpgrade} size="sm" disabled={isUpgrading}>
+              <Button onClick={onUpgradeClick} size="sm" disabled={isUpgrading}>
                 {isUpgrading ? (
                   <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                 ) : (

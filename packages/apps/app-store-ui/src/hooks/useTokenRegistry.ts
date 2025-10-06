@@ -1,10 +1,70 @@
 import { useState, useMemo } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Principal } from '@dfinity/principal';
-import { Token } from '@prometheus-protocol/ic-js';
+import { Token, getCanisterId } from '@prometheus-protocol/ic-js';
 
 // KongSwap API base URL
 const KONGSWAP_API_BASE = 'https://api.kongswap.io/api';
+
+// Check if we're on local network
+const isLocalNetwork = () => {
+  return (
+    process.env.DFX_NETWORK === 'local' ||
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1'
+  );
+};
+
+// Mock data for local development
+const createMockTokensResponse = (
+  page: number,
+  searchTerm?: string,
+): KongSwapTokensResponse => {
+  try {
+    const localUsdcId = getCanisterId('USDC_LEDGER');
+
+    const mockTokens = [
+      {
+        canister_id: localUsdcId,
+        symbol: 'USDC',
+        name: 'USD Coin (Local)',
+        decimals: 8,
+        fee: 10000,
+        logo_url: '/images/usdc.svg',
+      },
+    ];
+
+    // Filter by search term if provided
+    const filteredTokens = searchTerm
+      ? mockTokens.filter(
+          (token) =>
+            token.symbol.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            token.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            token.canister_id.toLowerCase().includes(searchTerm.toLowerCase()),
+        )
+      : mockTokens;
+
+    return {
+      items: filteredTokens,
+      total_pages: 1,
+      total_count: filteredTokens.length,
+      page: page,
+      limit: 25,
+    };
+  } catch (error) {
+    console.warn(
+      'Failed to create mock tokens, falling back to empty response:',
+      error,
+    );
+    return {
+      items: [],
+      total_pages: 1,
+      total_count: 0,
+      page: page,
+      limit: 25,
+    };
+  }
+};
 
 // KongSwap API response structure
 interface KongSwapTokensResponse {
@@ -23,22 +83,20 @@ interface KongSwapTokensResponse {
   limit: number;
 }
 
-// Check if we're on local network (avoid balance fetching on local)
-const isLocalNetwork = () => {
-  return (
-    process.env.DFX_NETWORK === 'local' ||
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1'
-  );
-};
-
-// Simple fetch function
-// Fetch a page of tokens from KongSwap API
+// Fetch a page of tokens from KongSwap API or return mock data for local dev
 const fetchTokensPage = async (
   page: number,
   searchTerm?: string,
   limit: number = 25,
 ): Promise<KongSwapTokensResponse> => {
+  // Return mock data for local development
+  if (isLocalNetwork()) {
+    // Simulate network delay for more realistic development experience
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return createMockTokensResponse(page, searchTerm);
+  }
+
+  // Production KongSwap API call
   const url = new URL(`${KONGSWAP_API_BASE}/tokens`);
 
   // Add pagination parameters
@@ -139,7 +197,7 @@ export const useTokenRegistry = () => {
     refetchOnWindowFocus: false, // Prevent unnecessary refetches
     refetchOnMount: false, // Use cached data if available
     retry: 2, // Retry failed requests
-    // API calls to external services are fine on local - only IC canister calls should be disabled
+    // Now works in both local and production environments
   });
 
   // Transform all tokens from all pages and deduplicate by canister_id

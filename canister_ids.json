@@ -37,5 +37,8 @@
   },
   "usage_tracker": {
     "ic": "m63pw-fqaaa-aaaai-q33pa-cai"
+  },
+  "usdc_ledger": {
+    "ic": "53nhb-haaaa-aaaar-qbn5q-cai"
   }
 }
