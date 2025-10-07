@@ -21,7 +21,7 @@ import {
   User,
   CreditCard,
 } from 'lucide-react';
-import { JSX, useMemo } from 'react';
+import { JSX, useMemo, useState } from 'react';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 
 // --- Types and Data Structures ---
@@ -74,6 +74,7 @@ export default function ConsentPage() {
   const location = useLocation();
   const sessionId = searchParams.get('session_id');
   const { identity } = useInternetIdentity();
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const { mutate: completeAuthorize, isPending: isAllowing } =
     useCompleteAuthorizeMutation();
   const { denyConsent, isDenying } = useDenyConsentMutation();
@@ -106,6 +107,7 @@ export default function ConsentPage() {
       { identity, sessionId },
       {
         onSuccess: (redirectUrl) => {
+          setIsRedirecting(true);
           window.location.href = redirectUrl;
         },
       },
@@ -117,15 +119,16 @@ export default function ConsentPage() {
       { identity, sessionId },
       {
         onSuccess: (redirectUrl) => {
+          setIsRedirecting(true);
           window.location.href = redirectUrl;
         },
       },
     );
   };
-  const isPending = isAllowing || isDenying;
+  const isPending = isAllowing || isDenying || isRedirecting;
 
   return (
-    <Card className="w-full max-w-md py-2 sm:py-6">
+    <Card className="w-full max-w-md py-6">
       <CardHeader className="items-center text-center">
         {resourceServerLogo && (
           <img
@@ -168,7 +171,7 @@ export default function ConsentPage() {
         <div className="flex flex-col gap-3">
           <Button onClick={handleAllow} disabled={isPending} size="lg">
             {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Allow Access
+            {isRedirecting ? 'Redirecting...' : 'Allow Access'}
           </Button>
           <Button
             onClick={handleDeny}

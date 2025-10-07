@@ -1,0 +1,47 @@
+# Prometheus Application Manifest
+# This is the permanent, unique identifier for your application.
+namespace: org.prometheusprotocol.token-watchlist
+
+# This section contains all data for a specific version. This entire package will be submitted for review and locked to the audit of this version.
+submission:
+  # --- Core App Information ---
+  name: Token Watchlist
+  description: A personal, on-chain watchlist for your tokens. Syncs your favorite tokens between your UI and your AI agents, providing them with essential context.
+  publisher: Prometheus Protocol
+  category: Agent Tools
+  deployment_type: global
+
+  # --- Technical & Marketing Details ---
+  repo_url: https://github.com/prometheus-protocol/prometheus-protocol/tree/main/packages/canisters/token_watchlist
+  mcp_path: /mcp
+  why_this_app: An AI agent is only as smart as the context it's given. The Token Watchlist provides that essential context. It creates a direct, on-chain link between a user's actions in a UI and their agent's awareness. By adding a token to your watchlist, you are effectively telling your agent, "Pay attention to this." This is the foundational tool for personalizing and scoping any financial AI agent's behavior.
+  key_features:
+    - "Seamless Agent Sync: The first tool that directly connects your UI preferences to your agent's operational context."
+    - 'On-Chain & Persistent: Your watchlist is stored securely on the IC, available across all your devices, forever.'
+    - 'Dual Interface: Provides both a standard backend API for web apps and a standardized MCP tool for agents.'
+    - 'User-Controlled: You have full, sovereign control over what your agent sees and focuses on.'
+  tags:
+    - watchlist
+    - favorites
+    - user-preferences
+    - ai-agent
+    - agent
+    - llm
+    - tool-use
+    - developer-tools
+    - utility
+    - on-chain
+    - icp
+
+  # --- Visuals (Replace with actual asset URLs) ---
+  visuals:
+    icon_url: https://github.com/prometheus-protocol/prometheus-protocol/releases/download/v1.0.0-assets/icon-token-watchlist.webp
+    banner_url: https://github.com/prometheus-protocol/prometheus-protocol/releases/download/v1.0.0-assets/banner-token-watchlist.webp
+    gallery_images:
+      - https://github.com/prometheus-protocol/prometheus-protocol/releases/download/v1.0.0-assets/banner-token-watchlist.webp
+
+  # --- BUILD-SPECIFIC - MUST BE FILLED OUT BY CI/CD ---
+  # The full commit hash of the version being published.
+  git_commit: ''
+  # The path to the compiled WASM file for this canister.
+  wasm_path: .dfx/local/canisters/token_watchlist/token_watchlist.wasm

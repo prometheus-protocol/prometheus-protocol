@@ -73,6 +73,19 @@
         "node_compatibility": true
       }
     },
+    "token_watchlist": {
+      "main": "packages/canisters/token_watchlist/src/main.mo",
+      "type": "motoko",
+      "declarations": {
+        "output": "packages/declarations/src/generated/token_watchlist",
+        "node_compatibility": true
+      },
+      "remote": {
+        "id": {
+          "ic": "53nhb-haaaa-aaaar-qbn5q-cai"
+        }
+      }
+    },
     "icrc1_ledger": {
       "type": "custom",
       "candid": "https://github.com/dfinity/ic/releases/download/ledger-suite-icrc-2025-06-19/ledger.did",

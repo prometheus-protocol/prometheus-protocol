@@ -320,17 +320,97 @@ export default function ServerDetailsPage() {
   };
 
   const handleUpgradeClick = async () => {
-    if (!server) return;
+    if (!server || !canisterId) return;
+
+    // Always upgrade to the actual latest version (allVersions[0]), not the viewed version
+    const actualLatestVersion = allVersions[0];
+    if (!actualLatestVersion) return;
 
     try {
+      // Start polling state
+      setIsPollingForCanister(true);
+
       // For provisioned instances, we use provision_instance which handles upgrades
       await provisionMutation.mutateAsync({
         namespace: server.namespace,
-        wasmId: server.latestVersion.wasmId,
+        wasmId: actualLatestVersion.wasmId,
       });
+
+      // After successful upgrade, poll for the WASM hash to verify the upgrade completed
+      const pollForWasmHash = async () => {
+        const wasmMaxAttempts = 15; // 15 attempts * 2 seconds = 30 seconds
+        let wasmAttempts = 0;
+
+        const wasmPoll = async (): Promise<void> => {
+          wasmAttempts++;
+
+          try {
+            // Force refetch of WASM hash query
+            await queryClient.invalidateQueries({
+              queryKey: ['canisterWasmHash', canisterId.toText()],
+            });
+
+            // Check if we have WASM hash data now
+            const wasmHashData = queryClient.getQueryData([
+              'canisterWasmHash',
+              canisterId.toText(),
+            ]);
+
+            if (wasmHashData !== undefined && wasmHashData !== null) {
+              // WASM hash available, stop polling
+              setIsPollingForCanister(false);
+
+              // If we're viewing an archived version, redirect to the latest version
+              if (isViewingArchivedVersion) {
+                window.location.href = `/app/${server.namespace}`;
+              }
+              return;
+            }
+
+            if (wasmAttempts < wasmMaxAttempts) {
+              // Continue polling for WASM hash
+              setTimeout(wasmPoll, 2000);
+            } else {
+              // WASM hash polling timeout
+              setIsPollingForCanister(false);
+              console.warn(
+                'WASM hash polling timeout: Hash not available after maximum attempts',
+              );
+
+              // Still redirect if needed, even if polling timed out
+              if (isViewingArchivedVersion) {
+                window.location.href = `/app/${server.namespace}`;
+              }
+            }
+          } catch (error) {
+            if (wasmAttempts < wasmMaxAttempts) {
+              // Retry on error
+              setTimeout(wasmPoll, 2000);
+            } else {
+              setIsPollingForCanister(false);
+              console.error(
+                'WASM hash polling failed after maximum attempts:',
+                error,
+              );
+
+              // Still redirect if needed, even if polling failed
+              if (isViewingArchivedVersion) {
+                window.location.href = `/app/${server.namespace}`;
+              }
+            }
+          }
+        };
+
+        // Start WASM hash polling after a short delay
+        setTimeout(wasmPoll, 1000);
+      };
+
+      // Start WASM hash polling
+      pollForWasmHash();
     } catch (error) {
       // Error is handled by the custom mutation hook
       console.error('Upgrade failed:', error);
+      setIsPollingForCanister(false);
     }
   };
 
@@ -472,24 +552,6 @@ export default function ServerDetailsPage() {
               />
             )}
 
-            {hasToolsInfo ? (
-              <AccessAndBilling
-                latestVersion={server.latestVersion}
-                canisterId={canisterId}
-              />
-            ) : (
-              <SponsorPrompt
-                icon={Wallet}
-                title="Access & Billing"
-                description="Sponsor the Tools & Resources audit to enable API key creation and manage wallet allowances for this app."
-                auditType="tools_v1"
-                bounty={toolsBounty}
-                paymentToken={Tokens.USDC}
-                wasmId={server.latestVersion.wasmId}
-                isArchived={isViewingArchivedVersion}
-              />
-            )}
-
             {/* Conditional rendering now correctly checks the nested status. */}
             {hasToolsInfo ? (
               <ToolsAndResources
@@ -518,6 +580,24 @@ export default function ServerDetailsPage() {
                 description="Sponsor the Data Safety audit to understand how this application handles your data."
                 auditType="data_safety_v1"
                 bounty={dataSafetyBounty}
+                paymentToken={Tokens.USDC}
+                wasmId={server.latestVersion.wasmId}
+                isArchived={isViewingArchivedVersion}
+              />
+            )}
+
+            {hasToolsInfo ? (
+              <AccessAndBilling
+                latestVersion={server.latestVersion}
+                canisterId={canisterId}
+              />
+            ) : (
+              <SponsorPrompt
+                icon={Wallet}
+                title="API Keys"
+                description="Sponsor the Tools audit to enable API key creation for this app."
+                auditType="tools_v1"
+                bounty={toolsBounty}
                 paymentToken={Tokens.USDC}
                 wasmId={server.latestVersion.wasmId}
                 isArchived={isViewingArchivedVersion}
