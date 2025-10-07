@@ -65,7 +65,7 @@ export const AddTokenDialog: React.FC<AddTokenDialogProps> = ({
           Add Token
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="end">
+      <PopoverContent className="w-80 p-0">
         <Command shouldFilter={false}>
           <CommandInput
             placeholder="Search tokens..."

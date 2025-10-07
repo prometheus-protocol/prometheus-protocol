@@ -19,12 +19,8 @@ export const TokenManager: React.FC<TokenManagerProps> = ({
   onWithdraw,
 }) => {
   const { identity } = useInternetIdentity();
-  const {
-    watchedTokenIds,
-    addWatchedToken,
-    removeWatchedToken,
-    clearWatchlist,
-  } = useWatchlist();
+  const { watchedTokenIds, addWatchedToken, removeWatchedToken } =
+    useWatchlist();
 
   const { allTokens, isLoading: isLoadingTokens } = useTokenRegistry();
   const [missingWatchedTokens, setMissingWatchedTokens] = useState<Token[]>([]);

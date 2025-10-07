@@ -49,7 +49,7 @@ Discord Bot
 │   │   └── Discord Notification Service
 │   └── OAuth & Auth
 │       ├── OAuth Provider
-│       └── Token Management
+│       └── Token Watchlist
 └── AI Functions
     ├── Task Management
     ├── MCP Tool Invocation
@@ -211,7 +211,7 @@ All commands work identically in DMs:
 
 1. **Discovery**: Automatic OAuth server metadata discovery
 2. **Authorization**: PKCE-secured authorization code flow
-3. **Token Management**: Automatic token refresh and expiration handling
+3. **Token Watchlist**: Automatic token refresh and expiration handling
 4. **Callback Handling**: Express server for OAuth callbacks
 5. **Security**: State validation and CSRF protection
 

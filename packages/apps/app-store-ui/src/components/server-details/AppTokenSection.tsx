@@ -76,7 +76,7 @@ export const AppTokenSection: React.FC<AppTokenSectionProps> = ({
 
   if (isLoading) {
     return (
-      <Section title="Token Management" icon={<Wallet className="h-5 w-5" />}>
+      <Section title="Token Watchlist" icon={<Wallet className="h-5 w-5" />}>
         <div className="animate-pulse space-y-4">
           <div className="h-32 bg-muted rounded-lg" />
           <div className="h-32 bg-muted rounded-lg" />
@@ -87,7 +87,7 @@ export const AppTokenSection: React.FC<AppTokenSectionProps> = ({
 
   if (error) {
     return (
-      <Section title="Token Management" icon={<Wallet className="h-5 w-5" />}>
+      <Section title="Token Watchlist" icon={<Wallet className="h-5 w-5" />}>
         <div className="text-red-500 p-4 border border-red-500/20 rounded-lg bg-red-500/5">
           Failed to load token registry: {error}
         </div>
@@ -96,9 +96,9 @@ export const AppTokenSection: React.FC<AppTokenSectionProps> = ({
   }
 
   return (
-    <Section title="Token Management" icon={<Wallet className="h-5 w-5" />}>
+    <Section title="Token Watchlist" icon={<Wallet className="h-5 w-5" />}>
       <div className="space-y-6">
-        {/* Unified Token Management - Always visible for logged-in users */}
+        {/* Unified Token Watchlist - Always visible for logged-in users */}
         <TokenManager
           targetPrincipal={targetPrincipal}
           showPrincipalId={isOwnerOrDeveloper}

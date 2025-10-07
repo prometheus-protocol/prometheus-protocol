@@ -8,6 +8,7 @@ import * as Leaderboard from './generated/leaderboard/leaderboard.did.js';
 import * as McpServer from './generated/mcp_server/mcp_server.did.js';
 import * as SearchIndex from './generated/search_index/search_index.did.js';
 import * as UsageTracker from './generated/usage_tracker/usage_tracker.did.js';
+import * as TokenWatchlist from './generated/token_watchlist/token_watchlist.did.js';
 
 // Centralized export for all canisters
 export {
@@ -21,4 +22,5 @@ export {
   McpServer,
   SearchIndex,
   UsageTracker,
+  TokenWatchlist,
 };

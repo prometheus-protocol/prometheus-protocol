@@ -604,7 +604,7 @@ export default function ServerDetailsPage() {
               />
             )}
 
-            {/* Token Management Section */}
+            {/* Token Watchlist Section */}
             {identity && canisterId && (
               <AppTokenSection
                 targetPrincipal={canisterId}

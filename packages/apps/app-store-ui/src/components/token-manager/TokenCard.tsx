@@ -2,10 +2,22 @@ import React, { useState } from 'react';
 import { Principal } from '@dfinity/principal';
 import { Token } from '@prometheus-protocol/ic-js';
 import { toast } from 'sonner';
-import { Loader2, Copy, ArrowDown, ArrowUp, X } from 'lucide-react';
+import {
+  Loader2,
+  Copy,
+  ArrowDown,
+  ArrowUp,
+  X,
+  ChevronDown,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TokenLogo } from '@/components/ui/TokenLogo';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import {
   useGetTokenBalance,
   useGetTokenBalanceForPrincipal,
@@ -29,6 +41,7 @@ export const TokenCard: React.FC<TokenCardProps> = ({
   onDeposit,
   onWithdraw,
 }) => {
+  const [isOpen, setIsOpen] = useState(false);
   const { data: userBalance, isLoading: isLoadingUserBalance } =
     useGetTokenBalance(token);
   const { data: appBalance, isLoading: isLoadingAppBalance } =
@@ -97,44 +110,80 @@ export const TokenCard: React.FC<TokenCardProps> = ({
   }
 
   return (
-    <div className="border rounded-lg p-4 space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <TokenLogo token={token} size="md" />
-          <div>
-            <div className="font-semibold text-lg">{token.symbol}</div>
-            <div className="flex items-center gap-1">
-              <div className="text-xs text-muted-foreground font-mono">
-                {truncatePrincipal(token.canisterId.toText())}
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="border rounded-lg">
+        {/* Collapsible Header - Always visible */}
+        <CollapsibleTrigger asChild>
+          <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/30 transition-colors">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <TokenLogo token={token} size="md" />
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-lg">{token.symbol}</div>
+                <div className="flex items-center gap-1">
+                  <div className="text-xs text-muted-foreground font-mono truncate">
+                    {truncatePrincipal(token.canisterId.toText())}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-4 w-4 p-0 text-muted-foreground hover:text-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigator.clipboard.writeText(token.canisterId.toText());
+                      toast.success(`${token.symbol} canister ID copied`);
+                    }}
+                    title={`Copy ${token.symbol} canister ID`}>
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-4 w-4 p-0 text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  navigator.clipboard.writeText(token.canisterId.toText());
-                  toast.success(`${token.symbol} canister ID copied`);
-                }}
-                title={`Copy ${token.symbol} canister ID`}>
-                <Copy className="h-3 w-3" />
-              </Button>
+            </div>
+
+            {/* Quick view balances and controls */}
+            <div className="flex items-center gap-3 ml-3">
+              {/* Quick Balance Display - Hidden on small screens */}
+              <div className="hidden lg:flex items-center gap-4 text-sm">
+                <div className="text-right">
+                  <div className="text-muted-foreground text-xs">Wallet</div>
+                  <div className="font-semibold">
+                    {userBalance ? token.fromAtomic(userBalance) : '0'}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-muted-foreground text-xs">App</div>
+                  <div className="font-semibold">
+                    {appBalance ? token.fromAtomic(appBalance) : '0'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {onRemove && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemove();
+                    }}
+                    title={`Remove ${token.symbol} from watchlist`}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+                <ChevronDown
+                  className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${
+                    isOpen ? 'transform rotate-180' : ''
+                  }`}
+                />
+              </div>
             </div>
           </div>
-        </div>
-        {onRemove && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-            onClick={onRemove}
-            title={`Remove ${token.symbol} from watchlist`}>
-            <X className="h-4 w-4" />
-          </Button>
-        )}
-      </div>
+        </CollapsibleTrigger>
 
-      {/* Balances Section */}
+        {/* Collapsible Content - Shows details when expanded */}
+        <CollapsibleContent>
+          <div className="px-4 pb-4 space-y-6 border-t pt-4">{/* Balances Section */}
       <div className="space-y-3">
         <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Balances
@@ -300,6 +349,9 @@ export const TokenCard: React.FC<TokenCardProps> = ({
           </div>
         </div>
       </div>
-    </div>
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
   );
 };

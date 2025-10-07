@@ -90,7 +90,7 @@ describe('Token Watchlist Canister', () => {
       // Arrange: Alice adds tokens to her watchlist
       const userAlice = createIdentity('alice-isolation-' + Math.random());
       const userBob = createIdentity('bob-isolation-' + Math.random());
-      
+
       watchlistActor.setIdentity(userAlice);
       await watchlistActor.add_to_watchlist(TOKEN_USDC);
       await watchlistActor.add_to_watchlist(TOKEN_ICP);
@@ -173,7 +173,7 @@ describe('Token Watchlist Canister', () => {
       // Arrange & Act
       const userAlice = createIdentity('alice-add-isolate-' + Math.random());
       const userBob = createIdentity('bob-add-isolate-' + Math.random());
-      
+
       watchlistActor.setIdentity(userAlice);
       await watchlistActor.add_to_watchlist(TOKEN_USDC);
 
@@ -213,7 +213,9 @@ describe('Token Watchlist Canister', () => {
 
     it('should succeed when removing a token that does not exist', async () => {
       // Arrange
-      const userAlice = createIdentity('alice-remove-notexist-' + Math.random());
+      const userAlice = createIdentity(
+        'alice-remove-notexist-' + Math.random(),
+      );
       watchlistActor.setIdentity(userAlice);
       await watchlistActor.add_to_watchlist(TOKEN_USDC);
 
@@ -296,7 +298,7 @@ describe('Token Watchlist Canister', () => {
       const userAlice = createIdentity('alice-mcp-auth-' + Math.random());
       const userBob = createIdentity('bob-mcp-auth-' + Math.random());
       const userCharlie = createIdentity('charlie-mcp-auth-' + Math.random());
-      
+
       watchlistActor.setIdentity(userAlice);
       await watchlistActor.add_to_watchlist(TOKEN_USDC);
 
@@ -355,10 +357,14 @@ describe('Token Watchlist Canister', () => {
 
     it('should handle concurrent operations from multiple users', async () => {
       // Arrange & Act: Multiple users adding tokens
-      const userAlice = createIdentity('alice-persist-concurrent-' + Math.random());
+      const userAlice = createIdentity(
+        'alice-persist-concurrent-' + Math.random(),
+      );
       const userBob = createIdentity('bob-persist-concurrent-' + Math.random());
-      const userCharlie = createIdentity('charlie-persist-concurrent-' + Math.random());
-      
+      const userCharlie = createIdentity(
+        'charlie-persist-concurrent-' + Math.random(),
+      );
+
       watchlistActor.setIdentity(userAlice);
       await watchlistActor.add_to_watchlist(TOKEN_USDC);
 
