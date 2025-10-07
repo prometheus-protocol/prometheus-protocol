@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import { Principal } from '@dfinity/principal';
+import { useMemo } from 'react';
 import {
   getMyWatchlist,
   addToWatchlist,
@@ -27,20 +28,6 @@ export const useWatchlist = () => {
       }
 
       const canisterList = await getMyWatchlist(identity);
-
-      // If canister is empty, initialize with USDC
-      if (canisterList.length === 0) {
-        try {
-          const usdcCanisterId = getCanisterId('USDC_LEDGER');
-          await addToWatchlist(identity, Principal.fromText(usdcCanisterId));
-          // Re-fetch to get full TokenInfo object
-          return await getMyWatchlist(identity);
-        } catch (error) {
-          console.error('Failed to initialize watchlist with USDC:', error);
-          return [];
-        }
-      }
-
       return canisterList;
     },
     enabled: !!identity && !isInitializing,
@@ -48,8 +35,10 @@ export const useWatchlist = () => {
   });
 
   // Extract canister IDs as strings for backward compatibility
-  const watchedTokenIds = watchedTokens.map((token) =>
-    token.canisterId.toText(),
+  // Use useMemo to prevent creating a new array on every render
+  const watchedTokenIds = useMemo(
+    () => watchedTokens.map((token) => token.canisterId.toText()),
+    [watchedTokens],
   );
 
   // Mutation for adding a token

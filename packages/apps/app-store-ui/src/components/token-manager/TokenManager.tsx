@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import { toast } from 'sonner';
 import { Loader2, Copy } from 'lucide-react';
@@ -10,6 +10,47 @@ import { TokenManagerProps } from './types';
 import { TokenCard } from './TokenCard';
 import { AddTokenDialog } from './AddTokenDialog';
 
+// Helper function to convert TokenInfo (from watchlist) to Token (expected by TokenCard)
+const tokenInfoToToken = (
+  tokenInfo: any,
+  logoUrl?: string,
+): Token & { logo_url?: string } => {
+  return {
+    canisterId: tokenInfo.canisterId,
+    symbol: tokenInfo.symbol,
+    name: tokenInfo.name,
+    decimals: tokenInfo.decimals,
+    fee: tokenInfo.fee,
+    logo_url: logoUrl, // Use logo URL from KongSwap if available
+    toAtomic: (amount: string | number): bigint => {
+      const amountStr = String(amount);
+      const [integerPart, fractionalPart = ''] = amountStr.split('.');
+
+      if (fractionalPart.length > tokenInfo.decimals) {
+        throw new Error(
+          `Amount "${amountStr}" has more than ${tokenInfo.decimals} decimal places.`,
+        );
+      }
+      const combined =
+        (integerPart || '0') + fractionalPart.padEnd(tokenInfo.decimals, '0');
+      return BigInt(combined);
+    },
+    fromAtomic: (atomicAmount: bigint): string => {
+      const atomicStr = atomicAmount
+        .toString()
+        .padStart(tokenInfo.decimals + 1, '0');
+      const integerPart = atomicStr.slice(0, -tokenInfo.decimals);
+      const fractionalPart = atomicStr
+        .slice(-tokenInfo.decimals)
+        .replace(/0+$/, '');
+
+      return fractionalPart.length > 0
+        ? `${integerPart}.${fractionalPart}`
+        : integerPart;
+    },
+  };
+};
+
 export const TokenManager: React.FC<TokenManagerProps> = ({
   targetPrincipal,
   showPrincipalId = false,
@@ -19,64 +60,27 @@ export const TokenManager: React.FC<TokenManagerProps> = ({
   onWithdraw,
 }) => {
   const { identity } = useInternetIdentity();
-  const { watchedTokenIds, addWatchedToken, removeWatchedToken } =
-    useWatchlist();
-
-  const { allTokens, isLoading: isLoadingTokens } = useTokenRegistry();
-  const [missingWatchedTokens, setMissingWatchedTokens] = useState<Token[]>([]);
-
-  // This separate registry instance is specifically for finding watched tokens
-  // that might not be in the main `allTokens` list (e.g., from a different page).
   const {
-    tokens: searchResults,
-    serverSearchTerm: missingTokenSearchTerm,
-    setServerSearchTerm: setMissingTokenSearchTerm,
-  } = useTokenRegistry();
-
-  // Effect to find any watched token IDs that aren't in our main list
-  useEffect(() => {
-    if (isLoadingTokens || watchedTokenIds.length === 0) return;
-
-    const missingIds = watchedTokenIds.filter(
-      (id) => !allTokens.some((token) => token.canisterId.toText() === id),
-    );
-
-    if (missingIds.length > 0 && missingIds[0] !== missingTokenSearchTerm) {
-      setMissingTokenSearchTerm(missingIds[0]);
-    } else if (missingIds.length === 0) {
-      setMissingTokenSearchTerm('');
-    }
-  }, [
     watchedTokenIds,
-    allTokens,
-    isLoadingTokens,
-    missingTokenSearchTerm,
-    setMissingTokenSearchTerm,
-  ]);
+    watchedTokens,
+    addWatchedToken,
+    removeWatchedToken,
+    isLoading,
+  } = useWatchlist();
 
-  // Effect to add found tokens to our local `missingWatchedTokens` state
-  useEffect(() => {
-    if (searchResults.length > 0) {
-      setMissingWatchedTokens((prev) => {
-        const newTokens = searchResults.filter(
-          (newToken) =>
-            !prev.some(
-              (p) => p.canisterId.toText() === newToken.canisterId.toText(),
-            ) && watchedTokenIds.includes(newToken.canisterId.toText()),
-        );
-        return [...prev, ...newTokens];
-      });
-    }
-  }, [searchResults, watchedTokenIds]);
+  // Fetch token registry to get logo URLs
+  const { allTokens: registryTokens } = useTokenRegistry();
 
-  // Combine tokens and deduplicate by canister ID
-  const combinedTokenList = [...allTokens, ...missingWatchedTokens];
-  const uniqueTokenMap = new Map(
-    combinedTokenList.map((token) => [token.canisterId.toText(), token]),
-  );
-  const watchedTokens = Array.from(uniqueTokenMap.values()).filter((token) =>
-    watchedTokenIds.includes(token.canisterId.toText()),
-  );
+  // Create a lookup map: canisterId -> logo_url
+  const logoMap = useMemo(() => {
+    const map = new Map<string, string>();
+    registryTokens.forEach((token) => {
+      if (token.logo_url) {
+        map.set(token.canisterId.toText(), token.logo_url);
+      }
+    });
+    return map;
+  }, [registryTokens]);
 
   if (!identity) {
     return (
@@ -113,7 +117,7 @@ export const TokenManager: React.FC<TokenManagerProps> = ({
         </div>
       )}
 
-      {isLoadingTokens && watchedTokens.length === 0 ? (
+      {isLoading && watchedTokens.length === 0 ? (
         <div className="text-center text-muted-foreground py-8">
           <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
           Loading tokens...
@@ -130,19 +134,24 @@ export const TokenManager: React.FC<TokenManagerProps> = ({
         </div>
       ) : (
         <div className="space-y-4">
-          {watchedTokens.map((token) => (
-            <TokenCard
-              key={token.canisterId.toText()}
-              token={token}
-              targetPrincipal={targetPrincipal}
-              onDeposit={onDeposit}
-              onWithdraw={onWithdraw}
-              onRemove={() => {
-                removeWatchedToken(token.canisterId.toText());
-                toast.success(`${token.symbol} removed from watchlist`);
-              }}
-            />
-          ))}
+          {watchedTokens.map((tokenInfo) => {
+            // Look up logo URL from registry
+            const logoUrl = logoMap.get(tokenInfo.canisterId.toText());
+            const token = tokenInfoToToken(tokenInfo, logoUrl);
+            return (
+              <TokenCard
+                key={token.canisterId.toText()}
+                token={token}
+                targetPrincipal={targetPrincipal}
+                onDeposit={onDeposit}
+                onWithdraw={onWithdraw}
+                onRemove={() => {
+                  removeWatchedToken(token.canisterId.toText());
+                  toast.success(`${token.symbol} removed from watchlist`);
+                }}
+              />
+            );
+          })}
 
           {/* Add Token Button */}
           <div className="pt-2">

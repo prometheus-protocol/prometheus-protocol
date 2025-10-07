@@ -34,47 +34,6 @@ import SrvTypes "mo:mcp-motoko-sdk/server/Types";
 
 import IC "mo:ic";
 
-(
-  with migration =
-  // Migrate from old state structure (Text-based canister IDs, no metadata cache)
-  // to new state structure (Principal-based IDs, deduplicated metadata cache)
-  func(
-    old : {
-      var watchlist_data : Map.Map<Principal, [Text]>;
-    }
-  ) : {
-    var token_metadata_cache : Map.Map<Principal, { canisterId : Principal; symbol : Text; name : Text; decimals : Nat8; fee : Nat; lastRefreshed : Nat64 }>;
-    var user_watchlists : Map.Map<Principal, [Principal]>;
-  } {
-    // Initialize the new state structures
-    let new_cache = Map.new<Principal, { canisterId : Principal; symbol : Text; name : Text; decimals : Nat8; fee : Nat; lastRefreshed : Nat64 }>();
-    let new_watchlists = Map.new<Principal, [Principal]>();
-
-    // Migrate each user's watchlist
-    for ((user_principal, old_token_ids) in Map.entries(old.watchlist_data)) {
-      // Convert Text canister IDs to Principal
-      let new_token_ids = Array.mapFilter<Text, Principal>(
-        old_token_ids,
-        func(textId : Text) : ?Principal {
-          ?Principal.fromText(textId);
-        },
-      );
-
-      // Store the converted list
-      Map.set(new_watchlists, Map.phash, user_principal, new_token_ids);
-    };
-
-    // Note: The metadata cache starts empty. It will be populated on first access
-    // or by the periodic refresh timer.
-    Debug.print("Migration complete. Migrated " # Nat.toText(Map.size(new_watchlists)) # " user watchlists.");
-
-    {
-      var token_metadata_cache = new_cache;
-      var user_watchlists = new_watchlists;
-    };
-  };
-)
-
 shared ({ caller = deployer }) persistent actor class WatchlistCanister(
   args : ?{
     owner : ?Principal;
@@ -224,43 +183,58 @@ shared ({ caller = deployer }) persistent actor class WatchlistCanister(
       case (null) { [] };
     };
 
+    Debug.print("Adding token " # Principal.toText(token_canister_id) # " to watchlist of " # Principal.toText(caller));
+
     // Check if the token already exists in the user's list
     let token_exists = Array.find<Principal>(current_list, func(id) { id == token_canister_id });
 
-    switch (token_exists) {
-      case (?_) {
-        // Already exists, no change
+    // Check if metadata is already cached
+    let cached_metadata = Map.get(token_metadata_cache, Map.phash, token_canister_id);
+
+    switch (token_exists, cached_metadata) {
+      // Token in list AND metadata cached - nothing to do
+      case (?_, ?_) {
+        Debug.print("Token " # Principal.toText(token_canister_id) # " already in watchlist with cached metadata");
         return #ok(());
       };
-      case (null) {
-        // Check if metadata is already cached
-        let cached_metadata = Map.get(token_metadata_cache, Map.phash, token_canister_id);
-
-        switch (cached_metadata) {
-          case (?_) {
-            // Metadata already in cache, just add to user's list
+      // Token in list but NO metadata - fetch metadata to repair inconsistent state
+      case (?_, null) {
+        Debug.print("Token " # Principal.toText(token_canister_id) # " in watchlist but metadata missing, fetching...");
+        let metadataResult = await fetchTokenMetadata(token_canister_id);
+        switch (metadataResult) {
+          case (#ok(tokenInfo)) {
+            Debug.print("Fetched and cached metadata for " # Principal.toText(token_canister_id));
+            Map.set(token_metadata_cache, Map.phash, token_canister_id, tokenInfo);
+            return #ok(());
+          };
+          case (#err(errorMsg)) {
+            Debug.print("Failed to fetch metadata: " # errorMsg);
+            return #err(errorMsg);
+          };
+        };
+      };
+      // Token NOT in list but metadata cached - just add to list
+      case (null, ?_) {
+        Debug.print("Metadata for token " # Principal.toText(token_canister_id) # " already in cache, adding to watchlist");
+        let new_list = Array.append(current_list, [token_canister_id]);
+        Map.set(user_watchlists, Map.phash, caller, new_list);
+        return #ok(());
+      };
+      // Token NOT in list and NO metadata - fetch and add
+      case (null, null) {
+        Debug.print("Token " # Principal.toText(token_canister_id) # " not in watchlist, fetching metadata...");
+        let metadataResult = await fetchTokenMetadata(token_canister_id);
+        switch (metadataResult) {
+          case (#ok(tokenInfo)) {
+            Debug.print("Fetched metadata for token " # Principal.toText(token_canister_id) # ": " # tokenInfo.name # " (" # tokenInfo.symbol # ")");
+            Map.set(token_metadata_cache, Map.phash, token_canister_id, tokenInfo);
             let new_list = Array.append(current_list, [token_canister_id]);
             Map.set(user_watchlists, Map.phash, caller, new_list);
             return #ok(());
           };
-          case (null) {
-            // Fetch metadata and add to cache
-            let metadataResult = await fetchTokenMetadata(token_canister_id);
-
-            switch (metadataResult) {
-              case (#ok(tokenInfo)) {
-                // Store in cache
-                Map.set(token_metadata_cache, Map.phash, token_canister_id, tokenInfo);
-                // Add to user's list
-                let new_list = Array.append(current_list, [token_canister_id]);
-                Map.set(user_watchlists, Map.phash, caller, new_list);
-                return #ok(());
-              };
-              case (#err(errorMsg)) {
-                // Return the error without modifying anything
-                return #err(errorMsg);
-              };
-            };
+          case (#err(errorMsg)) {
+            Debug.print("Failed to fetch metadata for token " # Principal.toText(token_canister_id) # ": " # errorMsg);
+            return #err(errorMsg);
           };
         };
       };
@@ -465,7 +439,7 @@ shared ({ caller = deployer }) persistent actor class WatchlistCanister(
     serverInfo = {
       name = "org.prometheusprotocol.token-watchlist";
       title = "Token Watchlist";
-      version = "0.1.2";
+      version = "0.1.3";
     };
     resources = []; // No static resources for this app
     resourceReader = func(_) { null };
