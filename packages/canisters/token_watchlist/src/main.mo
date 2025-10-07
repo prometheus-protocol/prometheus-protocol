@@ -423,8 +423,8 @@ shared ({ caller = deployer }) persistent actor class WatchlistCanister(
     allowanceUrl = null;
     serverInfo = {
       name = "org.prometheusprotocol.token-watchlist";
-      title = "Token Watchlist Manager";
-      version = "0.1.0";
+      title = "Token Watchlist";
+      version = "0.1.1";
     };
     resources = []; // No static resources for this app
     resourceReader = func(_) { null };
