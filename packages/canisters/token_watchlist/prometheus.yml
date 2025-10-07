@@ -6,7 +6,7 @@ namespace: org.prometheusprotocol.token-watchlist
 submission:
   # --- Core App Information ---
   name: Token Watchlist
-  description: A personal, on-chain watchlist for your tokens. Syncs your favorite tokens between your UI and your AI agents, providing them with essential context.
+  description: A personal, on-chain watchlist for your tokens. Syncs your favorite tokens between the UI and your AI agents, providing them with essential context.
   publisher: Prometheus Protocol
   category: Agent Tools
   deployment_type: global
@@ -14,7 +14,7 @@ submission:
   # --- Technical & Marketing Details ---
   repo_url: https://github.com/prometheus-protocol/prometheus-protocol/tree/main/packages/canisters/token_watchlist
   mcp_path: /mcp
-  why_this_app: An AI agent is only as smart as the context it's given. The Token Watchlist provides that essential context. It creates a direct, on-chain link between a user's actions in a UI and their agent's awareness. By adding a token to your watchlist, you are effectively telling your agent, "Pay attention to this." This is the foundational tool for personalizing and scoping any financial AI agent's behavior.
+  why_this_app: An AI agent is only as smart as the context it's given. The Token Watchlist provides that essential context. It creates a direct, on-chain link between a user's actions in the UI and their agent's awareness. By adding a token to your watchlist, you are effectively telling your agent, "Pay attention to this." This is the foundational tool for personalizing and scoping any financial AI agent's behavior.
   key_features:
     - "Seamless Agent Sync: The first tool that directly connects your UI preferences to your agent's operational context."
     - 'On-Chain & Persistent: Your watchlist is stored securely on the IC, available across all your devices, forever.'
@@ -42,6 +42,6 @@ submission:
 
   # --- BUILD-SPECIFIC - MUST BE FILLED OUT BY CI/CD ---
   # The full commit hash of the version being published.
-  git_commit: ''
+  git_commit: 617cac52ed8cf8ac1f7cd672d6220d9167c244a6
   # The path to the compiled WASM file for this canister.
-  wasm_path: .dfx/local/canisters/token_watchlist/token_watchlist.wasm
+  wasm_path: ../../../.dfx/local/canisters/token_watchlist/token_watchlist.wasm
