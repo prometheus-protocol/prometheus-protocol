@@ -6,32 +6,26 @@ namespace: org.prometheusprotocol.token-watchlist
 submission:
   # --- Core App Information ---
   name: Token Watchlist
-  description: A personal, on-chain watchlist for your tokens. Syncs your favorite tokens between the UI and your AI agents, providing them with essential context.
+  description: Manage your favorite tokens. Your watchlist syncs between the Prometheus app and AI agents automatically.
   publisher: Prometheus Protocol
-  category: Agent Tools
+  category: Finance
   deployment_type: global
 
   # --- Technical & Marketing Details ---
   repo_url: https://github.com/prometheus-protocol/prometheus-protocol/tree/main/packages/canisters/token_watchlist
   mcp_path: /mcp
-  why_this_app: An AI agent is only as smart as the context it's given. The Token Watchlist provides that essential context. It creates a direct, on-chain link between a user's actions in the UI and their agent's awareness. By adding a token to your watchlist, you are effectively telling your agent, "Pay attention to this." This is the foundational tool for personalizing and scoping any financial AI agent's behavior.
+  why_this_app: Keep track of the tokens you care about. Your AI agent can see your watchlist and help you manage them.
   key_features:
-    - "Seamless Agent Sync: The first tool that directly connects your UI preferences to your agent's operational context."
-    - 'On-Chain & Persistent: Your watchlist is stored securely on the IC, available across all your devices, forever.'
-    - 'Dual Interface: Provides both a standard backend API for web apps and a standardized MCP tool for agents.'
-    - 'User-Controlled: You have full, sovereign control over what your agent sees and focuses on.'
+    - 'Add and remove tokens from your personal watchlist'
+    - 'Stored on-chain - access from any device'
+    - 'Syncs with AI agents through MCP'
+    - 'Integrated with Prometheus Protocol'
   tags:
     - watchlist
     - favorites
-    - user-preferences
+    - tokens
     - ai-agent
-    - agent
-    - llm
-    - tool-use
-    - developer-tools
     - utility
-    - on-chain
-    - icp
 
   # --- Visuals (Replace with actual asset URLs) ---
   visuals:

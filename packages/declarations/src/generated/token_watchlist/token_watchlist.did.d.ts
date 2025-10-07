@@ -59,6 +59,14 @@ export type StreamingToken = Uint8Array | number[];
 export type Subaccount = Uint8Array | number[];
 export type Time = bigint;
 export type Timestamp = bigint;
+export interface TokenInfo {
+  'fee' : bigint,
+  'decimals' : number,
+  'lastRefreshed' : bigint,
+  'name' : string,
+  'symbol' : string,
+  'canisterId' : Principal,
+}
 export type TransferError = {
     'GenericError' : { 'message' : string, 'error_code' : bigint }
   } |
@@ -76,9 +84,9 @@ export type UpgradeFinishedResult = { 'Failed' : [bigint, string] } |
   { 'Success' : bigint } |
   { 'InProgress' : bigint };
 export interface WatchlistCanister {
-  'add_to_watchlist' : ActorMethod<[string], Result_2>,
+  'add_to_watchlist' : ActorMethod<[Principal], Result_2>,
   'create_my_api_key' : ActorMethod<[string, Array<string>], string>,
-  'get_my_watchlist' : ActorMethod<[], Array<string>>,
+  'get_my_watchlist' : ActorMethod<[], Array<TokenInfo>>,
   'get_owner' : ActorMethod<[], Principal>,
   'get_treasury_balance' : ActorMethod<[Principal], bigint>,
   'http_request' : ActorMethod<[HttpRequest], HttpResponse>,
@@ -89,7 +97,7 @@ export interface WatchlistCanister {
   'http_request_update' : ActorMethod<[HttpRequest], HttpResponse>,
   'icrc120_upgrade_finished' : ActorMethod<[], UpgradeFinishedResult>,
   'list_my_api_keys' : ActorMethod<[], Array<ApiKeyMetadata>>,
-  'remove_from_watchlist' : ActorMethod<[string], Result_2>,
+  'remove_from_watchlist' : ActorMethod<[Principal], Result_2>,
   'revoke_my_api_key' : ActorMethod<[string], undefined>,
   'set_owner' : ActorMethod<[Principal], Result_1>,
   'transformJwksResponse' : ActorMethod<

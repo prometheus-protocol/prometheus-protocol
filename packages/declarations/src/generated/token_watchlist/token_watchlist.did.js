@@ -1,5 +1,13 @@
 export const idlFactory = ({ IDL }) => {
   const Result_2 = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
+  const TokenInfo = IDL.Record({
+    'fee' : IDL.Nat,
+    'decimals' : IDL.Nat8,
+    'lastRefreshed' : IDL.Nat64,
+    'name' : IDL.Text,
+    'symbol' : IDL.Text,
+    'canisterId' : IDL.Principal,
+  });
   const Header = IDL.Tuple(IDL.Text, IDL.Text);
   const HttpRequest = IDL.Record({
     'url' : IDL.Text,
@@ -81,13 +89,13 @@ export const idlFactory = ({ IDL }) => {
   });
   const Result = IDL.Variant({ 'ok' : IDL.Nat, 'err' : TreasuryError });
   const WatchlistCanister = IDL.Service({
-    'add_to_watchlist' : IDL.Func([IDL.Text], [Result_2], []),
+    'add_to_watchlist' : IDL.Func([IDL.Principal], [Result_2], []),
     'create_my_api_key' : IDL.Func(
         [IDL.Text, IDL.Vec(IDL.Text)],
         [IDL.Text],
         [],
       ),
-    'get_my_watchlist' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
+    'get_my_watchlist' : IDL.Func([], [IDL.Vec(TokenInfo)], ['query']),
     'get_owner' : IDL.Func([], [IDL.Principal], ['query']),
     'get_treasury_balance' : IDL.Func([IDL.Principal], [IDL.Nat], []),
     'http_request' : IDL.Func([HttpRequest], [HttpResponse], ['query']),
@@ -99,7 +107,7 @@ export const idlFactory = ({ IDL }) => {
     'http_request_update' : IDL.Func([HttpRequest], [HttpResponse], []),
     'icrc120_upgrade_finished' : IDL.Func([], [UpgradeFinishedResult], []),
     'list_my_api_keys' : IDL.Func([], [IDL.Vec(ApiKeyMetadata)], ['query']),
-    'remove_from_watchlist' : IDL.Func([IDL.Text], [Result_2], []),
+    'remove_from_watchlist' : IDL.Func([IDL.Principal], [Result_2], []),
     'revoke_my_api_key' : IDL.Func([IDL.Text], [], []),
     'set_owner' : IDL.Func([IDL.Principal], [Result_1], []),
     'transformJwksResponse' : IDL.Func(

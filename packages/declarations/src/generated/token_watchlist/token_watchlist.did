@@ -1,15 +1,17 @@
 type WatchlistCanister = 
  service {
    /// * Adds a token canister ID to the caller's watchlist.
+   ///    * Fetches metadata immediately and stores it in the shared cache.
    ///    * Idempotent: adding a token that already exists will not create duplicates.
-   add_to_watchlist: (token_canister_id: text) -> (Result_2);
+   add_to_watchlist: (token_canister_id: principal) -> (Result_2);
    /// * Creates a new API key. This API key is linked to the caller's principal.
    ///    * @param name A human-readable name for the key.
    ///    * @returns The raw, unhashed API key. THIS IS THE ONLY TIME IT WILL BE VISIBLE.
    create_my_api_key: (name: text, scopes: vec text) -> (text);
    /// * Retrieves the watchlist for the calling user.
    ///    * Returns an empty array if the user has no watchlist yet.
-   get_my_watchlist: () -> (vec text) query;
+   ///    * Returns full TokenInfo records by looking up cached metadata.
+   get_my_watchlist: () -> (vec TokenInfo) query;
    get_owner: () -> (principal) query;
    get_treasury_balance: (ledger_id: principal) -> (nat);
    http_request: (req: HttpRequest) -> (HttpResponse) query;
@@ -21,8 +23,9 @@ type WatchlistCanister =
    ///    * @returns A list of API key metadata (but not the raw keys).
    list_my_api_keys: () -> (vec ApiKeyMetadata) query;
    /// * Removes a token canister ID from the caller's watchlist.
+   ///    * Does NOT remove from the shared cache (other users may still be watching it).
    ///    * Succeeds even if the token is not in the list.
-   remove_from_watchlist: (token_canister_id: text) -> (Result_2);
+   remove_from_watchlist: (token_canister_id: principal) -> (Result_2);
    /// Revoke (delete) an API key owned by the caller.
    ///    * @param key_id The ID of the key to revoke.
    ///    * @returns True if the key was found and revoked, false otherwise.
@@ -64,6 +67,15 @@ type TransferError =
    InsufficientFunds: record {balance: nat;};
    TemporarilyUnavailable;
    TooOld;
+ };
+type TokenInfo = 
+ record {
+   canisterId: principal;
+   decimals: nat8;
+   fee: nat;
+   lastRefreshed: nat64;
+   name: text;
+   symbol: text;
  };
 type Timestamp = nat64;
 type Time = int;

@@ -19,7 +19,13 @@ import { idlFactory as watchlistIdlFactory } from '@declarations/token_watchlist
 import {
   _SERVICE as WatchlistService,
   init as watchlistInit,
+  TokenInfo,
 } from '@declarations/token_watchlist/token_watchlist.did.js';
+import {
+  idlFactory as ledgerIdlFactory,
+  init as ledgerInit,
+  type _SERVICE as LedgerService,
+} from '@declarations/icrc1_ledger/icrc1_ledger.did.js';
 import { IDL } from '@dfinity/candid';
 
 const WATCHLIST_WASM_PATH = path.resolve(
@@ -28,20 +34,141 @@ const WATCHLIST_WASM_PATH = path.resolve(
   '.dfx/local/canisters/token_watchlist/token_watchlist.wasm',
 );
 
+const LEDGER_WASM_PATH = path.resolve(
+  __dirname,
+  '../../../../',
+  '.dfx/local/canisters/icrc1_ledger/icrc1_ledger.wasm.gz',
+);
+
+const daoIdentity = createIdentity('dao-principal');
+
 describe('Token Watchlist Canister', () => {
   let pic: PocketIc;
   let watchlistActor: Actor<WatchlistService>;
   let watchlistCanisterId: Principal;
 
-  // Test token canister IDs
-  const TOKEN_USDC = 'xevnm-gaaaa-aaaar-qafnq-cai';
-  const TOKEN_ICP = 'ryjl3-tyaaa-aaaaa-aaaba-cai';
-  const TOKEN_CKBTC = 'mxzaz-hqaaa-aaaar-qaada-cai';
-  const TOKEN_CKETH = 'ss2fx-dyaaa-aaaar-qacoq-cai';
+  // Real token canister Principals deployed in test environment
+  let TOKEN_USDC: Principal;
+  let TOKEN_ICP: Principal;
+  let TOKEN_CKBTC: Principal;
 
   beforeAll(async () => {
     pic = await PocketIc.create(inject('PIC_URL'));
     await pic.setTime(new Date());
+
+    // Deploy USDC Ledger
+    const usdcFixture = await pic.setupCanister<LedgerService>({
+      idlFactory: ledgerIdlFactory,
+      wasm: LEDGER_WASM_PATH,
+      sender: daoIdentity.getPrincipal(),
+      arg: IDL.encode(ledgerInit({ IDL }), [
+        {
+          Init: {
+            minting_account: {
+              owner: daoIdentity.getPrincipal(),
+              subaccount: [],
+            },
+            initial_balances: [],
+            transfer_fee: 10_000n,
+            token_name: 'USD Coin',
+            token_symbol: 'USDC',
+            metadata: [],
+            archive_options: {
+              num_blocks_to_archive: 1000n,
+              trigger_threshold: 2000n,
+              controller_id: daoIdentity.getPrincipal(),
+              max_message_size_bytes: [],
+              cycles_for_archive_creation: [],
+              node_max_memory_size_bytes: [],
+              more_controller_ids: [],
+              max_transactions_per_response: [],
+            },
+            decimals: [],
+            fee_collector_account: [],
+            max_memo_length: [],
+            index_principal: [],
+            feature_flags: [],
+          },
+        },
+      ]),
+    });
+    TOKEN_USDC = usdcFixture.canisterId;
+
+    // Deploy ICP Ledger
+    const icpFixture = await pic.setupCanister<LedgerService>({
+      idlFactory: ledgerIdlFactory,
+      wasm: LEDGER_WASM_PATH,
+      sender: daoIdentity.getPrincipal(),
+      arg: IDL.encode(ledgerInit({ IDL }), [
+        {
+          Init: {
+            minting_account: {
+              owner: daoIdentity.getPrincipal(),
+              subaccount: [],
+            },
+            initial_balances: [],
+            transfer_fee: 10_000n,
+            token_name: 'Internet Computer',
+            token_symbol: 'ICP',
+            metadata: [],
+            archive_options: {
+              num_blocks_to_archive: 1000n,
+              trigger_threshold: 2000n,
+              controller_id: daoIdentity.getPrincipal(),
+              max_message_size_bytes: [],
+              cycles_for_archive_creation: [],
+              node_max_memory_size_bytes: [],
+              more_controller_ids: [],
+              max_transactions_per_response: [],
+            },
+            decimals: [],
+            fee_collector_account: [],
+            max_memo_length: [],
+            index_principal: [],
+            feature_flags: [],
+          },
+        },
+      ]),
+    });
+    TOKEN_ICP = icpFixture.canisterId;
+
+    // Deploy ckBTC Ledger
+    const ckbtcFixture = await pic.setupCanister<LedgerService>({
+      idlFactory: ledgerIdlFactory,
+      wasm: LEDGER_WASM_PATH,
+      sender: daoIdentity.getPrincipal(),
+      arg: IDL.encode(ledgerInit({ IDL }), [
+        {
+          Init: {
+            minting_account: {
+              owner: daoIdentity.getPrincipal(),
+              subaccount: [],
+            },
+            initial_balances: [],
+            transfer_fee: 10n,
+            token_name: 'Chain Key Bitcoin',
+            token_symbol: 'ckBTC',
+            metadata: [],
+            archive_options: {
+              num_blocks_to_archive: 1000n,
+              trigger_threshold: 2000n,
+              controller_id: daoIdentity.getPrincipal(),
+              max_message_size_bytes: [],
+              cycles_for_archive_creation: [],
+              node_max_memory_size_bytes: [],
+              more_controller_ids: [],
+              max_transactions_per_response: [],
+            },
+            decimals: [],
+            fee_collector_account: [],
+            max_memo_length: [],
+            index_principal: [],
+            feature_flags: [],
+          },
+        },
+      ]),
+    });
+    TOKEN_CKBTC = ckbtcFixture.canisterId;
 
     // Setup the watchlist canister
     const fixture = await pic.setupCanister<WatchlistService>({
@@ -70,58 +197,33 @@ describe('Token Watchlist Canister', () => {
       expect(watchlist).toEqual([]);
     });
 
-    it('should return the correct watchlist for a user with tokens', async () => {
+    it('should return TokenInfo objects with correct metadata', async () => {
       // Arrange
-      const userAlice = createIdentity('alice-tokens-' + Math.random());
+      const userAlice = createIdentity('alice-metadata-' + Math.random());
       watchlistActor.setIdentity(userAlice);
-      await watchlistActor.add_to_watchlist(TOKEN_USDC);
-      await watchlistActor.add_to_watchlist(TOKEN_ICP);
+
+      // Add a real token
+      const addResult = await watchlistActor.add_to_watchlist(TOKEN_USDC);
+      expect(addResult).toHaveProperty('ok');
 
       // Act
       const watchlist = await watchlistActor.get_my_watchlist();
 
       // Assert
-      expect(watchlist).toHaveLength(2);
-      expect(watchlist).toContain(TOKEN_USDC);
-      expect(watchlist).toContain(TOKEN_ICP);
-    });
-
-    it("should only return the calling user's watchlist", async () => {
-      // Arrange: Alice adds tokens to her watchlist
-      const userAlice = createIdentity('alice-isolation-' + Math.random());
-      const userBob = createIdentity('bob-isolation-' + Math.random());
-
-      watchlistActor.setIdentity(userAlice);
-      await watchlistActor.add_to_watchlist(TOKEN_USDC);
-      await watchlistActor.add_to_watchlist(TOKEN_ICP);
-
-      // Arrange: Bob adds different tokens to his watchlist
-      watchlistActor.setIdentity(userBob);
-      await watchlistActor.add_to_watchlist(TOKEN_CKBTC);
-
-      // Act: Get Bob's watchlist
-      const bobWatchlist = await watchlistActor.get_my_watchlist();
-
-      // Act: Get Alice's watchlist
-      watchlistActor.setIdentity(userAlice);
-      const aliceWatchlist = await watchlistActor.get_my_watchlist();
-
-      // Assert: Each user sees only their own tokens
-      expect(bobWatchlist).toHaveLength(1);
-      expect(bobWatchlist).toContain(TOKEN_CKBTC);
-      expect(bobWatchlist).not.toContain(TOKEN_USDC);
-
-      expect(aliceWatchlist).toHaveLength(2);
-      expect(aliceWatchlist).toContain(TOKEN_USDC);
-      expect(aliceWatchlist).toContain(TOKEN_ICP);
-      expect(aliceWatchlist).not.toContain(TOKEN_CKBTC);
+      expect(watchlist).toHaveLength(1);
+      expect(watchlist[0]).toHaveProperty('canisterId', TOKEN_USDC);
+      expect(watchlist[0]).toHaveProperty('symbol', 'USDC');
+      expect(watchlist[0]).toHaveProperty('name', 'USD Coin');
+      expect(watchlist[0]).toHaveProperty('decimals');
+      expect(watchlist[0]).toHaveProperty('fee');
+      expect(watchlist[0]).toHaveProperty('lastRefreshed');
     });
   });
 
   describe('UI Backend API - add_to_watchlist', () => {
-    it('should successfully add a token to an empty watchlist', async () => {
+    it('should successfully add a token and fetch its metadata', async () => {
       // Arrange
-      const userAlice = createIdentity('alice-add-empty-' + Math.random());
+      const userAlice = createIdentity('alice-add-success-' + Math.random());
       watchlistActor.setIdentity(userAlice);
 
       // Act
@@ -131,12 +233,14 @@ describe('Token Watchlist Canister', () => {
       // Assert
       expect(result).toHaveProperty('ok');
       expect(watchlist).toHaveLength(1);
-      expect(watchlist[0]).toBe(TOKEN_USDC);
+      expect(watchlist[0].canisterId).toEqual(TOKEN_USDC);
+      expect(watchlist[0].symbol).toBe('USDC');
+      expect(watchlist[0].name).toBe('USD Coin');
     });
 
     it('should successfully add multiple different tokens', async () => {
       // Arrange
-      const userAlice = createIdentity('alice-add-multiple-' + Math.random());
+      const userAlice = createIdentity('alice-add-multi-' + Math.random());
       watchlistActor.setIdentity(userAlice);
 
       // Act
@@ -147,9 +251,10 @@ describe('Token Watchlist Canister', () => {
 
       // Assert
       expect(watchlist).toHaveLength(3);
-      expect(watchlist).toContain(TOKEN_USDC);
-      expect(watchlist).toContain(TOKEN_ICP);
-      expect(watchlist).toContain(TOKEN_CKBTC);
+      const canisterIds = watchlist.map((t) => t.canisterId);
+      expect(canisterIds).toContainEqual(TOKEN_USDC);
+      expect(canisterIds).toContainEqual(TOKEN_ICP);
+      expect(canisterIds).toContainEqual(TOKEN_CKBTC);
     });
 
     it('should be idempotent - adding the same token twice should not create duplicates', async () => {
@@ -166,7 +271,7 @@ describe('Token Watchlist Canister', () => {
       expect(result1).toHaveProperty('ok');
       expect(result2).toHaveProperty('ok');
       expect(watchlist).toHaveLength(1);
-      expect(watchlist[0]).toBe(TOKEN_USDC);
+      expect(watchlist[0].canisterId).toEqual(TOKEN_USDC);
     });
 
     it('should isolate watchlists between different users', async () => {
@@ -186,9 +291,27 @@ describe('Token Watchlist Canister', () => {
       const aliceCheck = await watchlistActor.get_my_watchlist();
 
       expect(bobWatchlist).toHaveLength(1);
-      expect(bobWatchlist).toContain(TOKEN_ICP);
+      expect(bobWatchlist[0].canisterId).toEqual(TOKEN_ICP);
       expect(aliceCheck).toHaveLength(1);
-      expect(aliceCheck).toContain(TOKEN_USDC);
+      expect(aliceCheck[0].canisterId).toEqual(TOKEN_USDC);
+    });
+
+    it('should return an error when trying to add a non-existent token', async () => {
+      // Arrange
+      const userAlice = createIdentity(
+        'alice-add-nonexistent-' + Math.random(),
+      );
+      watchlistActor.setIdentity(userAlice);
+      const fakeTokenId = Principal.fromText('aaaaa-aa');
+
+      // Act
+      const result = await watchlistActor.add_to_watchlist(fakeTokenId);
+
+      // Assert - should fail because token doesn't exist or doesn't implement ICRC-1
+      expect(result).toHaveProperty('err');
+      if ('err' in result) {
+        expect(result.err).toContain('Failed to fetch token metadata');
+      }
     });
   });
 
@@ -207,8 +330,7 @@ describe('Token Watchlist Canister', () => {
       // Assert
       expect(result).toHaveProperty('ok');
       expect(watchlist).toHaveLength(1);
-      expect(watchlist).toContain(TOKEN_ICP);
-      expect(watchlist).not.toContain(TOKEN_USDC);
+      expect(watchlist[0].canisterId).toEqual(TOKEN_ICP);
     });
 
     it('should succeed when removing a token that does not exist', async () => {
@@ -226,7 +348,7 @@ describe('Token Watchlist Canister', () => {
       // Assert
       expect(result).toHaveProperty('ok');
       expect(watchlist).toHaveLength(1);
-      expect(watchlist).toContain(TOKEN_USDC);
+      expect(watchlist[0].canisterId).toEqual(TOKEN_USDC);
     });
 
     it('should succeed when removing from an empty watchlist', async () => {
@@ -289,8 +411,9 @@ describe('Token Watchlist Canister', () => {
 
       // Assert
       expect(watchlist).toHaveLength(2);
-      expect(watchlist).toContain(TOKEN_USDC);
-      expect(watchlist).toContain(TOKEN_ICP);
+      const canisterIds = watchlist.map((t) => t.canisterId);
+      expect(canisterIds).toContainEqual(TOKEN_USDC);
+      expect(canisterIds).toContainEqual(TOKEN_ICP);
     });
 
     it('should respect authentication and return different watchlists for different users', async () => {
@@ -307,7 +430,6 @@ describe('Token Watchlist Canister', () => {
 
       watchlistActor.setIdentity(userCharlie);
       await watchlistActor.add_to_watchlist(TOKEN_CKBTC);
-      await watchlistActor.add_to_watchlist(TOKEN_CKETH);
 
       // Act: Query each user's watchlist
       const charlieWatchlist = await watchlistActor.get_my_watchlist();
@@ -319,15 +441,14 @@ describe('Token Watchlist Canister', () => {
       const aliceWatchlist = await watchlistActor.get_my_watchlist();
 
       // Assert
-      expect(charlieWatchlist).toHaveLength(2);
-      expect(charlieWatchlist).toContain(TOKEN_CKBTC);
-      expect(charlieWatchlist).toContain(TOKEN_CKETH);
+      expect(charlieWatchlist).toHaveLength(1);
+      expect(charlieWatchlist[0].canisterId).toEqual(TOKEN_CKBTC);
 
       expect(bobWatchlist).toHaveLength(1);
-      expect(bobWatchlist).toContain(TOKEN_ICP);
+      expect(bobWatchlist[0].canisterId).toEqual(TOKEN_ICP);
 
       expect(aliceWatchlist).toHaveLength(1);
-      expect(aliceWatchlist).toContain(TOKEN_USDC);
+      expect(aliceWatchlist[0].canisterId).toEqual(TOKEN_USDC);
     });
   });
 
@@ -342,17 +463,14 @@ describe('Token Watchlist Canister', () => {
       await watchlistActor.add_to_watchlist(TOKEN_ICP);
       await watchlistActor.add_to_watchlist(TOKEN_CKBTC);
       await watchlistActor.remove_from_watchlist(TOKEN_ICP);
-      await watchlistActor.add_to_watchlist(TOKEN_CKETH);
+      await watchlistActor.add_to_watchlist(TOKEN_CKBTC);
       await watchlistActor.remove_from_watchlist(TOKEN_USDC);
 
       const watchlist = await watchlistActor.get_my_watchlist();
 
       // Assert
-      expect(watchlist).toHaveLength(2);
-      expect(watchlist).toContain(TOKEN_CKBTC);
-      expect(watchlist).toContain(TOKEN_CKETH);
-      expect(watchlist).not.toContain(TOKEN_USDC);
-      expect(watchlist).not.toContain(TOKEN_ICP);
+      expect(watchlist).toHaveLength(1);
+      expect(watchlist[0].canisterId).toEqual(TOKEN_CKBTC);
     });
 
     it('should handle concurrent operations from multiple users', async () => {
@@ -375,92 +493,73 @@ describe('Token Watchlist Canister', () => {
       await watchlistActor.add_to_watchlist(TOKEN_CKBTC);
 
       watchlistActor.setIdentity(userAlice);
-      await watchlistActor.add_to_watchlist(TOKEN_CKETH);
+      await watchlistActor.add_to_watchlist(TOKEN_CKBTC);
 
       // Assert: Each user's data is intact
       const aliceWatchlist = await watchlistActor.get_my_watchlist();
       expect(aliceWatchlist).toHaveLength(2);
-      expect(aliceWatchlist).toContain(TOKEN_USDC);
-      expect(aliceWatchlist).toContain(TOKEN_CKETH);
+      const aliceIds = aliceWatchlist.map((t) => t.canisterId);
+      expect(aliceIds).toContainEqual(TOKEN_USDC);
+      expect(aliceIds).toContainEqual(TOKEN_CKBTC);
 
       watchlistActor.setIdentity(userBob);
       const bobWatchlist = await watchlistActor.get_my_watchlist();
       expect(bobWatchlist).toHaveLength(1);
-      expect(bobWatchlist).toContain(TOKEN_ICP);
+      expect(bobWatchlist[0].canisterId).toEqual(TOKEN_ICP);
 
       watchlistActor.setIdentity(userCharlie);
       const charlieWatchlist = await watchlistActor.get_my_watchlist();
       expect(charlieWatchlist).toHaveLength(1);
-      expect(charlieWatchlist).toContain(TOKEN_CKBTC);
+      expect(charlieWatchlist[0].canisterId).toEqual(TOKEN_CKBTC);
     });
   });
 
   describe('Edge Cases and Error Handling', () => {
-    it('should handle empty string token IDs gracefully', async () => {
+    it('should reject empty string token IDs at the API boundary', async () => {
       // Arrange
       const userAlice = createIdentity('alice-edge-empty-' + Math.random());
       watchlistActor.setIdentity(userAlice);
 
-      // Act
-      const result = await watchlistActor.add_to_watchlist('');
-      const watchlist = await watchlistActor.get_my_watchlist();
+      // Act & Assert - should fail because empty string cannot be converted to Principal
+      await expect(async () => {
+        // @ts-expect-error - Testing invalid input
+        await watchlistActor.add_to_watchlist('');
+      }).rejects.toThrow();
 
-      // Assert
-      expect(result).toHaveProperty('ok');
-      expect(watchlist).toHaveLength(1);
-      expect(watchlist[0]).toBe('');
+      const watchlist = await watchlistActor.get_my_watchlist();
+      expect(watchlist).toHaveLength(0);
     });
 
-    it('should handle very long token ID strings', async () => {
+    it('should reject very long token ID strings at the API boundary', async () => {
       // Arrange
       const userAlice = createIdentity('alice-edge-long-' + Math.random());
       watchlistActor.setIdentity(userAlice);
       const longTokenId = 'a'.repeat(1000);
 
-      // Act
-      const result = await watchlistActor.add_to_watchlist(longTokenId);
-      const watchlist = await watchlistActor.get_my_watchlist();
+      // Act & Assert - should fail because it's not a valid Principal format
+      await expect(async () => {
+        // @ts-expect-error - Testing invalid input
+        await watchlistActor.add_to_watchlist(longTokenId);
+      }).rejects.toThrow();
 
-      // Assert
-      expect(result).toHaveProperty('ok');
-      expect(watchlist).toHaveLength(1);
-      expect(watchlist[0]).toBe(longTokenId);
+      const watchlist = await watchlistActor.get_my_watchlist();
+      expect(watchlist).toHaveLength(0);
     });
 
-    it('should handle special characters in token IDs', async () => {
+    it('should reject special characters in token IDs at the API boundary', async () => {
       // Arrange
       const userAlice = createIdentity('alice-edge-special-' + Math.random());
       watchlistActor.setIdentity(userAlice);
       const specialTokenId = 'token-with-special!@#$%^&*()_+-=[]{}|;:,.<>?';
 
-      // Act
-      const result = await watchlistActor.add_to_watchlist(specialTokenId);
+      // Act & Assert - should fail because special chars are not valid in Principal format
+      await expect(async () => {
+        // @ts-expect-error - Testing invalid input
+        await watchlistActor.add_to_watchlist(specialTokenId);
+      }).rejects.toThrow();
+
       const watchlist = await watchlistActor.get_my_watchlist();
-
-      // Assert
-      expect(result).toHaveProperty('ok');
-      expect(watchlist).toHaveLength(1);
-      expect(watchlist[0]).toBe(specialTokenId);
-    });
-
-    it('should handle a large number of tokens in a watchlist', async () => {
-      // Arrange
-      const userAlice = createIdentity('alice-edge-large-' + Math.random());
-      watchlistActor.setIdentity(userAlice);
-      const numTokens = 100;
-      const tokens = Array.from({ length: numTokens }, (_, i) => `token-${i}`);
-
-      // Act: Add all tokens
-      for (const token of tokens) {
-        await watchlistActor.add_to_watchlist(token);
-      }
-      const watchlist = await watchlistActor.get_my_watchlist();
-
-      // Assert
-      expect(watchlist).toHaveLength(numTokens);
-      for (const token of tokens) {
-        expect(watchlist).toContain(token);
-      }
+      expect(watchlist).toHaveLength(0);
     });
   });
 
@@ -494,22 +593,13 @@ describe('Token Watchlist Canister', () => {
       await watchlistActor.remove_from_watchlist(TOKEN_ICP);
       watchlist = await watchlistActor.get_my_watchlist();
       expect(watchlist).toHaveLength(2);
-      expect(watchlist).toContain(TOKEN_USDC);
-      expect(watchlist).toContain(TOKEN_CKBTC);
+      const remainingIds = watchlist.map((t) => t.canisterId);
+      expect(remainingIds).toContainEqual(TOKEN_USDC);
+      expect(remainingIds).toContainEqual(TOKEN_CKBTC);
 
-      // Step 6: User adds a new token
-      await watchlistActor.add_to_watchlist(TOKEN_CKETH);
-      watchlist = await watchlistActor.get_my_watchlist();
-      expect(watchlist).toHaveLength(3);
-
-      // Step 7: AI agent (using same identity) queries the watchlist
-      const agentView = await watchlistActor.get_my_watchlist();
-      expect(agentView).toEqual(watchlist); // Agent sees the same data
-
-      // Step 8: User removes all tokens
+      // Step 6: User removes all tokens
       await watchlistActor.remove_from_watchlist(TOKEN_USDC);
       await watchlistActor.remove_from_watchlist(TOKEN_CKBTC);
-      await watchlistActor.remove_from_watchlist(TOKEN_CKETH);
       watchlist = await watchlistActor.get_my_watchlist();
       expect(watchlist).toEqual([]);
     });

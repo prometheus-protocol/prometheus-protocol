@@ -5,10 +5,13 @@ import Debug "mo:base/Debug";
 import Principal "mo:base/Principal";
 import Option "mo:base/Option";
 import Nat "mo:base/Nat";
+import Nat8 "mo:base/Nat8";
+import Nat64 "mo:base/Nat64";
 import Array "mo:base/Array";
 import Int "mo:base/Int";
 import Time "mo:base/Time";
-import Buffer "mo:base/Buffer";
+import Timer "mo:base/Timer";
+import Error "mo:base/Error";
 
 import HttpTypes "mo:http-types";
 import Map "mo:map/Map";
@@ -37,6 +40,28 @@ shared ({ caller = deployer }) persistent actor class WatchlistCanister(
   }
 ) = self {
 
+  // =================================================================================
+  // --- TYPE DEFINITIONS ---
+  // =================================================================================
+
+  // ICRC-1 Metadata Value Type
+  type Value = { #Nat : Nat; #Int : Int; #Blob : Blob; #Text : Text };
+
+  // Rich token information record
+  public type TokenInfo = {
+    canisterId : Principal;
+    symbol : Text;
+    name : Text;
+    decimals : Nat8;
+    fee : Nat;
+    lastRefreshed : Nat64;
+  };
+
+  // ICRC-1 Token Actor Interface (for inter-canister calls)
+  type ICRC1Actor = actor {
+    icrc1_metadata : shared query () -> async [(Text, Value)];
+  };
+
   // The canister owner, who can manage treasury funds.
   var owner : Principal = Option.get(do ? { args!.owner! }, deployer);
 
@@ -48,10 +73,77 @@ shared ({ caller = deployer }) persistent actor class WatchlistCanister(
   // --- WATCHLIST STATE ---
   // =================================================================================
 
-  // The main state of our application: A map from a user's Principal
-  // to their list of watched token canister IDs.
-  // This MUST be stable to persist across upgrades.
-  var watchlist_data : Map.Map<Principal, [Text]> = Map.new<Principal, [Text]>();
+  // Shared cache of token metadata, indexed by canister ID
+  // This deduplicates metadata - store once, reference many times
+  var token_metadata_cache : Map.Map<Principal, TokenInfo> = Map.new<Principal, TokenInfo>();
+
+  // Per-user watchlists: just store canister IDs, not full metadata
+  // The full TokenInfo is looked up from token_metadata_cache
+  var user_watchlists : Map.Map<Principal, [Principal]> = Map.new<Principal, [Principal]>();
+
+  // =================================================================================
+  // --- HELPER FUNCTIONS ---
+  // =================================================================================
+
+  /**
+   * Fetches ICRC-1 metadata from a token canister and returns a TokenInfo record.
+   * Returns an error if the fetch fails or required fields are missing.
+   */
+  private func fetchTokenMetadata(canisterId : Principal) : async Result.Result<TokenInfo, Text> {
+    try {
+      let tokenActor : ICRC1Actor = actor (Principal.toText(canisterId));
+      let metadata = await tokenActor.icrc1_metadata();
+
+      // Extract required fields from metadata
+      var symbol : ?Text = null;
+      var name : ?Text = null;
+      var decimals : ?Nat8 = null;
+      var fee : ?Nat = null;
+
+      for ((key, value) in metadata.vals()) {
+        if (key == "icrc1:symbol") {
+          switch (value) {
+            case (#Text(v)) { symbol := ?v };
+            case (_) {};
+          };
+        } else if (key == "icrc1:name") {
+          switch (value) {
+            case (#Text(v)) { name := ?v };
+            case (_) {};
+          };
+        } else if (key == "icrc1:decimals") {
+          switch (value) {
+            case (#Nat(v)) { decimals := ?Nat8.fromNat(v) };
+            case (_) {};
+          };
+        } else if (key == "icrc1:fee") {
+          switch (value) {
+            case (#Nat(v)) { fee := ?v };
+            case (_) {};
+          };
+        };
+      };
+
+      // Validate that all required fields were found
+      switch (symbol, name, decimals, fee) {
+        case (?s, ?n, ?d, ?f) {
+          return #ok({
+            canisterId = canisterId;
+            symbol = s;
+            name = n;
+            decimals = d;
+            fee = f;
+            lastRefreshed = Nat64.fromNat(Int.abs(Time.now()));
+          });
+        };
+        case (_) {
+          return #err("Token metadata is missing required fields (symbol, name, decimals, or fee)");
+        };
+      };
+    } catch (error) {
+      return #err("Failed to fetch token metadata: " # Error.message(error));
+    };
+  };
 
   // =================================================================================
   // --- UI BACKEND API ---
@@ -61,50 +153,138 @@ shared ({ caller = deployer }) persistent actor class WatchlistCanister(
   /**
    * Retrieves the watchlist for the calling user.
    * Returns an empty array if the user has no watchlist yet.
+   * Returns full TokenInfo records by looking up cached metadata.
    */
-  public query ({ caller }) func get_my_watchlist() : async [Text] {
-    switch (Map.get(watchlist_data, Map.phash, caller)) {
-      case (?list) { return list };
+  public query ({ caller }) func get_my_watchlist() : async [TokenInfo] {
+    let canisterIds = switch (Map.get(user_watchlists, Map.phash, caller)) {
+      case (?list) { list };
       case (null) { return [] };
     };
+
+    // Look up metadata for each canister ID
+    let tokenInfos = Array.mapFilter<Principal, TokenInfo>(
+      canisterIds,
+      func(canisterId : Principal) : ?TokenInfo {
+        Map.get(token_metadata_cache, Map.phash, canisterId);
+      },
+    );
+
+    return tokenInfos;
   };
 
   /**
    * Adds a token canister ID to the caller's watchlist.
+   * Fetches metadata immediately and stores it in the shared cache.
    * Idempotent: adding a token that already exists will not create duplicates.
    */
-  public shared ({ caller }) func add_to_watchlist(token_canister_id : Text) : async Result.Result<(), Text> {
-    let current_list = switch (Map.get(watchlist_data, Map.phash, caller)) {
+  public shared ({ caller }) func add_to_watchlist(token_canister_id : Principal) : async Result.Result<(), Text> {
+    let current_list = switch (Map.get(user_watchlists, Map.phash, caller)) {
       case (?list) { list };
       case (null) { [] };
     };
 
-    // Check if the token already exists in the list
-    let token_exists = Array.find<Text>(current_list, func(id) { id == token_canister_id });
+    // Check if the token already exists in the user's list
+    let token_exists = Array.find<Principal>(current_list, func(id) { id == token_canister_id });
 
-    let new_list = switch (token_exists) {
-      case (?_) { current_list }; // Already exists, no change
-      case (null) { Array.append(current_list, [token_canister_id]) };
+    switch (token_exists) {
+      case (?_) {
+        // Already exists, no change
+        return #ok(());
+      };
+      case (null) {
+        // Check if metadata is already cached
+        let cached_metadata = Map.get(token_metadata_cache, Map.phash, token_canister_id);
+
+        switch (cached_metadata) {
+          case (?_) {
+            // Metadata already in cache, just add to user's list
+            let new_list = Array.append(current_list, [token_canister_id]);
+            Map.set(user_watchlists, Map.phash, caller, new_list);
+            return #ok(());
+          };
+          case (null) {
+            // Fetch metadata and add to cache
+            let metadataResult = await fetchTokenMetadata(token_canister_id);
+
+            switch (metadataResult) {
+              case (#ok(tokenInfo)) {
+                // Store in cache
+                Map.set(token_metadata_cache, Map.phash, token_canister_id, tokenInfo);
+                // Add to user's list
+                let new_list = Array.append(current_list, [token_canister_id]);
+                Map.set(user_watchlists, Map.phash, caller, new_list);
+                return #ok(());
+              };
+              case (#err(errorMsg)) {
+                // Return the error without modifying anything
+                return #err(errorMsg);
+              };
+            };
+          };
+        };
+      };
     };
-
-    Map.set(watchlist_data, Map.phash, caller, new_list);
-    return #ok(());
   };
 
   /**
    * Removes a token canister ID from the caller's watchlist.
+   * Does NOT remove from the shared cache (other users may still be watching it).
    * Succeeds even if the token is not in the list.
    */
-  public shared ({ caller }) func remove_from_watchlist(token_canister_id : Text) : async Result.Result<(), Text> {
-    let current_list = switch (Map.get(watchlist_data, Map.phash, caller)) {
+  public shared ({ caller }) func remove_from_watchlist(token_canister_id : Principal) : async Result.Result<(), Text> {
+    let current_list = switch (Map.get(user_watchlists, Map.phash, caller)) {
       case (?list) { list };
       case (null) { return #ok(()) }; // No list, nothing to remove
     };
 
-    let new_list = Array.filter<Text>(current_list, func(id) { id != token_canister_id });
+    let new_list = Array.filter<Principal>(current_list, func(id) { id != token_canister_id });
 
-    Map.set(watchlist_data, Map.phash, caller, new_list);
+    Map.set(user_watchlists, Map.phash, caller, new_list);
     return #ok(());
+  };
+
+  // =================================================================================
+  // --- METADATA REFRESH MECHANISM ---
+  // =================================================================================
+
+  /**
+   * Refreshes all token metadata in the shared cache.
+   * This runs periodically via a timer to keep cached data fresh.
+   * Only refreshes tokens that are currently being watched by at least one user.
+   */
+  private func refreshAllMetadata() : async () {
+    Debug.print("Starting metadata refresh cycle...");
+
+    // Collect all unique token canister IDs from all users' watchlists
+    let uniqueTokenIds = Map.new<Principal, Bool>();
+
+    for ((principal, tokenIdList) in Map.entries(user_watchlists)) {
+      for (tokenId in tokenIdList.vals()) {
+        Map.set(uniqueTokenIds, Map.phash, tokenId, true);
+      };
+    };
+
+    let uniqueCount = Map.size(uniqueTokenIds);
+    Debug.print("Found " # Nat.toText(uniqueCount) # " unique tokens to refresh");
+
+    // Fetch fresh metadata for all unique tokens and update the cache
+    for ((canisterId, _) in Map.entries(uniqueTokenIds)) {
+      try {
+        let result = await fetchTokenMetadata(canisterId);
+        switch (result) {
+          case (#ok(tokenInfo)) {
+            Map.set(token_metadata_cache, Map.phash, canisterId, tokenInfo);
+          };
+          case (#err(errorMsg)) {
+            Debug.print("Failed to refresh metadata for " # Principal.toText(canisterId) # ": " # errorMsg);
+          };
+        };
+      } catch (error) {
+        Debug.print("Error refreshing " # Principal.toText(canisterId) # ": " # Error.message(error));
+      };
+    };
+
+    Debug.print("Metadata refresh cycle complete");
   };
 
   // The application context that holds our state for streams.
@@ -122,6 +302,7 @@ shared ({ caller = deployer }) persistent actor class WatchlistCanister(
     context : Blob;
     response : IC.HttpRequestResult;
   }) : async IC.HttpRequestResult {
+    ignore context; // Required by interface but unused
     { response with headers = [] };
   };
 
@@ -160,19 +341,28 @@ shared ({ caller = deployer }) persistent actor class WatchlistCanister(
     case (null) { Debug.print("Beacon is disabled.") };
   };
 
+  // Metadata refresh timer - runs every 24 hours
+  let REFRESH_INTERVAL_SECONDS = 24 * 60 * 60; // 24 hours
+  ignore Timer.recurringTimer<system>(
+    #seconds(REFRESH_INTERVAL_SECONDS),
+    func() : async () {
+      await refreshAllMetadata();
+    },
+  );
+
   // --- 1. DEFINE YOUR TOOLS ---
   transient let tools : [McpTypes.Tool] = [
     {
       name = "get_my_watchlist";
       title = ?"Get My Watchlist";
-      description = ?"Returns the list of token canister IDs that the authenticated user is currently tracking. The agent should use this list to scope its observations and actions.";
+      description = ?"Returns the list of tokens with full metadata that the authenticated user is currently tracking. The agent should use this list to scope its observations and actions.";
       inputSchema = Json.obj([
         ("type", Json.str("object")),
         ("properties", Json.obj([])),
       ]);
       outputSchema = ?Json.obj([
         ("type", Json.str("object")),
-        ("properties", Json.obj([("watchlist", Json.obj([("type", Json.str("array")), ("items", Json.obj([("type", Json.str("string")), ("description", Json.str("An ICRC token canister ID."))]))]))])),
+        ("properties", Json.obj([("watchlist", Json.obj([("type", Json.str("array")), ("items", Json.obj([("type", Json.str("object")), ("properties", Json.obj([("canisterId", Json.obj([("type", Json.str("string"))])), ("symbol", Json.obj([("type", Json.str("string"))])), ("name", Json.obj([("type", Json.str("string"))])), ("decimals", Json.obj([("type", Json.str("number"))])), ("lastRefreshed", Json.obj([("type", Json.str("string")), ("description", Json.str("Nanosecond timestamp"))]))])), ("required", Json.arr([Json.str("canisterId"), Json.str("symbol"), Json.str("name"), Json.str("decimals"), Json.str("lastRefreshed")]))]))]))])),
         ("required", Json.arr([Json.str("watchlist")])),
       ]);
       payment = null;
@@ -194,15 +384,32 @@ shared ({ caller = deployer }) persistent actor class WatchlistCanister(
       };
     };
 
-    let watchlist = switch (Map.get(watchlist_data, Map.phash, caller)) {
+    let canisterIds = switch (Map.get(user_watchlists, Map.phash, caller)) {
       case (?list) { list };
       case (null) { [] };
     };
 
-    // Convert the watchlist to JSON array
-    let watchlist_json = Array.map<Text, McpTypes.JsonValue>(
-      watchlist,
-      func(token_id) { Json.str(token_id) },
+    // Look up metadata for each canister ID
+    let tokenInfos = Array.mapFilter<Principal, TokenInfo>(
+      canisterIds,
+      func(canisterId : Principal) : ?TokenInfo {
+        Map.get(token_metadata_cache, Map.phash, canisterId);
+      },
+    );
+
+    // Convert the watchlist to JSON array of TokenInfo objects
+    let watchlist_json = Array.map<TokenInfo, McpTypes.JsonValue>(
+      tokenInfos,
+      func(tokenInfo : TokenInfo) : McpTypes.JsonValue {
+        Json.obj([
+          ("canisterId", Json.str(Principal.toText(tokenInfo.canisterId))),
+          ("symbol", Json.str(tokenInfo.symbol)),
+          ("name", Json.str(tokenInfo.name)),
+          ("decimals", Json.int(Nat8.toNat(tokenInfo.decimals))),
+          ("fee", Json.str(Nat.toText(tokenInfo.fee))),
+          ("lastRefreshed", Json.str(Nat64.toText(tokenInfo.lastRefreshed))),
+        ]);
+      },
     );
 
     let structuredPayload = Json.obj([("watchlist", Json.arr(watchlist_json))]);

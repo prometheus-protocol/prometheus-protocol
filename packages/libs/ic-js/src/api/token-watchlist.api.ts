@@ -1,15 +1,19 @@
 import { Identity } from '@dfinity/agent';
 import { getTokenWatchlistActor } from '../actors.js';
 import { TokenWatchlist } from '@prometheus-protocol/declarations';
+import { Principal } from '@dfinity/principal';
 
 export type { TokenWatchlist };
+export type WatchlistTokenInfo = TokenWatchlist.TokenInfo;
 
 /**
  * Fetches the watchlist for the authenticated user.
  * @param identity The user's identity.
- * @returns An array of token canister IDs.
+ * @returns An array of WatchlistTokenInfo objects containing token metadata.
  */
-export const getMyWatchlist = async (identity: Identity): Promise<string[]> => {
+export const getMyWatchlist = async (
+  identity: Identity,
+): Promise<WatchlistTokenInfo[]> => {
   const actor = getTokenWatchlistActor(identity);
   const result = await actor.get_my_watchlist();
   return result;
@@ -23,7 +27,7 @@ export const getMyWatchlist = async (identity: Identity): Promise<string[]> => {
  */
 export const addToWatchlist = async (
   identity: Identity,
-  tokenCanisterId: string,
+  tokenCanisterId: Principal,
 ): Promise<void> => {
   const actor = getTokenWatchlistActor(identity);
   const result = await actor.add_to_watchlist(tokenCanisterId);
@@ -41,7 +45,7 @@ export const addToWatchlist = async (
  */
 export const removeFromWatchlist = async (
   identity: Identity,
-  tokenCanisterId: string,
+  tokenCanisterId: Principal,
 ): Promise<void> => {
   const actor = getTokenWatchlistActor(identity);
   const result = await actor.remove_from_watchlist(tokenCanisterId);
