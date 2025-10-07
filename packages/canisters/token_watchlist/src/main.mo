@@ -34,6 +34,47 @@ import SrvTypes "mo:mcp-motoko-sdk/server/Types";
 
 import IC "mo:ic";
 
+(
+  with migration =
+  // Migrate from old state structure (Text-based canister IDs, no metadata cache)
+  // to new state structure (Principal-based IDs, deduplicated metadata cache)
+  func(
+    old : {
+      var watchlist_data : Map.Map<Principal, [Text]>;
+    }
+  ) : {
+    var token_metadata_cache : Map.Map<Principal, { canisterId : Principal; symbol : Text; name : Text; decimals : Nat8; fee : Nat; lastRefreshed : Nat64 }>;
+    var user_watchlists : Map.Map<Principal, [Principal]>;
+  } {
+    // Initialize the new state structures
+    let new_cache = Map.new<Principal, { canisterId : Principal; symbol : Text; name : Text; decimals : Nat8; fee : Nat; lastRefreshed : Nat64 }>();
+    let new_watchlists = Map.new<Principal, [Principal]>();
+
+    // Migrate each user's watchlist
+    for ((user_principal, old_token_ids) in Map.entries(old.watchlist_data)) {
+      // Convert Text canister IDs to Principal
+      let new_token_ids = Array.mapFilter<Text, Principal>(
+        old_token_ids,
+        func(textId : Text) : ?Principal {
+          ?Principal.fromText(textId);
+        },
+      );
+
+      // Store the converted list
+      Map.set(new_watchlists, Map.phash, user_principal, new_token_ids);
+    };
+
+    // Note: The metadata cache starts empty. It will be populated on first access
+    // or by the periodic refresh timer.
+    Debug.print("Migration complete. Migrated " # Nat.toText(Map.size(new_watchlists)) # " user watchlists.");
+
+    {
+      var token_metadata_cache = new_cache;
+      var user_watchlists = new_watchlists;
+    };
+  };
+)
+
 shared ({ caller = deployer }) persistent actor class WatchlistCanister(
   args : ?{
     owner : ?Principal;
@@ -424,7 +465,7 @@ shared ({ caller = deployer }) persistent actor class WatchlistCanister(
     serverInfo = {
       name = "org.prometheusprotocol.token-watchlist";
       title = "Token Watchlist";
-      version = "0.1.1";
+      version = "0.1.2";
     };
     resources = []; // No static resources for this app
     resourceReader = func(_) { null };

@@ -36,6 +36,6 @@ submission:
 
   # --- BUILD-SPECIFIC - MUST BE FILLED OUT BY CI/CD ---
   # The full commit hash of the version being published.
-  git_commit: 617cac52ed8cf8ac1f7cd672d6220d9167c244a6
+  git_commit: 8a545323c731fc210f28b8b331af576a180527f5
   # The path to the compiled WASM file for this canister.
   wasm_path: ../../../.dfx/local/canisters/token_watchlist/token_watchlist.wasm

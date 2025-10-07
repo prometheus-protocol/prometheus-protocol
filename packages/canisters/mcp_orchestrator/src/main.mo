@@ -81,11 +81,30 @@ shared (deployer) actor class ICRC120Canister<system>(
 
   private func reportTTExecution(execInfo : TT.ExecutionReport) : Bool {
     D.print("CANISTER: TimerTool Execution: " # debug_show (execInfo));
+
+    // Handle recurring cycle top-up job
+    if (execInfo.action.actionType == CYCLE_JOB_ACTION_TYPE) {
+      D.print("Cycle top-up job completed successfully. Rescheduling...");
+      _cycle_job_action_id := null; // Clear the old action ID
+      _schedule_cycle_top_up_job<system>(tt()); // Schedule the next run
+    };
+
     return false;
   };
 
   private func reportTTError(errInfo : TT.ErrorReport) : ?Nat {
     D.print("CANISTER: TimerTool Error: " # debug_show (errInfo));
+
+    // Handle recurring cycle top-up job errors - reschedule anyway
+    if (errInfo.action.actionType == CYCLE_JOB_ACTION_TYPE) {
+      D.print("Cycle top-up job failed. Rescheduling anyway...");
+      _cycle_job_action_id := null; // Clear the old action ID
+
+      // Reschedule for the next interval
+      let next_time = Time.now() + Int.abs(_cycle_check_interval_seconds * 1_000_000_000);
+      return ?Int.abs(next_time);
+    };
+
     return null;
   };
 
@@ -180,8 +199,7 @@ shared (deployer) actor class ICRC120Canister<system>(
 
         func _handle_cycle_top_up_action(actionId : TT.ActionId, action : TT.Action) : async* Star.Star<TT.ActionId, TT.Error> {
           await _check_and_top_up_cycles();
-          // Schedule the next run
-          _schedule_cycle_top_up_job<system>(newClass);
+          // Rescheduling happens in reportExecution/reportError callbacks
           return #trappable(actionId);
         };
 

@@ -80,6 +80,7 @@
         "output": "packages/declarations/src/generated/token_watchlist",
         "node_compatibility": true
       },
+      "args": "--enhanced-orthogonal-persistence",
       "remote": {
         "id": {
           "ic": "ljntu-eaaaa-aaaai-q34bq-cai"
