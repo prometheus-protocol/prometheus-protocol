@@ -22,6 +22,10 @@ export const idlFactory = ({ IDL }) => {
     'expectedExecutionTime' : Time,
     'lastExecutionTime' : Time,
   });
+  const CanisterDeploymentType = IDL.Variant({
+    'provisioned' : IDL.Null,
+    'global' : IDL.Null,
+  });
   const canister_install_mode = IDL.Variant({
     'reinstall' : IDL.Null,
     'upgrade' : IDL.Opt(
@@ -68,10 +72,6 @@ export const idlFactory = ({ IDL }) => {
       'Class' : IDL.Vec(ICRC16Property__1),
     })
   );
-  const CanisterDeploymentType = IDL.Variant({
-    'provisioned' : IDL.Null,
-    'global' : IDL.Null,
-  });
   const DeployOrUpgradeRequest = IDL.Record({
     'snapshot' : IDL.Bool,
     'args' : IDL.Vec(IDL.Nat8),
@@ -340,6 +340,22 @@ export const idlFactory = ({ IDL }) => {
   const Result_1 = IDL.Variant({ 'ok' : ResourceServer, 'err' : IDL.Text });
   const Result = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   const ICRC120Canister = IDL.Service({
+    'debug_canister_info' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Record({
+            'canister_deployment_types' : IDL.Vec(
+              IDL.Tuple(IDL.Text, CanisterDeploymentType)
+            ),
+            'canisters' : IDL.Vec(IDL.Principal),
+            'canister_owners' : IDL.Vec(
+              IDL.Tuple(IDL.Principal, IDL.Principal)
+            ),
+            'caller_principal' : IDL.Principal,
+          }),
+        ],
+        ['query'],
+      ),
     'deploy_or_upgrade' : IDL.Func([DeployOrUpgradeRequest], [Result_2], []),
     'get_auth_server_id' : IDL.Func([], [IDL.Opt(IDL.Principal)], ['query']),
     'get_canister_id' : IDL.Func(
@@ -427,7 +443,17 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'set_auth_server_id' : IDL.Func([IDL.Principal], [Result], []),
+    'set_canister_owner' : IDL.Func(
+        [IDL.Principal, IDL.Principal],
+        [Result],
+        [],
+      ),
     'set_cycle_top_up_config' : IDL.Func([CycleTopUpConfig], [Result], []),
+    'set_deployment_type' : IDL.Func(
+        [IDL.Text, IDL.Text, CanisterDeploymentType],
+        [Result],
+        [],
+      ),
     'set_mcp_registry_id' : IDL.Func([IDL.Principal], [Result], []),
   });
   return ICRC120Canister;

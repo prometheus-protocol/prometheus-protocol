@@ -299,6 +299,20 @@ type ICRC16 =
  };
 type ICRC120Canister = 
  service {
+   /// * Debug function to help troubleshoot canister tracking issues
+   debug_canister_info: (namespace: text) ->
+    (record {
+       caller_principal: principal;
+       canister_deployment_types: vec record {
+                                        text;
+                                        CanisterDeploymentType;
+                                      };
+       canister_owners: vec record {
+                              principal;
+                              principal;
+                            };
+       canisters: vec principal;
+     }) query;
    /// * The primary entry point for the owner to debug/fix bad installs.
    deploy_or_upgrade: (request: DeployOrUpgradeRequest) -> (Result_2);
    /// * [PUBLIC] Get the current auth server configuration.
@@ -344,10 +358,14 @@ type ICRC120Canister =
    register_oauth_resource: (canister_id: principal, args:
     RegisterResourceServerArgs) -> (Result_1);
    set_auth_server_id: (authServerId: principal) -> (Result);
+   set_canister_owner: (canister_id: principal, new_owner: principal) ->
+    (Result);
    /// * Sets the configuration for the automated cycle top-up feature.
    ///    * This function is restricted to the owner of the orchestrator canister.
    ///    * It will reschedule or remove the timer job based on the new settings.
    set_cycle_top_up_config: (config: CycleTopUpConfig) -> (Result);
+   set_deployment_type: (namespace: text, wasm_id: text, deployment_type:
+    CanisterDeploymentType) -> (Result);
    set_mcp_registry_id: (registryId: principal) -> (Result);
  };
 type GetTransactionsResult = 

@@ -95,6 +95,15 @@ export interface GetTransactionsResult {
   'archived_blocks' : Array<ArchivedTransactionResponse>,
 }
 export interface ICRC120Canister {
+  'debug_canister_info' : ActorMethod<
+    [string],
+    {
+      'canister_deployment_types' : Array<[string, CanisterDeploymentType]>,
+      'canisters' : Array<Principal>,
+      'canister_owners' : Array<[Principal, Principal]>,
+      'caller_principal' : Principal,
+    }
+  >,
   'deploy_or_upgrade' : ActorMethod<[DeployOrUpgradeRequest], Result_2>,
   'get_auth_server_id' : ActorMethod<[], [] | [Principal]>,
   'get_canister_id' : ActorMethod<[string, string], [] | [Principal]>,
@@ -156,7 +165,12 @@ export interface ICRC120Canister {
     Result_1
   >,
   'set_auth_server_id' : ActorMethod<[Principal], Result>,
+  'set_canister_owner' : ActorMethod<[Principal, Principal], Result>,
   'set_cycle_top_up_config' : ActorMethod<[CycleTopUpConfig], Result>,
+  'set_deployment_type' : ActorMethod<
+    [string, string, CanisterDeploymentType],
+    Result
+  >,
   'set_mcp_registry_id' : ActorMethod<[Principal], Result>,
 }
 export type ICRC16 = { 'Int' : bigint } |

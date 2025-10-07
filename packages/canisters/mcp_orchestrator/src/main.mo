@@ -81,12 +81,11 @@ shared (deployer) actor class ICRC120Canister<system>(
 
   private func reportTTExecution(execInfo : TT.ExecutionReport) : Bool {
     D.print("CANISTER: TimerTool Execution: " # debug_show (execInfo));
-
-    // Handle recurring cycle top-up job
-    if (execInfo.action.actionType == CYCLE_JOB_ACTION_TYPE) {
-      D.print("Cycle top-up job completed successfully. Rescheduling...");
+    // Just log execution, don't reschedule here (can't use system capability)
+    let (actionId, action) = execInfo.action;
+    if (action.actionType == CYCLE_JOB_ACTION_TYPE) {
+      D.print("Cycle top-up job completed successfully.");
       _cycle_job_action_id := null; // Clear the old action ID
-      _schedule_cycle_top_up_job<system>(tt()); // Schedule the next run
     };
 
     return false;
@@ -96,7 +95,8 @@ shared (deployer) actor class ICRC120Canister<system>(
     D.print("CANISTER: TimerTool Error: " # debug_show (errInfo));
 
     // Handle recurring cycle top-up job errors - reschedule anyway
-    if (errInfo.action.actionType == CYCLE_JOB_ACTION_TYPE) {
+    let (actionId, action) = errInfo.action;
+    if (action.actionType == CYCLE_JOB_ACTION_TYPE) {
       D.print("Cycle top-up job failed. Rescheduling anyway...");
       _cycle_job_action_id := null; // Clear the old action ID
 
@@ -199,7 +199,11 @@ shared (deployer) actor class ICRC120Canister<system>(
 
         func _handle_cycle_top_up_action(actionId : TT.ActionId, action : TT.Action) : async* Star.Star<TT.ActionId, TT.Error> {
           await _check_and_top_up_cycles();
-          // Rescheduling happens in reportExecution/reportError callbacks
+
+          // Schedule the next run after successful completion
+          _cycle_job_action_id := null; // Clear the old action ID
+          _schedule_cycle_top_up_job<system>(newClass);
+
           return #trappable(actionId);
         };
 
@@ -616,7 +620,14 @@ shared (deployer) actor class ICRC120Canister<system>(
         );
 
         switch (existing_canister) {
-          case (?exists) { exists };
+          case (?exists) {
+            // --- UPGRADE PATH for existing canister ---
+            // Update the deployment type for this WASM hash
+            let wasm_id = Base16.encode(request.hash);
+            Map.set(canister_deployment_types, Map.thash, wasm_id, request.deployment_type);
+            Debug.print("Updating deployment type for existing canister " # Principal.toText(exists) # " to " # debug_show (request.deployment_type));
+            exists;
+          };
           case (null) {
             // --- DEPLOY PATH ---
             Debug.print("No canister found for namespace " # request.namespace # ". Provisioning a new one...");
