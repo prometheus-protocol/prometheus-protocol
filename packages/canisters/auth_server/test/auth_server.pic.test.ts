@@ -723,8 +723,8 @@ describe('Auth Server Canister (Isolated Tests)', () => {
       // The new tokens should be different from the original
       expect(firstTokenData.refresh_token).not.toEqual(firstRefreshToken);
 
-      // Act: Now try to use the original token after the grace period (11 seconds)
-      await pic.advanceTime(11 * 1000);
+      // Act: Now try to use the original token after the grace period (2 seconds - more than 1 second threshold)
+      await pic.advanceTime(2 * 1000);
       await pic.tick(); // Process any pending operations
 
       console.log(

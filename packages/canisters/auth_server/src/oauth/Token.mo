@@ -140,9 +140,10 @@ module {
 
           switch (existing_pending) {
             case (?pending) {
-              // Clean up stale pending operations (older than 10 seconds)
+              // Clean up stale pending operations (older than 1 second)
+              // This is a very short grace period to catch concurrent requests only, not sequential ones
               let current_time = Time.now();
-              let stale_threshold = current_time - (10 * 1_000_000_000);
+              let stale_threshold = current_time - (1 * 1_000_000_000);
               let age_nanoseconds = current_time - pending.created_at;
               let age_seconds = age_nanoseconds / 1_000_000_000;
               Debug.print("TOKEN (refresh): Found pending operation, age: " # debug_show (age_seconds) # " seconds (current: " # debug_show (current_time) # ", created: " # debug_show (pending.created_at) # ")");
@@ -248,8 +249,9 @@ module {
         Map.set(context.pending_refresh_operations, thash, old_refresh_token.token, final_pending_refresh);
         Debug.print("TOKEN (refresh): Updated pending operation with final tokens");
 
-        // Clean up the pending operation after a grace period
-        // Note: Stale operations are cleaned up by the check at the beginning of this function
+        // Note: The pending operation will be automatically cleaned up by the stale threshold check
+        // in subsequent requests (after 1 second), which is enough time for concurrent requests
+        // to find the cached tokens, but short enough that sequential requests will fail as expected.
 
         return issue_token_response(res, access_token, old_refresh_token.scope, ?new_refresh_token_string);
       };
@@ -263,10 +265,10 @@ module {
   /**
    * Cleanup stale pending refresh operations.
    * This should be called periodically or opportunistically to prevent memory leaks.
-   * Operations older than 10 seconds are considered stale.
+   * Operations older than 1 second are considered stale.
    */
   public func cleanup_stale_pending_refreshes(context : Types.Context) {
-    let stale_threshold = Time.now() - (10 * 1_000_000_000); // 10 seconds
+    let stale_threshold = Time.now() - (1 * 1_000_000_000); // 1 second
     let entries = Map.entries(context.pending_refresh_operations);
     var cleaned_count = 0;
 
