@@ -29,6 +29,7 @@ await suite(
       refresh_tokens = Map.new();
       resource_servers = Map.new();
       user_grants = Map.new<Principal, Types.UserGrants>(); // Initialize user_grants
+      pending_refresh_operations = Map.new<Text, Types.PendingRefresh>(); // Initialize pending_refresh_operations
     };
 
     // Helper to create a mock request with a specific host header.

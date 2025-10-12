@@ -47,6 +47,7 @@ func createMockContext() : Types.Context {
     uri_to_rs_id = Map.new<Text, Text>(); // Initialized
     refresh_tokens = Map.new<Text, Types.RefreshToken>(); // Initialized
     user_grants = Map.new<Principal, Types.UserGrants>(); // Initialized
+    pending_refresh_operations = Map.new<Text, Types.PendingRefresh>(); // Initialized
   };
 };
 
