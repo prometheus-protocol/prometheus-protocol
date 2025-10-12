@@ -43,6 +43,11 @@ import {
   useProvisionInstance,
 } from '@/hooks/useOrchestrator';
 import { useGetAppMetrics } from '@/hooks/useUsageTracker';
+import { useAggregatedAppMetrics } from '@/hooks/useAggregatedAppMetrics';
+import { useNamespaceMetrics } from '@/hooks/useNamespaceMetrics';
+import { getServerCanisterId } from '@prometheus-protocol/ic-js';
+import { useQueries } from '@tanstack/react-query';
+import { Principal } from '@dfinity/principal';
 
 // --- NEW High-Fidelity Skeleton Component ---
 const ServerDetailsSkeleton = () => (
@@ -125,6 +130,8 @@ export default function ServerDetailsPage() {
     'closed' | 'install' | 'confirm'
   >('closed');
   const [isPollingForCanister, setIsPollingForCanister] = useState(false);
+  const { identity } = useInternetIdentity();
+  const queryClient = useQueryClient();
 
   // --- 3. CALL THE NEW, CORRECT HOOK ---
   const {
@@ -138,9 +145,58 @@ export default function ServerDetailsPage() {
     isLoading: isLoadingCanisterId,
     refetch: refetchCanisterId,
   } = useGetCanisterId(server?.namespace, server?.latestVersion.wasmId);
-  const { data: appMetrics } = useGetAppMetrics(canisterId);
-  const { identity } = useInternetIdentity();
-  const queryClient = useQueryClient();
+
+  // Fetch canister IDs for all WASM versions to aggregate metrics
+  const allVersionCanisterQueries = useQueries({
+    queries: (server?.allVersions ?? []).map((version) => ({
+      queryKey: ['serverCanisterId', server?.namespace, version.wasmId],
+      queryFn: async (): Promise<Principal | null> => {
+        if (!server?.namespace || !version.wasmId || !identity) {
+          return null;
+        }
+        try {
+          const id = await getServerCanisterId(
+            identity,
+            server.namespace,
+            version.wasmId,
+          );
+          return id ?? null;
+        } catch {
+          return null;
+        }
+      },
+      enabled: !!server?.namespace && !!version.wasmId && !!identity,
+    })),
+  });
+
+  // Extract all valid canister IDs
+  const allCanisterIds = useMemo(() => {
+    return allVersionCanisterQueries
+      .map((q) => q.data)
+      .filter((id): id is Principal => id !== null);
+  }, [allVersionCanisterQueries]);
+
+  // Use aggregated metrics across all versions
+  const { data: aggregatedMetrics, isLoading: isLoadingMetrics } =
+    useAggregatedAppMetrics(
+      allCanisterIds.length > 0 ? allCanisterIds : undefined,
+    );
+
+  // Try to get namespace-level metrics (new backend feature)
+  const { data: namespaceMetrics } = useNamespaceMetrics(server?.namespace);
+
+  // Use namespace metrics if available, otherwise fall back to aggregated canister metrics
+  const displayMetrics = useMemo(() => {
+    if (namespaceMetrics) {
+      return {
+        authenticated_unique_users: namespaceMetrics.authenticated_unique_users,
+        anonymous_invocations: namespaceMetrics.anonymous_invocations,
+        total_tools: namespaceMetrics.total_tools,
+        total_invocations: namespaceMetrics.total_invocations,
+      };
+    }
+    return aggregatedMetrics;
+  }, [namespaceMetrics, aggregatedMetrics]);
 
   // --- 4. PROVISION HOOK ---
   const provisionMutation = useProvisionInstance(server?.namespace);
@@ -502,14 +558,14 @@ export default function ServerDetailsPage() {
               </div>
 
               {/* Stats Strip */}
-              {appMetrics && (
+              {displayMetrics && (
                 <StatsStrip
                   authenticatedUniqueUsers={
-                    appMetrics.authenticated_unique_users
+                    displayMetrics.authenticated_unique_users
                   }
-                  anonymousInvocations={appMetrics.anonymous_invocations}
-                  totalTools={appMetrics.total_tools}
-                  totalInvocations={appMetrics.total_invocations}
+                  anonymousInvocations={displayMetrics.anonymous_invocations}
+                  totalTools={BigInt(server.latestVersion.tools?.length ?? 0)}
+                  totalInvocations={displayMetrics.total_invocations}
                 />
               )}
 

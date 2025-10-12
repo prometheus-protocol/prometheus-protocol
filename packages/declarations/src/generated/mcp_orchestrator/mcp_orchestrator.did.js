@@ -455,6 +455,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'set_mcp_registry_id' : IDL.Func([IDL.Principal], [Result], []),
+    'set_usage_tracker_id' : IDL.Func([IDL.Principal], [Result], []),
   });
   return ICRC120Canister;
 };

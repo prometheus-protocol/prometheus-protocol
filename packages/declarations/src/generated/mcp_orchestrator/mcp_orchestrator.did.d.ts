@@ -172,6 +172,7 @@ export interface ICRC120Canister {
     Result
   >,
   'set_mcp_registry_id' : ActorMethod<[Principal], Result>,
+  'set_usage_tracker_id' : ActorMethod<[Principal], Result>,
 }
 export type ICRC16 = { 'Int' : bigint } |
   { 'Map' : Array<[string, ICRC16]> } |

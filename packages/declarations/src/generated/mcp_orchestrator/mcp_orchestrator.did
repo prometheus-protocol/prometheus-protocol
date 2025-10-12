@@ -367,6 +367,7 @@ type ICRC120Canister =
    set_deployment_type: (namespace: text, wasm_id: text, deployment_type:
     CanisterDeploymentType) -> (Result);
    set_mcp_registry_id: (registryId: principal) -> (Result);
+   set_usage_tracker_id: (usageTrackerId: principal) -> (Result);
  };
 type GetTransactionsResult = 
  record {

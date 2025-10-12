@@ -1,7 +1,6 @@
 type UsageTracker = 
  service {
    add_approved_wasm_hash: (wasm_id: text) -> (Result);
-   get_admin: () -> (principal) query;
    get_all_server_metrics: () ->
     (vec record {
            text;
@@ -10,14 +9,22 @@ type UsageTracker =
    get_and_clear_logs: () -> (Result_1);
    get_app_metrics: (canister_id: principal) -> (opt AppMetrics) query;
    get_metrics_for_server: (wasm_id: text) -> (opt ServerMetricsShared) query;
+   get_namespace_metrics: (namespace: text) -> (opt NamespaceMetrics) query;
+   get_owner: () -> (principal) query;
    get_payout_canister: () -> (opt principal) query;
    is_wasm_hash_approved: (wasm_id: text) -> (bool) query;
    log_call: (stats: UsageStats) -> (Result);
+   /// * Registers the namespace for a canister. This should be called by the orchestrator
+   ///    * when a new canister is provisioned or when an existing canister is upgraded.
+   register_canister_namespace: (canister_id: principal, namespace: text) ->
+    (Result);
    remove_approved_wasm_hash: (wasm_id: text) -> (Result);
    seed_log: (canister_id: principal, wasm_id: text, stats: UsageStats) ->
     (Result);
+   set_orchestrator_canister: (canister_id: principal) -> (Result);
+   set_owner: (new_owner: principal) -> (Result);
    set_payout_canister: (canister_id: principal) -> (Result);
-   transfer_admin: (new_admin: principal) -> (Result);
+   set_registry_canister: (canister_id: principal) -> (Result);
  };
 type UsageStats = 
  record {
@@ -47,6 +54,15 @@ type Result =
  variant {
    err: text;
    ok;
+ };
+type NamespaceMetrics = 
+ record {
+   anonymous_invocations: nat;
+   authenticated_unique_users: nat;
+   namespace: text;
+   total_instances: nat;
+   total_invocations: nat;
+   total_tools: nat;
  };
 type LogEntry = 
  record {
