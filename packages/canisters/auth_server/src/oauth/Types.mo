@@ -170,6 +170,14 @@ module {
     expires_at : Time.Time;
   };
 
+  // Track in-flight refresh operations to prevent race conditions
+  public type PendingRefresh = {
+    new_refresh_token : Text; // The newly generated refresh token
+    new_access_token : Text; // The newly generated access token
+    scope : Text;
+    created_at : Time.Time; // When this pending refresh was created
+  };
+
   // The data returned to a developer after successful client registration.
   public type RegistrationResponse = {
     client_id : Text;
@@ -202,6 +210,7 @@ module {
     uri_to_rs_id : Map.Map<Text, Text>; // Maps resource server URIs to their IDs
     refresh_tokens : Map.Map<Text, RefreshToken>;
     user_grants : Map.Map<Principal, UserGrants>;
+    pending_refresh_operations : Map.Map<Text, PendingRefresh>; // Track in-flight refresh operations by old token
   };
 
   // Re-export HttpParser types that are not exported from the lib.

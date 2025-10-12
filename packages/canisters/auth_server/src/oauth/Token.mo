@@ -47,6 +47,9 @@ module {
   public func handle_token(context : Types.Context, req : Types.Request, res : Types.ResponseClass) : async Types.Response {
     Debug.print("--- Handling token request ---");
 
+    // Opportunistically cleanup stale pending refresh operations on each token request
+    cleanup_stale_pending_refreshes(context);
+
     // 1. Get form data from the request body.
     let form = switch (req.body) {
       case (?b) b.form;
@@ -115,18 +118,86 @@ module {
       };
       case (?"refresh_token") {
         // --- Handle Refresh Token Grant ---
+
+        // Get the refresh token string first to check for pending operations
+        let refresh_token_string = switch (form.get("refresh_token")) {
+          case (?values) {
+            if (values.size() > 0) values[0] else {
+              return Errors.send_token_error(res, 400, "invalid_request", ?"refresh_token is missing");
+            };
+          };
+          case (_) return Errors.send_token_error(res, 400, "invalid_request", ?"refresh_token is missing");
+        };
+
+        Debug.print("TOKEN (refresh): Refresh token string: " # refresh_token_string);
+
+        // RACE CONDITION PREVENTION: Poll for up to 5 seconds if another request is processing
+        let max_poll_attempts = 10; // 10 attempts = ~5 seconds max wait with IC block processing
+        var poll_attempt = 0;
+
+        label polling_loop loop {
+          let existing_pending = Map.get(context.pending_refresh_operations, thash, refresh_token_string);
+
+          switch (existing_pending) {
+            case (?pending) {
+              // Clean up stale pending operations (older than 10 seconds)
+              let current_time = Time.now();
+              let stale_threshold = current_time - (10 * 1_000_000_000);
+              let age_nanoseconds = current_time - pending.created_at;
+              let age_seconds = age_nanoseconds / 1_000_000_000;
+              Debug.print("TOKEN (refresh): Found pending operation, age: " # debug_show (age_seconds) # " seconds (current: " # debug_show (current_time) # ", created: " # debug_show (pending.created_at) # ")");
+
+              if (pending.created_at < stale_threshold) {
+                Debug.print("TOKEN (refresh): Found stale pending refresh operation, cleaning up");
+                Map.delete(context.pending_refresh_operations, thash, refresh_token_string);
+                break polling_loop; // Continue with normal flow
+              } else if (pending.new_access_token != "" and pending.new_refresh_token != "") {
+                // Tokens are ready! Return them
+                Debug.print("TOKEN (refresh): Returning cached tokens from completed pending refresh operation");
+                return issue_token_response(res, pending.new_access_token, pending.scope, ?pending.new_refresh_token);
+              } else {
+                // Placeholder exists - another request is processing
+                poll_attempt += 1;
+                if (poll_attempt >= max_poll_attempts) {
+                  Debug.print("TOKEN (refresh): Max polling attempts reached, proceeding anyway");
+                  break polling_loop;
+                };
+                Debug.print("TOKEN (refresh): Waiting for in-progress refresh (attempt " # debug_show (poll_attempt) # ")");
+                // Yield control to allow other messages to process
+                // This async operation ensures the IC runtime can process the first request
+                // that's currently generating tokens
+                await async {};
+              };
+            };
+            case (null) {
+              Debug.print("TOKEN (refresh): No pending refresh found, proceeding with new refresh");
+              break polling_loop;
+            };
+          };
+        };
+
+        // Validate the refresh token request
         let validation_result = Validation.validate_refresh_token_request(context, form);
         let old_refresh_token = switch (validation_result) {
           case (#err((status, error, desc))) return Errors.send_token_error(res, Nat16.fromNat(status), error, ?desc);
           case (#ok(data)) data;
         };
 
-        Debug.print("TOKEN (refresh): Refresh token string: " # old_refresh_token.token);
+        // CRITICAL: Set placeholder IMMEDIATELY after successful validation, BEFORE any await
+        let placeholder_pending : Types.PendingRefresh = {
+          new_refresh_token = "";
+          new_access_token = "";
+          scope = old_refresh_token.scope;
+          created_at = Time.now();
+        };
+        Map.set(context.pending_refresh_operations, thash, old_refresh_token.token, placeholder_pending);
+        Debug.print("TOKEN (refresh): Set placeholder to lock this refresh operation");
 
-        // REFRESH TOKEN ROTATION: Invalidate the old token immediately.
+        // Delete the old refresh token to prevent it from being used again
         Map.delete(context.refresh_tokens, thash, old_refresh_token.token);
+        Debug.print("TOKEN (refresh): Deleted old refresh token");
 
-        // Create a new access token from the refresh token's data.
+        // Now do the expensive async operations
         let issuer = Utils.get_issuer(context, req);
         let auth_data_for_jwt : Types.AuthorizationCode = {
           user_principal = old_refresh_token.user_principal;
@@ -139,9 +210,15 @@ module {
           code_challenge_method = "";
           resource = old_refresh_token.audience;
         };
+
         let token_result = await JWT.create_and_sign(context, auth_data_for_jwt, issuer);
         let access_token = switch (token_result) {
-          case (#err(msg)) return Errors.send_token_error(res, 500, "server_error", ?msg);
+          case (#err(msg)) {
+            // Clean up the placeholder on error
+            Map.delete(context.pending_refresh_operations, thash, old_refresh_token.token);
+            Debug.print("TOKEN (refresh): Error creating access token, cleaned up placeholder");
+            return Errors.send_token_error(res, 500, "server_error", ?msg);
+          };
           case (#ok(token)) token;
         };
 
@@ -157,6 +234,22 @@ module {
           expires_at = old_refresh_token.expires_at; // Keep the original expiry date
         };
         Map.set(context.refresh_tokens, thash, new_refresh_token_string, new_refresh_token_data);
+        Debug.print("TOKEN (refresh): Created and stored new refresh token");
+
+        // Update the pending refresh operation with the actual token values
+        // This allows concurrent requests that checked after we set the placeholder to get the real tokens
+        // NOTE: Keep the original created_at timestamp from the placeholder, don't reset it
+        let final_pending_refresh : Types.PendingRefresh = {
+          new_refresh_token = new_refresh_token_string;
+          new_access_token = access_token;
+          scope = old_refresh_token.scope;
+          created_at = placeholder_pending.created_at; // Use original timestamp, not Time.now()
+        };
+        Map.set(context.pending_refresh_operations, thash, old_refresh_token.token, final_pending_refresh);
+        Debug.print("TOKEN (refresh): Updated pending operation with final tokens");
+
+        // Clean up the pending operation after a grace period
+        // Note: Stale operations are cleaned up by the check at the beginning of this function
 
         return issue_token_response(res, access_token, old_refresh_token.scope, ?new_refresh_token_string);
       };
@@ -164,6 +257,28 @@ module {
       case (_) {
         return Errors.send_token_error(res, 400, "unsupported_grant_type", ?"grant_type is missing or invalid");
       };
+    };
+  };
+
+  /**
+   * Cleanup stale pending refresh operations.
+   * This should be called periodically or opportunistically to prevent memory leaks.
+   * Operations older than 10 seconds are considered stale.
+   */
+  public func cleanup_stale_pending_refreshes(context : Types.Context) {
+    let stale_threshold = Time.now() - (10 * 1_000_000_000); // 10 seconds
+    let entries = Map.entries(context.pending_refresh_operations);
+    var cleaned_count = 0;
+
+    for ((token, pending) in entries) {
+      if (pending.created_at < stale_threshold) {
+        Map.delete(context.pending_refresh_operations, thash, token);
+        cleaned_count += 1;
+      };
+    };
+
+    if (cleaned_count > 0) {
+      Debug.print("Cleaned up " # debug_show (cleaned_count) # " stale pending refresh operations");
     };
   };
 };
