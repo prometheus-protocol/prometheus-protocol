@@ -30,7 +30,7 @@ export function FeaturedServerCard({ server }: FeaturedServerCardProps) {
               className="
                 aspect-[16/10] w-full object-cover
                 transition-transform duration-500 ease-in-out
-                group-hover:scale-105
+                scale-[1.01] group-hover:scale-105
               "
             />
             <PromoBadge className="md:py-2 md:px-4 md:text-xs">
