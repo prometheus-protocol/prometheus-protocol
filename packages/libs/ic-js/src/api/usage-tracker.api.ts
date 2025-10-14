@@ -13,3 +13,11 @@ export const getAppMetrics = async (
   const res = await usageTrackerActor.get_app_metrics(principalId);
   return fromNullable(res);
 };
+
+export const getNamespaceMetrics = async (
+  namespace: string,
+): Promise<UsageTracker.NamespaceMetrics | undefined> => {
+  const usageTrackerActor = getUsageTrackerActor();
+  const res = await usageTrackerActor.get_namespace_metrics(namespace);
+  return fromNullable(res);
+};

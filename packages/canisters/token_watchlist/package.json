@@ -1,0 +1,9 @@
+{
+  "name": "@prometheus-protocol/token-watchlist",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A token watchlist canister.",
+  "devDependencies": {
+    "@dfinity/pic": "^0.13.1"
+  }
+}

@@ -11,6 +11,7 @@ import {
   McpServer,
   SearchIndex,
   UsageTracker,
+  TokenWatchlist,
 } from '@prometheus-protocol/declarations';
 import { getCanisterId, getHost } from './config.js';
 
@@ -165,6 +166,14 @@ export const getUsageTrackerActor = (identity?: Identity) => {
   return createActor<UsageTracker._SERVICE>(
     UsageTracker.idlFactory,
     getCanisterId('USAGE_TRACKER'),
+    identity,
+  );
+};
+
+export const getTokenWatchlistActor = (identity: Identity) => {
+  return createActor<TokenWatchlist._SERVICE>(
+    TokenWatchlist.idlFactory,
+    getCanisterId('TOKEN_WATCHLIST'),
     identity,
   );
 };

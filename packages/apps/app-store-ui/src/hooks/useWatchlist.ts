@@ -1,86 +1,82 @@
-import { useState, useEffect, useCallback } from 'react';
-import { getCanisterId } from '@prometheus-protocol/ic-js';
+import { useQuery } from '@tanstack/react-query';
+import { useInternetIdentity } from 'ic-use-internet-identity';
+import { Principal } from '@dfinity/principal';
+import { useMemo } from 'react';
+import {
+  getMyWatchlist,
+  addToWatchlist,
+  removeFromWatchlist,
+  getCanisterId,
+  type WatchlistTokenInfo,
+} from '@prometheus-protocol/ic-js';
+import useMutation from './useMutation';
 
-const WATCHED_TOKENS_KEY = 'prometheus_watched_tokens';
-
-const getWatchedTokens = (): string[] => {
-  try {
-    const stored = localStorage.getItem(WATCHED_TOKENS_KEY);
-    const storedTokens: string[] = stored ? JSON.parse(stored) : [];
-
-    // If there are stored tokens, just return them as-is
-    if (storedTokens.length > 0) {
-      return storedTokens;
-    }
-
-    // Only add USDC as default if localStorage is empty
-    const usdcCanisterId = getCanisterId('USDC_LEDGER');
-    return [usdcCanisterId];
-  } catch (error) {
-    console.error('Error in getWatchedTokens:', error);
-    try {
-      return [getCanisterId('USDC_LEDGER')];
-    } catch {
-      return [];
-    }
-  }
-};
-
-const setWatchedTokens = (tokenIds: string[]) => {
-  localStorage.setItem(WATCHED_TOKENS_KEY, JSON.stringify(tokenIds));
-  window.dispatchEvent(new CustomEvent('watchlistChanged'));
-};
-
+/**
+ * Hook for managing the user's token watchlist.
+ * Requires authentication - uses the token_watchlist canister.
+ */
 export const useWatchlist = () => {
-  const [watchedTokenIds, setWatchedTokenIdsState] =
-    useState<string[]>(getWatchedTokens);
+  const { identity, isInitializing } = useInternetIdentity();
+  const isAuthenticated = !!identity && !isInitializing;
 
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === WATCHED_TOKENS_KEY) {
-        setWatchedTokenIdsState(getWatchedTokens());
+  // Query for fetching the watchlist from the canister
+  const { data: watchedTokens = [], isLoading } = useQuery({
+    queryKey: ['watchlist', identity?.getPrincipal().toString()],
+    queryFn: async (): Promise<WatchlistTokenInfo[]> => {
+      if (!identity) {
+        return [];
       }
-    };
 
-    const handleCustomStorageChange = () => {
-      setWatchedTokenIdsState(getWatchedTokens());
-    };
+      const canisterList = await getMyWatchlist(identity);
+      return canisterList;
+    },
+    enabled: !!identity && !isInitializing,
+    staleTime: 1000 * 30, // 30 seconds
+  });
 
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('watchlistChanged', handleCustomStorageChange);
+  // Extract canister IDs as strings for backward compatibility
+  // Use useMemo to prevent creating a new array on every render
+  const watchedTokenIds = useMemo(
+    () => watchedTokens.map((token) => token.canisterId.toText()),
+    [watchedTokens],
+  );
 
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('watchlistChanged', handleCustomStorageChange);
-    };
-  }, []);
+  // Mutation for adding a token
+  const addMutation = useMutation<string, void>({
+    mutationFn: async (tokenId: string) => {
+      if (!identity) {
+        throw new Error('Must be authenticated to add tokens to watchlist');
+      }
 
-  const addWatchedToken = useCallback((tokenId: string) => {
-    setWatchedTokenIdsState((prev) => {
-      const newSet = new Set([...prev, tokenId]);
-      const newWatchedTokens = Array.from(newSet);
-      setWatchedTokens(newWatchedTokens);
-      return newWatchedTokens;
-    });
-  }, []);
+      await addToWatchlist(identity, Principal.fromText(tokenId));
+    },
+    queryKeysToRefetch: [['watchlist', identity?.getPrincipal().toString()]],
+    enableSnackbar: false, // Don't show default success toast
+  });
 
-  const removeWatchedToken = useCallback((tokenId: string) => {
-    setWatchedTokenIdsState((prev) => {
-      const newWatchedTokens = prev.filter((id) => id !== tokenId);
-      setWatchedTokens(newWatchedTokens);
-      return newWatchedTokens;
-    });
-  }, []);
+  // Mutation for removing a token
+  const removeMutation = useMutation<string, void>({
+    mutationFn: async (tokenId: string) => {
+      if (!identity) {
+        throw new Error(
+          'Must be authenticated to remove tokens from watchlist',
+        );
+      }
 
-  const clearWatchlist = useCallback(() => {
-    setWatchedTokenIdsState([]);
-    setWatchedTokens([]);
-  }, []);
+      await removeFromWatchlist(identity, Principal.fromText(tokenId));
+    },
+    queryKeysToRefetch: [['watchlist', identity?.getPrincipal().toString()]],
+    enableSnackbar: false, // Don't show default success toast
+  });
 
   return {
     watchedTokenIds,
-    addWatchedToken,
-    removeWatchedToken,
-    clearWatchlist,
+    watchedTokens, // Full TokenInfo objects
+    isLoading: isLoading || isInitializing,
+    isAuthenticated,
+    addWatchedToken: (tokenId: string) => addMutation.mutate(tokenId),
+    removeWatchedToken: (tokenId: string) => removeMutation.mutate(tokenId),
+    isAddingToken: addMutation.isPending,
+    isRemovingToken: removeMutation.isPending,
   };
 };

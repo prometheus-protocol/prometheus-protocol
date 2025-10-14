@@ -28,7 +28,7 @@ export const useProvisionInstance = (namespace?: string) => {
     queryKeysToRefetch: [
       ['appDetails', namespace],
       ['serverCanisterId', namespace],
-      ['canisterWasmHash'],
+      ['canisterWasmHash'], // This will be supplemented by specific invalidation in the component
     ],
   });
 };

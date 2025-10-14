@@ -63,6 +63,16 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
     anonymous_invocations : Nat;
   };
 
+  // --- NEW: Namespace-level metrics for aggregated app statistics ---
+  public type NamespaceMetrics = {
+    namespace : Text;
+    total_invocations : Nat;
+    total_tools : Nat;
+    authenticated_unique_users : Nat;
+    anonymous_invocations : Nat;
+    total_instances : Nat; // Count of all canister instances
+  };
+
   // ==================================================================================================
   // STATE
   // ==================================================================================================
@@ -72,12 +82,22 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   var approved_wasm_hashes = Map.new<Text, Null>();
   var logs = Vector.new<LogEntry>();
   var registry_canister_id : ?Principal = null;
+  var orchestrator_canister_id : ?Principal = null;
 
   // The primary state for all aggregated data, keyed by WASM hash for payouts.
   var aggregated_metrics = Map.new<Text, ServerMetrics>();
 
   // --- 2. A new, lean state map for fast UI queries, keyed by canister_id ---
   var metrics_by_canister = Map.new<Principal, AppMetrics>();
+
+  // --- NEW: Map to track which namespace each canister belongs to ---
+  var canister_to_namespace = Map.new<Principal, Text>();
+
+  // --- NEW: Map to track which wasm_id each canister is running ---
+  var canister_to_wasm = Map.new<Principal, Text>();
+
+  // --- NEW: Namespace-level aggregated metrics ---
+  var metrics_by_namespace = Map.new<Text, NamespaceMetrics>();
 
   // ==================================================================================================
   // PRIVATE HELPERS
@@ -96,6 +116,9 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
 
   // --- 3. CORRECTED: This helper now updates BOTH state maps efficiently ---
   private func update_metrics(wasm_id : Text, canister_id : Principal, stats : UsageStats) {
+    // Track which wasm_id this canister is running
+    Map.set(canister_to_wasm, Map.phash, canister_id, wasm_id);
+
     // --- Part A: Update the detailed metrics by wasm_id (for payouts) ---
     // This part remains unchanged, as it's the source of truth.
     var server_metrics = Option.get(
@@ -137,6 +160,61 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
       anonymous_invocations = anonymous_invocations;
     };
     Map.set(metrics_by_canister, Map.phash, canister_id, app_metrics);
+
+    // --- Part C: NEW - Update namespace-level metrics ---
+    // Look up the namespace for this canister and aggregate metrics at namespace level
+    switch (Map.get(canister_to_namespace, Map.phash, canister_id)) {
+      case (?namespace) {
+        // Recalculate namespace metrics by iterating over all canisters in this namespace
+        recompute_namespace_metrics(namespace);
+      };
+      case (null) {
+        // Namespace not registered yet - this is expected for older canisters
+        Debug.print("Warning: Canister " # Principal.toText(canister_id) # " has no registered namespace");
+      };
+    };
+  };
+
+  // Helper function to recompute all metrics for a namespace
+  private func recompute_namespace_metrics(namespace : Text) {
+    var total_invocations : Nat = 0;
+    var total_tools : Nat = 0;
+    var total_authenticated_users : Nat = 0;
+    var total_anonymous_invocations : Nat = 0;
+    var instance_count : Nat = 0;
+
+    // Iterate through all canisters to find those belonging to this namespace
+    for ((canister_id, canister_namespace) in Map.entries(canister_to_namespace)) {
+      if (canister_namespace == namespace) {
+        instance_count += 1;
+
+        // Get metrics directly from the per-canister metrics
+        switch (Map.get(metrics_by_canister, Map.phash, canister_id)) {
+          case (?app_metrics) {
+            total_invocations += app_metrics.total_invocations;
+            total_tools += app_metrics.total_tools;
+            total_authenticated_users += app_metrics.authenticated_unique_users;
+            total_anonymous_invocations += app_metrics.anonymous_invocations;
+          };
+          case (null) {
+            // No metrics yet for this canister
+          };
+        };
+      };
+    };
+
+    // Create namespace-level metrics
+    let namespace_metrics : NamespaceMetrics = {
+      namespace = namespace;
+      total_invocations = total_invocations;
+      total_tools = total_tools;
+      authenticated_unique_users = total_authenticated_users;
+      anonymous_invocations = total_anonymous_invocations;
+      total_instances = instance_count;
+    };
+
+    Map.set(metrics_by_namespace, Map.thash, namespace, namespace_metrics);
+    Debug.print("Recomputed namespace metrics for: " # namespace # " - " # debug_show (instance_count) # " instances, " # debug_show (total_invocations) # " invocations");
   };
 
   // ==================================================================================================
@@ -236,6 +314,41 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
     return #ok(());
   };
 
+  public shared (msg) func set_orchestrator_canister(canister_id : Principal) : async Result.Result<(), Text> {
+    if (not is_owner(msg.caller)) {
+      Debug.print("Unauthorized attempt to set orchestrator canister by: " # Principal.toText(msg.caller));
+      return #err("Unauthorized: Only the owner can set the orchestrator canister.");
+    };
+    orchestrator_canister_id := ?canister_id;
+    return #ok(());
+  };
+
+  private func is_orchestrator_canister(caller : Principal) : Bool {
+    switch (orchestrator_canister_id) {
+      case (null) { return false };
+      case (?orchestrator) { return Principal.equal(orchestrator, caller) };
+    };
+  };
+
+  /**
+   * Registers the namespace for a canister. This should be called by the orchestrator
+   * when a new canister is provisioned or when an existing canister is upgraded.
+   */
+  public shared (msg) func register_canister_namespace(canister_id : Principal, namespace : Text) : async Result.Result<(), Text> {
+    if (not is_owner(msg.caller) and not is_orchestrator_canister(msg.caller)) {
+      Debug.print("Unauthorized attempt to register canister namespace by: " # Principal.toText(msg.caller));
+      return #err("Unauthorized: Only the owner or orchestrator can register canister namespaces.");
+    };
+
+    Map.set(canister_to_namespace, Map.phash, canister_id, namespace);
+    Debug.print("Registered canister " # Principal.toText(canister_id) # " to namespace: " # namespace);
+
+    // Recompute namespace metrics to include this canister
+    recompute_namespace_metrics(namespace);
+
+    return #ok(());
+  };
+
   // ==================================================================================================
   // PUBLIC METHODS: DATA RETRIEVAL
   // ==================================================================================================
@@ -257,6 +370,11 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   // --- 5. NEW: The public query endpoint for the App Store UI ---
   public shared query func get_app_metrics(canister_id : Principal) : async ?AppMetrics {
     return Map.get(metrics_by_canister, Map.phash, canister_id);
+  };
+
+  // --- NEW: Query endpoint for namespace-level metrics ---
+  public shared query func get_namespace_metrics(namespace : Text) : async ?NamespaceMetrics {
+    return Map.get(metrics_by_namespace, Map.thash, namespace);
   };
 
   private func to_shared_metrics(metrics : ServerMetrics) : ServerMetricsShared {

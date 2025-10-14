@@ -678,8 +678,8 @@ describe('Auth Server Canister (Isolated Tests)', () => {
       expect(refreshedTokenData.refresh_token).not.toEqual(initialRefreshToken);
     });
 
-    it('should reject a reused (rotated) refresh token', async () => {
-      // Arrange: Get an initial token, then use the refresh token once to rotate it.
+    it('should handle concurrent refresh token requests gracefully', async () => {
+      // Arrange: Get an initial token
       const initialTokenData = await getInitialTokens();
       const firstRefreshToken = initialTokenData.refresh_token;
 
@@ -696,18 +696,71 @@ describe('Auth Server Canister (Isolated Tests)', () => {
         ),
       };
       authActor.setPrincipal(Principal.anonymous());
+
+      // Act: Make two concurrent refresh requests with the same token
+      // This simulates the race condition that occurs when multiple MCP requests
+      // arrive with expired access tokens due to blockchain latency
       const firstRefreshResponse =
         await authActor.http_request_update(refreshRequest);
-      expect(firstRefreshResponse.status_code).toBe(200); // First use is successful
-
-      // Act: Try to use the *original* refresh token again
       const secondRefreshResponse =
         await authActor.http_request_update(refreshRequest);
 
-      // Assert: The second request must fail
-      expect(secondRefreshResponse.status_code).toBe(400);
-      const errorJson = JSON.parse(
+      // Assert: Both requests should succeed with the same new tokens
+      expect(firstRefreshResponse.status_code).toBe(200);
+      expect(secondRefreshResponse.status_code).toBe(200);
+
+      const firstTokenData = JSON.parse(
+        new TextDecoder().decode(firstRefreshResponse.body as Uint8Array),
+      );
+      const secondTokenData = JSON.parse(
         new TextDecoder().decode(secondRefreshResponse.body as Uint8Array),
+      );
+
+      // Both responses should contain the same new tokens
+      expect(firstTokenData.access_token).toBe(secondTokenData.access_token);
+      expect(firstTokenData.refresh_token).toBe(secondTokenData.refresh_token);
+
+      // The new tokens should be different from the original
+      expect(firstTokenData.refresh_token).not.toEqual(firstRefreshToken);
+
+      // Act: Now try to use the original token after the grace period (2 seconds - more than 1 second threshold)
+      await pic.advanceTime(2 * 1000);
+      await pic.tick(); // Process any pending operations
+
+      console.log(
+        'About to make third request with original token:',
+        firstRefreshToken,
+      );
+
+      const thirdRefreshResponse =
+        await authActor.http_request_update(refreshRequest);
+
+      // Debug: Log what we got
+      console.log(
+        'Third refresh response status:',
+        thirdRefreshResponse.status_code,
+      );
+      const thirdBody = new TextDecoder().decode(
+        thirdRefreshResponse.body as Uint8Array,
+      );
+      console.log('Third refresh response body:', thirdBody);
+      if (thirdRefreshResponse.status_code === 200) {
+        const thirdTokenData = JSON.parse(thirdBody);
+        console.log(
+          'Third request returned NEW refresh token:',
+          thirdTokenData.refresh_token,
+        );
+        console.log('Original first refresh token was:', firstRefreshToken);
+        console.log(
+          'New token from first two requests was:',
+          firstTokenData.refresh_token,
+        );
+      }
+
+      // Assert: After the grace period, the old token should be rejected
+      expect(thirdRefreshResponse.status_code).toBe(400);
+      const errorJson = JSON.parse(
+        new TextDecoder().decode(thirdRefreshResponse.body as Uint8Array),
       );
       expect(errorJson.error).toBe('invalid_grant');
       expect(errorJson.error_description).toContain('revoked');

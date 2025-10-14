@@ -81,11 +81,30 @@ shared (deployer) actor class ICRC120Canister<system>(
 
   private func reportTTExecution(execInfo : TT.ExecutionReport) : Bool {
     D.print("CANISTER: TimerTool Execution: " # debug_show (execInfo));
+    // Just log execution, don't reschedule here (can't use system capability)
+    let (actionId, action) = execInfo.action;
+    if (action.actionType == CYCLE_JOB_ACTION_TYPE) {
+      D.print("Cycle top-up job completed successfully.");
+      _cycle_job_action_id := null; // Clear the old action ID
+    };
+
     return false;
   };
 
   private func reportTTError(errInfo : TT.ErrorReport) : ?Nat {
     D.print("CANISTER: TimerTool Error: " # debug_show (errInfo));
+
+    // Handle recurring cycle top-up job errors - reschedule anyway
+    let (actionId, action) = errInfo.action;
+    if (action.actionType == CYCLE_JOB_ACTION_TYPE) {
+      D.print("Cycle top-up job failed. Rescheduling anyway...");
+      _cycle_job_action_id := null; // Clear the old action ID
+
+      // Reschedule for the next interval
+      let next_time = Time.now() + Int.abs(_cycle_check_interval_seconds * 1_000_000_000);
+      return ?Int.abs(next_time);
+    };
+
     return null;
   };
 
@@ -180,8 +199,11 @@ shared (deployer) actor class ICRC120Canister<system>(
 
         func _handle_cycle_top_up_action(actionId : TT.ActionId, action : TT.Action) : async* Star.Star<TT.ActionId, TT.Error> {
           await _check_and_top_up_cycles();
-          // Schedule the next run
+
+          // Schedule the next run after successful completion
+          _cycle_job_action_id := null; // Clear the old action ID
           _schedule_cycle_top_up_job<system>(newClass);
+
           return #trappable(actionId);
         };
 
@@ -229,6 +251,9 @@ shared (deployer) actor class ICRC120Canister<system>(
   // --- OAuth Auth Server Configuration ---
   stable var _auth_server_id : ?Principal = null;
 
+  // --- Usage Tracker Configuration ---
+  stable var _usage_tracker_id : ?Principal = null;
+
   // --- FIX 2: A post-deployment, one-time setter for the registry ID ---
   public shared ({ caller }) func set_mcp_registry_id(registryId : Principal) : async Result.Result<(), Text> {
     if (caller != _owner) { return #err("Caller is not the owner") };
@@ -239,6 +264,12 @@ shared (deployer) actor class ICRC120Canister<system>(
   public shared ({ caller }) func set_auth_server_id(authServerId : Principal) : async Result.Result<(), Text> {
     if (caller != _owner) { return #err("Caller is not the owner") };
     _auth_server_id := ?authServerId;
+    return #ok(());
+  };
+
+  public shared ({ caller }) func set_usage_tracker_id(usageTrackerId : Principal) : async Result.Result<(), Text> {
+    if (caller != _owner) { return #err("Caller is not the owner") };
+    _usage_tracker_id := ?usageTrackerId;
     return #ok(());
   };
 
@@ -598,7 +629,18 @@ shared (deployer) actor class ICRC120Canister<system>(
         );
 
         switch (existing_canister) {
-          case (?exists) { exists };
+          case (?exists) {
+            // --- UPGRADE PATH for existing canister ---
+            // Update the deployment type for this WASM hash
+            let wasm_id = Base16.encode(request.hash);
+            Map.set(canister_deployment_types, Map.thash, wasm_id, request.deployment_type);
+            Debug.print("Updating deployment type for existing canister " # Principal.toText(exists) # " to " # debug_show (request.deployment_type));
+            
+            // Re-register with usage tracker in case namespace changed or wasn't registered before
+            ignore _register_usage_tracker_namespace(exists, request.namespace);
+            
+            exists;
+          };
           case (null) {
             // --- DEPLOY PATH ---
             Debug.print("No canister found for namespace " # request.namespace # ". Provisioning a new one...");
@@ -625,8 +667,9 @@ shared (deployer) actor class ICRC120Canister<system>(
                 Map.set(canister_deployment_types, Map.thash, wasm_id, request.deployment_type);
                 Debug.print("Provisioned new canister " # Principal.toText(new_canister_id));
 
-                // Auto-register canister with OAuth server after successful provision
+                // Auto-register canister with OAuth server and usage tracker after successful provision
                 ignore _register_oauth_resource(new_canister_id, request.namespace, caller);
+                ignore _register_usage_tracker_namespace(new_canister_id, request.namespace);
 
                 new_canister_id;
               };
@@ -660,8 +703,9 @@ shared (deployer) actor class ICRC120Canister<system>(
             Map.set(canister_deployment_types, Map.thash, wasm_id, request.deployment_type);
             Debug.print("Provisioned new canister " # Principal.toText(new_canister_id));
 
-            // Auto-register canister with OAuth server after successful provision
+            // Auto-register canister with OAuth server and usage tracker after successful provision
             ignore _register_oauth_resource(new_canister_id, request.namespace, caller);
+            ignore _register_usage_tracker_namespace(new_canister_id, request.namespace);
 
             new_canister_id;
           };
@@ -872,6 +916,42 @@ shared (deployer) actor class ICRC120Canister<system>(
   // =====================================================================================
   // OAUTH REGISTRATION AUTOMATION
   // =====================================================================================
+
+  /**
+   * [PRIVATE] Registers a canister's namespace with the usage tracker for metrics aggregation.
+   * This is called after successful canister provision or upgrade.
+   */
+  private func _register_usage_tracker_namespace(
+    canister_id : Principal,
+    namespace : Text,
+  ) : async () {
+    switch (_usage_tracker_id) {
+      case (null) {
+        Debug.print("Usage tracker registration skipped: Usage tracker ID not configured");
+        return;
+      };
+      case (?tracker_id) {
+        try {
+          type UsageTracker = actor {
+            register_canister_namespace : (Principal, Text) -> async Result.Result<(), Text>;
+          };
+          let usage_tracker : UsageTracker = actor (Principal.toText(tracker_id));
+          let result = await usage_tracker.register_canister_namespace(canister_id, namespace);
+          
+          switch (result) {
+            case (#ok(())) {
+              Debug.print("Successfully registered canister " # Principal.toText(canister_id) # " to namespace: " # namespace # " in usage tracker");
+            };
+            case (#err(error)) {
+              Debug.print("Failed to register canister in usage tracker: " # error);
+            };
+          };
+        } catch (e) {
+          Debug.print("Error registering canister in usage tracker: " # Error.message(e));
+        };
+      };
+    };
+  };
 
   /**
    * [PRIVATE] Automatically registers a newly provisioned canister as an OAuth resource server.

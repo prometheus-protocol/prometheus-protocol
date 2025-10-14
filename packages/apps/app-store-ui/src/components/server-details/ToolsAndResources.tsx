@@ -22,7 +22,7 @@ export function ToolsAndResources({ tools, wasmId }: ToolsAndResourcesProps) {
   return (
     <section>
       <div className="pb-6">
-        <h2 className="text-2xl font-bold tracking-tight flex items-center gap-3 mb-6">
+        <h2 className="text-2xl font-bold tracking-tight flex items-center gap-3">
           <Wrench className="w-6 h-6" />
           Tools and Resources
         </h2>

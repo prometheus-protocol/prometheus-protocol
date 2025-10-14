@@ -29,9 +29,16 @@ export const idlFactory = ({ IDL }) => {
     'anonymous_invocations' : IDL.Nat,
     'total_tools' : IDL.Nat,
   });
+  const NamespaceMetrics = IDL.Record({
+    'authenticated_unique_users' : IDL.Nat,
+    'total_invocations' : IDL.Nat,
+    'anonymous_invocations' : IDL.Nat,
+    'total_instances' : IDL.Nat,
+    'total_tools' : IDL.Nat,
+    'namespace' : IDL.Text,
+  });
   const UsageTracker = IDL.Service({
     'add_approved_wasm_hash' : IDL.Func([IDL.Text], [Result], []),
-    'get_admin' : IDL.Func([], [IDL.Principal], ['query']),
     'get_all_server_metrics' : IDL.Func(
         [],
         [IDL.Vec(IDL.Tuple(IDL.Text, ServerMetricsShared))],
@@ -48,13 +55,26 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Opt(ServerMetricsShared)],
         ['query'],
       ),
+    'get_namespace_metrics' : IDL.Func(
+        [IDL.Text],
+        [IDL.Opt(NamespaceMetrics)],
+        ['query'],
+      ),
+    'get_owner' : IDL.Func([], [IDL.Principal], ['query']),
     'get_payout_canister' : IDL.Func([], [IDL.Opt(IDL.Principal)], ['query']),
     'is_wasm_hash_approved' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'log_call' : IDL.Func([UsageStats], [Result], []),
+    'register_canister_namespace' : IDL.Func(
+        [IDL.Principal, IDL.Text],
+        [Result],
+        [],
+      ),
     'remove_approved_wasm_hash' : IDL.Func([IDL.Text], [Result], []),
     'seed_log' : IDL.Func([IDL.Principal, IDL.Text, UsageStats], [Result], []),
+    'set_orchestrator_canister' : IDL.Func([IDL.Principal], [Result], []),
+    'set_owner' : IDL.Func([IDL.Principal], [Result], []),
     'set_payout_canister' : IDL.Func([IDL.Principal], [Result], []),
-    'transfer_admin' : IDL.Func([IDL.Principal], [Result], []),
+    'set_registry_canister' : IDL.Func([IDL.Principal], [Result], []),
   });
   return UsageTracker;
 };

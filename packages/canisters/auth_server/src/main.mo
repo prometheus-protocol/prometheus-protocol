@@ -2,6 +2,7 @@ import Principal "mo:base/Principal";
 import Result "mo:base/Result";
 import Text "mo:base/Text";
 import Random "mo:base/Random";
+import Map "mo:map/Map";
 import Server "server";
 import Routes "Routes";
 import Types "oauth/Types";

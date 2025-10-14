@@ -121,7 +121,7 @@ export default function WalletPage() {
         </div>
       </div>
 
-      {/* Token Management */}
+      {/* Token Watchlist */}
       <WalletTokenList
         showPrincipalId={true}
         onTransfer={handleTransferToken}

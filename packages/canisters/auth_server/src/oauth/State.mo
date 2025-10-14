@@ -18,6 +18,7 @@ module {
       uri_to_rs_id = Map.new<Text, Text>();
       refresh_tokens = Map.new<Text, Types.RefreshToken>();
       user_grants = Map.new<Principal, Types.UserGrants>();
+      pending_refresh_operations = Map.new<Text, Types.PendingRefresh>();
     };
   };
 };

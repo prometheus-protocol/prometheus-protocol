@@ -40,5 +40,8 @@
   },
   "usdc_ledger": {
     "ic": "53nhb-haaaa-aaaar-qbn5q-cai"
+  },
+  "token_watchlist": {
+    "ic": "ljntu-eaaaa-aaaai-q34bq-cai"
   }
 }
