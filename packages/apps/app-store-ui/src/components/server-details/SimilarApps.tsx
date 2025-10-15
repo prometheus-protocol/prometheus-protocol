@@ -91,7 +91,7 @@ export function SimilarApps({ currentServerNamespace }: SimilarAppsProps) {
               <ImageWithFallback
                 src={app.iconUrl} // This is a stable, top-level property.
                 alt={app.name}
-                className="w-12 h-12 rounded-lg object-cover"
+                className="w-11 h-11 rounded-md"
               />
               <div className="flex-1">
                 <h3 className="font-semibold leading-tight">{app.name}</h3>

@@ -34,7 +34,7 @@ export function ImageWithFallback({
     <img
       src={src}
       alt={alt}
-      className={cn(className)}
+      className={cn('scale-[1.01]', className)}
       onError={() => setHasError(true)} // This is the key!
       {...props}
     />

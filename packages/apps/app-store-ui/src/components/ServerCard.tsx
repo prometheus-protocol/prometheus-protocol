@@ -20,7 +20,7 @@ export function ServerCard({ app }: AppCardProps) {
       <ImageWithFallback
         src={app.iconUrl}
         alt={`${app.name} icon`}
-        className="w-18 h-18 rounded-xl object-cover flex-shrink-0"
+        className="w-16 h-16 rounded-md"
       />
       <div className="flex-1 flex flex-col items-start">
         <h3 className="font-semibold group-hover:underline">{app.name}</h3>

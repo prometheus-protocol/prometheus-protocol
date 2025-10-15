@@ -206,7 +206,7 @@ export function CertificatePage() {
             <div className="relative hidden lg:flex items-end justify-end">
               <div className="relative">
                 <img
-                  src="/images/promie.png"
+                  src="/images/prometheus.webp"
                   alt="Prometheus Protocol Mascot"
                   className="w-52 h-auto mb-12"
                 />

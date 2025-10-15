@@ -64,7 +64,7 @@ export const AppInfoAttestation = ({
           <ImageWithFallback
             src={data.icon_url}
             alt={`${data.name} Icon`}
-            className="w-16 h-16 rounded-lg object-cover"
+            className="w-16 h-16 rounded-md"
           />
         )}
 
