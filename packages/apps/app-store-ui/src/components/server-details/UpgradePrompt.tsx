@@ -83,6 +83,22 @@ export function UpgradePrompt({
     return null;
   }
 
+  // Show verifying state if currently polling after upgrade
+  if (isPollingForCanister) {
+    return (
+      <Alert className="border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200 [&>svg]:text-blue-500">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <AlertTitle>Verifying Upgrade</AlertTitle>
+        <AlertDescription>
+          Checking new canister version and verifying upgrade integrity...
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  // Determine if button should be in loading state
+  const isProcessing = isUpgrading || isPollingForCanister;
+
   // This is an actionable prompt, so a custom div is still the best choice here.
   return (
     <div className="p-4 border rounded-lg">
@@ -109,13 +125,13 @@ export function UpgradePrompt({
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={onUpgradeClick} size="sm" disabled={isUpgrading}>
-                {isUpgrading ? (
+              <Button onClick={onUpgradeClick} size="sm" disabled={isProcessing}>
+                {isProcessing ? (
                   <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                 ) : (
                   <ArrowUp className="w-3 h-3 mr-1" />
                 )}
-                {isUpgrading ? 'Upgrading...' : 'Upgrade'}
+                {isProcessing ? 'Upgrading...' : 'Upgrade'}
               </Button>
             </TooltipTrigger>
             <TooltipContent>
