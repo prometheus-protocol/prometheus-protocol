@@ -125,7 +125,10 @@ export function UpgradePrompt({
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={onUpgradeClick} size="sm" disabled={isProcessing}>
+              <Button
+                onClick={onUpgradeClick}
+                size="sm"
+                disabled={isProcessing}>
                 {isProcessing ? (
                   <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                 ) : (

@@ -51,7 +51,7 @@ export function SimilarApps({ currentServerNamespace }: SimilarAppsProps) {
     if (!currentApp) {
       return allApps
         .filter((app) => app.namespace !== currentServerNamespace)
-        .slice(0, 3);
+        .slice(0, 6);
     }
 
     // A much better UX: "Similar" means "in the same category".
