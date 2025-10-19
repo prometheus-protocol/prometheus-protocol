@@ -7,12 +7,14 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Frown } from 'lucide-react';
+import { Frown, Loader2 } from 'lucide-react';
 import { useListPendingVerifications } from '@/hooks/useAuditBounties';
 import { PendingVerificationListItem } from './PendingVerificationListItem';
-import { useState } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { CreateBountyDialog } from '../server-details/CreateBountyDialog';
 import { Tokens } from '@prometheus-protocol/ic-js';
+
+const ITEMS_PER_PAGE = 10;
 
 export function PendingVerificationsTab() {
   const {
@@ -24,11 +26,51 @@ export function PendingVerificationsTab() {
   // --- 1. Add state to manage the dialog ---
   // It will store the wasm_id of the selected project, or null if the dialog is closed.
   const [sponsoringWasmId, setSponsoringWasmId] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(ITEMS_PER_PAGE);
+  const observerTarget = useRef<HTMLDivElement>(null);
 
   // --- 2. Define the handler to be passed to the child component ---
   const handleSponsorClick = (wasmId: string) => {
     setSponsoringWasmId(wasmId);
   };
+
+  const visibleVerifications = useMemo(() => {
+    if (!verifications) return [];
+    return verifications.slice(0, visibleCount);
+  }, [verifications, visibleCount]);
+
+  const hasMore = verifications && visibleCount < verifications.length;
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((prev) => {
+            const total = verifications?.length || 0;
+            if (prev < total) {
+              return prev + ITEMS_PER_PAGE;
+            }
+            return prev;
+          });
+        }
+      },
+      { 
+        threshold: 0.1,
+        rootMargin: '100px'
+      }
+    );
+
+    const currentTarget = observerTarget.current;
+    if (currentTarget && hasMore) {
+      observer.observe(currentTarget);
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
+      }
+    };
+  }, [hasMore, verifications?.length]);
 
   if (isLoading) {
     return (
@@ -99,13 +141,30 @@ export function PendingVerificationsTab() {
             <p className="font-semibold">No Pending Verifications</p>
           </div>
         ) : (
-          verifications.map((req) => (
-            <PendingVerificationListItem
-              key={req.wasm_hash}
-              request={req}
-              onSponsorClick={handleSponsorClick}
-            />
-          ))
+          <>
+            {visibleVerifications.map((req) => (
+              <PendingVerificationListItem
+                key={req.wasm_hash}
+                request={req}
+                onSponsorClick={handleSponsorClick}
+              />
+            ))}
+            {hasMore && (
+              <div
+                ref={observerTarget}
+                className="flex flex-col items-center justify-center py-8 gap-2">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">
+                  Loading more verifications... ({visibleCount} of {verifications?.length || 0})
+                </p>
+              </div>
+            )}
+            {!hasMore && (verifications?.length || 0) > ITEMS_PER_PAGE && (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>All {verifications?.length} verifications loaded</p>
+              </div>
+            )}
+          </>
         )}
       </div>
 
