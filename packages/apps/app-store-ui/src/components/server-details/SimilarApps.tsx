@@ -51,7 +51,7 @@ export function SimilarApps({ currentServerNamespace }: SimilarAppsProps) {
     if (!currentApp) {
       return allApps
         .filter((app) => app.namespace !== currentServerNamespace)
-        .slice(0, 3);
+        .slice(0, 6);
     }
 
     // A much better UX: "Similar" means "in the same category".
@@ -91,7 +91,7 @@ export function SimilarApps({ currentServerNamespace }: SimilarAppsProps) {
               <ImageWithFallback
                 src={app.iconUrl} // This is a stable, top-level property.
                 alt={app.name}
-                className="w-12 h-12 rounded-lg object-cover"
+                className="w-11 h-11 rounded-md"
               />
               <div className="flex-1">
                 <h3 className="font-semibold leading-tight">{app.name}</h3>

@@ -163,10 +163,10 @@ const LeaderboardCtaBanner = () => (
   <section className="bg-primary/80 rounded-4xl p-8 md:p-12 my-16 relative flex flex-col md:flex-row items-center justify-between gap-8">
     <div className="text-center md:text-left">
       <h2 className="text-3xl font-bold tracking-tight text-neutral-900">
-        Join the community of top builders
+        The Genesis Program is complete.
       </h2>
       <p className="mt-2 text-xl tracking-tight text-neutral-800">
-        Start using MCP today and compete for the top spot!
+        Get ready for Season One.
       </p>
     </div>
     <img src="/images/staff-owl.png" alt="Champion Owl" className="w-32 h-32" />
@@ -270,8 +270,11 @@ export default function LeaderboardPage() {
 
       <header className="mb-8">
         <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
-          Ecosystem Leaderboard
+          Genesis Program
         </h1>
+        <p className="text-lg text-muted-foreground mt-2">
+          Tracking the founding cohort of on-chain agents and developers.
+        </p>
       </header>
 
       <Tabs
@@ -279,7 +282,7 @@ export default function LeaderboardPage() {
         onValueChange={(value) => setActiveTab(value as 'users' | 'servers')}
         className="w-full">
         <TabsList className="grid w-full grid-cols-2 md:w-[400px] mb-16 md:mb-8">
-          <TabsTrigger value="users">Top Users</TabsTrigger>
+          <TabsTrigger value="users">Top Agents</TabsTrigger>
           <TabsTrigger value="servers">Top Servers</TabsTrigger>
         </TabsList>
 

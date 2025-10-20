@@ -40,10 +40,6 @@ export function VersionSelector({
   // Get the currently installed version from the canister
   const { installedVersion } = useInstalledVersion(canisterId, allVersions);
 
-  // Check if the currently viewed version is different from installed
-  const currentVersion = allVersions.find(
-    (v) => v.wasmId === currentVersionWasmId,
-  );
   const isViewingInstalledVersion =
     installedVersion?.wasmId === currentVersionWasmId;
 

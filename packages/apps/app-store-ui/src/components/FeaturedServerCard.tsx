@@ -42,7 +42,7 @@ export function FeaturedServerCard({ server }: FeaturedServerCardProps) {
             <ImageWithFallback
               src={server.iconUrl}
               alt={`${server.name} icon`}
-              className="w-12 h-12 rounded-lg object-cover"
+              className="w-12 h-12 rounded-md object-cover"
             />
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold truncate">{server.name}</h3>

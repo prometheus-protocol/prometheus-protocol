@@ -51,6 +51,7 @@ export const getCanisterId = (name: string): string => {
       'Available canister names in config:',
       Object.keys(_canisterIds),
     );
+    console.error(`Requested canister name: '${name}'`);
     throw new Error(
       `Configuration does not contain a canister ID for '${name}'.`,
     );

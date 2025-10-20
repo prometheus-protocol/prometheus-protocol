@@ -1,6 +1,6 @@
 // packages/hooks/src/useBounties.ts
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import {
   listBounties,
   AuditBounty,
@@ -37,6 +37,32 @@ export const useGetAllAuditBounties = () => {
     queryFn: async () => {
       return listBounties({});
     },
+  });
+};
+
+/**
+ * React Query infinite hook to fetch paginated bounties.
+ * This enables efficient infinite scrolling without fetching all bounties at once.
+ */
+export const useGetAuditBountiesInfinite = (pageSize: number = 20) => {
+  return useInfiniteQuery({
+    queryKey: ['auditBounties', 'infinite', pageSize],
+    queryFn: async ({ pageParam }: { pageParam?: number }) => {
+      return listBounties({
+        take: BigInt(pageSize),
+        prev: pageParam ? BigInt(pageParam) : undefined,
+      });
+    },
+    getNextPageParam: (lastPage: AuditBounty[]) => {
+      // If we got a full page, there might be more
+      // Return the ID of the last bounty as the cursor for the next page
+      if (lastPage.length === pageSize && lastPage.length > 0) {
+        const lastBounty = lastPage[lastPage.length - 1];
+        return Number(lastBounty.id);
+      }
+      return undefined; // No more pages
+    },
+    initialPageParam: undefined as number | undefined,
   });
 };
 

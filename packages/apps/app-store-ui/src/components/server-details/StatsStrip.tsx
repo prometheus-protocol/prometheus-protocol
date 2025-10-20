@@ -69,7 +69,7 @@ export function StatsStrip({
     return (
       <StatItem
         value={formatNumber(authenticatedUniqueUsers)}
-        label="Unique Users"
+        label="Genesis Users"
         Icon={Users}
       />
     );
