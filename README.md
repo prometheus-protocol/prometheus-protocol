@@ -19,7 +19,7 @@
   <b>Please note that this project is under active development. APIs might change before version 1 is released.</b>
 </p>
 
-<p align="center"><a href="https://github.com/prometheus-protocol/prometheus-protocol/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue.svg"/></a>&nbsp;<a href="https://www.npmjs.com/package/@prometheus-protocol/cli"><img alt="NPM Version" src="https://img.shields.io/npm/v/@prometheus-protocol/cli.svg"/></a>&nbsp;<a href="https://github.com/prometheus-protocol/prometheus-protocol/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/prometheus-protocol/prometheus-protocol/actions/workflows/ci.yml/badge.svg" /></a>&nbsp;<a href="https://discord.gg/TbqgYERjYw"><img alt="Join our Discord" src="https://dcbadge.limes.pink/api/server/https://discord.gg/TbqgYERjYw?style=flat"/></a>&nbsp;<a href="https://github.com/prometheus-protocol/prometheus-protocol"><img alt="Version" src="https://img.shields.io/github/package-json/v/prometheus-protocol/prometheus-protocol"/></a></p>
+<p align="center"><a href="https://github.com/prometheus-protocol/prometheus-protocol/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue.svg"/></a>&nbsp;<a href="https://www.npmjs.com/package/@prometheus-protocol/app-store-cli"><img alt="NPM Version" src="https://img.shields.io/npm/v/@prometheus-protocol/app-store-cli"/></a>&nbsp;<a href="https://github.com/prometheus-protocol/prometheus-protocol/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/prometheus-protocol/prometheus-protocol/actions/workflows/ci.yml/badge.svg" /></a>&nbsp;<a href="https://discord.gg/TbqgYERjYw"><img alt="Join our Discord" src="https://dcbadge.limes.pink/api/server/https://discord.gg/TbqgYERjYw?style=flat"/></a>&nbsp;<a href="https://github.com/prometheus-protocol/prometheus-protocol"></a></p>
 
 ## Project Summary
 
@@ -60,7 +60,7 @@ It’s the complete trust stack for AI agents to finally interact with the world
 
 ---
 
-## The Proof: We Didn't Just Design This. We Built It. All of It.
+## We Didn't Just Design This. We Built It. All of It.
 
 That's a big vision. But we're a team that executes. We didn't just build a feature. We built and shipped a live, end-to-end ecosystem from scratch during this hackathon.
 
@@ -91,8 +91,8 @@ Finally, we built the most critical piece: the financial tools that make an agen
 
 - **Live Marketplace:** [Discover, verify, and manage agent allowances](https://prometheusprotocol.org/)
 - **Documentation:** [Read the Docs](https://docs.prometheusprotocol.org)
-- **Pitch Deck Video:** [Watch our Vision & Architecture Overview](https://www.youtube.com/watch?v=639_-z_Oq8E)
-- **Functional Demo:** [Watch the Full Protocol in Action](https://www.youtube.com/watch?v=ZK6Zo2tWfSQ)
+- **Pitch Deck Video:** [Watch our Vision & Architecture Overview](https://youtu.be/W2JADKBXTJA)
+- **Functional Demo:** [Watch the Full Protocol in Action](https://youtu.be/pZuS0EZ8Inw)
 
 ---
 
