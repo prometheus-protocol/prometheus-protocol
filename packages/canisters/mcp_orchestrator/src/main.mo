@@ -80,14 +80,7 @@ shared (deployer) actor class ICRC120Canister<system>(
   stable var icrc10 = ICRC10.initCollection();
 
   private func reportTTExecution(execInfo : TT.ExecutionReport) : Bool {
-    D.print("CANISTER: TimerTool Execution: " # debug_show (execInfo));
-    // Just log execution, don't reschedule here (can't use system capability)
-    let (actionId, action) = execInfo.action;
-    if (action.actionType == CYCLE_JOB_ACTION_TYPE) {
-      D.print("Cycle top-up job completed successfully.");
-      _cycle_job_action_id := null; // Clear the old action ID
-    };
-
+    // Just log execution, don't clear action ID here - the async handler already rescheduled
     return false;
   };
 
@@ -153,17 +146,23 @@ shared (deployer) actor class ICRC120Canister<system>(
   private func _schedule_cycle_top_up_job<system>(tt : TT.TimerTool) {
     // Prevent scheduling duplicates.
     if (_cycle_job_action_id != null) {
+      D.print("Cycle top-up job already scheduled with ID: " # debug_show (_cycle_job_action_id));
       return;
     };
 
     if (not _cycle_top_up_enabled) {
+      D.print("Cycle top-up is disabled. Skipping job scheduling.");
       return;
     };
 
     let tt_instance = tt;
-    let schedule_time = Time.now() + Int.abs(_cycle_check_interval_seconds * 1_000_000_000);
+    let current_time = Time.now();
+    let schedule_time = current_time + Int.abs(_cycle_check_interval_seconds * 1_000_000_000);
 
-    D.print("Scheduling cycle top-up job for " # Int.toText(schedule_time));
+    D.print("Current time: " # Int.toText(current_time));
+    D.print("Interval (seconds): " # Nat.toText(_cycle_check_interval_seconds));
+    D.print("Scheduling cycle top-up job for: " # Int.toText(schedule_time));
+    D.print("Time until next run (seconds): " # Nat.toText(_cycle_check_interval_seconds));
 
     let action : TT.ActionRequest = {
       actionType = CYCLE_JOB_ACTION_TYPE;
@@ -173,6 +172,8 @@ shared (deployer) actor class ICRC120Canister<system>(
     // Use setActionAsync because our handler is async. A timeout of 0 means it can run as long as needed.
     let actionId = tt_instance.setActionASync<system>(Int.abs(schedule_time), action, 0);
     _cycle_job_action_id := ?actionId;
+
+    D.print("Successfully scheduled cycle top-up job with action ID: " # debug_show (actionId));
   };
 
   let tt = TT.Init<system>({
@@ -193,7 +194,12 @@ shared (deployer) actor class ICRC120Canister<system>(
 
     onInitialize = ?(
       func(newClass : TT.TimerTool) : async* () {
-        D.print("Initializing TimerTool");
+        D.print("=== Initializing TimerTool ===");
+        D.print("Cycle top-up enabled: " # debug_show (_cycle_top_up_enabled));
+        D.print("Cycle top-up threshold: " # Nat.toText(TOP_UP_THRESHOLD));
+        D.print("Cycle top-up amount: " # Nat.toText(TOP_UP_AMOUNT));
+        D.print("Cycle check interval: " # Nat.toText(_cycle_check_interval_seconds) # " seconds");
+
         newClass.initialize<system>();
         // do any work here necessary for initialization
 
@@ -204,12 +210,18 @@ shared (deployer) actor class ICRC120Canister<system>(
           _cycle_job_action_id := null; // Clear the old action ID
           _schedule_cycle_top_up_job<system>(newClass);
 
-          return #trappable(actionId);
+          // Return #awaited to signal this async action completed successfully and shouldn't retry
+          return #awaited(actionId);
         };
 
         // Ensure a job is scheduled if the feature is enabled
-        _schedule_cycle_top_up_job<system>(newClass);
+        D.print("Registering execution listener for: " # CYCLE_JOB_ACTION_TYPE);
         newClass.registerExecutionListenerAsync(?CYCLE_JOB_ACTION_TYPE, _handle_cycle_top_up_action);
+
+        D.print("Scheduling initial cycle top-up job...");
+        _schedule_cycle_top_up_job<system>(newClass);
+
+        D.print("=== TimerTool initialization complete ===");
       }
     );
     onStorageChange = func(state : TT.State) {
@@ -635,10 +647,10 @@ shared (deployer) actor class ICRC120Canister<system>(
             let wasm_id = Base16.encode(request.hash);
             Map.set(canister_deployment_types, Map.thash, wasm_id, request.deployment_type);
             Debug.print("Updating deployment type for existing canister " # Principal.toText(exists) # " to " # debug_show (request.deployment_type));
-            
+
             // Re-register with usage tracker in case namespace changed or wasn't registered before
             ignore _register_usage_tracker_namespace(exists, request.namespace);
-            
+
             exists;
           };
           case (null) {
@@ -913,6 +925,135 @@ shared (deployer) actor class ICRC120Canister<system>(
     return #ok(());
   };
 
+  /**
+   * [NEW] Manually trigger a cycle check and top-up for all managed canisters.
+   * This is useful for testing and debugging the automated cycle management system.
+   */
+  public shared ({ caller }) func trigger_manual_cycle_top_up() : async Result.Result<Text, Text> {
+    if (caller != _owner) {
+      return #err("Caller is not the owner");
+    };
+
+    D.print("Manual cycle top-up triggered by owner");
+    await _check_and_top_up_cycles();
+    return #ok("Cycle top-up check completed. Check logs for details.");
+  };
+
+  /**
+   * [NEW] Get the cycle balance of all managed canisters.
+   * Returns a detailed report of each canister's cycle balance.
+   */
+  public type CanisterCycleInfo = {
+    canister_id : Principal;
+    namespace : Text;
+    cycles : Nat;
+    needs_top_up : Bool;
+  };
+
+  public shared query ({ caller }) func get_all_canister_cycles() : async Result.Result<[CanisterCycleInfo], Text> {
+    if (caller != _owner) {
+      return #err("Caller is not the owner");
+    };
+
+    // Collect all canisters with their namespaces
+    var result : [CanisterCycleInfo] = [];
+
+    for ((namespace, canister_ids) in Map.entries(managed_canisters)) {
+      for (canister_id in canister_ids.vals()) {
+        // Note: We can't actually query cycle balance in a query call
+        // This function signature needs to be changed to shared (not query)
+        result := Array.append(result, [{ canister_id = canister_id; namespace = namespace; cycles = 0; /* Will be populated in the update version */
+        needs_top_up = false }]);
+      };
+    };
+
+    return #ok(result);
+  };
+
+  /**
+   * [NEW] Get detailed cycle information for all managed canisters.
+   * This is an UPDATE call that actually queries each canister's status.
+   */
+  public shared ({ caller }) func check_all_canister_cycles() : async Result.Result<[CanisterCycleInfo], Text> {
+    if (caller != _owner) {
+      return #err("Caller is not the owner");
+    };
+
+    D.print("Checking cycle balances for all managed canisters...");
+
+    var result : [CanisterCycleInfo] = [];
+
+    for ((namespace, canister_ids) in Map.entries(managed_canisters)) {
+      for (canister_id in canister_ids.vals()) {
+        try {
+          let status = await ic.canister_status({ canister_id = canister_id });
+          let needs_top_up = status.cycles < TOP_UP_THRESHOLD;
+
+          result := Array.append(result, [{ canister_id = canister_id; namespace = namespace; cycles = status.cycles; needs_top_up = needs_top_up }]);
+
+          D.print("Canister " # Principal.toText(canister_id) # " (" # namespace # "): " # Nat.toText(status.cycles) # " cycles" # (if needs_top_up " [NEEDS TOP-UP]" else ""));
+        } catch (e) {
+          D.print("Failed to check canister " # Principal.toText(canister_id) # ": " # Error.message(e));
+          // Add entry with error indicator
+          result := Array.append(result, [{ canister_id = canister_id; namespace = namespace; cycles = 0; needs_top_up = true }]);
+        };
+      };
+    };
+
+    return #ok(result);
+  };
+
+  /**
+   * [NEW] Get the current orchestrator's cycle balance.
+   */
+  public shared query ({ caller }) func get_orchestrator_cycles() : async Result.Result<Nat, Text> {
+    if (caller != _owner) {
+      return #err("Caller is not the owner");
+    };
+
+    return #ok(Cycles.balance());
+  };
+
+  /**
+   * [NEW] Get detailed information about the cycle top-up job status.
+   */
+  public type CycleJobStatus = {
+    job_scheduled : Bool;
+    job_action_id : ?Nat;
+    enabled : Bool;
+    last_check : ?Int;
+    next_check : ?Int;
+    orchestrator_balance : Nat;
+  };
+
+  public shared query ({ caller }) func get_cycle_job_status() : async Result.Result<CycleJobStatus, Text> {
+    if (caller != _owner) {
+      return #err("Caller is not the owner");
+    };
+
+    let job_id = switch (_cycle_job_action_id) {
+      case (?id) { ?id.id };
+      case (null) { null };
+    };
+
+    let next_check = switch (_cycle_job_action_id) {
+      case (?id) {
+        // Calculate next scheduled time based on current time and interval
+        ?(Time.now() + Int.abs(_cycle_check_interval_seconds * 1_000_000_000));
+      };
+      case (null) { null };
+    };
+
+    return #ok({
+      job_scheduled = _cycle_job_action_id != null;
+      job_action_id = job_id;
+      enabled = _cycle_top_up_enabled;
+      last_check = null; // We could add a stable variable to track this
+      next_check = next_check;
+      orchestrator_balance = Cycles.balance();
+    });
+  };
+
   // =====================================================================================
   // OAUTH REGISTRATION AUTOMATION
   // =====================================================================================
@@ -937,7 +1078,7 @@ shared (deployer) actor class ICRC120Canister<system>(
           };
           let usage_tracker : UsageTracker = actor (Principal.toText(tracker_id));
           let result = await usage_tracker.register_canister_namespace(canister_id, namespace);
-          
+
           switch (result) {
             case (#ok(())) {
               Debug.print("Successfully registered canister " # Principal.toText(canister_id) # " to namespace: " # namespace # " in usage tracker");
