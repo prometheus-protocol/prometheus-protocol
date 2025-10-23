@@ -460,6 +460,7 @@ export interface AppVersionSummary {
   versionString: string; // e.g., "1.2.0"
   securityTier: SecurityTier;
   status: 'Rejected' | 'Verified' | 'Pending';
+  created: bigint; // Timestamp in nanoseconds since epoch
 }
 
 // The new, primary data structure for the app store's list view.
@@ -525,6 +526,7 @@ export const getAppStoreListings = async (): Promise<AppStoreListing[]> => {
           versionString: item.latest_version.version_string,
           securityTier: unwrapSecurityTier(item.latest_version.security_tier),
           status: unwrapVersionStatus(item.latest_version.status),
+          created: item.latest_version.created,
         },
       }),
     );
@@ -564,6 +566,7 @@ function mapCanisterVersionToTS(
     bounties: canisterVersion.bounties.map(processBounty),
     // Use a more generic name like `processAuditRecord` that handles both types
     auditRecords: canisterVersion.audit_records.map(processAuditRecord),
+    created: canisterVersion.created,
   };
 }
 
@@ -590,6 +593,7 @@ function mapCanisterVersionSummaryToTS(
     versionString: canisterSummary.version_string,
     securityTier: unwrapSecurityTier(canisterSummary.security_tier),
     status: unwrapVersionStatus(canisterSummary.status),
+    created: canisterSummary.created,
   };
 }
 

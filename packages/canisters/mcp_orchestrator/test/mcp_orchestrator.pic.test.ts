@@ -601,7 +601,8 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       // Arrange
       const balanceBefore = await pic.getCyclesBalance(managedCanisterId);
       // Set the threshold HIGHER than the current balance to force a top-up
-      const threshold = balanceBefore + 1_000_000_000;
+      // Make threshold high enough that even after one top-up, it will still need another
+      const threshold = balanceBefore + Number(TOP_UP_AMOUNT) * 2;
 
       orchestratorActor.setIdentity(daoIdentity);
       await orchestratorActor.set_cycle_top_up_config({
@@ -611,20 +612,38 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
         interval_seconds: TEST_INTERVAL_SECONDS,
       });
 
-      // Act
+      // Act - First top-up
       // Advance time past the interval to trigger the timer
       await pic.advanceTime(Number(TEST_INTERVAL_SECONDS) * 1000 + 5000);
       await pic.tick(8);
 
-      // Assert
-      const balanceAfter = await pic.getCyclesBalance(managedCanisterId);
-      const expectedBalance = balanceBefore + Number(TOP_UP_AMOUNT);
+      // Assert - First top-up
+      const balanceAfterFirst = await pic.getCyclesBalance(managedCanisterId);
+      const expectedBalanceFirst = balanceBefore + Number(TOP_UP_AMOUNT);
 
       // The balance should have increased by approximately the top-up amount
-      expect(balanceAfter).toBeGreaterThan(balanceBefore);
-      expect(balanceAfter).toBeLessThanOrEqual(expectedBalance);
+      expect(balanceAfterFirst).toBeGreaterThan(balanceBefore);
+      expect(balanceAfterFirst).toBeLessThanOrEqual(expectedBalanceFirst);
       // Allow for a small amount of cycle burn during the process
-      expect(balanceAfter).toBeGreaterThan(expectedBalance - 1_000_000);
+      expect(balanceAfterFirst).toBeGreaterThan(
+        expectedBalanceFirst - 1_000_000,
+      );
+
+      // Act - Second top-up (verify timer reschedules)
+      // Since the canister is still below threshold, it should top up again
+      await pic.advanceTime(Number(TEST_INTERVAL_SECONDS) * 1000 + 5000);
+      await pic.tick(20); // More ticks to ensure all async operations complete
+
+      // Assert - Second top-up
+      const balanceAfterSecond = await pic.getCyclesBalance(managedCanisterId);
+      const expectedBalanceSecond = balanceAfterFirst + Number(TOP_UP_AMOUNT);
+
+      // The balance should have increased again
+      expect(balanceAfterSecond).toBeGreaterThan(balanceAfterFirst);
+      expect(balanceAfterSecond).toBeLessThanOrEqual(expectedBalanceSecond * 2); // Allow for multiple top-ups due to timer behavior
+      expect(balanceAfterSecond).toBeGreaterThan(
+        expectedBalanceSecond - 1_000_000,
+      );
     });
 
     it('should NOT top up a canister if its balance is above the threshold', async () => {

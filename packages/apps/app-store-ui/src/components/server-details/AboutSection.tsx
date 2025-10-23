@@ -31,12 +31,22 @@ export function AboutSection({ server }: AboutSectionProps) {
       <p className="text-muted-foreground mb-8">{server.whyThisApp}</p>
 
       {/* 5. Tags */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 mb-8">
         {server.tags.map((tag, index) => (
           <Badge key={index} variant="outline">
             {tag}
           </Badge>
         ))}
+      </div>
+
+      {/* 6. Published Date */}
+      <div className="text-sm text-muted-foreground">
+        Published on{' '}
+        {new Date(Number(server.latestVersion.created / 1_000_000n)).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })}
       </div>
     </section>
   );
