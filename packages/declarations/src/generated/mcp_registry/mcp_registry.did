@@ -849,6 +849,7 @@ type ArchivedTransactionResponse =
  };
 type AppVersionSummary = 
  record {
+   created: nat;
    security_tier: SecurityTier;
    status: AppListingStatus;
    version_string: text;
@@ -859,6 +860,7 @@ type AppVersionDetails =
    audit_records: vec AuditRecord;
    bounties: vec Bounty;
    build_info: BuildInfo;
+   created: nat;
    data_safety: DataSafetyInfo;
    security_tier: SecurityTier;
    status: AppListingStatus;

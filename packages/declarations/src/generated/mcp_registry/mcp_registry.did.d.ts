@@ -59,6 +59,7 @@ export type AppStoreError = { 'NotFound' : string } |
   { 'InternalError' : string };
 export interface AppVersionDetails {
   'status' : AppListingStatus,
+  'created' : bigint,
   'tools' : Array<ICRC16Map>,
   'bounties' : Array<Bounty>,
   'security_tier' : SecurityTier,
@@ -70,6 +71,7 @@ export interface AppVersionDetails {
 }
 export interface AppVersionSummary {
   'status' : AppListingStatus,
+  'created' : bigint,
   'security_tier' : SecurityTier,
   'wasm_id' : string,
   'version_string' : string,
