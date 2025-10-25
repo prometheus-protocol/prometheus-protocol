@@ -16,7 +16,6 @@ import { DiscordNotificationService } from './services/discord-notification.serv
 import { MCPEventService } from './services/event-emitter.service.js';
 import { ConnectionPoolService } from './services/connections.js';
 import { MCPCoordinatorService } from './services/mcp-coordinator.service.js';
-import { RegistryService } from './services/registry.service.js';
 import { auth } from './mcp/oauth.js';
 import { ConnectionManagerOAuthProvider } from './mcp/oauth-provider.js';
 
@@ -33,7 +32,6 @@ class DiscordBot {
   private mcpEventService: MCPEventService;
   private connectionPool: ConnectionPoolService;
   private mcpCoordinator: MCPCoordinatorService;
-  private registryService: RegistryService;
   private webApp = express();
   private webServer?: any;
 
@@ -66,7 +64,6 @@ class DiscordBot {
       this.database,
       this.discordNotification,
     );
-    this.registryService = new RegistryService();
 
     // Initialize MCP service with all required dependencies
     this.mcpService = new MCPService(
@@ -74,24 +71,34 @@ class DiscordBot {
       this.mcpEventService,
       this.connectionPool,
       this.mcpCoordinator,
-      this.registryService,
+      undefined, // No registry service needed
       this.discordNotification,
     );
 
     // Initialize the MCP service after all dependencies are set up
     this.mcpService.initialize();
 
-    this.llmService = new LLMService(this.config, this.mcpService);
+    // Create scheduler and task functions first (LLM service needs task functions)
     this.scheduler = new AlertScheduler(
       this.client,
       this.database,
       this.config,
-      this.llmService,
+      null as any, // Will be set after LLM service is created
     );
     this.taskFunctions = new TaskManagementFunctions(
       this.scheduler,
       this.database,
     );
+
+    // Now create LLM service with both MCP and task functions
+    this.llmService = new LLMService(
+      this.config,
+      this.mcpService,
+      this.taskFunctions,
+    );
+
+    // Set the LLM service in scheduler now that it's created
+    (this.scheduler as any).llmService = this.llmService;
 
     this.setupEventHandlers();
     this.registerCommands();
@@ -276,10 +283,8 @@ class DiscordBot {
     // Register clear chat memory command
     this.commandRegistry.register(new ClearChatCommand(this.database));
 
-    // Register MCP management command
-    this.commandRegistry.register(
-      new MCPCommand(this.mcpService, this.registryService),
-    );
+    // Register MCP management command (no registry service needed)
+    this.commandRegistry.register(new MCPCommand(this.mcpService));
 
     // Register dedicated tasks management command
     this.commandRegistry.register(

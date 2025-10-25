@@ -13,7 +13,6 @@ import type {
   InvokeToolRequestPayload,
   DisconnectRequestPayload,
   SamplingDecisionSubmittedPayload,
-  ElicitationDataSubmittedPayload,
 } from '../../dtos/pubsub.events.dto.js';
 
 // Mock external dependencies
@@ -35,6 +34,7 @@ const createMockDatabase = (): SupabaseService => {
     storeConnectionDetails: vi.fn().mockResolvedValue(undefined),
     updateConnectionStatus: vi.fn().mockResolvedValue(undefined),
     getReconnectableConnections: vi.fn(),
+    getUserMCPConnection: vi.fn().mockResolvedValue(null),
   } as any;
   mockDb.getReconnectableConnections.mockResolvedValue([]);
   return mockDb;

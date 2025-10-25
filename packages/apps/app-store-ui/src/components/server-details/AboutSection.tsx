@@ -42,7 +42,9 @@ export function AboutSection({ server }: AboutSectionProps) {
       {/* 6. Published Date */}
       <div className="text-sm text-muted-foreground">
         Published on{' '}
-        {new Date(Number(server.latestVersion.created / 1_000_000n)).toLocaleDateString('en-US', {
+        {new Date(
+          Number(server.latestVersion.created / 1_000_000n),
+        ).toLocaleDateString('en-US', {
           year: 'numeric',
           month: 'long',
           day: 'numeric',

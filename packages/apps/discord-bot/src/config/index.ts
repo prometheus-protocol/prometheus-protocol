@@ -54,9 +54,9 @@ export class ConfigManager {
       },
       llm: {
         provider:
-          (process.env.LLM_PROVIDER as 'openai' | 'anthropic') || 'openai',
+          (process.env.LLM_PROVIDER as 'openai' | 'anthropic') || 'anthropic',
         apiKey: required('LLM_API_KEY'),
-        model: optional('LLM_MODEL', 'gpt-3.5-turbo'),
+        model: optional('LLM_MODEL', 'claude-sonnet-4-5-20250929'),
         maxTokens: parseInt(optional('LLM_MAX_TOKENS', '1000')),
         temperature: parseFloat(optional('LLM_TEMPERATURE', '0.7')),
         toolConcurrencyLimit: parseInt(

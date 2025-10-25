@@ -16,6 +16,7 @@
     "deploy:commands": "tsx src/deploy-commands.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.67.0",
     "@modelcontextprotocol/sdk": "^1.18.1",
     "@supabase/supabase-js": "^2.39.0",
     "@types/express": "^5.0.3",
@@ -30,10 +31,10 @@
     "@types/eventsource": "^1.1.15",
     "@types/node": "^20.12.12",
     "@types/node-cron": "^3.0.11",
+    "@vitest/ui": "^2.1.5",
     "tsx": "^4.10.5",
     "typescript": "^5.4.5",
-    "vitest": "^2.1.5",
-    "@vitest/ui": "^2.1.5"
+    "vitest": "^2.1.5"
   },
   "keywords": [
     "discord",

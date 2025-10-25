@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { logger } from '../utils/logger.js';
 import {
   AIFunction,
@@ -20,15 +21,15 @@ export class TaskManagementFunctions {
 
   private registerFunctions(): void {
     this.functions.set(
-      'create_monitoring_task',
+      'create_task',
       new CreateTaskHandler(this.scheduler, this.database),
     );
     this.functions.set(
-      'list_user_tasks',
+      'list_my_tasks',
       new ListTasksHandler(this.scheduler, this.database),
     );
     this.functions.set(
-      'modify_task',
+      'update_task',
       new ModifyTaskHandler(this.scheduler, this.database),
     );
     this.functions.set(
@@ -36,7 +37,7 @@ export class TaskManagementFunctions {
       new DeleteTaskHandler(this.scheduler, this.database),
     );
     this.functions.set(
-      'get_task_status',
+      'check_task_status',
       new GetTaskStatusHandler(this.scheduler, this.database),
     );
   }
@@ -44,21 +45,32 @@ export class TaskManagementFunctions {
   getFunctions(): AIFunction[] {
     return [
       {
-        name: 'create_monitoring_task',
+        name: 'create_task',
+        title: 'Create Task',
         description:
-          'Create a new monitoring task that will periodically execute an AI prompt with MCP tools and alert the user',
+          'Create a new scheduled task for the current user. Use this to set up recurring monitoring or one-time checks using their available tools.',
         parameters: {
           type: 'object',
           properties: {
+            title: {
+              type: 'string',
+              description:
+                'Clear, descriptive title for this task. Examples: "Check my account balance", "Monitor match predictions", "Alert me about market changes"',
+            },
             prompt: {
               type: 'string',
               description:
-                'AI prompt to execute with MCP tools. This prompt will be run periodically and should check for conditions and return alert messages when needed.',
+                "The AI prompt that will be executed when this task runs. This prompt should describe what to check and when to alert. Use the user's available tools to gather information.",
+            },
+            recurring: {
+              type: 'boolean',
+              description:
+                'True = task repeats at the interval indefinitely. False = task runs once then stops automatically.',
             },
             interval: {
               type: 'string',
               description:
-                'How often to execute the prompt (e.g., "5 minutes", "1 hour", "daily")',
+                'How often to run this task. For one-time tasks, this is the delay before first execution.',
               enum: [
                 '1 minute',
                 '5 minutes',
@@ -70,17 +82,15 @@ export class TaskManagementFunctions {
                 'daily',
               ],
             },
-            description: {
-              type: 'string',
-              description: 'Human-readable description of what this task does',
-            },
           },
-          required: ['prompt', 'interval', 'description'],
+          required: ['title', 'prompt', 'recurring', 'interval'],
         },
       },
       {
-        name: 'list_user_tasks',
-        description: 'List all monitoring tasks for the current user',
+        name: 'list_my_tasks',
+        title: 'List My Tasks',
+        description:
+          'List all scheduled tasks belonging to the current user, showing their status, intervals, and when they last ran.',
         parameters: {
           type: 'object',
           properties: {},
@@ -88,23 +98,26 @@ export class TaskManagementFunctions {
         },
       },
       {
-        name: 'modify_task',
+        name: 'update_task',
+        title: 'Update Task',
         description:
-          'Modify an existing monitoring task (enable/disable, change interval, etc.)',
+          'Update an existing task. Use this to enable/disable a task or change how often it runs. IMPORTANT: Always call list_my_tasks first to get the correct task_id.',
         parameters: {
           type: 'object',
           properties: {
             task_id: {
               type: 'string',
-              description: 'ID of the task to modify',
+              description:
+                'The exact task ID from list_my_tasks output. This is a UUID like "a1b2c3d4-e5f6-7890-abcd-ef1234567890".',
             },
             enabled: {
               type: 'boolean',
-              description: 'Whether the task should be enabled or disabled',
+              description:
+                'Set to true to enable/resume the task, false to pause it',
             },
             interval: {
               type: 'string',
-              description: 'New interval for the task',
+              description: 'Change how often the task runs',
               enum: [
                 '1 minute',
                 '5 minutes',
@@ -122,28 +135,33 @@ export class TaskManagementFunctions {
       },
       {
         name: 'delete_task',
-        description: 'Delete a monitoring task completely',
+        title: 'Delete Task',
+        description:
+          'Permanently delete a scheduled task. This cannot be undone. IMPORTANT: Always call list_my_tasks first to get the correct task_id before deleting.',
         parameters: {
           type: 'object',
           properties: {
             task_id: {
               type: 'string',
-              description: 'ID of the task to delete',
+              description:
+                'The exact task ID from list_my_tasks output. This is a UUID like "a1b2c3d4-e5f6-7890-abcd-ef1234567890".',
             },
           },
           required: ['task_id'],
         },
       },
       {
-        name: 'get_task_status',
+        name: 'check_task_status',
+        title: 'Check Task Status',
         description:
-          'Get the current status and last run information for a specific task',
+          "Get detailed information about a specific task including when it last ran, if it's enabled, and any recent results. IMPORTANT: Always call list_my_tasks first to get the correct task_id.",
         parameters: {
           type: 'object',
           properties: {
             task_id: {
               type: 'string',
-              description: 'ID of the task to check',
+              description:
+                'The exact task ID from list_my_tasks output. This is a UUID like "a1b2c3d4-e5f6-7890-abcd-ef1234567890".',
             },
           },
           required: ['task_id'],
@@ -191,7 +209,7 @@ class CreateTaskHandler implements AIFunctionHandler {
     args: Record<string, any>,
     context: AIFunctionContext,
   ): Promise<AIFunctionResult> {
-    const { prompt, interval, description } = args;
+    const { prompt, interval, title, recurring = true } = args;
 
     // Parse interval to milliseconds
     const intervalMs = this.parseInterval(interval);
@@ -202,31 +220,35 @@ class CreateTaskHandler implements AIFunctionHandler {
       };
     }
 
-    // Check if task name already exists for this user
+    // Check if task title already exists for this user
     const existingTasks = await this.database.getUserTasks(context.userId);
     const existingTask = existingTasks.find(
-      (task) => task.description === description,
+      (task) => task.description === title,
     );
     if (existingTask) {
       return {
         success: false,
-        message: `A task named "${description}" already exists. Please choose a different name.`,
+        message: `A task titled "${title}" already exists. Please choose a different title.`,
       };
     }
 
-    // Create unique task ID
-    const taskId = `${context.userId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Create unique task ID using UUID
+    const taskId = randomUUID();
 
     try {
       // Create alert configuration with the prompt
       const alertConfig = {
         id: taskId,
-        name: description,
-        description: `AI prompt-based task: ${description}`,
+        name: title,
+        description: recurring
+          ? `Recurring task: ${title}`
+          : `One-shot task: ${title}`,
+        userId: context.userId, // Include userId for MCP tool access
         channelId: context.channelId,
         interval: intervalMs,
         enabled: true,
         prompt: prompt,
+        recurring: recurring,
       };
 
       // Add to scheduler
@@ -239,15 +261,21 @@ class CreateTaskHandler implements AIFunctionHandler {
         channelId: context.channelId,
         prompt,
         interval: intervalMs,
-        description,
+        description: title,
         enabled: true,
+        recurring: recurring,
         createdAt: new Date(),
       });
 
+      const taskType = recurring ? 'recurring' : 'one-shot';
+      const executionMsg = recurring
+        ? `I'll execute your prompt every ${interval}`
+        : `I'll execute your prompt once in ${interval}`;
+
       return {
         success: true,
-        message: `✅ Created monitoring task: "${description}". Task ID: ${taskId}. I'll execute your prompt every ${interval} and alert you based on the results.`,
-        data: { taskId, description, interval, prompt },
+        message: `✅ Created ${taskType} task: "${title}". ${executionMsg} and alert you based on the results.`,
+        data: { taskId, title, interval, prompt, recurring },
       };
     } catch (error) {
       return {
@@ -296,7 +324,7 @@ class ListTasksHandler implements AIFunctionHandler {
       }
 
       const taskList = tasks
-        .map((task) => {
+        .map((task, index) => {
           const alert = this.scheduler.getAlert(task.id);
           const errorState = alert?.errorState;
 
@@ -318,21 +346,39 @@ class ListTasksHandler implements AIFunctionHandler {
             }
           }
 
+          const truncatedPrompt =
+            task.prompt.length > 100
+              ? task.prompt.substring(0, 100) + '...'
+              : task.prompt;
+
+          // Determine task type
+          const taskType =
+            task.recurring === false ? '🎯 One-Shot' : '🔄 Recurring';
+
           return (
-            `• **${task.description}** (${statusIcon})\n` +
-            `  ID: \`${task.id}\`\n` +
-            `  Prompt: ${task.prompt.length > 100 ? task.prompt.substring(0, 100) + '...' : task.prompt}\n` +
-            `  Interval: ${this.formatInterval(task.interval)}\n` +
-            `  ${task.lastRun ? `Last run: ${task.lastRun.toLocaleString()}` : 'Never run'}` +
+            `${index + 1}. **${task.description}** (${statusIcon})\n` +
+            `   Task ID: \`${task.id}\`\n` +
+            `   Type: ${taskType}\n` +
+            `   Prompt: ${truncatedPrompt}\n` +
+            `   Interval: ${this.formatInterval(task.interval)}\n` +
+            `   ${task.lastRun ? `Last run: ${task.lastRun.toLocaleString()}` : 'Never run'}` +
             errorInfo
           );
         })
         .join('\n\n');
 
+      // Include task ID mapping in data for LLM reference
+      const taskMapping = tasks.map((task, index) => ({
+        number: index + 1,
+        id: task.id,
+        description: task.description,
+        enabled: task.enabled,
+      }));
+
       return {
         success: true,
-        message: `📋 **Your Monitoring Tasks:**\n\n${taskList}`,
-        data: { tasks },
+        message: `📋 **Your Monitoring Tasks:**\n\n${taskList}\n\n_To modify or delete a task, use its Task ID shown above._`,
+        data: { tasks, taskMapping },
       };
     } catch (error) {
       return {
@@ -389,13 +435,8 @@ class ModifyTaskHandler implements AIFunctionHandler {
       if (interval) {
         const intervalMs = this.parseInterval(interval);
         if (intervalMs) {
-          // Update scheduler
-          const alert = this.scheduler.getAlert(task_id);
-          if (alert) {
-            alert.interval = intervalMs;
-            await this.scheduler.removeAlert(task_id);
-            await this.scheduler.addAlert(alert);
-          }
+          // Update scheduler with new interval - this will reschedule if enabled
+          await this.scheduler.updateAlertInterval(task_id, intervalMs);
           await this.database.updateTaskInterval(task_id, intervalMs);
         }
       }
@@ -499,7 +540,13 @@ class GetTaskStatusHandler implements AIFunctionHandler {
       let status = task.enabled ? '✅ Active' : '❌ Disabled';
       let errorInfo = '';
 
-      if (errorState?.hasError) {
+      // Note: Completed one-shot tasks are deleted immediately, so this case shouldn't occur
+      // But we'll keep the check in case there's any delay in deletion
+      if (task.recurring === false && task.lastRun && !task.enabled) {
+        status = '✔️ Completed (One-Shot)';
+        errorInfo =
+          '\nℹ️ This task ran once and has been automatically disabled. It will be deleted momentarily.';
+      } else if (errorState?.hasError) {
         if (errorState.errorType === 'permission') {
           status = '🚫 Permission Error (Disabled)';
           errorInfo = `\nError: ${errorState.errorMessage}\nOccurred: ${errorState.lastErrorDate?.toLocaleString() || 'Unknown'}\nSuggestion: Fix bot permissions and use /modify_task to re-enable`;
@@ -516,16 +563,33 @@ class GetTaskStatusHandler implements AIFunctionHandler {
       }
 
       const lastRun = task.lastRun ? task.lastRun.toLocaleString() : 'Never';
-      const nextRun =
-        task.enabled && task.lastRun && !errorState?.disabledDueToError
-          ? new Date(task.lastRun.getTime() + task.interval).toLocaleString()
-          : 'N/A';
+
+      // For one-shot tasks, there is no next run (they run once and stop)
+      let nextRun = 'N/A';
+      if (
+        task.recurring !== false &&
+        task.enabled &&
+        task.lastRun &&
+        !errorState?.disabledDueToError
+      ) {
+        // Only show next run for recurring tasks
+        nextRun = new Date(
+          task.lastRun.getTime() + task.interval,
+        ).toLocaleString();
+      } else if (task.recurring === false && !task.lastRun && task.enabled) {
+        // One-shot task that hasn't run yet
+        nextRun = 'Scheduled (one-time)';
+      }
+
+      const taskType =
+        task.recurring === false ? '🎯 One-Shot' : '🔄 Recurring';
 
       return {
         success: true,
         message:
           `📊 **Task Status: ${task.description}**\n\n` +
           `Status: ${status}\n` +
+          `Type: ${taskType}\n` +
           `Prompt: ${task.prompt}\n` +
           `Interval: ${this.formatInterval(task.interval)}\n` +
           `Last run: ${lastRun}\n` +

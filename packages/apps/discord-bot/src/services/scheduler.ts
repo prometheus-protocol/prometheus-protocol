@@ -96,9 +96,10 @@ export class AlertScheduler {
     }
     this.alerts.delete(alertId);
 
-    // Remove from database
+    // Remove from database (both alert_configs and user_tasks)
     try {
       await this.database.deleteAlert(alertId);
+      await this.database.deleteUserTask(alertId);
       schedulerLogger.info('Alert removed and deleted from database', {
         alertId,
       });
@@ -171,6 +172,46 @@ export class AlertScheduler {
         task.stop();
         this.tasks.delete(alertId);
       }
+    }
+  }
+
+  async updateAlertInterval(
+    alertId: string,
+    newInterval: number,
+  ): Promise<void> {
+    const alert = this.alerts.get(alertId);
+    if (!alert) {
+      throw new Error(`Alert ${alertId} not found`);
+    }
+
+    // Update the interval
+    alert.interval = newInterval;
+
+    // Update in database
+    try {
+      await this.database.updateAlert(alert);
+      schedulerLogger.info('Alert interval updated in database', {
+        alertId,
+        alertName: alert.name,
+        newInterval,
+      });
+    } catch (error) {
+      schedulerLogger.error(
+        'Failed to update alert interval in database',
+        error instanceof Error ? error : new Error(String(error)),
+        { alertId },
+      );
+      throw error;
+    }
+
+    // If the alert is enabled, reschedule it with the new interval
+    if (alert.enabled && this.running) {
+      schedulerLogger.info('Rescheduling alert with new interval', {
+        alertId,
+        alertName: alert.name,
+        newInterval,
+      });
+      this.scheduleAlert(alert);
     }
   }
 
@@ -280,8 +321,8 @@ export class AlertScheduler {
     try {
       schedulerLogger.info(`Executing alert: ${alert.name}`);
 
-      // Extract userId for MCP server access
-      const userId = alert.id.split('_')[0];
+      // Use the userId from the alert config (stored when task was created)
+      const userId = alert.userId;
 
       schedulerLogger.info(`Executing scheduled task with MCP access`, {
         taskName: alert.name,
@@ -349,8 +390,53 @@ export class AlertScheduler {
 
       // Update last run time and save to database
       alert.lastRun = new Date();
+
+      // If this is a one-shot task (not recurring), disable it after execution
+      if (alert.recurring === false) {
+        alert.enabled = false;
+        schedulerLogger.info(
+          `One-shot task "${alert.name}" executed - disabling and auto-deleting`,
+          {
+            alertId: alert.id,
+            alertName: alert.name,
+          },
+        );
+
+        // Stop the scheduled task
+        const task = this.tasks.get(alert.id);
+        if (task) {
+          task.stop();
+          this.tasks.delete(alert.id);
+        }
+
+        try {
+          // Update alert_configs table one last time
+          await this.database.updateAlert(alert);
+          // Also update user_tasks table so list_my_tasks shows correct last run
+          await this.database.updateTaskLastRun(alert.id, alert.lastRun);
+
+          // Auto-delete completed one-shot tasks immediately
+          await this.removeAlert(alert.id);
+          schedulerLogger.info(
+            `Auto-deleted completed one-shot task "${alert.name}"`,
+            { alertId: alert.id },
+          );
+
+          return; // Exit early to avoid duplicate database update below
+        } catch (error) {
+          schedulerLogger.error(
+            'Failed to update one-shot task after execution',
+            error instanceof Error ? error : new Error(String(error)),
+            { alertId: alert.id },
+          );
+        }
+      }
+
       try {
+        // Update alert_configs table
         await this.database.updateAlert(alert);
+        // Also update user_tasks table so list_my_tasks shows correct last run
+        await this.database.updateTaskLastRun(alert.id, alert.lastRun);
       } catch (error) {
         schedulerLogger.error(
           'Failed to update alert lastRun time in database',

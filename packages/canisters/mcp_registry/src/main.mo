@@ -1460,14 +1460,14 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       if (is_verified) {
         let records = _get_audit_records_for_wasm(wasm_id);
         let completed_audits = AppStore.get_completed_audit_types(records);
-        
+
         // Fetch the full WASM record to get the created timestamp
         let wasm_record_opt = _get_wasm_by_hash(version_record.calculated_hash);
         let created_timestamp = switch (wasm_record_opt) {
           case (?wasm_record) { wasm_record.created };
           case (null) { 0 }; // Fallback to 0 if not found (shouldn't happen)
         };
-        
+
         all_versions_summary.add({
           wasm_id = wasm_id;
           version_string = _format_version_number(version_record.version_number);
@@ -1482,14 +1482,14 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     let latest_build_info = _build_build_info(latest_audit_records);
     let is_verified = _is_wasm_verified(wasm_id_to_load);
     let status = if (is_verified) { #Verified } else { #Pending };
-    
+
     // Fetch the full WASM record to get the created timestamp
     let latest_wasm_record_opt = _get_wasm_by_hash(version_to_load_record.calculated_hash);
     let latest_created_timestamp = switch (latest_wasm_record_opt) {
       case (?wasm_record) { wasm_record.created };
       case (null) { 0 }; // Fallback to 0 if not found (shouldn't happen)
     };
-    
+
     let latest_version_details : AppStore.AppVersionDetails = {
       wasm_id = wasm_id_to_load;
       version_string = _format_version_number(version_to_load_record.version_number);

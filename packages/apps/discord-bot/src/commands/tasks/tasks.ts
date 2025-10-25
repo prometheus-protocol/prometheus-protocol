@@ -289,7 +289,7 @@ export class TasksCommand extends BaseCommand {
 
       case 'list': {
         const result = await this.taskFunctions.executeFunction(
-          'list_user_tasks',
+          'list_my_tasks',
           {},
           functionContext,
         );
@@ -413,7 +413,7 @@ export class TasksCommand extends BaseCommand {
         }
 
         const result = await this.taskFunctions.executeFunction(
-          'modify_task',
+          'update_task',
           { task_id: taskId, enabled: true },
           functionContext,
         );
@@ -455,7 +455,7 @@ export class TasksCommand extends BaseCommand {
         }
 
         const result = await this.taskFunctions.executeFunction(
-          'modify_task',
+          'update_task',
           { task_id: taskId, enabled: false },
           functionContext,
         );
@@ -549,7 +549,7 @@ export class TasksCommand extends BaseCommand {
         }
 
         const result = await this.taskFunctions.executeFunction(
-          'modify_task',
+          'update_task',
           { task_id: taskId, interval },
           functionContext,
         );
@@ -602,7 +602,7 @@ export class TasksCommand extends BaseCommand {
 
       // Get all user tasks and find by description (name)
       const result = await this.taskFunctions.executeFunction(
-        'list_user_tasks',
+        'list_my_tasks',
         {},
         { userId, channelId: '', guildId: '', username },
       );
@@ -641,7 +641,7 @@ export class TasksCommand extends BaseCommand {
         console.log('🎯 FETCHING TASKS FOR AUTOCOMPLETE...');
         // Get user's tasks for autocomplete
         const result = await this.taskFunctions.executeFunction(
-          'list_user_tasks',
+          'list_my_tasks',
           {},
           {
             userId: interaction.user.id,

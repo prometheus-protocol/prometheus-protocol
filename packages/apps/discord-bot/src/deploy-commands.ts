@@ -26,7 +26,7 @@ if (!token || !clientId || !guildId) {
 const commandRegistry = new CommandRegistryImpl();
 commandRegistry.register(new ChatCommand(null as any, null as any));
 commandRegistry.register(new ClearChatCommand(null as any));
-commandRegistry.register(new MCPCommand(null as any, null as any));
+commandRegistry.register(new MCPCommand(null as any)); // No longer needs registry service
 commandRegistry.register(new TasksCommand(null as any, null as any));
 
 const commands = commandRegistry

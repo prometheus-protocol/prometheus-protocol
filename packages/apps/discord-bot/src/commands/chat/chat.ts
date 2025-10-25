@@ -56,22 +56,15 @@ export class ChatCommand extends BaseCommand {
       userId: interaction.user.id,
     });
 
-    // Acknowledge the interaction immediately - before any other processing
+    // Reply immediately with brief acknowledgment
     try {
-      await interaction.deferReply();
-      console.log(
-        '✅ Successfully deferred reply for interaction:',
-        interaction.id,
-      );
-    } catch (error) {
-      console.error('❌ Failed to defer reply:', error);
-      console.log('🔍 Interaction state when defer failed:', {
-        interactionId: interaction.id,
-        isDeferred: interaction.deferred,
-        isReplied: interaction.replied,
-        createdTimestamp: interaction.createdTimestamp,
-        age: Date.now() - interaction.createdTimestamp,
+      await interaction.reply({
+        content: `� *Processing your request...*`,
+        fetchReply: true,
       });
+      console.log('✅ Successfully replied:', interaction.id);
+    } catch (error) {
+      console.error('❌ Failed to reply:', error);
       return;
     }
 
@@ -82,28 +75,25 @@ export class ChatCommand extends BaseCommand {
 
     try {
       // Create a context object compatible with the existing execute method
-      // In DMs, interaction.guildId will be null, so we handle that properly
       const context: CommandContext = {
         interaction,
         args: [],
         userId: interaction.user.id,
         channelId: interaction.channelId,
-        guildId: interaction.guildId || undefined, // Will be undefined in DMs
+        guildId: interaction.guildId || undefined,
       };
 
       // Call the existing execute method
       const response = await this.executeInternal(context, prompt);
 
-      // Send the response using editReply since we deferred
+      // Send the final response as a follow-up message
       if (response) {
-        await interaction.editReply({
+        await interaction.followUp({
           content: response.content || undefined,
           embeds: response.embeds || undefined,
           files: response.files || undefined,
           components: response.components || undefined,
         });
-      } else {
-        await interaction.editReply({ content: '✅ Done.' });
       }
     } catch (error) {
       chatLogger.error(
@@ -111,7 +101,7 @@ export class ChatCommand extends BaseCommand {
         error instanceof Error ? error : new Error(String(error)),
       );
 
-      await interaction.editReply({
+      await interaction.followUp({
         content:
           'Sorry, I encountered an error while processing your request. Please try again later.',
       });
@@ -160,12 +150,7 @@ export class ChatCommand extends BaseCommand {
       // Generate response from LLM with status updates
       chatLogger.info('Calling LLM service', { userId: context.userId });
 
-      // Update user with initial status
-      if (context.interaction && context.interaction.deferred) {
-        await context.interaction.editReply({
-          content: '🤖 Processing your request...',
-        });
-      }
+      // No initial status update needed - user message is already visible
 
       const response = await this.llmService.generateResponse(
         prompt,
@@ -175,14 +160,18 @@ export class ChatCommand extends BaseCommand {
           history: history, // Use actual conversation history
         },
         context.userId, // Pass userId for MCP integration
-        // Pass callback for status updates
+        // Pass callback for status updates - send as follow-up messages
         async (status: string) => {
-          if (context.interaction && context.interaction.deferred) {
+          if (context.interaction) {
             try {
-              await context.interaction.editReply({ content: `🤖 ${status}` });
+              // Status already includes emoji from LLM service
+              await context.interaction.followUp({ content: status });
             } catch (error) {
               // If update fails, log but don't break the flow
-              chatLogger.warn('Failed to update status', { status, error });
+              chatLogger.warn('Failed to send status update', {
+                status,
+                error,
+              });
             }
           }
         },

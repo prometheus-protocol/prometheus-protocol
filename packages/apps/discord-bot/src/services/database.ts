@@ -72,6 +72,13 @@ export class SupabaseService implements DatabaseService {
       dbLogger.error('Error saving conversation turn:', error);
       throw error;
     }
+
+    // Prune old messages to keep only the last 50 (async, don't await to avoid blocking)
+    this.pruneOldMessages(userId, channelId, 50).catch((err) => {
+      dbLogger.warn('Failed to prune old messages (non-blocking)', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
   }
 
   async getConversationHistory(
@@ -125,6 +132,60 @@ export class SupabaseService implements DatabaseService {
     return deletedCount;
   }
 
+  async pruneOldMessages(
+    userId: string,
+    channelId: string,
+    keepCount: number = 50,
+  ): Promise<number> {
+    try {
+      // Get all messages for this user/channel ordered by date
+      const { data: allMessages, error: fetchError } = await this.client
+        .from('conversation_history')
+        .select('id, created_at')
+        .eq('user_id', userId)
+        .eq('channel_id', channelId)
+        .order('created_at', { ascending: false });
+
+      if (fetchError) {
+        dbLogger.error('Error fetching messages for pruning:', fetchError);
+        return 0;
+      }
+
+      // If we have more than keepCount messages, delete the oldest ones
+      if (allMessages && allMessages.length > keepCount) {
+        const messagesToDelete = allMessages.slice(keepCount);
+        const idsToDelete = messagesToDelete.map((msg) => msg.id);
+
+        const { error: deleteError } = await this.client
+          .from('conversation_history')
+          .delete()
+          .in('id', idsToDelete);
+
+        if (deleteError) {
+          dbLogger.error('Error pruning old messages:', deleteError);
+          return 0;
+        }
+
+        dbLogger.info('Pruned old conversation messages', {
+          userId,
+          channelId,
+          deletedCount: idsToDelete.length,
+          kept: keepCount,
+        });
+
+        return idsToDelete.length;
+      }
+
+      return 0;
+    } catch (error) {
+      dbLogger.error(
+        'Error in pruneOldMessages:',
+        error instanceof Error ? error : new Error(String(error)),
+      );
+      return 0;
+    }
+  }
+
   async saveAlertState(
     alertId: string,
     data: any,
@@ -164,9 +225,11 @@ export class SupabaseService implements DatabaseService {
         id: alert.id,
         name: alert.name,
         description: alert.description,
+        user_id: alert.userId, // Save userId field
         channel_id: alert.channelId,
         interval: alert.interval,
         enabled: alert.enabled,
+        recurring: alert.recurring ?? true, // Default to true if not specified
         prompt: alert.prompt,
         last_run: alert.lastRun?.toISOString() || null,
         last_data: alert.lastData ? JSON.stringify(alert.lastData) : null,
@@ -212,9 +275,11 @@ export class SupabaseService implements DatabaseService {
         id: row.id,
         name: row.name,
         description: row.description,
+        userId: row.user_id, // Load userId field
         channelId: row.channel_id,
         interval: row.interval,
         enabled: row.enabled,
+        recurring: row.recurring ?? true, // Default to true for backwards compatibility
         prompt: row.prompt,
         lastRun: row.last_run ? new Date(row.last_run) : undefined,
         lastData: row.last_data ? JSON.parse(row.last_data) : undefined,
@@ -242,9 +307,11 @@ export class SupabaseService implements DatabaseService {
         .update({
           name: alert.name,
           description: alert.description,
+          user_id: alert.userId, // Include userId in updates
           channel_id: alert.channelId,
           interval: alert.interval,
           enabled: alert.enabled,
+          recurring: alert.recurring ?? true, // Include recurring field
           prompt: alert.prompt,
           last_run: alert.lastRun?.toISOString() || null,
           last_data: alert.lastData ? JSON.stringify(alert.lastData) : null,
@@ -336,6 +403,7 @@ export class SupabaseService implements DatabaseService {
       interval: task.interval,
       description: task.description,
       enabled: task.enabled,
+      recurring: task.recurring ?? true, // Default to true if not specified
       created_at: task.createdAt.toISOString(),
       last_run: task.lastRun?.toISOString(),
     });
@@ -361,6 +429,7 @@ export class SupabaseService implements DatabaseService {
       interval: row.interval,
       description: row.description,
       enabled: row.enabled,
+      recurring: row.recurring ?? true, // Default to true for backwards compatibility
       createdAt: new Date(row.created_at),
       lastRun: row.last_run ? new Date(row.last_run) : undefined,
     }));
@@ -389,6 +458,7 @@ export class SupabaseService implements DatabaseService {
       interval: data.interval,
       description: data.description,
       enabled: data.enabled,
+      recurring: data.recurring ?? true, // Default to true for backwards compatibility
       createdAt: new Date(data.created_at),
       lastRun: data.last_run ? new Date(data.last_run) : undefined,
     };
@@ -402,8 +472,36 @@ export class SupabaseService implements DatabaseService {
     await this.client.from('user_tasks').update({ interval }).eq('id', taskId);
   }
 
+  async updateTaskLastRun(taskId: string, lastRun: Date): Promise<void> {
+    await this.client
+      .from('user_tasks')
+      .update({ last_run: lastRun.toISOString() })
+      .eq('id', taskId);
+  }
+
   async deleteUserTask(taskId: string): Promise<void> {
-    await this.client.from('user_tasks').delete().eq('id', taskId);
+    try {
+      const { error } = await this.client
+        .from('user_tasks')
+        .delete()
+        .eq('id', taskId);
+
+      if (error) {
+        dbLogger.error('Failed to delete user task', error, {
+          taskId,
+        });
+        throw new Error(`Failed to delete user task: ${error.message}`);
+      }
+
+      dbLogger.info('User task deleted successfully', { taskId });
+    } catch (error) {
+      dbLogger.error(
+        'Error deleting user task',
+        error instanceof Error ? error : new Error(String(error)),
+        { taskId },
+      );
+      throw error;
+    }
   }
 
   // === OAuth Persistence ===
@@ -1230,6 +1328,16 @@ export class SupabaseService implements DatabaseService {
       server_url: mcpServerUrl,
     };
 
+    // Generate a human-readable fallback name from the URL
+    let fallbackServerName = 'MCP Server';
+    try {
+      const url = new URL(mcpServerUrl);
+      fallbackServerName = url.hostname;
+    } catch {
+      // If URL parsing fails, just use generic name
+      fallbackServerName = 'MCP Server';
+    }
+
     // Note: metadata and updated_at are not stored in the database schema, only logged for debugging
 
     // Use UPSERT to handle both insert and update cases
@@ -1237,7 +1345,7 @@ export class SupabaseService implements DatabaseService {
       user_id: userId,
       server_id: mcpServerConfigId,
       server_url: mcpServerUrl,
-      server_name: mcpServerConfigId, // Use server ID as fallback name initially
+      server_name: fallbackServerName, // Use hostname from URL as fallback name initially
       status: dbStatus,
       tools: '[]',
       connected_at: new Date().toISOString(),
@@ -1282,6 +1390,7 @@ export class SupabaseService implements DatabaseService {
           'RECONNECTING',
           'CONNECTION_REQUESTED',
           'connected',
+          'error',
           'FAILED_INVOKE_TOOL',
         ])
         .not('status', 'eq', 'DISCONNECTED_BY_USER')

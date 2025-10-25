@@ -29,9 +29,11 @@ export interface AlertConfig {
   id: string;
   name: string;
   description: string;
+  userId: string; // Discord user ID who created the task
   channelId: string;
   interval: number; // milliseconds
   enabled: boolean;
+  recurring?: boolean; // If false, alert will be disabled after first execution
   prompt: string; // AI prompt to execute with MCP tools
   lastRun?: Date;
   lastData?: any;
@@ -96,6 +98,7 @@ export interface DatabaseService {
   getUserTask(userId: string, taskId: string): Promise<UserTaskData | null>;
   updateTaskEnabled(taskId: string, enabled: boolean): Promise<void>;
   updateTaskInterval(taskId: string, interval: number): Promise<void>;
+  updateTaskLastRun(taskId: string, lastRun: Date): Promise<void>;
   deleteUserTask(taskId: string): Promise<void>;
 
   // OAuth persistence
@@ -186,6 +189,7 @@ export interface UserTaskData {
   interval: number;
   description: string;
   enabled: boolean;
+  recurring?: boolean; // If false, task will be disabled after first execution
   createdAt: Date;
   lastRun?: Date;
 }
