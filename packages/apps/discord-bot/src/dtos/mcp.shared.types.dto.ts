@@ -65,7 +65,7 @@ export interface MCPToolInvocationProgressEvent extends BaseMCPEventPayload {
 }
 
 export interface MCPServerCapabilitiesEvent extends BaseMCPEventPayload {
-  name: string; // Name of the MCP server
+  name: string; // Name of the MCP server (display name with title priority)
   version: string; // Version of the MCP server
   capabilities: ServerCapabilities; // Use the same ServerCapabilities interface
 }

@@ -1,6 +1,7 @@
 // AI Function Types
 export interface AIFunction {
   name: string;
+  title?: string; // Optional human-readable display name
   description: string;
   parameters: {
     type: 'object';

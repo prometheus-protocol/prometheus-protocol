@@ -54,6 +54,7 @@ const createMockDatabaseService = (): DatabaseService => ({
   getUserTask: vi.fn(),
   updateTaskEnabled: vi.fn(),
   updateTaskInterval: vi.fn(),
+  updateTaskLastRun: vi.fn(),
   deleteUserTask: vi.fn(),
 
   // MCP connections (not used in OAuth provider)
