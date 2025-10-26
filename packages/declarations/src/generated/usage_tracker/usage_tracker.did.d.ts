@@ -27,6 +27,14 @@ export interface NamespaceMetrics {
   'total_tools' : bigint,
   'namespace' : string,
 }
+export interface NamespaceMetricsDetailed {
+  'tools' : Array<ToolMetrics>,
+  'authenticated_unique_users' : bigint,
+  'total_invocations' : bigint,
+  'anonymous_invocations' : bigint,
+  'total_instances' : bigint,
+  'namespace' : string,
+}
 export type Result = { 'ok' : null } |
   { 'err' : string };
 export type Result_1 = { 'ok' : string } |
@@ -39,6 +47,10 @@ export interface ServerMetricsShared {
   'invocations_by_user' : Array<[Principal, bigint]>,
 }
 export type Time = bigint;
+export interface ToolMetrics {
+  'total_invocations' : bigint,
+  'tool_id' : string,
+}
 export interface UsageStats {
   'start_timestamp_ns' : Time,
   'end_timestamp_ns' : Time,
@@ -54,6 +66,11 @@ export interface UsageTracker {
   'get_app_metrics' : ActorMethod<[Principal], [] | [AppMetrics]>,
   'get_metrics_for_server' : ActorMethod<[string], [] | [ServerMetricsShared]>,
   'get_namespace_metrics' : ActorMethod<[string], [] | [NamespaceMetrics]>,
+  'get_namespace_metrics_detailed' : ActorMethod<
+    [string],
+    [] | [NamespaceMetricsDetailed]
+  >,
+  'get_namespace_tools' : ActorMethod<[string], Array<ToolMetrics>>,
   'get_namespace_wasms' : ActorMethod<[string], Array<string>>,
   'get_owner' : ActorMethod<[], Principal>,
   'get_payout_canister' : ActorMethod<[], [] | [Principal]>,

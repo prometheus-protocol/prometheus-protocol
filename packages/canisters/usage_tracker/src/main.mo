@@ -73,6 +73,21 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
     total_instances : Nat; // Count of all canister instances
   };
 
+  // --- Tool-level metrics ---
+  public type ToolMetrics = {
+    tool_id : Text;
+    total_invocations : Nat;
+  };
+
+  public type NamespaceMetricsDetailed = {
+    namespace : Text;
+    total_invocations : Nat;
+    tools : [ToolMetrics];
+    authenticated_unique_users : Nat;
+    anonymous_invocations : Nat;
+    total_instances : Nat;
+  };
+
   // ==================================================================================================
   // STATE
   // ==================================================================================================
@@ -101,6 +116,9 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
 
   // --- NEW: Namespace-level aggregated metrics ---
   var metrics_by_namespace = Map.new<Text, NamespaceMetrics>();
+
+  // --- NEW: Map to track tool invocations aggregated across all WASMs in a namespace ---
+  var tools_by_namespace = Map.new<Text, Map.Map<Text, Nat>>();
 
   // ==================================================================================================
   // PRIVATE HELPERS
@@ -198,6 +216,9 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
     // Use a map to track unique tools across all WASM versions
     var unique_tools = Map.new<Text, Null>();
 
+    // Use a map to track tool invocations across all WASM versions
+    var tool_invocations = Map.new<Text, Nat>();
+
     // Count the number of canister instances for this namespace
     for ((canister_id, canister_namespace) in Map.entries(canister_to_namespace)) {
       if (canister_namespace == namespace) {
@@ -229,9 +250,13 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
                 };
               };
 
-              // Track unique tools across all WASM versions
-              for ((tool_id, _) in Map.entries(server_metrics.invocations_by_tool)) {
+              // Track unique tools and aggregate their invocations across all WASM versions
+              for ((tool_id, call_count) in Map.entries(server_metrics.invocations_by_tool)) {
                 Map.set(unique_tools, Map.thash, tool_id, null);
+                
+                // Aggregate tool invocations
+                let current_count = Option.get(Map.get(tool_invocations, Map.thash, tool_id), 0);
+                Map.set(tool_invocations, Map.thash, tool_id, current_count + call_count);
               };
             };
             case (null) {
@@ -244,6 +269,9 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
         // No WASMs registered for this namespace yet
       };
     };
+
+    // Store tool invocations in tools_by_namespace
+    Map.set(tools_by_namespace, Map.thash, namespace, tool_invocations);
 
     // Calculate authenticated unique users (total unique users minus anonymous if present)
     let total_unique_users = Map.size(unique_users);
@@ -543,6 +571,61 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   // --- NEW: Query endpoint for namespace-level metrics ---
   public shared query func get_namespace_metrics(namespace : Text) : async ?NamespaceMetrics {
     return Map.get(metrics_by_namespace, Map.thash, namespace);
+  };
+
+  /**
+   * Get detailed namespace metrics including per-tool invocation counts.
+   * Returns aggregated tool usage across all WASM versions of the namespace.
+   */
+  public shared query func get_namespace_metrics_detailed(namespace : Text) : async ?NamespaceMetricsDetailed {
+    let basic_metrics = Map.get(metrics_by_namespace, Map.thash, namespace);
+    let tools = switch (Map.get(tools_by_namespace, Map.thash, namespace)) {
+      case (?tool_map) {
+        let result = Buffer.Buffer<ToolMetrics>(Map.size(tool_map));
+        for ((tool_id, invocations) in Map.entries(tool_map)) {
+          result.add({
+            tool_id = tool_id;
+            total_invocations = invocations;
+          });
+        };
+        Buffer.toArray(result);
+      };
+      case (null) { [] };
+    };
+    
+    switch (basic_metrics) {
+      case (?metrics) {
+        ?{
+          namespace = metrics.namespace;
+          total_invocations = metrics.total_invocations;
+          tools = tools;
+          authenticated_unique_users = metrics.authenticated_unique_users;
+          anonymous_invocations = metrics.anonymous_invocations;
+          total_instances = metrics.total_instances;
+        }
+      };
+      case (null) { null };
+    };
+  };
+
+  /**
+   * Get tool invocations for a specific namespace.
+   * Returns an array of tools with their aggregated invocation counts.
+   */
+  public shared query func get_namespace_tools(namespace : Text) : async [ToolMetrics] {
+    switch (Map.get(tools_by_namespace, Map.thash, namespace)) {
+      case (?tool_map) {
+        let result = Buffer.Buffer<ToolMetrics>(Map.size(tool_map));
+        for ((tool_id, invocations) in Map.entries(tool_map)) {
+          result.add({
+            tool_id = tool_id;
+            total_invocations = invocations;
+          });
+        };
+        Buffer.toArray(result);
+      };
+      case (null) { [] };
+    };
   };
 
   private func to_shared_metrics(metrics : ServerMetrics) : ServerMetricsShared {

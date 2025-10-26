@@ -34,8 +34,13 @@ export class MCPEventHandlerService {
    * Updates the server connection with OAuth details and sends Discord notification
    */
   async handleAuthRequired(payload: MCPAuthRequiredEvent): Promise<void> {
-    const { userId, channelId, mcpServerConfigId, mcpServerUrl, oauthAuthorizationUrl } =
-      payload;
+    const {
+      userId,
+      channelId,
+      mcpServerConfigId,
+      mcpServerUrl,
+      oauthAuthorizationUrl,
+    } = payload;
 
     logger.info(
       `[MCPEventHandler] Auth required for server ${mcpServerConfigId}`,
@@ -276,7 +281,14 @@ export class MCPEventHandlerService {
   async handleServerCapabilities(
     payload: MCPServerCapabilitiesEvent,
   ): Promise<void> {
-    const { userId, mcpServerConfigId, capabilities, name, version } = payload;
+    const {
+      userId,
+      mcpServerConfigId,
+      capabilities,
+      name,
+      version,
+      channelId,
+    } = payload;
 
     logger.info(
       `[MCPEventHandler] Server capabilities for ${mcpServerConfigId}: ${name} v${version}`,
@@ -286,6 +298,7 @@ export class MCPEventHandlerService {
       const existingConnection =
         await this.databaseService.getUserMCPConnection(
           userId,
+          channelId,
           mcpServerConfigId,
         );
 
@@ -308,6 +321,7 @@ export class MCPEventHandlerService {
         error_message: null,
         connected_at: existingConnection?.connected_at || new Date(),
         last_used: new Date(),
+        channel_id: existingConnection?.channel_id || '',
       };
 
       await this.databaseService.saveUserMCPConnection(connectionData);

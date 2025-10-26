@@ -612,7 +612,7 @@ export default function ServerDetailsPage() {
             {hasToolsInfo ? (
               <ToolsAndResources
                 tools={latestVersion.tools}
-                wasmId={latestVersion.wasmId}
+                namespace={server.namespace}
               />
             ) : (
               <SponsorPrompt

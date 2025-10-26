@@ -10,6 +10,13 @@ type UsageTracker =
    get_app_metrics: (canister_id: principal) -> (opt AppMetrics) query;
    get_metrics_for_server: (wasm_id: text) -> (opt ServerMetricsShared) query;
    get_namespace_metrics: (namespace: text) -> (opt NamespaceMetrics) query;
+   /// * Get detailed namespace metrics including per-tool invocation counts.
+   ///    * Returns aggregated tool usage across all WASM versions of the namespace.
+   get_namespace_metrics_detailed: (namespace: text) ->
+    (opt NamespaceMetricsDetailed) query;
+   /// * Get tool invocations for a specific namespace.
+   ///    * Returns an array of tools with their aggregated invocation counts.
+   get_namespace_tools: (namespace: text) -> (vec ToolMetrics) query;
    /// * Gets all WASM IDs currently registered for a namespace.
    get_namespace_wasms: (namespace: text) -> (vec text) query;
    get_owner: () -> (principal) query;
@@ -33,10 +40,10 @@ type UsageTracker =
     (Result);
    /// * Manually registers a historical WASM ID with a namespace.
    ///    * This is useful for recovering historical data from WASM versions that are no longer active.
-   ///    * 
+   ///    *
    ///    * Use case: If a canister was upgraded from v1 (wasm_id_1) to v2 (wasm_id_2), and you want to
    ///    * include the v1 users in the namespace metrics, call this function with wasm_id_1.
-   ///    * 
+   ///    *
    ///    * The WASM ID must exist in aggregated_metrics (meaning it has historical usage data).
    register_historical_wasm: (namespace: text, wasm_id: text) -> (Result_1);
    remove_approved_wasm_hash: (wasm_id: text) -> (Result);
@@ -52,6 +59,11 @@ type UsageStats =
    activity: vec CallerActivity;
    end_timestamp_ns: Time;
    start_timestamp_ns: Time;
+ };
+type ToolMetrics = 
+ record {
+   tool_id: text;
+   total_invocations: nat;
  };
 type Time = int;
 type ServerMetricsShared = 
@@ -80,6 +92,15 @@ type Result =
  variant {
    err: text;
    ok;
+ };
+type NamespaceMetricsDetailed = 
+ record {
+   anonymous_invocations: nat;
+   authenticated_unique_users: nat;
+   namespace: text;
+   tools: vec ToolMetrics;
+   total_instances: nat;
+   total_invocations: nat;
  };
 type NamespaceMetrics = 
  record {

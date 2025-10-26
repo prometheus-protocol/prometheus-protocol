@@ -37,6 +37,18 @@ export const idlFactory = ({ IDL }) => {
     'total_tools' : IDL.Nat,
     'namespace' : IDL.Text,
   });
+  const ToolMetrics = IDL.Record({
+    'total_invocations' : IDL.Nat,
+    'tool_id' : IDL.Text,
+  });
+  const NamespaceMetricsDetailed = IDL.Record({
+    'tools' : IDL.Vec(ToolMetrics),
+    'authenticated_unique_users' : IDL.Nat,
+    'total_invocations' : IDL.Nat,
+    'anonymous_invocations' : IDL.Nat,
+    'total_instances' : IDL.Nat,
+    'namespace' : IDL.Text,
+  });
   const Result_1 = IDL.Variant({ 'ok' : IDL.Text, 'err' : IDL.Text });
   const UsageTracker = IDL.Service({
     'add_approved_wasm_hash' : IDL.Func([IDL.Text], [Result], []),
@@ -59,6 +71,16 @@ export const idlFactory = ({ IDL }) => {
     'get_namespace_metrics' : IDL.Func(
         [IDL.Text],
         [IDL.Opt(NamespaceMetrics)],
+        ['query'],
+      ),
+    'get_namespace_metrics_detailed' : IDL.Func(
+        [IDL.Text],
+        [IDL.Opt(NamespaceMetricsDetailed)],
+        ['query'],
+      ),
+    'get_namespace_tools' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(ToolMetrics)],
         ['query'],
       ),
     'get_namespace_wasms' : IDL.Func(

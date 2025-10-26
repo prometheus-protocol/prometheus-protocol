@@ -1292,6 +1292,7 @@ export class ConnectionPoolService {
           uri: sdkContentItem.uri, // The URI of this specific content item
           originalRequestUri: payload.resourcePath, // Keep track of the URI that triggered this fetch
           mimeType: sdkContentItem.mimeType,
+          channelId: payload.channelId,
         };
 
         let estimatedPayloadSize = JSON.stringify(resourceForEvent).length;
