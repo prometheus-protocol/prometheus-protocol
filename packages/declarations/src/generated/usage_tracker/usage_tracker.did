@@ -6,18 +6,39 @@ type UsageTracker =
            text;
            ServerMetricsShared;
          }) query;
-   get_and_clear_logs: () -> (Result_1);
+   get_and_clear_logs: () -> (Result_2);
    get_app_metrics: (canister_id: principal) -> (opt AppMetrics) query;
    get_metrics_for_server: (wasm_id: text) -> (opt ServerMetricsShared) query;
    get_namespace_metrics: (namespace: text) -> (opt NamespaceMetrics) query;
+   /// * Gets all WASM IDs currently registered for a namespace.
+   get_namespace_wasms: (namespace: text) -> (vec text) query;
    get_owner: () -> (principal) query;
    get_payout_canister: () -> (opt principal) query;
    is_wasm_hash_approved: (wasm_id: text) -> (bool) query;
+   /// * Lists all WASM IDs that have historical data in aggregated_metrics.
+   ///    * This is useful for discovering which historical WASMs can be registered with namespaces.
+   list_all_wasm_ids: () -> (vec record {
+                                   text;
+                                   nat;
+                                   nat;
+                                 }) query;
    log_call: (stats: UsageStats) -> (Result);
+   /// * Rebuilds the namespace_to_wasms mapping from existing canister_to_wasm and canister_to_namespace data.
+   ///    * This is useful for migrating existing data or recovering from data inconsistencies.
+   ///    * Should be called by the owner after upgrading to ensure all historical WASMs are tracked.
+   rebuild_namespace_wasm_mappings: () -> (Result_1);
    /// * Registers the namespace for a canister. This should be called by the orchestrator
    ///    * when a new canister is provisioned or when an existing canister is upgraded.
    register_canister_namespace: (canister_id: principal, namespace: text) ->
     (Result);
+   /// * Manually registers a historical WASM ID with a namespace.
+   ///    * This is useful for recovering historical data from WASM versions that are no longer active.
+   ///    * 
+   ///    * Use case: If a canister was upgraded from v1 (wasm_id_1) to v2 (wasm_id_2), and you want to
+   ///    * include the v1 users in the namespace metrics, call this function with wasm_id_1.
+   ///    * 
+   ///    * The WASM ID must exist in aggregated_metrics (meaning it has historical usage data).
+   register_historical_wasm: (namespace: text, wasm_id: text) -> (Result_1);
    remove_approved_wasm_hash: (wasm_id: text) -> (Result);
    seed_log: (canister_id: principal, wasm_id: text, stats: UsageStats) ->
     (Result);
@@ -45,10 +66,15 @@ type ServerMetricsShared =
                             };
    total_invocations: nat;
  };
-type Result_1 = 
+type Result_2 = 
  variant {
    err: text;
    ok: vec LogEntry;
+ };
+type Result_1 = 
+ variant {
+   err: text;
+   ok: text;
  };
 type Result = 
  variant {
