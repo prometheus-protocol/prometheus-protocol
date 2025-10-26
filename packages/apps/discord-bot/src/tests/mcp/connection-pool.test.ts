@@ -156,6 +156,7 @@ describe('ConnectionPoolService', () => {
         mockPayload.mcpServerConfigId,
         'CONNECTION_REQUESTED',
         expect.any(Object),
+        mockPayload.mcpServerUrl,
       );
 
       // Should create and connect client
@@ -325,6 +326,7 @@ describe('ConnectionPoolService', () => {
         mockPayload.mcpServerConfigId,
         'CONNECTION_REQUESTED',
         expect.any(Object),
+        mockPayload.mcpServerUrl,
       );
     });
   });
