@@ -240,10 +240,11 @@ export class LLMService {
     // Silently load tools - no need to show this step to users
 
     // Load all available functions including MCP tools
-    const allFunctions = await this.getAllFunctions(userId);
+    const allFunctions = await this.getAllFunctions(userId, context?.channelId);
 
     llmLogger.info('Functions loaded for tool loop', {
       userId,
+      channelId: context?.channelId,
       totalFunctions: allFunctions.length,
       mcpFunctions: allFunctions.length,
     });
@@ -340,6 +341,7 @@ export class LLMService {
                   return await this.mcpService.getToolDisplayName(
                     userId!,
                     tc.function.name,
+                    context?.channelId || 'default',
                   );
                 }
                 return tc.function.name;
@@ -443,7 +445,7 @@ export class LLMService {
   }
 
   // Helper to consolidate function loading logic
-  private async getAllFunctions(userId?: string): Promise<AIFunction[]> {
+  private async getAllFunctions(userId?: string, channelId?: string): Promise<AIFunction[]> {
     let allFunctions: AIFunction[] = [];
 
     // Add the special respond_to_user function (always available)
@@ -481,17 +483,17 @@ export class LLMService {
       }
     }
 
-    // Add MCP tools (user-specific)
+    // Add MCP tools (user-specific and channel-specific)
     if (this.mcpService && userId) {
       try {
         const mcpFunctions =
-          await this.mcpService.convertToolsToOpenAIFunctions(userId);
+          await this.mcpService.convertToolsToOpenAIFunctions(userId, channelId || 'default');
         allFunctions = [...allFunctions, ...mcpFunctions];
       } catch (error) {
         llmLogger.error(
           'Failed to load MCP functions for user',
           error as Error,
-          { userId },
+          { userId, channelId },
         );
       }
     }
@@ -685,12 +687,14 @@ CRITICAL TOOL USAGE RULES:
     if (this.mcpService) {
       llmLogger.debug('Routing function call to MCP service', {
         userId,
+        channelId: context?.channelId,
       });
       try {
         const result = await this.mcpService.handleMCPFunctionCall(
           functionCall.name,
           functionCall.arguments,
           userId,
+          context?.channelId || 'default',
         );
         llmLogger.info('MCP function call succeeded', { userId });
         return result;
