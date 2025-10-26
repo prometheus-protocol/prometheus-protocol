@@ -288,6 +288,7 @@ export class MCPEventHandlerService {
       name,
       version,
       channelId,
+      mcpServerUrl,
     } = payload;
 
     logger.info(
@@ -315,13 +316,13 @@ export class MCPEventHandlerService {
         user_id: userId,
         server_id: mcpServerConfigId,
         server_name: finalServerName,
-        server_url: existingConnection?.server_url || '',
+        server_url: mcpServerUrl, // Use from payload instead of falling back to empty string
         status: existingConnection?.status || 'connected',
         tools: existingConnection?.tools || '[]',
         error_message: null,
         connected_at: existingConnection?.connected_at || new Date(),
         last_used: new Date(),
-        channel_id: existingConnection?.channel_id || '',
+        channel_id: channelId, // Use from payload instead of falling back to empty string
       };
 
       await this.databaseService.saveUserMCPConnection(connectionData);

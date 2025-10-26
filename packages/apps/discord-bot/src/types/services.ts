@@ -108,6 +108,7 @@ export interface DatabaseService {
     state: string;
     code_verifier: string;
     auth_url: string;
+    channel_id?: string;
   }): Promise<void>;
   getOAuthPendingByState(state: string): Promise<null | {
     server_id: string;
@@ -115,6 +116,7 @@ export interface DatabaseService {
     state: string;
     code_verifier: string;
     auth_url: string;
+    channel_id?: string;
   }>;
   getOAuthPending(
     serverId: string,
@@ -125,6 +127,7 @@ export interface DatabaseService {
     state: string;
     code_verifier: string;
     auth_url: string;
+    channel_id?: string;
   }>;
   deleteOAuthPending(serverId: string, userId: string): Promise<void>;
   saveOAuthTokens(tokens: {

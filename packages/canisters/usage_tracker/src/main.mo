@@ -253,7 +253,7 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
               // Track unique tools and aggregate their invocations across all WASM versions
               for ((tool_id, call_count) in Map.entries(server_metrics.invocations_by_tool)) {
                 Map.set(unique_tools, Map.thash, tool_id, null);
-                
+
                 // Aggregate tool invocations
                 let current_count = Option.get(Map.get(tool_invocations, Map.thash, tool_id), 0);
                 Map.set(tool_invocations, Map.thash, tool_id, current_count + call_count);
@@ -592,7 +592,7 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
       };
       case (null) { [] };
     };
-    
+
     switch (basic_metrics) {
       case (?metrics) {
         ?{
@@ -602,7 +602,7 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
           authenticated_unique_users = metrics.authenticated_unique_users;
           anonymous_invocations = metrics.anonymous_invocations;
           total_instances = metrics.total_instances;
-        }
+        };
       };
       case (null) { null };
     };

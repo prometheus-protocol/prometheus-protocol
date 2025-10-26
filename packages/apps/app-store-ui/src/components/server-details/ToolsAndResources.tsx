@@ -16,12 +16,15 @@ interface ToolsAndResourcesProps {
   namespace: string;
 }
 
-export function ToolsAndResources({ tools, namespace }: ToolsAndResourcesProps) {
+export function ToolsAndResources({
+  tools,
+  namespace,
+}: ToolsAndResourcesProps) {
   const { data: namespaceTools } = useNamespaceTools(namespace);
 
   // Create a map of tool name to invocation count for quick lookup
   const toolInvocations = new Map<string, bigint>();
-  namespaceTools?.forEach(tool => {
+  namespaceTools?.forEach((tool) => {
     toolInvocations.set(tool.tool_id, tool.total_invocations);
   });
 

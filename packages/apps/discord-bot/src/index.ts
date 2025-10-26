@@ -133,22 +133,6 @@ class DiscordBot {
           console.log(`📍 Guild: ${guild.name} (${guild.id})`);
         });
 
-        // Get current MCP tools available for chat
-        const mcpTools = await this.mcpService.getAvailableTools('system', 'default');
-        console.log(`🤖 AI Chat available with ${mcpTools.length} MCP tools`);
-        console.log(`⚡ Task management available via /tasks command`);
-
-        // Check MCP system status
-        try {
-          const mcpStatus = await this.mcpService.getSystemStatus();
-          console.log(
-            `🔌 MCP Registry: ${mcpStatus.registryConnected ? 'Connected' : 'Disconnected'}`,
-          );
-          console.log(`🌐 Available MCP Servers: ${mcpStatus.totalServers}`);
-        } catch (error) {
-          console.error('⚠️ MCP system initialization error:', error);
-        }
-
         // Start scheduler with alert loading
         try {
           await this.scheduler.start();
@@ -166,39 +150,22 @@ class DiscordBot {
     });
 
     this.client.on(Events.InteractionCreate, async (interaction) => {
-      console.log('🔔 INTERACTION RECEIVED:', {
+      // Log interaction details (keep logging brief to minimize delays)
+      const isSlash = interaction.isChatInputCommand();
+      const isAutocomplete = interaction.isAutocomplete();
+      const commandName =
+        isSlash || isAutocomplete ? interaction.commandName : 'N/A';
+
+      console.log('🔔 INTERACTION:', {
         type: interaction.type,
-        isSlash: interaction.isChatInputCommand(),
-        isAutocomplete: interaction.isAutocomplete(),
-        commandName:
-          interaction.isChatInputCommand() || interaction.isAutocomplete()
-            ? interaction.commandName
-            : 'N/A',
-        userId: interaction.user.id,
-        guildId: interaction.guildId,
-        channelId: interaction.channelId,
-        isDM: !interaction.guildId, // Flag DM interactions
+        cmd: commandName,
+        user: interaction.user.id,
+        isDM: !interaction.guildId,
       });
 
       // Handle autocomplete interactions
-      if (interaction.isAutocomplete()) {
-        console.log('🔍 AUTOCOMPLETE DEBUG:', {
-          commandName: interaction.commandName,
-          focusedOption: interaction.options.getFocused(true),
-        });
-
-        const command = this.commandRegistry.getCommand(
-          interaction.commandName,
-        );
-        console.log('🔍 COMMAND LOOKUP:', {
-          commandFound: !!command,
-          commandName: command?.name,
-          hasAutocompleteMethod: command && 'handleAutocomplete' in command,
-          methodType: command && typeof (command as any).handleAutocomplete,
-          allCommandNames: this.commandRegistry
-            .getAllCommands()
-            .map((c) => c.name),
-        });
+      if (isAutocomplete) {
+        const command = this.commandRegistry.getCommand(commandName);
 
         if (
           command &&
@@ -206,35 +173,28 @@ class DiscordBot {
           typeof command.handleAutocomplete === 'function'
         ) {
           try {
-            console.log('🔍 CALLING AUTOCOMPLETE HANDLER...');
             await (command as any).handleAutocomplete(interaction);
-            console.log('🔍 AUTOCOMPLETE HANDLER COMPLETED');
           } catch (error) {
             console.error(
-              `Error handling autocomplete for ${interaction.commandName}:`,
+              `Error handling autocomplete for ${commandName}:`,
               error,
             );
             // Respond with empty choices on error
             await interaction.respond([]);
           }
         } else {
-          console.log(
-            '🔍 NO AUTOCOMPLETE HANDLER FOUND - RESPONDING WITH EMPTY',
-          );
           // No autocomplete handler found
           await interaction.respond([]);
         }
         return;
       }
 
-      if (!interaction.isChatInputCommand()) return;
+      if (!isSlash) return;
 
-      const command = this.commandRegistry.getCommand(interaction.commandName);
+      const command = this.commandRegistry.getCommand(commandName);
 
       if (!command) {
-        console.error(
-          `No command matching ${interaction.commandName} was found.`,
-        );
+        console.error(`No command matching ${commandName} was found.`);
         try {
           await interaction.reply({
             content: 'Command not found!',
@@ -247,11 +207,11 @@ class DiscordBot {
       }
 
       try {
-        // Execute the slash command
+        // Execute the slash command immediately
         await command.executeSlash(interaction);
       } catch (error) {
         console.error(
-          `Error during interaction for command ${interaction.commandName}:`,
+          `Error during interaction for command ${commandName}:`,
           error,
         );
         // Safely reply or follow up if an error occurs
@@ -299,13 +259,14 @@ class DiscordBot {
   private async handleAutoReconnectAfterOAuth(
     serverId: string,
     userId: string,
+    channelId: string,
   ): Promise<void> {
     console.log(
-      `🔄 [AutoReconnect] Starting auto-reconnect for server=${serverId}, user=${userId}`,
+      `🔄 [AutoReconnect] Starting auto-reconnect for server=${serverId}, user=${userId}, channel=${channelId}`,
     );
 
     // Attempt auto-reconnect
-    await this.mcpService.autoReconnectAfterOAuth(serverId, userId);
+    await this.mcpService.autoReconnectAfterOAuth(serverId, userId, channelId);
   }
 
   private setupWebServer(): void {
@@ -353,9 +314,15 @@ class DiscordBot {
 
         // Exchange the authorization code for tokens directly
         try {
-          // Get the actual MCP server URL from the saved connection
-          // TODO: Get actual channel_id from oauth_pending table
-          const channelId = (pending as any).channel_id || 'default';
+          // Get the channel_id from the oauth_pending table
+          const channelId = pending.channel_id || 'default';
+          console.log(
+            `🔐 [Callback] Using channelId: ${channelId} (from pending.channel_id: ${pending.channel_id})`,
+          );
+          console.log(
+            `🔐 [Callback] Looking up connection with: userId=${pending.user_id}, channelId=${channelId}, serverId=${pending.server_id}`,
+          );
+
           const connection = await this.database.getUserMCPConnection(
             pending.user_id,
             channelId,
@@ -363,15 +330,28 @@ class DiscordBot {
           );
 
           if (!connection) {
+            // Log all connections for this user to help debug
+            const allUserConnections = await this.database.getUserMCPConnections(
+              pending.user_id,
+              channelId,
+            );
+            console.log(
+              `🔐 [Callback] No connection found. User has ${allUserConnections.length} connection(s) in this channel:`,
+              allUserConnections.map(c => ({ 
+                server_id: c.server_id, 
+                server_name: c.server_name,
+                channel_id: c.channel_id,
+              })),
+            );
             throw new Error('No saved MCP connection found');
           }
-
           const authProvider = new ConnectionManagerOAuthProvider(
             pending.server_id,
             pending.user_id,
             this.database,
             this.mcpService.getEventService(),
             connection.server_url,
+            channelId, // Pass channelId to the provider
           );
 
           // Call auth with the authorization code to complete token exchange
@@ -409,6 +389,7 @@ class DiscordBot {
           this.handleAutoReconnectAfterOAuth(
             pending.server_id,
             pending.user_id,
+            channelId,
           );
         } catch (tokenError) {
           console.error(`🔐 [Callback] Token exchange failed:`, tokenError);

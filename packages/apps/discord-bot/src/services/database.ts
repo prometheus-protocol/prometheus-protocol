@@ -511,6 +511,7 @@ export class SupabaseService implements DatabaseService {
     state: string;
     code_verifier: string;
     auth_url: string;
+    channel_id?: string;
   }): Promise<void> {
     dbLogger.info(`🔍 [DB] saveOAuthPending called with:`, {
       server_id: pending.server_id,
@@ -518,6 +519,7 @@ export class SupabaseService implements DatabaseService {
       state: pending.state,
       code_verifier: pending.code_verifier?.substring(0, 20) + '...',
       auth_url: pending.auth_url?.substring(0, 50) + '...',
+      channel_id: pending.channel_id,
     });
 
     // First, let's see what currently exists
@@ -542,6 +544,7 @@ export class SupabaseService implements DatabaseService {
         state: pending.state,
         code_verifier: pending.code_verifier,
         auth_url: pending.auth_url,
+        channel_id: pending.channel_id || 'default',
       },
       {
         onConflict: 'server_id,user_id',
@@ -635,6 +638,7 @@ export class SupabaseService implements DatabaseService {
       state: data.state,
       code_verifier: data.code_verifier,
       auth_url: data.auth_url,
+      channel_id: data.channel_id,
     };
   }
 
@@ -1083,8 +1087,19 @@ export class SupabaseService implements DatabaseService {
     );
 
     if (error) {
-      dbLogger.error(`🔗 [DB] Error saving MCP connection:`, error);
-      throw error;
+      const dbError = new Error(
+        `Failed to save MCP connection: ${error.message}`,
+      );
+      dbLogger.error(
+        `🔗 [DB] Error saving MCP connection: ${error.message} (code: ${(error as any).code})`,
+        dbError,
+        {
+          details: (error as any).details,
+          hint: (error as any).hint,
+          serverId: connection.server_id,
+        } as any,
+      );
+      throw dbError;
     }
 
     dbLogger.info(`🔗 [DB] MCP connection saved successfully`);
@@ -1111,8 +1126,17 @@ export class SupabaseService implements DatabaseService {
       .single();
 
     if (error || !data) {
+      // Also check what connections exist for this user/server combo
+      const { data: allForServer } = await this.client
+        .from('mcp_connections')
+        .select('channel_id')
+        .eq('user_id', userId)
+        .eq('server_id', serverId);
+
       dbLogger.info('No MCP connection found', {
         error: error?.message || 'no data',
+        searchedChannelId: channelId,
+        existingChannelsForServer: allForServer?.map((c) => c.channel_id) || [],
       });
       return null;
     }
@@ -1245,13 +1269,14 @@ export class SupabaseService implements DatabaseService {
     dbLogger.info(`🔗 [DB] MCP connection deleted successfully`);
   }
 
-    // Connection Pool Service methods
+  // Connection Pool Service methods
   async storeConnectionDetails(
     userId: string,
     channelId: string,
     mcpServerConfigId: string,
     status: string,
     metadata?: any,
+    mcpServerUrl?: string,
   ): Promise<void> {
     // Log the connection attempt for tracking purposes
     console.log('Storing connection details:', {
@@ -1260,6 +1285,7 @@ export class SupabaseService implements DatabaseService {
       mcpServerConfigId,
       status,
       metadata,
+      mcpServerUrl,
     });
 
     dbLogger.info(`🔗 [DB] storeConnectionDetails called:`, {
@@ -1268,6 +1294,7 @@ export class SupabaseService implements DatabaseService {
       mcpServerConfigId,
       status,
       metadata,
+      mcpServerUrl,
     });
 
     // First check if connection already exists
@@ -1294,16 +1321,65 @@ export class SupabaseService implements DatabaseService {
         .eq('server_id', mcpServerConfigId);
 
       if (error) {
-        dbLogger.error(`🔗 [DB] Error updating connection details:`, error);
-        throw error;
+        const dbError = new Error(
+          `Failed to update connection details: ${error.message}`,
+        );
+        dbLogger.error(
+          `🔗 [DB] Error updating connection details: ${error.message} (code: ${(error as any).code})`,
+          dbError,
+        );
+        throw dbError;
       }
 
       dbLogger.info(`🔗 [DB] Connection details updated successfully`);
     } else {
-      // Create new connection record (though this should rarely happen as connections are usually created via saveUserMCPConnection)
-      dbLogger.warn(
-        `🔗 [DB] Connection not found, cannot store details without server_url`,
-      );
+      // Create new connection record if we have a server URL
+      if (mcpServerUrl) {
+        dbLogger.info(
+          `🔗 [DB] Creating new connection record for ${mcpServerConfigId}`,
+        );
+
+        // Generate a fallback name from URL
+        let fallbackName = 'MCP Server';
+        try {
+          const url = new URL(mcpServerUrl);
+          fallbackName = url.hostname;
+        } catch {
+          fallbackName = 'MCP Server';
+        }
+
+        const dbStatus = this.mapStatusToDatabase(status);
+        const { error } = await this.client.from('mcp_connections').insert({
+          user_id: userId,
+          channel_id: channelId,
+          server_id: mcpServerConfigId,
+          server_name: fallbackName,
+          server_url: mcpServerUrl,
+          status: dbStatus,
+          tools: '[]',
+          error_message: null,
+          connected_at: null,
+          last_used: null,
+          updated_at: new Date().toISOString(),
+        });
+
+        if (error) {
+          const dbError = new Error(
+            `Failed to create connection record: ${error.message}`,
+          );
+          dbLogger.error(
+            `🔗 [DB] Error creating connection record: ${error.message} (code: ${(error as any).code})`,
+            dbError,
+          );
+          throw dbError;
+        }
+
+        dbLogger.info(`🔗 [DB] Connection record created successfully`);
+      } else {
+        dbLogger.warn(
+          `🔗 [DB] Connection not found and no server_url provided, cannot create connection`,
+        );
+      }
     }
   }
 
@@ -1400,8 +1476,19 @@ export class SupabaseService implements DatabaseService {
       .select();
 
     if (error) {
-      dbLogger.error(`🔗 [DB] Error upserting connection status:`, error);
-      throw error;
+      const dbError = new Error(
+        `Failed to upsert connection: ${error.message}`,
+      );
+      dbLogger.error(
+        `🔗 [DB] Error upserting connection status: ${error.message} (code: ${(error as any).code})`,
+        dbError,
+        {
+          details: (error as any).details,
+          hint: (error as any).hint,
+          connectionData: JSON.stringify(connectionData),
+        } as any,
+      );
+      throw dbError;
     }
 
     dbLogger.info(`🔗 [DB] Connection status upserted successfully`, {
@@ -1426,7 +1513,8 @@ export class SupabaseService implements DatabaseService {
           'FAILED_INVOKE_TOOL',
         ])
         .not('status', 'eq', 'DISCONNECTED_BY_USER')
-        .not('status', 'eq', 'CONNECTION_FAILED');
+        .not('status', 'eq', 'CONNECTION_FAILED')
+        .not('server_url', 'is', null); // Filter out connections without server_url
 
       if (error) {
         dbLogger.error('Error fetching reconnectable connections:', error);
@@ -1436,8 +1524,28 @@ export class SupabaseService implements DatabaseService {
       dbLogger.info(
         `Found ${data?.length || 0} reconnectable connections in database`,
       );
-      return (data || []).map((conn: any) => ({
+
+      // Additionally filter in JavaScript to ensure we have valid data
+      const validConnections = (data || []).filter((conn: any) => {
+        const isValid =
+          conn.user_id && conn.server_id && conn.server_url && conn.channel_id;
+        if (!isValid) {
+          dbLogger.warn(
+            `Skipping invalid connection record: ${conn.server_id} - missing required fields`,
+            {
+              hasUserId: !!conn.user_id,
+              hasServerId: !!conn.server_id,
+              hasServerUrl: !!conn.server_url,
+              hasChannelId: !!conn.channel_id,
+            } as any,
+          );
+        }
+        return isValid;
+      });
+
+      return validConnections.map((conn: any) => ({
         userId: conn.user_id,
+        channel_id: conn.channel_id,
         mcpServerConfigId: conn.server_id,
         mcpServerBaseUrl: conn.server_url,
         status: conn.status,

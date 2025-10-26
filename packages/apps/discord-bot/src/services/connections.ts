@@ -142,6 +142,7 @@ export class ConnectionPoolService {
         await this.eventService.publishConnectionStatusUpdate({
           generatedAt: new Date().toISOString(),
           userId: connection.userId,
+          channelId: connection.channelId,
           mcpServerConfigId: connection.mcpServerConfigId,
           mcpServerUrl: connection.mcpServerUrl,
           status: 'disconnected',
@@ -169,7 +170,7 @@ export class ConnectionPoolService {
         return;
       }
 
-      const { client, userId, mcpServerConfigId, mcpServerUrl } = connection;
+      const { client, userId, mcpServerConfigId, mcpServerUrl, channelId } = connection;
 
       if (!client) {
         throw new Error(`[ConnPool-${poolKey}] Client is not initialized.`);
@@ -203,6 +204,7 @@ export class ConnectionPoolService {
                 await this.eventService.publishResourcesFetched({
                   generatedAt: new Date().toISOString(),
                   userId,
+                  channelId,
                   mcpServerConfigId,
                   mcpServerUrl,
                   resources: resourcesResponse.resources,
@@ -243,6 +245,7 @@ export class ConnectionPoolService {
                 await this.eventService.publishToolsFetched({
                   generatedAt: new Date().toISOString(),
                   userId,
+                  channelId,
                   mcpServerConfigId,
                   mcpServerUrl,
                   tools: toolsResponse.tools,
@@ -367,6 +370,7 @@ export class ConnectionPoolService {
       payload.mcpServerConfigId,
       'CONNECTION_REQUESTED',
       { lastAttemptedAt: new Date().toISOString() },
+      payload.mcpServerUrl, // Pass the URL so it can create the record if needed
     );
 
     let primaryError: Error | undefined;
@@ -422,6 +426,7 @@ export class ConnectionPoolService {
         this.databaseService,
         this.eventService,
         payload.mcpServerUrl,
+        payload.channelId, // Pass channelId to the provider
       );
 
       // Store the authProvider in the pool immediately.
@@ -718,6 +723,7 @@ export class ConnectionPoolService {
       await this.eventService.publishConnectionStatusUpdate({
         generatedAt: new Date().toISOString(),
         userId: payload.userId,
+        channelId: payload.channelId,
         mcpServerConfigId: payload.mcpServerConfigId,
         mcpServerUrl: payload.mcpServerUrl,
         status: 'connected',
@@ -741,6 +747,7 @@ export class ConnectionPoolService {
         await this.eventService.publishServerCapabilities({
           generatedAt: new Date().toISOString(),
           userId: payload.userId,
+          channelId: payload.channelId,
           mcpServerConfigId: payload.mcpServerConfigId,
           mcpServerUrl: payload.mcpServerUrl,
           name: displayName,
@@ -864,6 +871,7 @@ export class ConnectionPoolService {
           await this.eventService.publishResourcesFetched({
             generatedAt: new Date().toISOString(),
             userId: payload.userId,
+            channelId: payload.channelId,
             mcpServerConfigId: payload.mcpServerConfigId,
             mcpServerUrl: payload.mcpServerUrl,
             resources: resourcesResponse.resources,
@@ -898,6 +906,7 @@ export class ConnectionPoolService {
           await this.eventService.publishToolsFetched({
             generatedAt: new Date().toISOString(),
             userId: payload.userId,
+            channelId: payload.channelId,
             mcpServerConfigId: payload.mcpServerConfigId,
             mcpServerUrl: payload.mcpServerUrl,
             tools: toolsResponse.tools,

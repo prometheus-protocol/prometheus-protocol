@@ -107,28 +107,26 @@ export class MCPCommand extends BaseCommand {
 
   async executeSlash(interaction: ChatInputCommandInteraction): Promise<void> {
     // IMMEDIATELY acknowledge the interaction - before any other processing
+    // Use a very short timeout to ensure we respond within Discord's 3-second window
     try {
-      await interaction.deferReply();
+      await Promise.race([
+        interaction.deferReply({ ephemeral: false }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Defer timeout')), 2500),
+        ),
+      ]);
     } catch (error) {
       console.error('❌ Failed to defer reply immediately:', error);
-      // Try immediate reply as fallback
-      try {
-        await interaction.reply({
-          content: '❌ Command processing failed. Please try again.',
-          ephemeral: true,
-        });
-      } catch (replyError) {
-        console.error('❌ Failed to send any response:', replyError);
-      }
+
+      // If defer fails, the interaction is likely already expired
+      // Don't try to send any more responses as they will also fail
       return;
     }
 
     const subcommand = interaction.options.getSubcommand();
 
-    console.log('🔍 MCP executeSlash called:', {
+    console.log('🔍 MCP executeSlash:', {
       interactionId: interaction.id,
-      isDeferred: interaction.deferred,
-      isReplied: interaction.replied,
       userId: interaction.user.id,
       subcommand,
     });
@@ -139,11 +137,18 @@ export class MCPCommand extends BaseCommand {
       // Route to existing handlers
       switch (subcommand) {
         case 'list':
-          response = await this.handleList(interaction.user.id, interaction.channelId);
+          response = await this.handleList(
+            interaction.user.id,
+            interaction.channelId,
+          );
           break;
         case 'connect': {
           const url = interaction.options.getString('url', true);
-          response = await this.handleConnect(url, interaction.user.id);
+          response = await this.handleConnect(
+            url,
+            interaction.user.id,
+            interaction.channelId,
+          );
           break;
         }
         case 'disconnect': {
@@ -151,28 +156,45 @@ export class MCPCommand extends BaseCommand {
           response = await this.handleDisconnect(
             serverName,
             interaction.user.id,
+            interaction.channelId,
           );
           break;
         }
         case 'delete': {
           const serverName = interaction.options.getString('server-name', true);
-          response = await this.handleDelete(serverName, interaction.user.id);
+          response = await this.handleDelete(
+            serverName,
+            interaction.user.id,
+            interaction.channelId,
+          );
           break;
         }
         case 'tools':
-          response = await this.handleTools(interaction.user.id, interaction.channelId);
+          response = await this.handleTools(
+            interaction.user.id,
+            interaction.channelId,
+          );
           break;
         case 'status':
           response = await this.handleStatus();
           break;
         case 'debug':
-          response = await this.handleDebug(interaction.user.id);
+          response = await this.handleDebug(
+            interaction.user.id,
+            interaction.channelId,
+          );
           break;
         case 'cleanup':
-          response = await this.handleCleanup(interaction.user.id);
+          response = await this.handleCleanup(
+            interaction.user.id,
+            interaction.channelId,
+          );
           break;
         case 'repair':
-          response = await this.handleRepair(interaction.user.id);
+          response = await this.handleRepair(
+            interaction.user.id,
+            interaction.channelId,
+          );
           break;
         default:
           response = {
@@ -201,9 +223,15 @@ export class MCPCommand extends BaseCommand {
     }
   }
 
-  private async handleList(userId: string, channelId: string): Promise<CommandResponse> {
+  private async handleList(
+    userId: string,
+    channelId: string,
+  ): Promise<CommandResponse> {
     try {
-      const connections = await this.mcpService.getUserConnections(userId, channelId);
+      const connections = await this.mcpService.getUserConnections(
+        userId,
+        channelId,
+      );
 
       if (connections.length === 0) {
         return {
@@ -281,6 +309,7 @@ export class MCPCommand extends BaseCommand {
   private async handleConnect(
     url: string,
     userId: string,
+    channelId: string,
   ): Promise<CommandResponse> {
     if (!url) {
       return {
@@ -315,6 +344,7 @@ export class MCPCommand extends BaseCommand {
         serverId,
         userId,
         url, // Pass the URL directly
+        channelId, // Pass the actual channel ID
       );
 
       if (connection.status === 'connected') {
@@ -361,6 +391,7 @@ export class MCPCommand extends BaseCommand {
   private async handleDisconnect(
     serverName: string,
     userId: string,
+    channelId: string,
   ): Promise<CommandResponse> {
     if (!serverName) {
       return {
@@ -374,6 +405,7 @@ export class MCPCommand extends BaseCommand {
       const serverId = await this.mcpService.resolveServerNameToId(
         userId,
         serverName,
+        channelId,
       );
       if (!serverId) {
         return {
@@ -381,7 +413,7 @@ export class MCPCommand extends BaseCommand {
         };
       }
 
-      await this.mcpService.disconnectFromServer(serverId, userId);
+      await this.mcpService.disconnectFromServer(serverId, userId, channelId);
       return {
         content: `✅ Disconnected from server: **${serverName}**`,
       };
@@ -396,6 +428,7 @@ export class MCPCommand extends BaseCommand {
   private async handleDelete(
     serverName: string,
     userId: string,
+    channelId: string,
   ): Promise<CommandResponse> {
     if (!serverName) {
       return {
@@ -409,6 +442,7 @@ export class MCPCommand extends BaseCommand {
       const serverId = await this.mcpService.resolveServerNameToId(
         userId,
         serverName,
+        channelId,
       );
       if (!serverId) {
         return {
@@ -416,7 +450,7 @@ export class MCPCommand extends BaseCommand {
         };
       }
 
-      await this.mcpService.deleteServerConnection(serverId, userId);
+      await this.mcpService.deleteServerConnection(serverId, userId, channelId);
       return {
         content: `🗑️ Permanently deleted server connection: **${serverName}**\n\n⚠️ This action cannot be undone. All connection data and OAuth tokens have been removed.`,
       };
@@ -428,7 +462,10 @@ export class MCPCommand extends BaseCommand {
     }
   }
 
-  private async handleTools(userId: string, channelId: string): Promise<CommandResponse> {
+  private async handleTools(
+    userId: string,
+    channelId: string,
+  ): Promise<CommandResponse> {
     try {
       const tools = await this.mcpService.getAvailableTools(userId, channelId);
 
@@ -521,10 +558,15 @@ export class MCPCommand extends BaseCommand {
     }
   }
 
-  private async handleDebug(userId: string): Promise<CommandResponse> {
+  private async handleDebug(
+    userId: string,
+    channelId: string,
+  ): Promise<CommandResponse> {
     try {
-      const diagnostics =
-        await this.mcpService.getConnectionDiagnostics(userId);
+      const diagnostics = await this.mcpService.getConnectionDiagnostics(
+        userId,
+        channelId,
+      );
 
       const embed = new EmbedBuilder()
         .setTitle('🔍 Connection Diagnostics')
@@ -581,9 +623,15 @@ export class MCPCommand extends BaseCommand {
     }
   }
 
-  private async handleCleanup(userId: string): Promise<CommandResponse> {
+  private async handleCleanup(
+    userId: string,
+    channelId: string,
+  ): Promise<CommandResponse> {
     try {
-      const result = await this.mcpService.cleanupStaleConnections(userId);
+      const result = await this.mcpService.cleanupStaleConnections(
+        userId,
+        channelId,
+      );
 
       const embed = new EmbedBuilder()
         .setTitle('🧹 Connection Cleanup')
@@ -619,9 +667,15 @@ export class MCPCommand extends BaseCommand {
     }
   }
 
-  private async handleRepair(userId: string): Promise<CommandResponse> {
+  private async handleRepair(
+    userId: string,
+    channelId: string,
+  ): Promise<CommandResponse> {
     try {
-      const result = await this.mcpService.repairCorruptedConnections(userId);
+      const result = await this.mcpService.repairCorruptedConnections(
+        userId,
+        channelId,
+      );
 
       const embed = new EmbedBuilder()
         .setTitle('🔧 Connection Repair')

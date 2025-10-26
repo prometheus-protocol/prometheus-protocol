@@ -162,8 +162,10 @@ export class MCPService {
     try {
       // Get active connections from database
       // TODO: Update to query across all channels for system-level stats
-      const connections =
-        await this.databaseService.getUserMCPConnections('system', 'default'); // Use system user for overall stats
+      const connections = await this.databaseService.getUserMCPConnections(
+        'system',
+        'default',
+      ); // Use system user for overall stats
       const activeConnections = connections.filter(
         (conn) => conn.status === 'connected',
       ).length;
@@ -221,8 +223,9 @@ export class MCPService {
    */
   async getUserConnections(userId: string, channelId: string): Promise<any[]> {
     try {
-      return (
-        await this.databaseService.getUserMCPConnections(userId, channelId)
+      return await this.databaseService.getUserMCPConnections(
+        userId,
+        channelId,
       );
     } catch (error) {
       logger.error(`Error fetching user connections: ${error}`);
@@ -249,7 +252,11 @@ export class MCPService {
         // Try to get the URL from existing connection
         // This handles the case where user is reconnecting
         const existingConnection =
-          await this.databaseService.getUserMCPConnection(userId, channelId, serverId);
+          await this.databaseService.getUserMCPConnection(
+            userId,
+            channelId,
+            serverId,
+          );
 
         if (existingConnection && existingConnection.server_url) {
           actualServerUrl = existingConnection.server_url;
@@ -390,7 +397,11 @@ export class MCPService {
   /**
    * Disconnect from an MCP server
    */
-  async disconnectFromServer(serverId: string, userId: string, channelId: string = 'default'): Promise<void> {
+  async disconnectFromServer(
+    serverId: string,
+    userId: string,
+    channelId: string = 'default',
+  ): Promise<void> {
     try {
       logger.info(`Disconnecting user ${userId} from server ${serverId}`);
 
@@ -447,7 +458,10 @@ export class MCPService {
     return toolName;
   }
 
-  async getAvailableTools(userId: string, channelId: string): Promise<ToolInfo[]> {
+  async getAvailableTools(
+    userId: string,
+    channelId: string,
+  ): Promise<ToolInfo[]> {
     try {
       const connections = await this.getUserConnections(userId, channelId);
       const tools: ToolInfo[] = [];
@@ -667,7 +681,10 @@ export class MCPService {
    * Convert available tools to OpenAI function format for LLM integration
    * Uses clean tool names by default, only adds prefix on collision
    */
-  async convertToolsToOpenAIFunctions(userId: string, channelId: string = 'default'): Promise<any[]> {
+  async convertToolsToOpenAIFunctions(
+    userId: string,
+    channelId: string = 'default',
+  ): Promise<any[]> {
     try {
       const tools = await this.getAvailableTools(userId, channelId);
 
@@ -891,7 +908,11 @@ export class MCPService {
   /**
    * Reset server data for a user
    */
-  async resetServerData(serverId: string, userId: string, channelId: string = 'default'): Promise<void> {
+  async resetServerData(
+    serverId: string,
+    userId: string,
+    channelId: string = 'default',
+  ): Promise<void> {
     try {
       logger.info(`Resetting server data for ${serverId}, user ${userId}`);
 
@@ -908,7 +929,11 @@ export class MCPService {
       }
 
       // Delete saved connection data
-      await this.databaseService.deleteUserMCPConnection(userId, channelId, serverId);
+      await this.databaseService.deleteUserMCPConnection(
+        userId,
+        channelId,
+        serverId,
+      );
 
       // Delete OAuth tokens if they exist
       await this.databaseService.deleteOAuthTokens(serverId, userId);
@@ -929,13 +954,14 @@ export class MCPService {
   async deleteServerConnection(
     serverId: string,
     userId: string,
+    channelId: string = 'default',
   ): Promise<void> {
     try {
       logger.info(`Deleting server connection ${serverId} for user ${userId}`);
 
       // First disconnect from the server if connected
       try {
-        await this.disconnectFromServer(serverId, userId);
+        await this.disconnectFromServer(serverId, userId, channelId);
       } catch (error) {
         // Ignore disconnect errors - might already be disconnected
         logger.warn(
@@ -944,7 +970,7 @@ export class MCPService {
       }
 
       // Then delete all database records and OAuth tokens
-      await this.resetServerData(serverId, userId);
+      await this.resetServerData(serverId, userId, channelId);
 
       logger.info(
         `Successfully deleted server connection ${serverId} for user ${userId}`,
@@ -985,14 +1011,19 @@ export class MCPService {
   /**
    * Get diagnostic information about connection states
    */
-  async getConnectionDiagnostics(userId: string, channelId: string = 'default'): Promise<{
+  async getConnectionDiagnostics(
+    userId: string,
+    channelId: string = 'default',
+  ): Promise<{
     databaseConnections: any[];
     activeConnections: any;
     mismatchedConnections: string[];
   }> {
     // Get connections from database
-    const dbConnections =
-      await this.databaseService.getUserMCPConnections(userId, channelId);
+    const dbConnections = await this.databaseService.getUserMCPConnections(
+      userId,
+      channelId,
+    );
 
     // Get active connections from pool
     const activeConnectionsInfo = this.connectionPool.getDiagnosticInfo();
@@ -1018,7 +1049,10 @@ export class MCPService {
   /**
    * Clean up stale connections that exist in database but not in active pool
    */
-  async cleanupStaleConnections(userId: string, channelId: string = 'default'): Promise<{
+  async cleanupStaleConnections(
+    userId: string,
+    channelId: string = 'default',
+  ): Promise<{
     cleanedCount: number;
     cleanedConnections: string[];
     remainingConnections: number;
@@ -1066,7 +1100,10 @@ export class MCPService {
   /**
    * Repair corrupted database records by fixing missing required fields
    */
-  async repairCorruptedConnections(userId: string, channelId: string = 'default'): Promise<{
+  async repairCorruptedConnections(
+    userId: string,
+    channelId: string = 'default',
+  ): Promise<{
     repairedCount: number;
     repairedConnections: Array<{
       id: string;
@@ -1075,8 +1112,10 @@ export class MCPService {
     }>;
     healthyConnections: number;
   }> {
-    const dbConnections =
-      await this.databaseService.getUserMCPConnections(userId, channelId);
+    const dbConnections = await this.databaseService.getUserMCPConnections(
+      userId,
+      channelId,
+    );
     const repairedConnections: Array<{
       id: string;
       issues: string[];
