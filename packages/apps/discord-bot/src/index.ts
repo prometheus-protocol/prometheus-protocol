@@ -1,5 +1,12 @@
 import 'dotenv/config';
-import { Client, GatewayIntentBits, Events } from 'discord.js';
+import {
+  Client,
+  GatewayIntentBits,
+  Events,
+  REST,
+  Routes,
+  Partials,
+} from 'discord.js';
 import express, { Request, Response } from 'express';
 import { ConfigManager } from './config/index.js';
 import { CommandRegistryImpl } from './commands/registry.js';
@@ -42,9 +49,11 @@ class DiscordBot {
       intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildIntegrations,
+        GatewayIntentBits.GuildMessages, // Enable reading messages in guild channels/threads
         GatewayIntentBits.DirectMessages, // Enable DM listening
         GatewayIntentBits.MessageContent, // Needed for reading message content
       ],
+      partials: [Partials.Channel, Partials.Message], // Enable DM events
     });
 
     this.commandRegistry = new CommandRegistryImpl();
@@ -232,6 +241,214 @@ class DiscordBot {
         }
       }
     });
+
+    // Handle messages for thread and DM conversations
+    this.client.on(Events.MessageCreate, async (message) => {
+      // Ignore bot messages
+      if (message.author.bot) return;
+
+      // Check if this is a thread message
+      if (message.channel.isThread()) {
+        await this.handleThreadMessage(message);
+      }
+      // Check if this is a DM message
+      else if (!message.guildId) {
+        await this.handleDMMessage(message);
+      }
+    });
+  }
+
+  private async handleThreadMessage(message: any): Promise<void> {
+    try {
+      const threadId = message.channel.id;
+
+      // Check if this thread is tracked in our database
+      const chatThread = await this.database.getChatThread(threadId);
+
+      if (!chatThread) {
+        // Not a tracked thread, ignore
+        return;
+      }
+
+      console.log('💬 Thread message received', {
+        threadId,
+        userId: message.author.id,
+        contentPreview: message.content.substring(0, 50),
+      });
+
+      // Create status callback that updates a single message
+      let statusMessage: any = null;
+      const sendStatus = async (status: string) => {
+        try {
+          if (statusMessage) {
+            // Edit existing status message
+            await statusMessage.edit(status);
+          } else {
+            // Create first status message
+            statusMessage = await message.reply(status);
+          }
+        } catch (error) {
+          console.warn('Failed to update status message:', error);
+        }
+      };
+
+      // Show typing indicator and keep it going
+      await message.channel.sendTyping();
+      const typingInterval = setInterval(() => {
+        message.channel.sendTyping().catch(() => clearInterval(typingInterval));
+      }, 5000); // Refresh every 5 seconds
+
+      try {
+        // Load conversation history from database
+        const history = chatThread.conversation_history.map((msg: any) => ({
+          role: msg.role as 'user' | 'assistant' | 'system',
+          content: msg.content,
+          timestamp: new Date(),
+        }));
+
+        // Generate AI response
+        const response = await this.llmService.generateResponse(
+          message.content,
+          {
+            userId: message.author.id,
+            channelId: chatThread.channel_id, // Use parent channel for MCP tool access
+            threadId: threadId, // Pass thread ID for task alerts
+            history: history,
+          },
+          message.author.id,
+          sendStatus, // Pass status callback for tool execution updates
+        );
+
+        // Clear typing interval
+        clearInterval(typingInterval);
+
+        // Keep the status message visible for transparency
+        // Don't delete it - users should see what tools were used
+
+        // Handle function calls or text response
+        if (Array.isArray(response)) {
+          // Function calls are supported - this would be handled by the chat command logic
+          // For now, inform the user that complex operations should use /chat
+          await message.reply(
+            "I received a complex request. For tool execution and tasks, please ensure you're in a thread created by the `/chat` command.",
+          );
+        } else {
+          // Send response
+          await message.reply(response);
+
+          // Update thread history
+          await this.database.updateThreadHistory(threadId, {
+            role: 'user',
+            content: message.content,
+          });
+          await this.database.updateThreadHistory(threadId, {
+            role: 'assistant',
+            content: response,
+          });
+        }
+      } finally {
+        // Ensure typing is cleared even if there's an error
+        clearInterval(typingInterval);
+      }
+    } catch (error) {
+      console.error('Error handling thread message:', error);
+      try {
+        await message.reply(
+          'Sorry, I encountered an error processing your message.',
+        );
+      } catch (replyError) {
+        console.error('Failed to send error reply:', replyError);
+      }
+    }
+  }
+
+  private async handleDMMessage(message: any): Promise<void> {
+    try {
+      console.log('📩 DM message received', {
+        userId: message.author.id,
+        contentPreview: message.content.substring(0, 50),
+      });
+
+      // Create status callback that updates a single message
+      let dmStatusMessage: any = null;
+      const sendStatus = async (status: string) => {
+        try {
+          if (dmStatusMessage) {
+            // Edit existing status message
+            await dmStatusMessage.edit(status);
+          } else {
+            // Create first status message
+            dmStatusMessage = await message.reply(status);
+          }
+        } catch (error) {
+          console.warn('Failed to update status message:', error);
+        }
+      };
+
+      // Show typing indicator and keep it going
+      await message.channel.sendTyping();
+      const typingInterval = setInterval(() => {
+        message.channel.sendTyping().catch(() => clearInterval(typingInterval));
+      }, 5000); // Refresh every 5 seconds
+
+      try {
+        // Load conversation history for this DM
+        const history = await this.database.getConversationHistory(
+          message.author.id,
+          message.channel.id,
+          50,
+        );
+
+        // Generate AI response
+        const response = await this.llmService.generateResponse(
+          message.content,
+          {
+            userId: message.author.id,
+            channelId: message.channel.id,
+            history: history,
+          },
+          message.author.id,
+          sendStatus, // Pass status callback for tool execution updates
+        );
+
+        // Clear typing interval
+        clearInterval(typingInterval);
+
+        // Keep the status message visible for transparency
+        // Don't delete it - users should see what tools were used
+
+        // Handle function calls or text response
+        if (Array.isArray(response)) {
+          // For now, don't support function calls in DMs
+          await message.reply(
+            "I can't execute tools in DM conversations yet. Please use the `/chat` command in a server for tool access.",
+          );
+        } else {
+          // Send response
+          await message.reply(response);
+
+          // Save conversation turn
+          await this.database.saveConversationTurn(
+            message.author.id,
+            message.channel.id,
+            message.content,
+            response,
+          );
+        }
+      } finally {
+        // Ensure typing is cleared even if there's an error
+        clearInterval(typingInterval);
+      }
+    } catch (error) {
+      console.error('Error handling DM message:', error);
+      try {
+        await message.reply(
+          'Sorry, I encountered an error processing your message.',
+        );
+      } catch (replyError) {
+        console.error('Failed to send error reply:', replyError);
+      }
+    }
   }
 
   private registerCommands(): void {
@@ -331,14 +548,15 @@ class DiscordBot {
 
           if (!connection) {
             // Log all connections for this user to help debug
-            const allUserConnections = await this.database.getUserMCPConnections(
-              pending.user_id,
-              channelId,
-            );
+            const allUserConnections =
+              await this.database.getUserMCPConnections(
+                pending.user_id,
+                channelId,
+              );
             console.log(
               `🔐 [Callback] No connection found. User has ${allUserConnections.length} connection(s) in this channel:`,
-              allUserConnections.map(c => ({ 
-                server_id: c.server_id, 
+              allUserConnections.map((c) => ({
+                server_id: c.server_id,
                 server_name: c.server_name,
                 channel_id: c.channel_id,
               })),

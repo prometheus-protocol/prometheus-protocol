@@ -12,6 +12,7 @@ export interface CommandContext {
   userId: string;
   channelId: string;
   guildId?: string;
+  threadId?: string; // Optional: thread ID for posting alerts when in a thread
 }
 
 export interface CommandResponse {

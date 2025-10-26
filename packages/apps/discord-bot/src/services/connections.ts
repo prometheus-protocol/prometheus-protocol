@@ -170,7 +170,8 @@ export class ConnectionPoolService {
         return;
       }
 
-      const { client, userId, mcpServerConfigId, mcpServerUrl, channelId } = connection;
+      const { client, userId, mcpServerConfigId, mcpServerUrl, channelId } =
+        connection;
 
       if (!client) {
         throw new Error(`[ConnPool-${poolKey}] Client is not initialized.`);

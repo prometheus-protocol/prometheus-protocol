@@ -227,6 +227,8 @@ export class SupabaseService implements DatabaseService {
         description: alert.description,
         user_id: alert.userId, // Save userId field
         channel_id: alert.channelId,
+        target_channel_id: alert.targetChannelId || null, // Save target channel
+        thread_id: alert.threadId || null, // Save thread ID for context
         interval: alert.interval,
         enabled: alert.enabled,
         recurring: alert.recurring ?? true, // Default to true if not specified
@@ -277,6 +279,8 @@ export class SupabaseService implements DatabaseService {
         description: row.description,
         userId: row.user_id, // Load userId field
         channelId: row.channel_id,
+        targetChannelId: row.target_channel_id || undefined, // Load target channel
+        threadId: row.thread_id || undefined, // Load thread ID
         interval: row.interval,
         enabled: row.enabled,
         recurring: row.recurring ?? true, // Default to true for backwards compatibility
@@ -309,6 +313,8 @@ export class SupabaseService implements DatabaseService {
           description: alert.description,
           user_id: alert.userId, // Include userId in updates
           channel_id: alert.channelId,
+          target_channel_id: alert.targetChannelId || null, // Include target channel
+          thread_id: alert.threadId || null, // Include thread ID
           interval: alert.interval,
           enabled: alert.enabled,
           recurring: alert.recurring ?? true, // Include recurring field
@@ -1554,6 +1560,130 @@ export class SupabaseService implements DatabaseService {
     } catch (error) {
       dbLogger.error('Error in getReconnectableConnections:', error as Error);
       return [];
+    }
+  }
+
+  // ===========================
+  // Chat Threads Methods
+  // ===========================
+
+  async createChatThread(data: {
+    thread_id: string;
+    channel_id: string;
+    user_id: string;
+  }): Promise<void> {
+    try {
+      const { error } = await this.client.from('chat_threads').insert({
+        thread_id: data.thread_id,
+        channel_id: data.channel_id,
+        user_id: data.user_id,
+        conversation_history: [],
+        is_active: true,
+        last_activity: new Date().toISOString(),
+      });
+
+      if (error) {
+        dbLogger.error('Error creating chat thread:', error as Error);
+        throw error;
+      }
+
+      dbLogger.info(`Chat thread created: ${data.thread_id}`);
+    } catch (error) {
+      dbLogger.error('Error in createChatThread:', error as Error);
+      throw error;
+    }
+  }
+
+  async getChatThread(threadId: string): Promise<{
+    id: string;
+    thread_id: string;
+    channel_id: string;
+    user_id: string;
+    conversation_history: Array<{ role: string; content: string }>;
+    is_active: boolean;
+    created_at: Date;
+    last_activity: Date;
+  } | null> {
+    try {
+      const { data, error } = await this.client
+        .from('chat_threads')
+        .select('*')
+        .eq('thread_id', threadId)
+        .single();
+
+      if (error || !data) {
+        return null;
+      }
+
+      return {
+        id: data.id,
+        thread_id: data.thread_id,
+        channel_id: data.channel_id,
+        user_id: data.user_id,
+        conversation_history: data.conversation_history || [],
+        is_active: data.is_active,
+        created_at: new Date(data.created_at),
+        last_activity: new Date(data.last_activity),
+      };
+    } catch (error) {
+      dbLogger.error('Error in getChatThread:', error as Error);
+      return null;
+    }
+  }
+
+  async updateThreadHistory(
+    threadId: string,
+    message: { role: string; content: string },
+  ): Promise<void> {
+    try {
+      // Get current history
+      const thread = await this.getChatThread(threadId);
+      if (!thread) {
+        throw new Error(`Thread ${threadId} not found`);
+      }
+
+      // Append new message to history, keep last 50 messages
+      const history = thread.conversation_history;
+      history.push(message);
+      if (history.length > 50) {
+        history.shift();
+      }
+
+      // Update thread
+      const { error } = await this.client
+        .from('chat_threads')
+        .update({
+          conversation_history: history,
+          last_activity: new Date().toISOString(),
+        })
+        .eq('thread_id', threadId);
+
+      if (error) {
+        dbLogger.error('Error updating thread history:', error as Error);
+        throw error;
+      }
+    } catch (error) {
+      dbLogger.error('Error in updateThreadHistory:', error as Error);
+      throw error;
+    }
+  }
+
+  async deactivateChatThread(threadId: string): Promise<void> {
+    try {
+      const { error } = await this.client
+        .from('chat_threads')
+        .update({ is_active: false })
+        .eq('thread_id', threadId);
+
+      if (error) {
+        dbLogger.error('Error deactivating chat thread:', error as Error);
+        throw error;
+      }
+
+      dbLogger.info(`Chat thread deactivated: ${threadId}`);
+    } catch (error) {
+      dbLogger.error('Error in deactivateChatThread:', error as Error);
+      throw error;
     }
   }
 }

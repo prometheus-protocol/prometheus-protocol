@@ -64,6 +64,12 @@ const createMockDatabaseService = (): DatabaseService => ({
   updateUserMCPConnection: vi.fn(),
   deleteUserMCPConnection: vi.fn(),
   clearConversationHistory: vi.fn(),
+
+  // Chat thread methods (not used in OAuth provider)
+  createChatThread: vi.fn(),
+  getChatThread: vi.fn(),
+  updateThreadHistory: vi.fn(),
+  deactivateChatThread: vi.fn(),
 });
 
 // Mock the event service

@@ -272,10 +272,6 @@ export class LLMService {
 
       try {
         // 3. Call the LLM with the current conversation history
-        // Only show "Analyzing" on first iteration, subsequent iterations are silent
-        if (statusCallback && i === 0) {
-          await statusCallback('🤔 Thinking...');
-        }
         const choice = await this.provider.generateChatCompletion(
           messages,
           allFunctions,
@@ -445,7 +441,10 @@ export class LLMService {
   }
 
   // Helper to consolidate function loading logic
-  private async getAllFunctions(userId?: string, channelId?: string): Promise<AIFunction[]> {
+  private async getAllFunctions(
+    userId?: string,
+    channelId?: string,
+  ): Promise<AIFunction[]> {
     let allFunctions: AIFunction[] = [];
 
     // Add the special respond_to_user function (always available)
@@ -487,7 +486,10 @@ export class LLMService {
     if (this.mcpService && userId) {
       try {
         const mcpFunctions =
-          await this.mcpService.convertToolsToOpenAIFunctions(userId, channelId || 'default');
+          await this.mcpService.convertToolsToOpenAIFunctions(
+            userId,
+            channelId || 'default',
+          );
         allFunctions = [...allFunctions, ...mcpFunctions];
       } catch (error) {
         llmLogger.error(
@@ -665,6 +667,7 @@ CRITICAL TOOL USAGE RULES:
             {
               userId,
               channelId: context?.channelId || '',
+              threadId: context?.threadId, // Pass thread ID for task alerts
               history: context?.history || [],
             },
           );

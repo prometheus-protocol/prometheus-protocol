@@ -1,6 +1,11 @@
 import { schedulerLogger } from '../utils/logger.js';
 import * as cron from 'node-cron';
-import { AlertConfig, AlertResult, DatabaseService } from '../types/index.js';
+import {
+  AlertConfig,
+  AlertResult,
+  DatabaseService,
+  ConversationMessage,
+} from '../types/index.js';
 import { ConfigManager } from '../config/index.js';
 import { Client } from 'discord.js';
 import { LLMService } from './llm.js';
@@ -327,7 +332,48 @@ export class AlertScheduler {
       schedulerLogger.info(`Executing scheduled task with MCP access`, {
         taskName: alert.name,
         userId: userId,
+        hasThread: !!alert.threadId,
       });
+
+      // Load conversation history to give tasks context
+      // If task was created in a thread, load thread history
+      // Otherwise load parent channel history
+      let history: ConversationMessage[] = [];
+      try {
+        if (alert.threadId) {
+          // Load thread-specific history
+          const chatThread = await this.database.getChatThread(alert.threadId);
+          if (chatThread) {
+            history = chatThread.conversation_history.map((msg: any) => ({
+              role: msg.role as 'user' | 'assistant' | 'system',
+              content: msg.content,
+              timestamp: new Date(msg.timestamp || Date.now()),
+            }));
+            schedulerLogger.info(
+              `Loaded ${history.length} messages from thread for task context`,
+            );
+          } else {
+            schedulerLogger.warn(
+              `Thread ${alert.threadId} not found, using empty history`,
+            );
+          }
+        } else {
+          // Load channel conversation history
+          history = await this.database.getConversationHistory(
+            userId,
+            alert.channelId, // Use parent channelId for history lookup
+            50, // Load last 50 messages for context
+          );
+          schedulerLogger.info(
+            `Loaded ${history.length} messages from channel for task context`,
+          );
+        }
+      } catch (error) {
+        schedulerLogger.warn(
+          `Failed to load conversation history for task: ${error}`,
+        );
+        // Continue with empty history if load fails
+      }
 
       // Execute the AI prompt with MCP tools - generateResponse handles all tool calling internally
       const result = await this.llmService.generateResponse(
@@ -335,7 +381,7 @@ export class AlertScheduler {
         {
           userId: userId,
           channelId: alert.channelId,
-          history: [],
+          history: history,
         },
         userId, // Pass userId for MCP integration
       );
@@ -348,10 +394,44 @@ export class AlertScheduler {
 
       // Send the result if we have content
       if (finalMessage.trim()) {
+        // Use targetChannelId if available, otherwise use channelId
+        const targetChannel = alert.targetChannelId || alert.channelId;
         await this.sendAlertMessage(
-          alert.channelId,
+          targetChannel,
           `🔔 **${alert.name}**\n\n${finalMessage}`,
         );
+
+        // Save the task execution to conversation history so future executions have context
+        try {
+          if (alert.threadId) {
+            // Save to thread history
+            await this.database.updateThreadHistory(alert.threadId, {
+              role: 'user',
+              content: `[Scheduled task: ${alert.name}] ${alert.prompt}`,
+            });
+            await this.database.updateThreadHistory(alert.threadId, {
+              role: 'assistant',
+              content: finalMessage,
+            });
+            schedulerLogger.info('Saved task execution to thread history');
+          } else {
+            // Save to channel conversation history
+            await this.database.saveConversationTurn(
+              userId,
+              alert.channelId,
+              `[Scheduled task: ${alert.name}] ${alert.prompt}`,
+              finalMessage,
+            );
+            schedulerLogger.info(
+              'Saved task execution to conversation history',
+            );
+          }
+        } catch (historyError) {
+          schedulerLogger.warn('Failed to save task execution to history', {
+            error: historyError,
+          });
+          // Don't fail the task if history save fails
+        }
 
         // Save the current state
         await this.database.saveAlertState(
@@ -650,7 +730,10 @@ export class AlertScheduler {
         });
       } catch (dmError) {
         try {
-          await this.sendAlertMessage(alert.channelId, permissionErrorMessage);
+          await this.sendAlertMessage(
+            alert.targetChannelId || alert.channelId,
+            permissionErrorMessage,
+          );
           schedulerLogger.info(
             'Sent permission error notification to channel',
             {
@@ -706,7 +789,10 @@ export class AlertScheduler {
         `The alert will continue trying to run and will work automatically once you reconnect.`;
 
       try {
-        await this.sendAlertMessage(alert.channelId, authErrorMessage);
+        await this.sendAlertMessage(
+          alert.targetChannelId || alert.channelId,
+          authErrorMessage,
+        );
       } catch (sendError) {
         // If we can't send to the channel, try DM
         try {
@@ -750,7 +836,10 @@ export class AlertScheduler {
     if (errorCount <= 3) {
       const regularErrorMessage = `⚠️ Alert "${alert.name}" failed: ${errorMessage}`;
       try {
-        await this.sendAlertMessage(alert.channelId, regularErrorMessage);
+        await this.sendAlertMessage(
+          alert.targetChannelId || alert.channelId,
+          regularErrorMessage,
+        );
       } catch (sendError) {
         schedulerLogger.error(
           'Could not send error notification to channel',
@@ -774,7 +863,10 @@ export class AlertScheduler {
         await user.send(disableMessage);
       } catch (dmError) {
         try {
-          await this.sendAlertMessage(alert.channelId, disableMessage);
+          await this.sendAlertMessage(
+            alert.targetChannelId || alert.channelId,
+            disableMessage,
+          );
         } catch (channelError) {
           schedulerLogger.error(
             'Could not send alert disable notification',
