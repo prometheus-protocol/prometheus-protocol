@@ -139,7 +139,7 @@ export class MCPCommand extends BaseCommand {
       // Route to existing handlers
       switch (subcommand) {
         case 'list':
-          response = await this.handleList(interaction.user.id);
+          response = await this.handleList(interaction.user.id, interaction.channelId);
           break;
         case 'connect': {
           const url = interaction.options.getString('url', true);
@@ -160,7 +160,7 @@ export class MCPCommand extends BaseCommand {
           break;
         }
         case 'tools':
-          response = await this.handleTools(interaction.user.id);
+          response = await this.handleTools(interaction.user.id, interaction.channelId);
           break;
         case 'status':
           response = await this.handleStatus();
@@ -201,9 +201,9 @@ export class MCPCommand extends BaseCommand {
     }
   }
 
-  private async handleList(userId: string): Promise<CommandResponse> {
+  private async handleList(userId: string, channelId: string): Promise<CommandResponse> {
     try {
-      const connections = await this.mcpService.getUserConnections(userId);
+      const connections = await this.mcpService.getUserConnections(userId, channelId);
 
       if (connections.length === 0) {
         return {
@@ -428,9 +428,9 @@ export class MCPCommand extends BaseCommand {
     }
   }
 
-  private async handleTools(userId: string): Promise<CommandResponse> {
+  private async handleTools(userId: string, channelId: string): Promise<CommandResponse> {
     try {
-      const tools = await this.mcpService.getAvailableTools(userId);
+      const tools = await this.mcpService.getAvailableTools(userId, channelId);
 
       if (tools.length === 0) {
         return {
@@ -682,6 +682,7 @@ export class MCPCommand extends BaseCommand {
         // Get user's connections for autocomplete
         const connections = await this.mcpService.getUserConnections(
           interaction.user.id,
+          interaction.channelId,
         );
         console.log('🔗 USER CONNECTIONS:', {
           connectionCount: connections.length,

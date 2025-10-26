@@ -1056,6 +1056,7 @@ export class SupabaseService implements DatabaseService {
   async saveUserMCPConnection(connection: SavedMCPConnection): Promise<void> {
     dbLogger.info(`🔗 [DB] saveUserMCPConnection called:`, {
       user_id: connection.user_id,
+      channel_id: connection.channel_id,
       server_id: connection.server_id,
       server_name: connection.server_name,
       status: connection.status,
@@ -1065,6 +1066,7 @@ export class SupabaseService implements DatabaseService {
     const { data, error } = await this.client.from('mcp_connections').upsert(
       {
         user_id: connection.user_id,
+        channel_id: connection.channel_id,
         server_id: connection.server_id,
         server_name: connection.server_name,
         server_url: connection.server_url,
@@ -1076,7 +1078,7 @@ export class SupabaseService implements DatabaseService {
         updated_at: new Date().toISOString(),
       },
       {
-        onConflict: 'user_id,server_id',
+        onConflict: 'user_id,channel_id,server_id',
       },
     );
 
@@ -1090,14 +1092,20 @@ export class SupabaseService implements DatabaseService {
 
   async getUserMCPConnection(
     userId: string,
+    channelId: string,
     serverId: string,
   ): Promise<SavedMCPConnection | null> {
-    dbLogger.info(`🔗 [DB] getUserMCPConnection called:`, { userId, serverId });
+    dbLogger.info(`🔗 [DB] getUserMCPConnection called:`, {
+      userId,
+      channelId,
+      serverId,
+    });
 
     const { data, error } = await this.client
       .from('mcp_connections')
       .select('*')
       .eq('user_id', userId)
+      .eq('channel_id', channelId)
       .eq('server_id', serverId)
       .limit(1)
       .single();
@@ -1111,6 +1119,7 @@ export class SupabaseService implements DatabaseService {
 
     const connection: SavedMCPConnection = {
       user_id: data.user_id,
+      channel_id: data.channel_id,
       server_id: data.server_id,
       server_name: data.server_name,
       server_url: data.server_url,
@@ -1129,13 +1138,20 @@ export class SupabaseService implements DatabaseService {
     return connection;
   }
 
-  async getUserMCPConnections(userId: string): Promise<SavedMCPConnection[]> {
-    dbLogger.info('getUserMCPConnections called for user', { userId });
+  async getUserMCPConnections(
+    userId: string,
+    channelId: string,
+  ): Promise<SavedMCPConnection[]> {
+    dbLogger.info('getUserMCPConnections called for user', {
+      userId,
+      channelId,
+    });
 
     const { data, error } = await this.client
       .from('mcp_connections')
       .select('*')
       .eq('user_id', userId)
+      .eq('channel_id', channelId)
       .order('connected_at', { ascending: false });
 
     if (error) {
@@ -1145,6 +1161,7 @@ export class SupabaseService implements DatabaseService {
 
     const connections: SavedMCPConnection[] = (data || []).map((row: any) => ({
       user_id: row.user_id,
+      channel_id: row.channel_id,
       server_id: row.server_id,
       server_name: row.server_name,
       server_url: row.server_url,
@@ -1156,18 +1173,20 @@ export class SupabaseService implements DatabaseService {
     }));
 
     dbLogger.info(
-      `🔗 [DB] Found ${connections.length} MCP connections for user ${userId}`,
+      `🔗 [DB] Found ${connections.length} MCP connections for user ${userId} in channel ${channelId}`,
     );
     return connections;
   }
 
   async updateUserMCPConnection(
     userId: string,
+    channelId: string,
     serverId: string,
     updates: Partial<SavedMCPConnection>,
   ): Promise<void> {
     dbLogger.info(`🔗 [DB] updateUserMCPConnection called:`, {
       userId,
+      channelId,
       serverId,
       updates,
     });
@@ -1189,6 +1208,7 @@ export class SupabaseService implements DatabaseService {
       .from('mcp_connections')
       .update(updateData)
       .eq('user_id', userId)
+      .eq('channel_id', channelId)
       .eq('server_id', serverId);
 
     if (error) {
@@ -1201,10 +1221,12 @@ export class SupabaseService implements DatabaseService {
 
   async deleteUserMCPConnection(
     userId: string,
+    channelId: string,
     serverId: string,
   ): Promise<void> {
     dbLogger.info(`🔗 [DB] deleteUserMCPConnection called:`, {
       userId,
+      channelId,
       serverId,
     });
 
@@ -1212,6 +1234,7 @@ export class SupabaseService implements DatabaseService {
       .from('mcp_connections')
       .delete()
       .eq('user_id', userId)
+      .eq('channel_id', channelId)
       .eq('server_id', serverId);
 
     if (error) {
@@ -1222,9 +1245,10 @@ export class SupabaseService implements DatabaseService {
     dbLogger.info(`🔗 [DB] MCP connection deleted successfully`);
   }
 
-  // Connection Pool Service methods
+    // Connection Pool Service methods
   async storeConnectionDetails(
     userId: string,
+    channelId: string,
     mcpServerConfigId: string,
     status: string,
     metadata?: any,
@@ -1232,6 +1256,7 @@ export class SupabaseService implements DatabaseService {
     // Log the connection attempt for tracking purposes
     console.log('Storing connection details:', {
       userId,
+      channelId,
       mcpServerConfigId,
       status,
       metadata,
@@ -1239,6 +1264,7 @@ export class SupabaseService implements DatabaseService {
 
     dbLogger.info(`🔗 [DB] storeConnectionDetails called:`, {
       userId,
+      channelId,
       mcpServerConfigId,
       status,
       metadata,
@@ -1247,6 +1273,7 @@ export class SupabaseService implements DatabaseService {
     // First check if connection already exists
     const existingConnection = await this.getUserMCPConnection(
       userId,
+      channelId,
       mcpServerConfigId,
     );
 
@@ -1263,6 +1290,7 @@ export class SupabaseService implements DatabaseService {
         .from('mcp_connections')
         .update(updateData)
         .eq('user_id', userId)
+        .eq('channel_id', channelId)
         .eq('server_id', mcpServerConfigId);
 
       if (error) {
@@ -1300,6 +1328,7 @@ export class SupabaseService implements DatabaseService {
 
   async updateConnectionStatus(
     userId: string,
+    channelId: string,
     mcpServerConfigId: string,
     mcpServerUrl: string,
     status: string,
@@ -1308,6 +1337,7 @@ export class SupabaseService implements DatabaseService {
     // Log the connection status update for tracking purposes
     console.log('Updating connection status:', {
       userId,
+      channelId,
       mcpServerConfigId,
       mcpServerUrl,
       status,
@@ -1316,6 +1346,7 @@ export class SupabaseService implements DatabaseService {
 
     dbLogger.info(`🔗 [DB] updateConnectionStatus called:`, {
       userId,
+      channelId,
       mcpServerConfigId,
       mcpServerUrl,
       status,
@@ -1343,6 +1374,7 @@ export class SupabaseService implements DatabaseService {
     // Use UPSERT to handle both insert and update cases
     const connectionData: any = {
       user_id: userId,
+      channel_id: channelId,
       server_id: mcpServerConfigId,
       server_url: mcpServerUrl,
       server_name: fallbackServerName, // Use hostname from URL as fallback name initially
@@ -1362,7 +1394,7 @@ export class SupabaseService implements DatabaseService {
     const { data, error } = await this.client
       .from('mcp_connections')
       .upsert(connectionData, {
-        onConflict: 'user_id,server_id',
+        onConflict: 'user_id,channel_id,server_id',
         ignoreDuplicates: false,
       })
       .select();

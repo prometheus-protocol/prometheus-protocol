@@ -170,15 +170,24 @@ export interface DatabaseService {
   saveUserMCPConnection(connection: SavedMCPConnection): Promise<void>;
   getUserMCPConnection(
     userId: string,
+    channelId: string,
     serverId: string,
   ): Promise<SavedMCPConnection | null>;
-  getUserMCPConnections(userId: string): Promise<SavedMCPConnection[]>;
+  getUserMCPConnections(
+    userId: string,
+    channelId: string,
+  ): Promise<SavedMCPConnection[]>;
   updateUserMCPConnection(
     userId: string,
+    channelId: string,
     serverId: string,
     updates: Partial<SavedMCPConnection>,
   ): Promise<void>;
-  deleteUserMCPConnection(userId: string, serverId: string): Promise<void>;
+  deleteUserMCPConnection(
+    userId: string,
+    channelId: string,
+    serverId: string,
+  ): Promise<void>;
 }
 
 export interface UserTaskData {
@@ -196,6 +205,7 @@ export interface UserTaskData {
 
 export interface SavedMCPConnection {
   user_id: string;
+  channel_id: string;
   server_id: string;
   server_name: string;
   server_url: string;

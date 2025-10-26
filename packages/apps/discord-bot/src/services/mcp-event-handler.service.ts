@@ -34,7 +34,7 @@ export class MCPEventHandlerService {
    * Updates the server connection with OAuth details and sends Discord notification
    */
   async handleAuthRequired(payload: MCPAuthRequiredEvent): Promise<void> {
-    const { userId, mcpServerConfigId, mcpServerUrl, oauthAuthorizationUrl } =
+    const { userId, channelId, mcpServerConfigId, mcpServerUrl, oauthAuthorizationUrl } =
       payload;
 
     logger.info(
@@ -46,6 +46,7 @@ export class MCPEventHandlerService {
       const existingConnection =
         await this.databaseService.getUserMCPConnection(
           userId, // userId in Discord context
+          channelId,
           mcpServerConfigId,
         );
 
@@ -64,6 +65,7 @@ export class MCPEventHandlerService {
 
       const connectionData: SavedMCPConnection = {
         user_id: userId,
+        channel_id: channelId,
         server_id: mcpServerConfigId,
         server_name: serverName,
         server_url: mcpServerUrl || existingConnection?.server_url || '', // Use actual MCP server URL
@@ -102,7 +104,7 @@ export class MCPEventHandlerService {
    * Updates the connection with tools data
    */
   async handleToolsFetched(payload: MCPToolsFetchedEvent): Promise<void> {
-    const { userId, mcpServerConfigId, tools } = payload;
+    const { userId, channelId, mcpServerConfigId, tools } = payload;
 
     logger.info(
       `[MCPEventHandler] Tools fetched for ${mcpServerConfigId}: ${tools.length} tools`,
@@ -116,6 +118,7 @@ export class MCPEventHandlerService {
       const existingConnection =
         await this.databaseService.getUserMCPConnection(
           userId,
+          channelId,
           mcpServerConfigId,
         );
 
@@ -195,7 +198,7 @@ export class MCPEventHandlerService {
   async handleConnectionStatusUpdate(
     payload: MCPConnectionStatusUpdateEvent,
   ): Promise<void> {
-    const { userId, mcpServerConfigId, status, error } = payload;
+    const { userId, channelId, mcpServerConfigId, status, error } = payload;
 
     logger.info(
       `[MCPEventHandler] Connection status update for ${mcpServerConfigId}: ${status}`,
@@ -205,6 +208,7 @@ export class MCPEventHandlerService {
       const existingConnection =
         await this.databaseService.getUserMCPConnection(
           userId,
+          channelId,
           mcpServerConfigId,
         );
 

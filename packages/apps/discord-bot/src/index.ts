@@ -134,7 +134,7 @@ class DiscordBot {
         });
 
         // Get current MCP tools available for chat
-        const mcpTools = await this.mcpService.getAvailableTools('system');
+        const mcpTools = await this.mcpService.getAvailableTools('system', 'default');
         console.log(`🤖 AI Chat available with ${mcpTools.length} MCP tools`);
         console.log(`⚡ Task management available via /tasks command`);
 
@@ -354,8 +354,11 @@ class DiscordBot {
         // Exchange the authorization code for tokens directly
         try {
           // Get the actual MCP server URL from the saved connection
+          // TODO: Get actual channel_id from oauth_pending table
+          const channelId = (pending as any).channel_id || 'default';
           const connection = await this.database.getUserMCPConnection(
             pending.user_id,
+            channelId,
             pending.server_id,
           );
 

@@ -3,6 +3,7 @@
 export interface BasePubSubPayload {
   generatedAt: string; // ISO Date string of when this event was generated
   userId: string; // Identifier for the workspace
+  channelId: string; // Discord channel ID for scoping MCP connections
   mcpServerConfigId: string; // Unique ID for the MCP Server configuration instance within the workspace
   mcpServerUrl: string; // The base URL of the target MCP Server
 }
