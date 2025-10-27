@@ -81,9 +81,8 @@ export class ChatCommand extends BaseCommand {
         // Check if channel supports threads
         if ('threads' in interaction.channel) {
           // Create a thread name from the prompt (max 100 chars for Discord)
-          const threadName = prompt.length > 100 
-            ? prompt.substring(0, 97) + '...' 
-            : prompt;
+          const threadName =
+            prompt.length > 100 ? prompt.substring(0, 97) + '...' : prompt;
 
           chatLogger.info('Creating thread for conversation', {
             channelId: interaction.channelId,
@@ -113,9 +112,8 @@ export class ChatCommand extends BaseCommand {
           });
 
           // Truncate prompt for display if too long
-          const displayPrompt = prompt.length > 80 
-            ? prompt.substring(0, 77) + '...' 
-            : prompt;
+          const displayPrompt =
+            prompt.length > 80 ? prompt.substring(0, 77) + '...' : prompt;
 
           // Update the original reply with the prompt and link to the thread
           await interaction.editReply({
@@ -146,7 +144,9 @@ export class ChatCommand extends BaseCommand {
                 statusMessage = await thread.send(status);
               }
             } catch (error) {
-              chatLogger.warn('Failed to send status update to thread', { error });
+              chatLogger.warn('Failed to send status update to thread', {
+                error,
+              });
             }
           };
 

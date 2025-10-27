@@ -149,16 +149,24 @@ class DiscordBot {
           console.error('⚠️ Scheduler initialization error:', error);
         }
 
-        // Reestablish persistent MCP connections
+        // NOTE: Reestablishing persistent MCP connections on startup is disabled
+        // for scalability. With thousands of users, this would create too many
+        // simultaneous connections. MCP connections are now lazy-loaded only when
+        // users actually interact with the bot.
+        // If you need to re-enable this for development/testing, uncomment below:
+        /*
         try {
           await this.mcpService.reestablishPersistentConnections();
         } catch (error) {
           console.error('⚠️ MCP connection reestablishment error:', error);
         }
+        */
       }
     });
 
     this.client.on(Events.InteractionCreate, async (interaction) => {
+      const startTime = Date.now();
+
       // Log interaction details (keep logging brief to minimize delays)
       const isSlash = interaction.isChatInputCommand();
       const isAutocomplete = interaction.isAutocomplete();
@@ -170,6 +178,7 @@ class DiscordBot {
         cmd: commandName,
         user: interaction.user.id,
         isDM: !interaction.guildId,
+        receivedAt: startTime,
       });
 
       // Handle autocomplete interactions
@@ -215,6 +224,11 @@ class DiscordBot {
         return;
       }
 
+      const preExecuteTime = Date.now();
+      console.log(
+        `⏱️ Time to execute command: ${preExecuteTime - startTime}ms`,
+      );
+
       try {
         // Execute the slash command immediately
         await command.executeSlash(interaction);
@@ -259,6 +273,12 @@ class DiscordBot {
   }
 
   private async handleThreadMessage(message: any): Promise<void> {
+    console.log('🔵 handleThreadMessage called', {
+      threadId: message.channel.id,
+      userId: message.author.id,
+      contentPreview: message.content.substring(0, 50),
+    });
+
     try {
       const threadId = message.channel.id;
 
@@ -266,11 +286,26 @@ class DiscordBot {
       const chatThread = await this.database.getChatThread(threadId);
 
       if (!chatThread) {
+        console.log('⚠️ Thread not tracked in database, ignoring', {
+          threadId,
+        });
         // Not a tracked thread, ignore
         return;
       }
 
-      console.log('💬 Thread message received', {
+      // Security: Only allow the thread owner to use their tools
+      if (message.author.id !== chatThread.user_id) {
+        console.log('🔒 User not authorized for thread', {
+          messageUserId: message.author.id,
+          threadUserId: chatThread.user_id,
+        });
+        await message.reply(
+          '🔒 This thread belongs to another user. Please start your own conversation with `/chat`.',
+        );
+        return;
+      }
+
+      console.log('💬 Thread message authorized and processing', {
         threadId,
         userId: message.author.id,
         contentPreview: message.content.substring(0, 50),
@@ -352,9 +387,18 @@ class DiscordBot {
       }
     } catch (error) {
       console.error('Error handling thread message:', error);
+      console.error(
+        'Error stack:',
+        error instanceof Error ? error.stack : 'No stack trace',
+      );
+      console.error('Error details:', {
+        threadId: message.channel.id,
+        userId: message.author.id,
+        messageContent: message.content.substring(0, 100),
+      });
       try {
         await message.reply(
-          'Sorry, I encountered an error processing your message.',
+          'Sorry, I encountered an error processing your message. Please check the logs for details.',
         );
       } catch (replyError) {
         console.error('Failed to send error reply:', replyError);
@@ -441,9 +485,18 @@ class DiscordBot {
       }
     } catch (error) {
       console.error('Error handling DM message:', error);
+      console.error(
+        'Error stack:',
+        error instanceof Error ? error.stack : 'No stack trace',
+      );
+      console.error('Error details:', {
+        userId: message.author.id,
+        channelId: message.channel.id,
+        messageContent: message.content.substring(0, 100),
+      });
       try {
         await message.reply(
-          'Sorry, I encountered an error processing your message.',
+          'Sorry, I encountered an error processing your message. Please check the logs for details.',
         );
       } catch (replyError) {
         console.error('Failed to send error reply:', replyError);

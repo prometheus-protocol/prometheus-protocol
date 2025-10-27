@@ -106,20 +106,16 @@ export class MCPCommand extends BaseCommand {
   }
 
   async executeSlash(interaction: ChatInputCommandInteraction): Promise<void> {
-    // IMMEDIATELY acknowledge the interaction - before any other processing
-    // Use a very short timeout to ensure we respond within Discord's 3-second window
+    // CRITICAL: Defer FIRST, before ANY other processing
+    // Discord requires acknowledgment within 3 seconds
+    let deferred = false;
     try {
-      await Promise.race([
-        interaction.deferReply({ ephemeral: false }),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Defer timeout')), 2500),
-        ),
-      ]);
+      await interaction.deferReply({ ephemeral: false });
+      deferred = true;
+      console.log('✅ Successfully deferred MCP command');
     } catch (error) {
-      console.error('❌ Failed to defer reply immediately:', error);
-
-      // If defer fails, the interaction is likely already expired
-      // Don't try to send any more responses as they will also fail
+      console.error('❌ CRITICAL: Failed to defer MCP command:', error);
+      // If we can't defer, we can't respond at all
       return;
     }
 
@@ -129,6 +125,7 @@ export class MCPCommand extends BaseCommand {
       interactionId: interaction.id,
       userId: interaction.user.id,
       subcommand,
+      deferred,
     });
 
     let response: CommandResponse | void;

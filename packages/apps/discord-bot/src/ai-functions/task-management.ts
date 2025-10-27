@@ -434,16 +434,16 @@ class ModifyTaskHandler implements AIFunctionHandler {
             // Update target channel to current location
             alert.targetChannelId = context.threadId || context.channelId;
             alert.threadId = context.threadId;
-            
+
             // Also update channelId if we're in a different channel (for MCP tool access)
             if (context.channelId) {
               alert.channelId = context.channelId;
             }
-            
+
             // Update in database
             await this.database.updateAlert(alert);
           }
-          
+
           await this.scheduler.enableAlert(task_id);
         } else {
           await this.scheduler.disableAlert(task_id);
