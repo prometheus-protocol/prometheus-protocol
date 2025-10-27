@@ -1361,52 +1361,19 @@ export class ConnectionPoolService {
         `[ConnPool-${poolKey}] Error fetching resource ${payload.resourcePath}: ${error.message}`,
         error,
       );
-      const connection = this.activeConnections.get(poolKey); // Re-fetch connection, might have changed
+
+      // Don't kill the connection for transient resource fetch errors
+      // The connection may still be valid for other operations
+      const connection = this.activeConnections.get(poolKey);
       if (connection) {
-        // if connection still exists in map
-        connectionUrl = connection.mcpServerUrl; // Update connectionUrl if available
-        await this.databaseService.updateConnectionStatus(
-          payload.userId,
-          payload.channelId,
-          payload.mcpServerConfigId,
-          connection.mcpServerUrl,
-          'FAILED_FETCH_RESOURCE',
-          {
-            lastFailureError: error.message,
-            lastAttemptedAt: new Date().toISOString(),
-            failureCount: 1, // increment by 1 instead of using FieldValue
-          },
-        );
-        await this.markConnectionAsInactive(
-          poolKey,
-          `Fetch resource error: ${error.message}`,
-          true,
-          true,
+        connectionUrl = connection.mcpServerUrl;
+        logger.warn(
+          `[ConnPool-${poolKey}] Resource fetch failed but keeping connection alive for retry`,
         );
       } else {
         logger.warn(
-          `[ConnPool-${poolKey}] Connection not found in active pool during fetch resource error handling. Database status for FAILED_FETCH_RESOURCE might not be set if connection was already removed.`,
+          `[ConnPool-${poolKey}] Connection not found in active pool during fetch resource error. Connection may have been disconnected.`,
         );
-        // Attempt to update database with payload data if connection object is gone
-        await this.databaseService
-          .updateConnectionStatus(
-            payload.userId,
-            payload.channelId,
-            payload.mcpServerConfigId,
-            payload.mcpServerUrl, // Use payload's URL as fallback
-            'FAILED_FETCH_RESOURCE',
-            {
-              lastFailureError: `Connection object not in map during error: ${error.message}`,
-              lastAttemptedAt: new Date().toISOString(),
-              failureCount: 1, // increment by 1 instead of using FieldValue
-            },
-          )
-          .catch((fsErr: any) =>
-            logger.error(
-              `[ConnPool-${poolKey}] Fallback database update failed:`,
-              fsErr,
-            ),
-          );
       }
       // Publish an error event for fetching resource
       // Assumes MCPPublisherService has publishResourceFetchError and corresponding DTO
@@ -1444,7 +1411,32 @@ export class ConnectionPoolService {
     );
     let connectionUrl = payload.mcpServerUrl; // Fallback
     try {
-      const connection = this.getConnectionOrFail(poolKey);
+      // Check if connection exists in memory
+      let connection = this.activeConnections.get(poolKey);
+
+      // If connection not in memory, establish it on-demand (lazy loading)
+      if (!connection || !connection.isActiveAttempted) {
+        logger.info(
+          `[ConnPool-${poolKey}] Connection not in memory, establishing on-demand...`,
+        );
+
+        await this.handleConnectionRequest({
+          userId: payload.userId,
+          channelId: payload.channelId,
+          mcpServerUrl: payload.mcpServerUrl,
+          mcpServerConfigId: payload.mcpServerConfigId,
+          generatedAt: new Date().toISOString(),
+        });
+
+        // Retry getting the connection
+        connection = this.activeConnections.get(poolKey);
+        if (!connection || !connection.isActiveAttempted) {
+          throw new Error(
+            `Failed to establish connection for tool invocation`,
+          );
+        }
+      }
+
       connectionUrl = connection.mcpServerUrl;
 
       // toolInput is already an object, no need to parse if it's not a string
@@ -1530,32 +1522,12 @@ export class ConnectionPoolService {
       let connectionUrl = payload.mcpServerUrl;
 
       if (connection && !isMcpError) {
-        try {
-          connectionUrl = connection.mcpServerUrl;
-          await this.databaseService.updateConnectionStatus(
-            payload.userId,
-            payload.channelId,
-            payload.mcpServerConfigId,
-            connection.mcpServerUrl,
-            'FAILED_INVOKE_TOOL',
-            {
-              lastFailureError: error.message,
-              lastAttemptedAt: new Date().toISOString(),
-              failureCount: 1, // increment by 1 instead of using FieldValue
-            },
-          );
-          await this.markConnectionAsInactive(
-            poolKey,
-            error.message,
-            true,
-            true,
-          );
-        } catch (fsError) {
-          logger.error(
-            `[ConnPool-${poolKey}] Failed to update Firestore status to FAILED_INVOKE_TOOL:`,
-            fsError as Error,
-          );
-        }
+        // Non-MCP errors (network issues, timeouts, etc.)
+        // Log the error but DON'T kill the connection - it may recover
+        connectionUrl = connection.mcpServerUrl;
+        logger.warn(
+          `[ConnPool-${poolKey}] Tool invocation failed with transient error. Keeping connection alive for retry.`,
+        );
       } else if (connection && isMcpError) {
         // If connection exists and error is from MCP SDK itself
         connectionUrl = connection.mcpServerUrl; // Use existing connection URL
@@ -1602,31 +1574,14 @@ export class ConnectionPoolService {
         }
         // --- END: MODIFICATION ---
       } else {
+        // Connection not found in pool - it may have already been cleaned up
         logger.warn(
-          `[ConnPool-${poolKey}] Connection not found in active pool during invoke tool error handling. Database status for FAILED_INVOKE_TOOL might not be set if connection was already removed.`,
+          `[ConnPool-${poolKey}] Connection not found in active pool during invoke tool error. Connection may have disconnected.`,
         );
-        await this.databaseService
-          .updateConnectionStatus(
-            payload.userId,
-            payload.channelId,
-            payload.mcpServerConfigId,
-            payload.mcpServerUrl, // Use payload's URL as fallback
-            'FAILED_INVOKE_TOOL',
-            {
-              lastFailureError: `Connection object not in map during error: ${error.message}`,
-              lastAttemptedAt: new Date().toISOString(),
-              failureCount: 1, // increment by 1 instead of using FieldValue
-            },
-          )
-          .catch((fsErr: any) =>
-            logger.error(
-              `[ConnPool-${poolKey}] Fallback database update failed:`,
-              fsErr,
-            ),
-          );
+        connectionUrl = payload.mcpServerUrl;
       }
 
-      // This is still necessary to inform the original caller that this specific invocation failed.
+      // Publish error result so the caller knows this specific invocation failed
       await this.eventService
         .publishToolResult({
           generatedAt: new Date().toISOString(),

@@ -485,11 +485,22 @@ export class LLMService {
     // Add MCP tools (user-specific and channel-specific)
     if (this.mcpService && userId) {
       try {
+        llmLogger.info('Loading MCP functions for LLM', {
+          userId,
+          channelId,
+          channelIdOrDefault: channelId || 'default',
+        });
         const mcpFunctions =
           await this.mcpService.convertToolsToOpenAIFunctions(
             userId,
             channelId || 'default',
           );
+        llmLogger.info('MCP functions loaded', {
+          userId,
+          channelId,
+          mcpFunctionCount: mcpFunctions.length,
+          functionNames: mcpFunctions.map((f) => f.name),
+        });
         allFunctions = [...allFunctions, ...mcpFunctions];
       } catch (error) {
         llmLogger.error(
