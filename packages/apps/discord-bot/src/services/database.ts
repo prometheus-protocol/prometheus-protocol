@@ -1436,33 +1436,12 @@ export class SupabaseService implements DatabaseService {
     });
 
     const dbStatus = this.mapStatusToDatabase(status);
+
+    // Build update data - only update status and error-related fields
+    // DO NOT overwrite tools, server_name, or other existing data
     const updateData: any = {
       status: dbStatus,
-      server_url: mcpServerUrl,
-    };
-
-    // Generate a human-readable fallback name from the URL
-    let fallbackServerName = 'MCP Server';
-    try {
-      const url = new URL(mcpServerUrl);
-      fallbackServerName = url.hostname;
-    } catch {
-      // If URL parsing fails, just use generic name
-      fallbackServerName = 'MCP Server';
-    }
-
-    // Note: metadata and updated_at are not stored in the database schema, only logged for debugging
-
-    // Use UPSERT to handle both insert and update cases
-    const connectionData: any = {
-      user_id: userId,
-      channel_id: channelId,
-      server_id: mcpServerConfigId,
-      server_url: mcpServerUrl,
-      server_name: fallbackServerName, // Use hostname from URL as fallback name initially
-      status: dbStatus,
-      tools: '[]',
-      connected_at: new Date().toISOString(),
+      server_url: mcpServerUrl, // Keep URL updated in case it changed
     };
 
     // Add error message if it's a failed connection
@@ -1470,35 +1449,96 @@ export class SupabaseService implements DatabaseService {
       (dbStatus === 'error' || dbStatus === 'disconnected') &&
       metadata?.lastFailureError
     ) {
-      connectionData.error_message = metadata.lastFailureError;
+      updateData.error_message = metadata.lastFailureError;
+    } else if (dbStatus === 'connected') {
+      // Clear error message on successful connection
+      updateData.error_message = null;
     }
 
-    const { data, error } = await this.client
+    // First, try to UPDATE the existing record
+    const { data: updateResult, error: updateError } = await this.client
       .from('mcp_connections')
-      .upsert(connectionData, {
-        onConflict: 'user_id,channel_id,server_id',
-        ignoreDuplicates: false,
-      })
+      .update(updateData)
+      .eq('user_id', userId)
+      .eq('channel_id', channelId)
+      .eq('server_id', mcpServerConfigId)
       .select();
 
-    if (error) {
+    // If no rows were updated, the connection doesn't exist yet - create it
+    if (!updateError && (!updateResult || updateResult.length === 0)) {
+      dbLogger.info(`🔗 [DB] Connection not found, creating new record`);
+
+      // Generate a human-readable fallback name from the URL
+      let fallbackServerName = 'MCP Server';
+      try {
+        const url = new URL(mcpServerUrl);
+        fallbackServerName = url.hostname;
+      } catch {
+        fallbackServerName = 'MCP Server';
+      }
+
+      const connectionData: any = {
+        user_id: userId,
+        channel_id: channelId,
+        server_id: mcpServerConfigId,
+        server_url: mcpServerUrl,
+        server_name: fallbackServerName,
+        status: dbStatus,
+        tools: '[]',
+        connected_at: new Date().toISOString(),
+      };
+
+      if (updateData.error_message) {
+        connectionData.error_message = updateData.error_message;
+      }
+
+      const { data, error } = await this.client
+        .from('mcp_connections')
+        .insert(connectionData)
+        .select();
+
+      if (error) {
+        const dbError = new Error(
+          `Failed to insert connection: ${error.message}`,
+        );
+        dbLogger.error(
+          `🔗 [DB] Error inserting connection status: ${error.message} (code: ${(error as any).code})`,
+          dbError,
+          {
+            details: (error as any).details,
+            hint: (error as any).hint,
+            connectionData: JSON.stringify(connectionData),
+          } as any,
+        );
+        throw dbError;
+      }
+
+      dbLogger.info(`🔗 [DB] Connection created successfully`, {
+        serverId: mcpServerConfigId,
+        status: dbStatus,
+      });
+      return;
+    }
+
+    // Handle UPDATE error
+    if (updateError) {
       const dbError = new Error(
-        `Failed to upsert connection: ${error.message}`,
+        `Failed to update connection: ${updateError.message}`,
       );
       dbLogger.error(
-        `🔗 [DB] Error upserting connection status: ${error.message} (code: ${(error as any).code})`,
+        `🔗 [DB] Error updating connection status: ${updateError.message} (code: ${(updateError as any).code})`,
         dbError,
         {
-          details: (error as any).details,
-          hint: (error as any).hint,
-          connectionData: JSON.stringify(connectionData),
+          details: (updateError as any).details,
+          hint: (updateError as any).hint,
+          updateData: JSON.stringify(updateData),
         } as any,
       );
       throw dbError;
     }
 
-    dbLogger.info(`🔗 [DB] Connection status upserted successfully`, {
-      rowsAffected: data ? data.length : 0,
+    dbLogger.info(`🔗 [DB] Connection status updated successfully`, {
+      rowsAffected: updateResult ? updateResult.length : 0,
       serverId: mcpServerConfigId,
       status: dbStatus,
     });

@@ -143,10 +143,15 @@ class DiscordBot {
         });
 
         // Start scheduler with alert loading
-        try {
-          await this.scheduler.start();
-        } catch (error) {
-          console.error('⚠️ Scheduler initialization error:', error);
+        // Skip loading alerts in development if DISABLE_SCHEDULER is set
+        if (process.env.DISABLE_SCHEDULER === 'true') {
+          console.log('⏸️ Scheduler disabled via DISABLE_SCHEDULER env var');
+        } else {
+          try {
+            await this.scheduler.start();
+          } catch (error) {
+            console.error('⚠️ Scheduler initialization error:', error);
+          }
         }
 
         // NOTE: Reestablishing persistent MCP connections on startup is disabled
