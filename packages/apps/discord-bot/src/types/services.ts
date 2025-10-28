@@ -16,6 +16,7 @@ export interface ConversationContext {
   history: ConversationMessage[];
   maxTokens?: number;
   temperature?: number;
+  threadId?: string; // Optional: thread ID for posting alerts when in a thread
 }
 
 export interface ConversationMessage {
@@ -24,13 +25,26 @@ export interface ConversationMessage {
   timestamp: Date;
 }
 
+export interface ChatThread {
+  id: string;
+  thread_id: string;
+  channel_id: string;
+  user_id: string;
+  conversation_history: Array<{ role: string; content: string }>;
+  is_active: boolean;
+  created_at: Date;
+  last_activity: Date;
+}
+
 // Alert Service Types
 export interface AlertConfig {
   id: string;
   name: string;
   description: string;
   userId: string; // Discord user ID who created the task
-  channelId: string;
+  channelId: string; // Channel where MCP tools are connected
+  targetChannelId?: string; // Optional: specific channel/thread to post alerts to
+  threadId?: string; // Optional: thread ID if task was created in a thread (for loading thread history)
   interval: number; // milliseconds
   enabled: boolean;
   recurring?: boolean; // If false, alert will be disabled after first execution
@@ -108,6 +122,7 @@ export interface DatabaseService {
     state: string;
     code_verifier: string;
     auth_url: string;
+    channel_id?: string;
   }): Promise<void>;
   getOAuthPendingByState(state: string): Promise<null | {
     server_id: string;
@@ -115,6 +130,7 @@ export interface DatabaseService {
     state: string;
     code_verifier: string;
     auth_url: string;
+    channel_id?: string;
   }>;
   getOAuthPending(
     serverId: string,
@@ -125,6 +141,7 @@ export interface DatabaseService {
     state: string;
     code_verifier: string;
     auth_url: string;
+    channel_id?: string;
   }>;
   deleteOAuthPending(serverId: string, userId: string): Promise<void>;
   saveOAuthTokens(tokens: {
@@ -170,21 +187,44 @@ export interface DatabaseService {
   saveUserMCPConnection(connection: SavedMCPConnection): Promise<void>;
   getUserMCPConnection(
     userId: string,
+    channelId: string,
     serverId: string,
   ): Promise<SavedMCPConnection | null>;
-  getUserMCPConnections(userId: string): Promise<SavedMCPConnection[]>;
+  getUserMCPConnections(
+    userId: string,
+    channelId: string,
+  ): Promise<SavedMCPConnection[]>;
   updateUserMCPConnection(
     userId: string,
+    channelId: string,
     serverId: string,
     updates: Partial<SavedMCPConnection>,
   ): Promise<void>;
-  deleteUserMCPConnection(userId: string, serverId: string): Promise<void>;
+  deleteUserMCPConnection(
+    userId: string,
+    channelId: string,
+    serverId: string,
+  ): Promise<void>;
+
+  // Chat thread management
+  createChatThread(data: {
+    thread_id: string;
+    channel_id: string;
+    user_id: string;
+  }): Promise<void>;
+  getChatThread(threadId: string): Promise<ChatThread | null>;
+  updateThreadHistory(
+    threadId: string,
+    message: { role: string; content: string },
+  ): Promise<void>;
+  deactivateChatThread(threadId: string): Promise<void>;
 }
 
 export interface UserTaskData {
   id: string;
   userId: string;
-  channelId: string;
+  channelId: string; // Channel where MCP tools are connected
+  targetChannelId?: string; // Optional: specific channel/thread to post alerts to
   prompt: string;
   interval: number;
   description: string;
@@ -196,6 +236,7 @@ export interface UserTaskData {
 
 export interface SavedMCPConnection {
   user_id: string;
+  channel_id: string;
   server_id: string;
   server_name: string;
   server_url: string;

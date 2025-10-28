@@ -34,8 +34,13 @@ export class MCPEventHandlerService {
    * Updates the server connection with OAuth details and sends Discord notification
    */
   async handleAuthRequired(payload: MCPAuthRequiredEvent): Promise<void> {
-    const { userId, mcpServerConfigId, mcpServerUrl, oauthAuthorizationUrl } =
-      payload;
+    const {
+      userId,
+      channelId,
+      mcpServerConfigId,
+      mcpServerUrl,
+      oauthAuthorizationUrl,
+    } = payload;
 
     logger.info(
       `[MCPEventHandler] Auth required for server ${mcpServerConfigId}`,
@@ -46,6 +51,7 @@ export class MCPEventHandlerService {
       const existingConnection =
         await this.databaseService.getUserMCPConnection(
           userId, // userId in Discord context
+          channelId,
           mcpServerConfigId,
         );
 
@@ -64,6 +70,7 @@ export class MCPEventHandlerService {
 
       const connectionData: SavedMCPConnection = {
         user_id: userId,
+        channel_id: channelId,
         server_id: mcpServerConfigId,
         server_name: serverName,
         server_url: mcpServerUrl || existingConnection?.server_url || '', // Use actual MCP server URL
@@ -102,7 +109,7 @@ export class MCPEventHandlerService {
    * Updates the connection with tools data
    */
   async handleToolsFetched(payload: MCPToolsFetchedEvent): Promise<void> {
-    const { userId, mcpServerConfigId, tools } = payload;
+    const { userId, channelId, mcpServerConfigId, tools } = payload;
 
     logger.info(
       `[MCPEventHandler] Tools fetched for ${mcpServerConfigId}: ${tools.length} tools`,
@@ -116,6 +123,7 @@ export class MCPEventHandlerService {
       const existingConnection =
         await this.databaseService.getUserMCPConnection(
           userId,
+          channelId,
           mcpServerConfigId,
         );
 
@@ -195,7 +203,7 @@ export class MCPEventHandlerService {
   async handleConnectionStatusUpdate(
     payload: MCPConnectionStatusUpdateEvent,
   ): Promise<void> {
-    const { userId, mcpServerConfigId, status, error } = payload;
+    const { userId, channelId, mcpServerConfigId, status, error } = payload;
 
     logger.info(
       `[MCPEventHandler] Connection status update for ${mcpServerConfigId}: ${status}`,
@@ -205,6 +213,7 @@ export class MCPEventHandlerService {
       const existingConnection =
         await this.databaseService.getUserMCPConnection(
           userId,
+          channelId,
           mcpServerConfigId,
         );
 
@@ -272,7 +281,15 @@ export class MCPEventHandlerService {
   async handleServerCapabilities(
     payload: MCPServerCapabilitiesEvent,
   ): Promise<void> {
-    const { userId, mcpServerConfigId, capabilities, name, version } = payload;
+    const {
+      userId,
+      mcpServerConfigId,
+      capabilities,
+      name,
+      version,
+      channelId,
+      mcpServerUrl,
+    } = payload;
 
     logger.info(
       `[MCPEventHandler] Server capabilities for ${mcpServerConfigId}: ${name} v${version}`,
@@ -282,6 +299,7 @@ export class MCPEventHandlerService {
       const existingConnection =
         await this.databaseService.getUserMCPConnection(
           userId,
+          channelId,
           mcpServerConfigId,
         );
 
@@ -298,12 +316,13 @@ export class MCPEventHandlerService {
         user_id: userId,
         server_id: mcpServerConfigId,
         server_name: finalServerName,
-        server_url: existingConnection?.server_url || '',
+        server_url: mcpServerUrl, // Use from payload instead of falling back to empty string
         status: existingConnection?.status || 'connected',
         tools: existingConnection?.tools || '[]',
         error_message: null,
         connected_at: existingConnection?.connected_at || new Date(),
         last_used: new Date(),
+        channel_id: channelId, // Use from payload instead of falling back to empty string
       };
 
       await this.databaseService.saveUserMCPConnection(connectionData);

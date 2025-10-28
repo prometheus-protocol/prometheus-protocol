@@ -48,6 +48,7 @@ interface ActiveConnection {
   authProvider: ConnectionManagerOAuthProvider;
   mcpServerUrl: string;
   userId: string;
+  channelId: string;
   mcpServerConfigId: string;
   isActiveAttempted: boolean;
   currentTransportType?: 'streamableHttp' | 'sse';
@@ -117,6 +118,7 @@ export class ConnectionPoolService {
         try {
           await this.databaseService.updateConnectionStatus(
             connection.userId,
+            connection.channelId,
             connection.mcpServerConfigId,
             connection.mcpServerUrl,
             'DISCONNECTED_UNEXPECTEDLY',
@@ -140,6 +142,7 @@ export class ConnectionPoolService {
         await this.eventService.publishConnectionStatusUpdate({
           generatedAt: new Date().toISOString(),
           userId: connection.userId,
+          channelId: connection.channelId,
           mcpServerConfigId: connection.mcpServerConfigId,
           mcpServerUrl: connection.mcpServerUrl,
           status: 'disconnected',
@@ -167,7 +170,8 @@ export class ConnectionPoolService {
         return;
       }
 
-      const { client, userId, mcpServerConfigId, mcpServerUrl } = connection;
+      const { client, userId, mcpServerConfigId, mcpServerUrl, channelId } =
+        connection;
 
       if (!client) {
         throw new Error(`[ConnPool-${poolKey}] Client is not initialized.`);
@@ -201,6 +205,7 @@ export class ConnectionPoolService {
                 await this.eventService.publishResourcesFetched({
                   generatedAt: new Date().toISOString(),
                   userId,
+                  channelId,
                   mcpServerConfigId,
                   mcpServerUrl,
                   resources: resourcesResponse.resources,
@@ -241,6 +246,7 @@ export class ConnectionPoolService {
                 await this.eventService.publishToolsFetched({
                   generatedAt: new Date().toISOString(),
                   userId,
+                  channelId,
                   mcpServerConfigId,
                   mcpServerUrl,
                   tools: toolsResponse.tools,
@@ -361,9 +367,11 @@ export class ConnectionPoolService {
     // Set initial status. Any subsequent error will UPDATE this status.
     await this.databaseService.storeConnectionDetails(
       payload.userId,
+      payload.channelId,
       payload.mcpServerConfigId,
       'CONNECTION_REQUESTED',
       { lastAttemptedAt: new Date().toISOString() },
+      payload.mcpServerUrl, // Pass the URL so it can create the record if needed
     );
 
     let primaryError: Error | undefined;
@@ -419,6 +427,7 @@ export class ConnectionPoolService {
         this.databaseService,
         this.eventService,
         payload.mcpServerUrl,
+        payload.channelId, // Pass channelId to the provider
       );
 
       // Store the authProvider in the pool immediately.
@@ -427,6 +436,7 @@ export class ConnectionPoolService {
         authProvider,
         mcpServerUrl: payload.mcpServerUrl,
         userId: payload.userId,
+        channelId: payload.channelId,
         mcpServerConfigId: payload.mcpServerConfigId,
         isActiveAttempted: false,
       };
@@ -445,6 +455,7 @@ export class ConnectionPoolService {
         );
         await this.databaseService.updateConnectionStatus(
           payload.userId,
+          payload.channelId,
           payload.mcpServerConfigId,
           payload.mcpServerUrl,
           'AUTH_PENDING',
@@ -466,6 +477,7 @@ export class ConnectionPoolService {
         });
         await this.databaseService.updateConnectionStatus(
           payload.userId,
+          payload.channelId,
           payload.mcpServerConfigId,
           payload.mcpServerUrl,
           'PENDING_CLIENT_REGISTRATION',
@@ -612,6 +624,7 @@ export class ConnectionPoolService {
           const existingConnection =
             await this.databaseService.getUserMCPConnection(
               payload.userId,
+              payload.channelId,
               payload.mcpServerConfigId,
             );
 
@@ -664,6 +677,7 @@ export class ConnectionPoolService {
           if (displayName !== currentServerName) {
             await this.databaseService.updateUserMCPConnection(
               payload.userId,
+              payload.channelId,
               payload.mcpServerConfigId,
               { server_name: displayName },
             );
@@ -693,6 +707,7 @@ export class ConnectionPoolService {
       );
       await this.databaseService.updateConnectionStatus(
         payload.userId,
+        payload.channelId,
         payload.mcpServerConfigId,
         payload.mcpServerUrl,
         'ACTIVE',
@@ -709,6 +724,7 @@ export class ConnectionPoolService {
       await this.eventService.publishConnectionStatusUpdate({
         generatedAt: new Date().toISOString(),
         userId: payload.userId,
+        channelId: payload.channelId,
         mcpServerConfigId: payload.mcpServerConfigId,
         mcpServerUrl: payload.mcpServerUrl,
         status: 'connected',
@@ -732,6 +748,7 @@ export class ConnectionPoolService {
         await this.eventService.publishServerCapabilities({
           generatedAt: new Date().toISOString(),
           userId: payload.userId,
+          channelId: payload.channelId,
           mcpServerConfigId: payload.mcpServerConfigId,
           mcpServerUrl: payload.mcpServerUrl,
           name: displayName,
@@ -855,6 +872,7 @@ export class ConnectionPoolService {
           await this.eventService.publishResourcesFetched({
             generatedAt: new Date().toISOString(),
             userId: payload.userId,
+            channelId: payload.channelId,
             mcpServerConfigId: payload.mcpServerConfigId,
             mcpServerUrl: payload.mcpServerUrl,
             resources: resourcesResponse.resources,
@@ -889,6 +907,7 @@ export class ConnectionPoolService {
           await this.eventService.publishToolsFetched({
             generatedAt: new Date().toISOString(),
             userId: payload.userId,
+            channelId: payload.channelId,
             mcpServerConfigId: payload.mcpServerConfigId,
             mcpServerUrl: payload.mcpServerUrl,
             tools: toolsResponse.tools,
@@ -940,13 +959,14 @@ export class ConnectionPoolService {
   private async _handleConnectionFailure(
     payload: {
       userId: string;
+      channelId: string;
       mcpServerConfigId: string;
       mcpServerUrl: string;
     },
     poolKey: string,
     error: any,
   ): Promise<void> {
-    const { userId, mcpServerConfigId, mcpServerUrl } = payload;
+    const { userId, channelId, mcpServerConfigId, mcpServerUrl } = payload;
 
     const isAuthError =
       error.message.toLowerCase().includes('auth') ||
@@ -968,11 +988,13 @@ export class ConnectionPoolService {
       const existingConnection =
         await this.databaseService.getUserMCPConnection(
           userId,
+          channelId,
           mcpServerConfigId,
         );
 
       await this.databaseService.updateConnectionStatus(
         userId,
+        channelId,
         mcpServerConfigId,
         mcpServerUrl,
         'AUTH_PENDING',
@@ -1021,6 +1043,7 @@ export class ConnectionPoolService {
     // Update database and publish the failure status.
     await this.databaseService.updateConnectionStatus(
       userId,
+      channelId,
       mcpServerConfigId,
       mcpServerUrl,
       'FAILED_CONNECTION',
@@ -1155,6 +1178,7 @@ export class ConnectionPoolService {
       // This will create a new ActiveConnection object, including a new AuthProvider
       await this.handleConnectionRequest({
         userId: payload.userId,
+        channelId: payload.channelId,
         mcpServerConfigId: payload.mcpServerConfigId,
         mcpServerUrl: payload.mcpServerUrl,
         generatedAt: payload.generatedAt,
@@ -1186,6 +1210,7 @@ export class ConnectionPoolService {
       // The important part is that the AuthProvider on `connection.authProvider` has been updated by the SDK/OAuth flow.
       await this.handleConnectionRequest({
         userId: payload.userId,
+        channelId: payload.channelId,
         mcpServerConfigId: payload.mcpServerConfigId,
         mcpServerUrl: payload.mcpServerUrl,
         generatedAt: payload.generatedAt,
@@ -1212,6 +1237,7 @@ export class ConnectionPoolService {
       // but as a safeguard:
       await this.databaseService.updateConnectionStatus(
         payload.userId,
+        payload.channelId,
         payload.mcpServerConfigId,
         payload.mcpServerUrl,
         'FAILED_POST_TOKEN_OBTAINED',
@@ -1276,6 +1302,7 @@ export class ConnectionPoolService {
           uri: sdkContentItem.uri, // The URI of this specific content item
           originalRequestUri: payload.resourcePath, // Keep track of the URI that triggered this fetch
           mimeType: sdkContentItem.mimeType,
+          channelId: payload.channelId,
         };
 
         let estimatedPayloadSize = JSON.stringify(resourceForEvent).length;
@@ -1334,50 +1361,19 @@ export class ConnectionPoolService {
         `[ConnPool-${poolKey}] Error fetching resource ${payload.resourcePath}: ${error.message}`,
         error,
       );
-      const connection = this.activeConnections.get(poolKey); // Re-fetch connection, might have changed
+
+      // Don't kill the connection for transient resource fetch errors
+      // The connection may still be valid for other operations
+      const connection = this.activeConnections.get(poolKey);
       if (connection) {
-        // if connection still exists in map
-        connectionUrl = connection.mcpServerUrl; // Update connectionUrl if available
-        await this.databaseService.updateConnectionStatus(
-          payload.userId,
-          payload.mcpServerConfigId,
-          connection.mcpServerUrl,
-          'FAILED_FETCH_RESOURCE',
-          {
-            lastFailureError: error.message,
-            lastAttemptedAt: new Date().toISOString(),
-            failureCount: 1, // increment by 1 instead of using FieldValue
-          },
-        );
-        await this.markConnectionAsInactive(
-          poolKey,
-          `Fetch resource error: ${error.message}`,
-          true,
-          true,
+        connectionUrl = connection.mcpServerUrl;
+        logger.warn(
+          `[ConnPool-${poolKey}] Resource fetch failed but keeping connection alive for retry`,
         );
       } else {
         logger.warn(
-          `[ConnPool-${poolKey}] Connection not found in active pool during fetch resource error handling. Database status for FAILED_FETCH_RESOURCE might not be set if connection was already removed.`,
+          `[ConnPool-${poolKey}] Connection not found in active pool during fetch resource error. Connection may have been disconnected.`,
         );
-        // Attempt to update database with payload data if connection object is gone
-        await this.databaseService
-          .updateConnectionStatus(
-            payload.userId,
-            payload.mcpServerConfigId,
-            payload.mcpServerUrl, // Use payload's URL as fallback
-            'FAILED_FETCH_RESOURCE',
-            {
-              lastFailureError: `Connection object not in map during error: ${error.message}`,
-              lastAttemptedAt: new Date().toISOString(),
-              failureCount: 1, // increment by 1 instead of using FieldValue
-            },
-          )
-          .catch((fsErr: any) =>
-            logger.error(
-              `[ConnPool-${poolKey}] Fallback database update failed:`,
-              fsErr,
-            ),
-          );
       }
       // Publish an error event for fetching resource
       // Assumes MCPPublisherService has publishResourceFetchError and corresponding DTO
@@ -1415,7 +1411,30 @@ export class ConnectionPoolService {
     );
     let connectionUrl = payload.mcpServerUrl; // Fallback
     try {
-      const connection = this.getConnectionOrFail(poolKey);
+      // Check if connection exists in memory
+      let connection = this.activeConnections.get(poolKey);
+
+      // If connection not in memory, establish it on-demand (lazy loading)
+      if (!connection || !connection.isActiveAttempted) {
+        logger.info(
+          `[ConnPool-${poolKey}] Connection not in memory, establishing on-demand...`,
+        );
+
+        await this.handleConnectionRequest({
+          userId: payload.userId,
+          channelId: payload.channelId,
+          mcpServerUrl: payload.mcpServerUrl,
+          mcpServerConfigId: payload.mcpServerConfigId,
+          generatedAt: new Date().toISOString(),
+        });
+
+        // Retry getting the connection
+        connection = this.activeConnections.get(poolKey);
+        if (!connection || !connection.isActiveAttempted) {
+          throw new Error(`Failed to establish connection for tool invocation`);
+        }
+      }
+
       connectionUrl = connection.mcpServerUrl;
 
       // toolInput is already an object, no need to parse if it's not a string
@@ -1501,31 +1520,12 @@ export class ConnectionPoolService {
       let connectionUrl = payload.mcpServerUrl;
 
       if (connection && !isMcpError) {
-        try {
-          connectionUrl = connection.mcpServerUrl;
-          await this.databaseService.updateConnectionStatus(
-            payload.userId,
-            payload.mcpServerConfigId,
-            connection.mcpServerUrl,
-            'FAILED_INVOKE_TOOL',
-            {
-              lastFailureError: error.message,
-              lastAttemptedAt: new Date().toISOString(),
-              failureCount: 1, // increment by 1 instead of using FieldValue
-            },
-          );
-          await this.markConnectionAsInactive(
-            poolKey,
-            error.message,
-            true,
-            true,
-          );
-        } catch (fsError) {
-          logger.error(
-            `[ConnPool-${poolKey}] Failed to update Firestore status to FAILED_INVOKE_TOOL:`,
-            fsError as Error,
-          );
-        }
+        // Non-MCP errors (network issues, timeouts, etc.)
+        // Log the error but DON'T kill the connection - it may recover
+        connectionUrl = connection.mcpServerUrl;
+        logger.warn(
+          `[ConnPool-${poolKey}] Tool invocation failed with transient error. Keeping connection alive for retry.`,
+        );
       } else if (connection && isMcpError) {
         // If connection exists and error is from MCP SDK itself
         connectionUrl = connection.mcpServerUrl; // Use existing connection URL
@@ -1572,30 +1572,14 @@ export class ConnectionPoolService {
         }
         // --- END: MODIFICATION ---
       } else {
+        // Connection not found in pool - it may have already been cleaned up
         logger.warn(
-          `[ConnPool-${poolKey}] Connection not found in active pool during invoke tool error handling. Database status for FAILED_INVOKE_TOOL might not be set if connection was already removed.`,
+          `[ConnPool-${poolKey}] Connection not found in active pool during invoke tool error. Connection may have disconnected.`,
         );
-        await this.databaseService
-          .updateConnectionStatus(
-            payload.userId,
-            payload.mcpServerConfigId,
-            payload.mcpServerUrl, // Use payload's URL as fallback
-            'FAILED_INVOKE_TOOL',
-            {
-              lastFailureError: `Connection object not in map during error: ${error.message}`,
-              lastAttemptedAt: new Date().toISOString(),
-              failureCount: 1, // increment by 1 instead of using FieldValue
-            },
-          )
-          .catch((fsErr: any) =>
-            logger.error(
-              `[ConnPool-${poolKey}] Fallback database update failed:`,
-              fsErr,
-            ),
-          );
+        connectionUrl = payload.mcpServerUrl;
       }
 
-      // This is still necessary to inform the original caller that this specific invocation failed.
+      // Publish error result so the caller knows this specific invocation failed
       await this.eventService
         .publishToolResult({
           generatedAt: new Date().toISOString(),
@@ -1643,6 +1627,7 @@ export class ConnectionPoolService {
       // Always update database to reflect user's intent first
       await this.databaseService.updateConnectionStatus(
         payload.userId,
+        payload.channelId,
         payload.mcpServerConfigId,
         payload.mcpServerUrl, // Use URL from payload as source of truth for this config
         'DISCONNECTED_BY_USER',
@@ -1713,6 +1698,7 @@ export class ConnectionPoolService {
       // Set database status first
       await this.databaseService.updateConnectionStatus(
         connection.userId,
+        connection.channelId,
         connection.mcpServerConfigId,
         connection.mcpServerUrl,
         'DISCONNECTED_ON_SHUTDOWN',
@@ -1760,6 +1746,7 @@ export class ConnectionPoolService {
         );
         await this.databaseService.updateConnectionStatus(
           storedConn.userId,
+          storedConn.channel_id,
           storedConn.mcpServerConfigId,
           storedConn.mcpServerBaseUrl,
           'RECONNECTING_ON_STARTUP',
@@ -1771,6 +1758,7 @@ export class ConnectionPoolService {
         try {
           await this.handleConnectionRequest({
             userId: storedConn.userId,
+            channelId: storedConn.channel_id,
             mcpServerUrl: storedConn.mcpServerBaseUrl,
             mcpServerConfigId: storedConn.mcpServerConfigId,
             generatedAt: new Date().toISOString(),

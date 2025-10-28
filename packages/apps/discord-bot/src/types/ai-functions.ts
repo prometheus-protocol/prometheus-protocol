@@ -41,6 +41,7 @@ export interface AIFunctionContext {
   channelId: string;
   guildId?: string;
   username: string;
+  threadId?: string; // Optional: thread ID for posting alerts when in a thread
 }
 
 // Task Management Types

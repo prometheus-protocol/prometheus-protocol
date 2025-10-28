@@ -5,6 +5,7 @@ create extension if not exists pgcrypto;
 create table if not exists mcp_connections (
   id uuid primary key default gen_random_uuid(),
   user_id text not null,
+  channel_id text not null,
   server_id text not null,
   server_name text not null,
   server_url text not null,
@@ -15,12 +16,15 @@ create table if not exists mcp_connections (
   last_used timestamptz null,
   updated_at timestamptz default now(),
   created_at timestamptz default now(),
-  unique(user_id, server_id)
+  unique(user_id, channel_id, server_id)
 );
 
 create index if not exists idx_mcp_connections_user on mcp_connections(user_id);
+create index if not exists idx_mcp_connections_user_channel on mcp_connections(user_id, channel_id);
 create index if not exists idx_mcp_connections_user_server on mcp_connections(user_id, server_id);
 create index if not exists idx_mcp_connections_status on mcp_connections(status);
+
+comment on column mcp_connections.channel_id is 'Discord channel ID - allows users to have different MCP server configurations per channel';
 
 -- Basic RLS (enable and allow service role access)
 alter table mcp_connections enable row level security;

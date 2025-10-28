@@ -277,5 +277,144 @@ describe('Usage Tracker Canister (Wasm Hash Allowlist)', () => {
       expect(metrics?.anonymous_invocations).toBe(7n);
       expect(metrics?.total_tools).toBe(2n);
     });
+
+    it('should correctly aggregate unique users across multiple app versions (namespace metrics)', async () => {
+      // ARRANGE: Deploy two server canisters with different WASM hashes (simulating v1 and v2)
+      trackerActor.setIdentity(ADMIN_IDENTITY);
+
+      const serverHashId = Buffer.from(serverWasmHash).toString('hex');
+      await trackerActor.add_approved_wasm_hash(serverHashId);
+
+      // Deploy a second server (same code, but represents different version)
+      const server2Fixture = await pic.setupCanister({
+        idlFactory: serverIdl,
+        wasm: MCP_SERVER_DUMMY_WASM_PATH,
+        sender: ADMIN_IDENTITY.getPrincipal(),
+        arg: IDL.encode(mcpServerInit({ IDL }), [[]]),
+      });
+      const server2Actor = server2Fixture.actor;
+      const server2Principal = server2Fixture.canisterId;
+
+      // Register both canisters to the same namespace
+      const testNamespace = 'test-app';
+      await trackerActor.register_canister_namespace(
+        serverPrincipal,
+        testNamespace,
+      );
+      await trackerActor.register_canister_namespace(
+        server2Principal,
+        testNamespace,
+      );
+
+      // Define test users - user1 and user2 use both versions, user3 only uses v1
+      const user1 = Principal.fromText('ryjl3-tyaaa-aaaaa-aaaba-cai');
+      const user2 = Principal.fromText('rrkah-fqaaa-aaaaa-aaaaq-cai');
+      const user3 = Principal.fromText('renrk-eyaaa-aaaaa-aaada-cai');
+
+      // Server 1 (v1): user1, user2, and user3 use it
+      await serverActor.call_tracker(trackerCanisterId, {
+        start_timestamp_ns: 0n,
+        end_timestamp_ns: 1_000_000n,
+        activity: [
+          { caller: user1, tool_id: 'tool_A', call_count: 5n },
+          { caller: user2, tool_id: 'tool_B', call_count: 3n },
+          { caller: user3, tool_id: 'tool_A', call_count: 2n },
+        ],
+      });
+
+      // Server 2 (v2): user1 and user2 also use this version (should NOT double-count)
+      await server2Actor.call_tracker(trackerCanisterId, {
+        start_timestamp_ns: 0n,
+        end_timestamp_ns: 1_000_000n,
+        activity: [
+          { caller: user1, tool_id: 'tool_C', call_count: 7n },
+          { caller: user2, tool_id: 'tool_C', call_count: 4n },
+        ],
+      });
+
+      // ACT: Query namespace-level metrics
+      const namespaceMetrics =
+        await trackerActor.get_namespace_metrics(testNamespace);
+
+      // ASSERT: Check that unique users are counted correctly
+      expect(namespaceMetrics).not.toEqual([]);
+      const metrics = namespaceMetrics[0];
+
+      expect(metrics).toBeDefined();
+      // Should have 3 unique authenticated users (user1, user2, user3) - NOT 5!
+      expect(metrics?.authenticated_unique_users).toBe(3n);
+      // Total invocations should be sum of all calls: 5 + 3 + 2 + 7 + 4 = 21
+      expect(metrics?.total_invocations).toBe(21n);
+      // Should have 3 unique tools across all versions
+      expect(metrics?.total_tools).toBe(3n);
+      // Should have 2 instances (2 canister deployments)
+      expect(metrics?.total_instances).toBe(2n);
+    });
+
+    it('should preserve Genesis Users count when a canister is upgraded to a new version', async () => {
+      // ARRANGE: Setup and log activity with version 1
+      trackerActor.setIdentity(ADMIN_IDENTITY);
+
+      const serverHashId = Buffer.from(serverWasmHash).toString('hex');
+      await trackerActor.add_approved_wasm_hash(serverHashId);
+
+      const testNamespace = 'upgraded-app';
+      await trackerActor.register_canister_namespace(
+        serverPrincipal,
+        testNamespace,
+      );
+
+      // Define 5 genesis users (using valid principal IDs)
+      const users = [
+        Principal.fromText('ryjl3-tyaaa-aaaaa-aaaba-cai'),
+        Principal.fromText('rrkah-fqaaa-aaaaa-aaaaq-cai'),
+        Principal.fromText('renrk-eyaaa-aaaaa-aaada-cai'),
+        Principal.fromText('rwlgt-iiaaa-aaaaa-aaaaa-cai'),
+        Principal.fromText('rno2w-sqaaa-aaaaa-aaacq-cai'),
+      ];
+
+      // V1: 5 users use the original version
+      await serverActor.call_tracker(trackerCanisterId, {
+        start_timestamp_ns: 0n,
+        end_timestamp_ns: 1_000_000n,
+        activity: users.map((user, i) => ({
+          caller: user,
+          tool_id: 'tool_A',
+          call_count: BigInt(i + 1),
+        })),
+      });
+
+      // Check metrics after v1
+      let namespaceMetrics =
+        await trackerActor.get_namespace_metrics(testNamespace);
+      expect(namespaceMetrics[0]?.authenticated_unique_users).toBe(5n);
+
+      // ACT: Simulate upgrading the canister to v2 (different WASM)
+      // We'll use a seed_log call with a different wasm_id to simulate this
+      const v2WasmId =
+        '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+      await trackerActor.add_approved_wasm_hash(v2WasmId);
+
+      // Simulate v2 usage (only 2 of the original users use the new version)
+      await trackerActor.seed_log(serverPrincipal, v2WasmId, {
+        start_timestamp_ns: 1_000_000n,
+        end_timestamp_ns: 2_000_000n,
+        activity: [
+          { caller: users[0], tool_id: 'tool_B', call_count: 3n },
+          { caller: users[1], tool_id: 'tool_B', call_count: 4n },
+        ],
+      });
+
+      // ASSERT: Genesis Users should STILL be 5, not reset to 2!
+      namespaceMetrics =
+        await trackerActor.get_namespace_metrics(testNamespace);
+      const metrics = namespaceMetrics[0];
+
+      expect(metrics).toBeDefined();
+      // Should STILL have all 5 genesis users from v1, not just the 2 from v2
+      expect(metrics?.authenticated_unique_users).toBe(5n);
+      // Total invocations should be: (1+2+3+4+5) from v1 + (3+4) from v2 = 22
+      expect(metrics?.total_invocations).toBe(22n);
+    });
   });
 });

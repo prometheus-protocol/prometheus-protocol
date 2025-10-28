@@ -20,6 +20,7 @@ export class ConnectionManagerOAuthProvider implements OAuthClientProvider {
     private databaseService: DatabaseService,
     private eventService: MCPEventService,
     private mcpServerUrl?: string,
+    private channelId?: string,
   ) {}
 
   // serverId for database paths is mcpServerConfigId
@@ -177,6 +178,7 @@ export class ConnectionManagerOAuthProvider implements OAuthClientProvider {
       .publishAuthRequired({
         generatedAt: new Date().toISOString(),
         userId: this.userId, // In Discord context, userId is the user ID
+        channelId: this.channelId || 'default', // Include channelId with fallback
         mcpServerConfigId: this.mcpServerConfigId,
         mcpServerUrl: this.mcpServerUrl || '', // Use the server URL passed to the provider
         oauthAuthorizationUrl: authorizationUrl.toString(),
@@ -207,6 +209,7 @@ export class ConnectionManagerOAuthProvider implements OAuthClientProvider {
         state: existing?.state || 'temp-state', // Will be updated when auth flow starts
         code_verifier: codeVerifier,
         auth_url: existing?.auth_url || '',
+        channel_id: this.channelId, // Include channel_id
       });
     } catch (err) {
       console.error(
@@ -264,6 +267,7 @@ export class ConnectionManagerOAuthProvider implements OAuthClientProvider {
         state: existing?.state || 'temp-state',
         code_verifier: existing?.code_verifier || '',
         auth_url: existing?.auth_url || resource.toString(), // Store resource URL here temporarily
+        channel_id: this.channelId, // Include channel_id to maintain channel context through OAuth flow
       });
     } catch (err) {
       console.error(`Failed to save resource URL for ${this.dbServerId}:`, err);
@@ -323,6 +327,7 @@ export class ConnectionManagerOAuthProvider implements OAuthClientProvider {
         state: params.state,
         code_verifier: params.codeVerifier || existing?.code_verifier || '',
         auth_url: params.resourceUrl || params.authUrl, // Use resource URL if provided, otherwise auth URL
+        channel_id: this.channelId, // Include channel_id to maintain channel context through OAuth flow
       });
     } catch (err) {
       console.error(

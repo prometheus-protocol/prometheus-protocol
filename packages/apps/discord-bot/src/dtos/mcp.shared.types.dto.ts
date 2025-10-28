@@ -12,6 +12,7 @@ import {
 export interface BaseMCPEventPayload {
   generatedAt: string; // ISO Date string of when this event was generated
   userId: string;
+  channelId: string;
   mcpServerConfigId: string;
   mcpServerUrl: string;
 }
