@@ -51,6 +51,18 @@ export class MCPCommand extends BaseCommand {
       )
       .addSubcommand((subcommand) =>
         subcommand
+          .setName('reconnect')
+          .setDescription('Reconnect to a disconnected MCP server')
+          .addStringOption((option) =>
+            option
+              .setName('server-name')
+              .setDescription('Name of the server to reconnect to')
+              .setRequired(true)
+              .setAutocomplete(true),
+          ),
+      )
+      .addSubcommand((subcommand) =>
+        subcommand
           .setName('disconnect')
           .setDescription('Disconnect from an MCP server')
           .addStringOption((option) =>
@@ -105,6 +117,23 @@ export class MCPCommand extends BaseCommand {
       ]);
   }
 
+  /**
+   * Get the effective channel ID for MCP operations.
+   * If the interaction is in a thread, returns the parent channel ID.
+   * Otherwise, returns the interaction's channel ID.
+   */
+  private async getEffectiveChannelId(
+    interaction: ChatInputCommandInteraction,
+  ): Promise<string> {
+    // Check if we're in a thread
+    if (interaction.channel?.isThread()) {
+      // Return the parent channel ID
+      return interaction.channel.parentId || interaction.channelId;
+    }
+    // Not in a thread, use the regular channel ID
+    return interaction.channelId;
+  }
+
   async executeSlash(interaction: ChatInputCommandInteraction): Promise<void> {
     // CRITICAL: Defer FIRST, before ANY other processing
     // Discord requires acknowledgment within 3 seconds
@@ -121,11 +150,16 @@ export class MCPCommand extends BaseCommand {
 
     const subcommand = interaction.options.getSubcommand();
 
+    // Get the correct channel ID (parent channel if in a thread)
+    const channelId = await this.getEffectiveChannelId(interaction);
+
     console.log('🔍 MCP executeSlash:', {
       interactionId: interaction.id,
       userId: interaction.user.id,
       subcommand,
       deferred,
+      channelId,
+      isThread: interaction.channel?.isThread(),
     });
 
     let response: CommandResponse | void;
@@ -136,7 +170,7 @@ export class MCPCommand extends BaseCommand {
         case 'list':
           response = await this.handleList(
             interaction.user.id,
-            interaction.channelId,
+            channelId,
           );
           break;
         case 'connect': {
@@ -144,7 +178,16 @@ export class MCPCommand extends BaseCommand {
           response = await this.handleConnect(
             url,
             interaction.user.id,
-            interaction.channelId,
+            channelId,
+          );
+          break;
+        }
+        case 'reconnect': {
+          const serverName = interaction.options.getString('server-name', true);
+          response = await this.handleReconnect(
+            serverName,
+            interaction.user.id,
+            channelId,
           );
           break;
         }
@@ -153,7 +196,7 @@ export class MCPCommand extends BaseCommand {
           response = await this.handleDisconnect(
             serverName,
             interaction.user.id,
-            interaction.channelId,
+            channelId,
           );
           break;
         }
@@ -162,14 +205,14 @@ export class MCPCommand extends BaseCommand {
           response = await this.handleDelete(
             serverName,
             interaction.user.id,
-            interaction.channelId,
+            channelId,
           );
           break;
         }
         case 'tools':
           response = await this.handleTools(
             interaction.user.id,
-            interaction.channelId,
+            channelId,
           );
           break;
         case 'status':
@@ -178,19 +221,19 @@ export class MCPCommand extends BaseCommand {
         case 'debug':
           response = await this.handleDebug(
             interaction.user.id,
-            interaction.channelId,
+            channelId,
           );
           break;
         case 'cleanup':
           response = await this.handleCleanup(
             interaction.user.id,
-            interaction.channelId,
+            channelId,
           );
           break;
         case 'repair':
           response = await this.handleRepair(
             interaction.user.id,
-            interaction.channelId,
+            channelId,
           );
           break;
         default:
@@ -381,6 +424,82 @@ export class MCPCommand extends BaseCommand {
 
       return {
         content: `❌ Error connecting to server: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
+  }
+
+  private async handleReconnect(
+    serverName: string,
+    userId: string,
+    channelId: string,
+  ): Promise<CommandResponse> {
+    if (!serverName) {
+      return {
+        content:
+          '❌ Please provide a server name. Use `/mcp list` to see your connections.',
+      };
+    }
+
+    try {
+      // Resolve server name to ID
+      const serverId = await this.mcpService.resolveServerNameToId(
+        userId,
+        serverName,
+        channelId,
+      );
+      if (!serverId) {
+        return {
+          content: `❌ Could not find a connection with the name "${serverName}". Use \`/mcp list\` to see your connections.`,
+        };
+      }
+
+      logger.info(
+        `Attempting to reconnect to MCP server ${serverName} for user ${userId}`,
+      );
+
+      const connection = await this.mcpService.autoReconnectAfterOAuth(
+        serverId,
+        userId,
+        channelId,
+      );
+
+      if (connection.success && connection.status === 'connected') {
+        return {
+          content:
+            `✅ Successfully reconnected to **${serverName}**!\n` +
+            `Use \`/mcp tools\` to see what you can do.`,
+        };
+      } else if (connection.status === 'auth-required') {
+        return {
+          content: '',
+          embeds: [
+            new EmbedBuilder()
+              .setTitle('🔐 Authorization Needed')
+              .setDescription(
+                `You need to authorize **${serverName}** before reconnecting.\n\n` +
+                  `**Next Steps:**\n` +
+                  `• Check your DMs to authorize access.\n` +
+                  `• Complete the sign-in / consent flow.\n` +
+                  `• Once authorized, the connection will be established automatically.\n`,
+              )
+              .setColor(0xff9500)
+              .setFooter({
+                text: 'Complete authorization to reconnect',
+              }),
+          ],
+        };
+      } else {
+        return {
+          content: `❌ Failed to reconnect to server: ${connection.message || 'Unknown error'}`,
+        };
+      }
+    } catch (error) {
+      logger.error(
+        `MCP reconnect error for ${serverName}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+
+      return {
+        content: `❌ Error reconnecting to server: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
     }
   }
@@ -730,10 +849,15 @@ export class MCPCommand extends BaseCommand {
         const subcommand = interaction.options.getSubcommand();
         console.log('🔗 SUBCOMMAND FOR FILTERING:', subcommand);
 
+        // Get the correct channel ID (parent channel if in a thread)
+        const channelId = interaction.channel?.isThread()
+          ? interaction.channel.parentId || interaction.channelId
+          : interaction.channelId;
+
         // Get user's connections for autocomplete
         const connections = await this.mcpService.getUserConnections(
           interaction.user.id,
-          interaction.channelId,
+          channelId,
         );
         console.log('🔗 USER CONNECTIONS:', {
           connectionCount: connections.length,
@@ -772,6 +896,10 @@ export class MCPCommand extends BaseCommand {
 
               // Subcommand-specific filters
               switch (subcommand) {
+                case 'reconnect':
+                  // For reconnect, only show disconnected or error servers
+                  return conn.status === 'disconnected' || conn.status === 'error';
+
                 case 'disconnect':
                   // For disconnect, only show connected servers
                   return conn.status === 'connected';
