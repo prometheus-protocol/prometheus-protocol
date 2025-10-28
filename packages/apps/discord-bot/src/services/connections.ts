@@ -1431,9 +1431,7 @@ export class ConnectionPoolService {
         // Retry getting the connection
         connection = this.activeConnections.get(poolKey);
         if (!connection || !connection.isActiveAttempted) {
-          throw new Error(
-            `Failed to establish connection for tool invocation`,
-          );
+          throw new Error(`Failed to establish connection for tool invocation`);
         }
       }
 

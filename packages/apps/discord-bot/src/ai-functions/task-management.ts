@@ -48,7 +48,7 @@ export class TaskManagementFunctions {
         name: 'create_task',
         title: 'Create Task',
         description:
-          'Create a new scheduled task for the current user. Use this to set up recurring monitoring or one-time checks using their available tools.',
+          'Create a new scheduled task for the current user. Use this to set up recurring monitoring or one-time checks using their available tools. IMPORTANT: Tasks execute without conversation history to reduce costs - make prompts self-contained with all necessary context.',
         parameters: {
           type: 'object',
           properties: {
@@ -60,7 +60,7 @@ export class TaskManagementFunctions {
             prompt: {
               type: 'string',
               description:
-                "The AI prompt that will be executed when this task runs. This prompt should describe what to check and when to alert. Use the user's available tools to gather information.",
+                "The AI prompt that will be executed when this task runs. IMPORTANT: Tasks don't have access to conversation history, so this prompt must be completely self-contained. Include all necessary context, parameters, and instructions. Use the user's available tools to gather information.",
             },
             recurring: {
               type: 'boolean',

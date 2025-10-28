@@ -333,47 +333,18 @@ export class AlertScheduler {
         taskName: alert.name,
         userId: userId,
         hasThread: !!alert.threadId,
+        isRecurring: alert.recurring !== false,
       });
 
-      // Load conversation history to give tasks context
-      // If task was created in a thread, load thread history
-      // Otherwise load parent channel history
-      let history: ConversationMessage[] = [];
-      try {
-        if (alert.threadId) {
-          // Load thread-specific history
-          const chatThread = await this.database.getChatThread(alert.threadId);
-          if (chatThread) {
-            history = chatThread.conversation_history.map((msg: any) => ({
-              role: msg.role as 'user' | 'assistant' | 'system',
-              content: msg.content,
-              timestamp: new Date(msg.timestamp || Date.now()),
-            }));
-            schedulerLogger.info(
-              `Loaded ${history.length} messages from thread for task context`,
-            );
-          } else {
-            schedulerLogger.warn(
-              `Thread ${alert.threadId} not found, using empty history`,
-            );
-          }
-        } else {
-          // Load channel conversation history
-          history = await this.database.getConversationHistory(
-            userId,
-            alert.channelId, // Use parent channelId for history lookup
-            50, // Load last 50 messages for context
-          );
-          schedulerLogger.info(
-            `Loaded ${history.length} messages from channel for task context`,
-          );
-        }
-      } catch (error) {
-        schedulerLogger.warn(
-          `Failed to load conversation history for task: ${error}`,
-        );
-        // Continue with empty history if load fails
-      }
+      // NOTE: Conversation history loading has been disabled for recurring tasks
+      // to reduce API costs. Recurring tasks now execute with only their prompt
+      // and available MCP tools, without previous conversation context.
+      // One-shot tasks also don't need history as they execute once.
+      const history: ConversationMessage[] = [];
+      schedulerLogger.info(
+        `Executing task without conversation history to reduce costs`,
+        { taskName: alert.name },
+      );
 
       // Execute the AI prompt with MCP tools - generateResponse handles all tool calling internally
       const result = await this.llmService.generateResponse(
