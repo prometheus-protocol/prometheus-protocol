@@ -168,10 +168,7 @@ export class MCPCommand extends BaseCommand {
       // Route to existing handlers
       switch (subcommand) {
         case 'list':
-          response = await this.handleList(
-            interaction.user.id,
-            channelId,
-          );
+          response = await this.handleList(interaction.user.id, channelId);
           break;
         case 'connect': {
           const url = interaction.options.getString('url', true);
@@ -210,31 +207,19 @@ export class MCPCommand extends BaseCommand {
           break;
         }
         case 'tools':
-          response = await this.handleTools(
-            interaction.user.id,
-            channelId,
-          );
+          response = await this.handleTools(interaction.user.id, channelId);
           break;
         case 'status':
           response = await this.handleStatus();
           break;
         case 'debug':
-          response = await this.handleDebug(
-            interaction.user.id,
-            channelId,
-          );
+          response = await this.handleDebug(interaction.user.id, channelId);
           break;
         case 'cleanup':
-          response = await this.handleCleanup(
-            interaction.user.id,
-            channelId,
-          );
+          response = await this.handleCleanup(interaction.user.id, channelId);
           break;
         case 'repair':
-          response = await this.handleRepair(
-            interaction.user.id,
-            channelId,
-          );
+          response = await this.handleRepair(interaction.user.id, channelId);
           break;
         default:
           response = {
@@ -898,7 +883,9 @@ export class MCPCommand extends BaseCommand {
               switch (subcommand) {
                 case 'reconnect':
                   // For reconnect, only show disconnected or error servers
-                  return conn.status === 'disconnected' || conn.status === 'error';
+                  return (
+                    conn.status === 'disconnected' || conn.status === 'error'
+                  );
 
                 case 'disconnect':
                   // For disconnect, only show connected servers

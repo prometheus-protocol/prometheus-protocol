@@ -81,6 +81,15 @@ interface MCPFunctionCall {
  */
 export class MCPService {
   private pendingInvocations: PendingToolInvocationsService;
+  private userConnectionsCache: Map<
+    string,
+    { connections: any[]; timestamp: number }
+  > = new Map();
+  private userToolsCache: Map<
+    string,
+    { tools: ToolInfo[]; timestamp: number }
+  > = new Map();
+  private readonly CACHE_TTL_MS = 5000; // 5 second cache
 
   constructor(
     private databaseService: SupabaseService,
@@ -219,18 +228,61 @@ export class MCPService {
   }
 
   /**
-   * Get user's MCP connections
+   * Get user's MCP connections (with caching to avoid redundant DB calls)
    */
   async getUserConnections(userId: string, channelId: string): Promise<any[]> {
     try {
-      return await this.databaseService.getUserMCPConnections(
+      const cacheKey = `${userId}:${channelId}`;
+      const now = Date.now();
+
+      // Check cache first
+      const cached = this.userConnectionsCache.get(cacheKey);
+      if (cached && now - cached.timestamp < this.CACHE_TTL_MS) {
+        logger.debug(`Using cached connections for ${cacheKey}`);
+        return cached.connections;
+      }
+
+      // Fetch from database
+      const connections = await this.databaseService.getUserMCPConnections(
         userId,
         channelId,
       );
+
+      // Update cache
+      this.userConnectionsCache.set(cacheKey, {
+        connections,
+        timestamp: now,
+      });
+
+      // Clean up old cache entries (simple cleanup)
+      if (this.userConnectionsCache.size > 100) {
+        const keysToDelete: string[] = [];
+        for (const [key, value] of this.userConnectionsCache.entries()) {
+          if (now - value.timestamp > this.CACHE_TTL_MS) {
+            keysToDelete.push(key);
+          }
+        }
+        keysToDelete.forEach((key) => this.userConnectionsCache.delete(key));
+      }
+
+      return connections;
     } catch (error) {
       logger.error(`Error fetching user connections: ${error}`);
       return [];
     }
+  }
+
+  /**
+   * Invalidate cached connections for a user
+   */
+  private invalidateUserConnectionsCache(
+    userId: string,
+    channelId: string,
+  ): void {
+    const cacheKey = `${userId}:${channelId}`;
+    this.userConnectionsCache.delete(cacheKey);
+    this.userToolsCache.delete(cacheKey);
+    logger.debug(`Invalidated connection and tools cache for ${cacheKey}`);
   }
 
   /**
@@ -314,6 +366,9 @@ export class MCPService {
           );
           if (connection) {
             if (connection.status === 'connected') {
+              // Invalidate cache since connection status changed
+              this.invalidateUserConnectionsCache(userId, channelId);
+
               return {
                 success: true,
                 message: 'Successfully connected to MCP server!',
@@ -330,6 +385,8 @@ export class MCPService {
               connection.status === 'error' ||
               connection.status === 'disconnected'
             ) {
+              // Invalidate cache since connection status changed
+              this.invalidateUserConnectionsCache(userId, channelId);
               throw new Error(connection.error_message || 'Connection failed');
             } else if (connection.status === 'auth-required') {
               return {
@@ -428,6 +485,10 @@ export class MCPService {
       };
 
       await this.connectionPool.handleDisconnectRequest(disconnectPayload);
+
+      // Invalidate cache since connection was removed
+      this.invalidateUserConnectionsCache(userId, channelId);
+
       logger.info(`Successfully disconnected from server ${serverId}`);
     } catch (error) {
       logger.error(
@@ -463,6 +524,16 @@ export class MCPService {
     channelId: string,
   ): Promise<ToolInfo[]> {
     try {
+      const cacheKey = `${userId}:${channelId}`;
+      const now = Date.now();
+
+      // Check cache first
+      const cached = this.userToolsCache.get(cacheKey);
+      if (cached && now - cached.timestamp < this.CACHE_TTL_MS) {
+        logger.debug(`Using cached tools for ${cacheKey}`);
+        return cached.tools;
+      }
+
       const connections = await this.getUserConnections(userId, channelId);
       const tools: ToolInfo[] = [];
 
@@ -510,6 +581,24 @@ export class MCPService {
       }
 
       logger.info(`Retrieved ${tools.length} tools for user ${userId}`);
+
+      // Update cache
+      this.userToolsCache.set(cacheKey, {
+        tools,
+        timestamp: now,
+      });
+
+      // Clean up old cache entries (simple cleanup)
+      if (this.userToolsCache.size > 100) {
+        const keysToDelete: string[] = [];
+        for (const [key, value] of this.userToolsCache.entries()) {
+          if (now - value.timestamp > this.CACHE_TTL_MS) {
+            keysToDelete.push(key);
+          }
+        }
+        keysToDelete.forEach((key) => this.userToolsCache.delete(key));
+      }
+
       return tools;
     } catch (error) {
       logger.error(
