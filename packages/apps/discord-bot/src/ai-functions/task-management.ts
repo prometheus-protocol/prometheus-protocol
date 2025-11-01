@@ -48,7 +48,7 @@ export class TaskManagementFunctions {
         name: 'create_task',
         title: 'Create Task',
         description:
-          'Create a new scheduled task for the current user. Use this to set up recurring monitoring or one-time checks using their available tools.',
+          'Create a new scheduled task for the current user. Use this to set up recurring monitoring or one-time checks using their available tools. IMPORTANT: Tasks execute without conversation history to reduce costs - make prompts self-contained with all necessary context.',
         parameters: {
           type: 'object',
           properties: {
@@ -60,7 +60,7 @@ export class TaskManagementFunctions {
             prompt: {
               type: 'string',
               description:
-                "The AI prompt that will be executed when this task runs. This prompt should describe what to check and when to alert. Use the user's available tools to gather information.",
+                "The AI prompt that will be executed when this task runs. IMPORTANT: Tasks don't have access to conversation history, so this prompt must be completely self-contained. Include all necessary context, parameters, and instructions. Use the user's available tools to gather information.",
             },
             recurring: {
               type: 'boolean',
@@ -244,7 +244,9 @@ class CreateTaskHandler implements AIFunctionHandler {
           ? `Recurring task: ${title}`
           : `One-shot task: ${title}`,
         userId: context.userId, // Include userId for MCP tool access
-        channelId: context.channelId,
+        channelId: context.channelId, // Parent channel for MCP tool access
+        targetChannelId: context.threadId || context.channelId, // Post alerts to thread if available
+        threadId: context.threadId, // Store thread ID for loading thread history
         interval: intervalMs,
         enabled: true,
         prompt: prompt,
@@ -258,7 +260,8 @@ class CreateTaskHandler implements AIFunctionHandler {
       await this.database.saveUserTask({
         id: taskId,
         userId: context.userId,
-        channelId: context.channelId,
+        channelId: context.channelId, // Parent channel for MCP tool access
+        targetChannelId: context.threadId || context.channelId, // Post alerts to thread if available
         prompt,
         interval: intervalMs,
         description: title,
@@ -424,6 +427,23 @@ class ModifyTaskHandler implements AIFunctionHandler {
       // Update enabled status
       if (typeof enabled === 'boolean') {
         if (enabled) {
+          // When re-enabling a task, update its target location to current context
+          // This allows users to move alerts to different channels/threads
+          const alert = this.scheduler.getAlert(task_id);
+          if (alert) {
+            // Update target channel to current location
+            alert.targetChannelId = context.threadId || context.channelId;
+            alert.threadId = context.threadId;
+
+            // Also update channelId if we're in a different channel (for MCP tool access)
+            if (context.channelId) {
+              alert.channelId = context.channelId;
+            }
+
+            // Update in database
+            await this.database.updateAlert(alert);
+          }
+
           await this.scheduler.enableAlert(task_id);
         } else {
           await this.scheduler.disableAlert(task_id);

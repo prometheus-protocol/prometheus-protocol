@@ -73,6 +73,21 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
     total_instances : Nat; // Count of all canister instances
   };
 
+  // --- Tool-level metrics ---
+  public type ToolMetrics = {
+    tool_id : Text;
+    total_invocations : Nat;
+  };
+
+  public type NamespaceMetricsDetailed = {
+    namespace : Text;
+    total_invocations : Nat;
+    tools : [ToolMetrics];
+    authenticated_unique_users : Nat;
+    anonymous_invocations : Nat;
+    total_instances : Nat;
+  };
+
   // ==================================================================================================
   // STATE
   // ==================================================================================================
@@ -96,8 +111,14 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   // --- NEW: Map to track which wasm_id each canister is running ---
   var canister_to_wasm = Map.new<Principal, Text>();
 
+  // --- NEW: Map to track all WASM IDs that have ever been used in each namespace ---
+  var namespace_to_wasms = Map.new<Text, Map.Map<Text, Null>>();
+
   // --- NEW: Namespace-level aggregated metrics ---
   var metrics_by_namespace = Map.new<Text, NamespaceMetrics>();
+
+  // --- NEW: Map to track tool invocations aggregated across all WASMs in a namespace ---
+  var tools_by_namespace = Map.new<Text, Map.Map<Text, Nat>>();
 
   // ==================================================================================================
   // PRIVATE HELPERS
@@ -165,7 +186,15 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
     // Look up the namespace for this canister and aggregate metrics at namespace level
     switch (Map.get(canister_to_namespace, Map.phash, canister_id)) {
       case (?namespace) {
-        // Recalculate namespace metrics by iterating over all canisters in this namespace
+        // Register this WASM ID with the namespace
+        let namespace_wasms = Option.get(
+          Map.get(namespace_to_wasms, Map.thash, namespace),
+          Map.new<Text, Null>(),
+        );
+        Map.set(namespace_wasms, Map.thash, wasm_id, null);
+        Map.set(namespace_to_wasms, Map.thash, namespace, namespace_wasms);
+
+        // Recalculate namespace metrics by iterating over all WASMs in this namespace
         recompute_namespace_metrics(namespace);
       };
       case (null) {
@@ -178,43 +207,92 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   // Helper function to recompute all metrics for a namespace
   private func recompute_namespace_metrics(namespace : Text) {
     var total_invocations : Nat = 0;
-    var total_tools : Nat = 0;
-    var total_authenticated_users : Nat = 0;
     var total_anonymous_invocations : Nat = 0;
     var instance_count : Nat = 0;
 
-    // Iterate through all canisters to find those belonging to this namespace
+    // Use a map to track unique users across all WASM versions
+    var unique_users = Map.new<Principal, Null>();
+
+    // Use a map to track unique tools across all WASM versions
+    var unique_tools = Map.new<Text, Null>();
+
+    // Use a map to track tool invocations across all WASM versions
+    var tool_invocations = Map.new<Text, Nat>();
+
+    // Count the number of canister instances for this namespace
     for ((canister_id, canister_namespace) in Map.entries(canister_to_namespace)) {
       if (canister_namespace == namespace) {
         instance_count += 1;
+      };
+    };
 
-        // Get metrics directly from the per-canister metrics
-        switch (Map.get(metrics_by_canister, Map.phash, canister_id)) {
-          case (?app_metrics) {
-            total_invocations += app_metrics.total_invocations;
-            total_tools += app_metrics.total_tools;
-            total_authenticated_users += app_metrics.authenticated_unique_users;
-            total_anonymous_invocations += app_metrics.anonymous_invocations;
-          };
-          case (null) {
-            // No metrics yet for this canister
+    // Get all WASM IDs that have ever been registered for this namespace
+    switch (Map.get(namespace_to_wasms, Map.thash, namespace)) {
+      case (?wasm_set) {
+        // Iterate through all WASM IDs (both current and historical)
+        for ((wasm_id, _) in Map.entries(wasm_set)) {
+          // Get the detailed metrics from aggregated_metrics
+          switch (Map.get(aggregated_metrics, Map.thash, wasm_id)) {
+            case (?server_metrics) {
+              // Add invocations
+              total_invocations += server_metrics.total_invocations;
+
+              // Track unique users across all WASM versions
+              for ((user_principal, _) in Map.entries(server_metrics.invocations_by_user)) {
+                Map.set(unique_users, Map.phash, user_principal, null);
+
+                // Track anonymous invocations separately
+                if (Principal.equal(user_principal, ANONYMOUS_PRINCIPAL)) {
+                  total_anonymous_invocations += Option.get(
+                    Map.get(server_metrics.invocations_by_user, Map.phash, user_principal),
+                    0,
+                  );
+                };
+              };
+
+              // Track unique tools and aggregate their invocations across all WASM versions
+              for ((tool_id, call_count) in Map.entries(server_metrics.invocations_by_tool)) {
+                Map.set(unique_tools, Map.thash, tool_id, null);
+
+                // Aggregate tool invocations
+                let current_count = Option.get(Map.get(tool_invocations, Map.thash, tool_id), 0);
+                Map.set(tool_invocations, Map.thash, tool_id, current_count + call_count);
+              };
+            };
+            case (null) {
+              // No detailed metrics for this WASM ID yet
+            };
           };
         };
       };
+      case (null) {
+        // No WASMs registered for this namespace yet
+      };
+    };
+
+    // Store tool invocations in tools_by_namespace
+    Map.set(tools_by_namespace, Map.thash, namespace, tool_invocations);
+
+    // Calculate authenticated unique users (total unique users minus anonymous if present)
+    let total_unique_users = Map.size(unique_users);
+    let total_authenticated_users = if (Option.isSome(Map.get(unique_users, Map.phash, ANONYMOUS_PRINCIPAL))) {
+      if (total_unique_users > 0) { total_unique_users - 1 : Nat } else { 0 };
+    } else {
+      total_unique_users;
     };
 
     // Create namespace-level metrics
     let namespace_metrics : NamespaceMetrics = {
       namespace = namespace;
       total_invocations = total_invocations;
-      total_tools = total_tools;
+      total_tools = Map.size(unique_tools);
       authenticated_unique_users = total_authenticated_users;
       anonymous_invocations = total_anonymous_invocations;
       total_instances = instance_count;
     };
 
     Map.set(metrics_by_namespace, Map.thash, namespace, namespace_metrics);
-    Debug.print("Recomputed namespace metrics for: " # namespace # " - " # debug_show (instance_count) # " instances, " # debug_show (total_invocations) # " invocations");
+    Debug.print("Recomputed namespace metrics for: " # namespace # " - " # debug_show (instance_count) # " instances, " # debug_show (total_invocations) # " invocations, " # debug_show (total_authenticated_users) # " unique authenticated users");
   };
 
   // ==================================================================================================
@@ -349,6 +427,124 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
     return #ok(());
   };
 
+  /**
+   * Rebuilds the namespace_to_wasms mapping from existing canister_to_wasm and canister_to_namespace data.
+   * This is useful for migrating existing data or recovering from data inconsistencies.
+   * Should be called by the owner after upgrading to ensure all historical WASMs are tracked.
+   */
+  public shared (msg) func rebuild_namespace_wasm_mappings() : async Result.Result<Text, Text> {
+    if (not is_owner(msg.caller)) {
+      Debug.print("Unauthorized attempt to rebuild mappings by: " # Principal.toText(msg.caller));
+      return #err("Unauthorized: Only the owner can rebuild mappings.");
+    };
+
+    var total_wasms_added : Nat = 0;
+    var namespaces_processed : Nat = 0;
+
+    // Iterate through all canisters and register their WASM IDs with their namespaces
+    for ((canister_id, namespace) in Map.entries(canister_to_namespace)) {
+      switch (Map.get(canister_to_wasm, Map.phash, canister_id)) {
+        case (?wasm_id) {
+          // Get or create the set of WASMs for this namespace
+          let namespace_wasms = Option.get(
+            Map.get(namespace_to_wasms, Map.thash, namespace),
+            Map.new<Text, Null>(),
+          );
+
+          // Check if this WASM is already registered for this namespace
+          if (Option.isNull(Map.get(namespace_wasms, Map.thash, wasm_id))) {
+            Map.set(namespace_wasms, Map.thash, wasm_id, null);
+            Map.set(namespace_to_wasms, Map.thash, namespace, namespace_wasms);
+            total_wasms_added += 1;
+          };
+        };
+        case (null) {
+          // Canister has no WASM ID yet (hasn't logged any usage)
+        };
+      };
+    };
+
+    // Recompute metrics for all namespaces
+    for ((namespace, _) in Map.entries(namespace_to_wasms)) {
+      recompute_namespace_metrics(namespace);
+      namespaces_processed += 1;
+    };
+
+    let message = "Rebuilt namespace WASM mappings: " # debug_show (total_wasms_added) # " WASMs added across " # debug_show (namespaces_processed) # " namespaces";
+    Debug.print(message);
+    return #ok(message);
+  };
+
+  /**
+   * Manually registers a historical WASM ID with a namespace.
+   * This is useful for recovering historical data from WASM versions that are no longer active.
+   *
+   * Use case: If a canister was upgraded from v1 (wasm_id_1) to v2 (wasm_id_2), and you want to
+   * include the v1 users in the namespace metrics, call this function with wasm_id_1.
+   *
+   * The WASM ID must exist in aggregated_metrics (meaning it has historical usage data).
+   */
+  public shared (msg) func register_historical_wasm(namespace : Text, wasm_id : Text) : async Result.Result<Text, Text> {
+    if (not is_owner(msg.caller)) {
+      Debug.print("Unauthorized attempt to register historical WASM by: " # Principal.toText(msg.caller));
+      return #err("Unauthorized: Only the owner can register historical WASMs.");
+    };
+
+    // Verify that this WASM ID actually has historical data
+    switch (Map.get(aggregated_metrics, Map.thash, wasm_id)) {
+      case (null) {
+        return #err("WASM ID not found in metrics. This WASM has no historical usage data.");
+      };
+      case (?metrics) {
+        // Get or create the set of WASMs for this namespace
+        let namespace_wasms = Option.get(
+          Map.get(namespace_to_wasms, Map.thash, namespace),
+          Map.new<Text, Null>(),
+        );
+
+        // Register the WASM with the namespace
+        Map.set(namespace_wasms, Map.thash, wasm_id, null);
+        Map.set(namespace_to_wasms, Map.thash, namespace, namespace_wasms);
+
+        // Recompute namespace metrics to include this historical data
+        recompute_namespace_metrics(namespace);
+
+        let user_count = Map.size(metrics.invocations_by_user);
+        let message = "Registered historical WASM " # wasm_id # " with namespace " # namespace # ". WASM has " # debug_show (user_count) # " users and " # debug_show (metrics.total_invocations) # " invocations.";
+        Debug.print(message);
+        return #ok(message);
+      };
+    };
+  };
+
+  /**
+   * Lists all WASM IDs that have historical data in aggregated_metrics.
+   * This is useful for discovering which historical WASMs can be registered with namespaces.
+   */
+  public shared query func list_all_wasm_ids() : async [(Text, Nat, Nat)] {
+    let result = Buffer.Buffer<(Text, Nat, Nat)>(Map.size(aggregated_metrics));
+    for ((wasm_id, metrics) in Map.entries(aggregated_metrics)) {
+      result.add((wasm_id, metrics.total_invocations, Map.size(metrics.invocations_by_user)));
+    };
+    return Buffer.toArray(result);
+  };
+
+  /**
+   * Gets all WASM IDs currently registered for a namespace.
+   */
+  public shared query func get_namespace_wasms(namespace : Text) : async [Text] {
+    switch (Map.get(namespace_to_wasms, Map.thash, namespace)) {
+      case (null) { return [] };
+      case (?wasm_map) {
+        let result = Buffer.Buffer<Text>(Map.size(wasm_map));
+        for ((wasm_id, _) in Map.entries(wasm_map)) {
+          result.add(wasm_id);
+        };
+        return Buffer.toArray(result);
+      };
+    };
+  };
+
   // ==================================================================================================
   // PUBLIC METHODS: DATA RETRIEVAL
   // ==================================================================================================
@@ -375,6 +571,61 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
   // --- NEW: Query endpoint for namespace-level metrics ---
   public shared query func get_namespace_metrics(namespace : Text) : async ?NamespaceMetrics {
     return Map.get(metrics_by_namespace, Map.thash, namespace);
+  };
+
+  /**
+   * Get detailed namespace metrics including per-tool invocation counts.
+   * Returns aggregated tool usage across all WASM versions of the namespace.
+   */
+  public shared query func get_namespace_metrics_detailed(namespace : Text) : async ?NamespaceMetricsDetailed {
+    let basic_metrics = Map.get(metrics_by_namespace, Map.thash, namespace);
+    let tools = switch (Map.get(tools_by_namespace, Map.thash, namespace)) {
+      case (?tool_map) {
+        let result = Buffer.Buffer<ToolMetrics>(Map.size(tool_map));
+        for ((tool_id, invocations) in Map.entries(tool_map)) {
+          result.add({
+            tool_id = tool_id;
+            total_invocations = invocations;
+          });
+        };
+        Buffer.toArray(result);
+      };
+      case (null) { [] };
+    };
+
+    switch (basic_metrics) {
+      case (?metrics) {
+        ?{
+          namespace = metrics.namespace;
+          total_invocations = metrics.total_invocations;
+          tools = tools;
+          authenticated_unique_users = metrics.authenticated_unique_users;
+          anonymous_invocations = metrics.anonymous_invocations;
+          total_instances = metrics.total_instances;
+        };
+      };
+      case (null) { null };
+    };
+  };
+
+  /**
+   * Get tool invocations for a specific namespace.
+   * Returns an array of tools with their aggregated invocation counts.
+   */
+  public shared query func get_namespace_tools(namespace : Text) : async [ToolMetrics] {
+    switch (Map.get(tools_by_namespace, Map.thash, namespace)) {
+      case (?tool_map) {
+        let result = Buffer.Buffer<ToolMetrics>(Map.size(tool_map));
+        for ((tool_id, invocations) in Map.entries(tool_map)) {
+          result.add({
+            tool_id = tool_id;
+            total_invocations = invocations;
+          });
+        };
+        Buffer.toArray(result);
+      };
+      case (null) { [] };
+    };
   };
 
   private func to_shared_metrics(metrics : ServerMetrics) : ServerMetricsShared {

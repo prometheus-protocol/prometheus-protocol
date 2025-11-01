@@ -22,13 +22,12 @@ export default function LoginPage() {
   const hasFiredRef = useRef(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
 
-  // This effect handles the OAuth login flow.
+  // This effect handles the OAuth confirmation flow after identity is obtained.
   useEffect(() => {
     if (
       !identity ||
       !sessionId ||
       hasFiredRef.current ||
-      isLoggingIn ||
       isConfirming ||
       error
     ) {
@@ -54,15 +53,7 @@ export default function LoginPage() {
         },
       },
     );
-  }, [
-    identity,
-    sessionId,
-    isConfirming,
-    confirmLogin,
-    navigate,
-    isLoggingIn,
-    error,
-  ]);
+  }, [identity, sessionId, isConfirming, confirmLogin, navigate, error]);
 
   // This handler triggers the Internet Identity login.
   const handleLoginClick = () => {

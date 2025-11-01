@@ -81,6 +81,15 @@ interface MCPFunctionCall {
  */
 export class MCPService {
   private pendingInvocations: PendingToolInvocationsService;
+  private userConnectionsCache: Map<
+    string,
+    { connections: any[]; timestamp: number }
+  > = new Map();
+  private userToolsCache: Map<
+    string,
+    { tools: ToolInfo[]; timestamp: number }
+  > = new Map();
+  private readonly CACHE_TTL_MS = 5000; // 5 second cache
 
   constructor(
     private databaseService: SupabaseService,
@@ -161,8 +170,11 @@ export class MCPService {
   async getSystemStatus(): Promise<SystemStatus> {
     try {
       // Get active connections from database
-      const connections =
-        await this.databaseService.getUserMCPConnections('system'); // Use system user for overall stats
+      // TODO: Update to query across all channels for system-level stats
+      const connections = await this.databaseService.getUserMCPConnections(
+        'system',
+        'default',
+      ); // Use system user for overall stats
       const activeConnections = connections.filter(
         (conn) => conn.status === 'connected',
       ).length;
@@ -171,7 +183,8 @@ export class MCPService {
       let totalAvailableTools = 0;
       try {
         // Get tools for system user (overall stats)
-        const systemTools = await this.getAvailableTools('system');
+        // TODO: Update to aggregate across all channels
+        const systemTools = await this.getAvailableTools('system', 'default');
         totalAvailableTools = systemTools.length;
       } catch (toolsError) {
         logger.warn(
@@ -215,32 +228,72 @@ export class MCPService {
   }
 
   /**
-   * Get user's MCP connections
+   * Get user's MCP connections (with caching to avoid redundant DB calls)
    */
-  async getUserConnections(userId: string): Promise<any[]> {
+  async getUserConnections(userId: string, channelId: string): Promise<any[]> {
     try {
-      const connections =
-        await this.databaseService.getUserMCPConnections(userId);
-      logger.info(
-        `Retrieved ${connections.length} connections for user ${userId}`,
+      const cacheKey = `${userId}:${channelId}`;
+      const now = Date.now();
+
+      // Check cache first
+      const cached = this.userConnectionsCache.get(cacheKey);
+      if (cached && now - cached.timestamp < this.CACHE_TTL_MS) {
+        logger.debug(`Using cached connections for ${cacheKey}`);
+        return cached.connections;
+      }
+
+      // Fetch from database
+      const connections = await this.databaseService.getUserMCPConnections(
+        userId,
+        channelId,
       );
+
+      // Update cache
+      this.userConnectionsCache.set(cacheKey, {
+        connections,
+        timestamp: now,
+      });
+
+      // Clean up old cache entries (simple cleanup)
+      if (this.userConnectionsCache.size > 100) {
+        const keysToDelete: string[] = [];
+        for (const [key, value] of this.userConnectionsCache.entries()) {
+          if (now - value.timestamp > this.CACHE_TTL_MS) {
+            keysToDelete.push(key);
+          }
+        }
+        keysToDelete.forEach((key) => this.userConnectionsCache.delete(key));
+      }
+
       return connections;
     } catch (error) {
-      logger.error(
-        `Error getting connections for user ${userId}:`,
-        error instanceof Error ? error : new Error(String(error)),
-      );
+      logger.error(`Error fetching user connections: ${error}`);
       return [];
     }
   }
 
   /**
+   * Invalidate cached connections for a user
+   */
+  private invalidateUserConnectionsCache(
+    userId: string,
+    channelId: string,
+  ): void {
+    const cacheKey = `${userId}:${channelId}`;
+    this.userConnectionsCache.delete(cacheKey);
+    this.userToolsCache.delete(cacheKey);
+    logger.debug(`Invalidated connection and tools cache for ${cacheKey}`);
+  }
+
+  /**
    * Connect to an MCP server
+   * @param channelId - Discord channel ID for channel-scoped connections
    */
   async connectToServer(
     serverId: string,
     userId: string,
     serverUrl?: string,
+    channelId: string = 'default',
   ): Promise<ConnectionResult> {
     try {
       logger.info(`Connecting user ${userId} to server ${serverId}`);
@@ -251,7 +304,11 @@ export class MCPService {
         // Try to get the URL from existing connection
         // This handles the case where user is reconnecting
         const existingConnection =
-          await this.databaseService.getUserMCPConnection(userId, serverId);
+          await this.databaseService.getUserMCPConnection(
+            userId,
+            channelId,
+            serverId,
+          );
 
         if (existingConnection && existingConnection.server_url) {
           actualServerUrl = existingConnection.server_url;
@@ -282,6 +339,7 @@ export class MCPService {
       const connectionPayload: ConnectionRequestPayload = {
         generatedAt: new Date().toISOString(),
         userId: userId, // Using userId as userId for Discord bot
+        channelId: channelId,
         mcpServerConfigId: serverId,
         mcpServerUrl: actualServerUrl,
       };
@@ -300,6 +358,7 @@ export class MCPService {
         try {
           const connection = await this.databaseService.getUserMCPConnection(
             userId,
+            channelId,
             serverId,
           );
           logger.info(
@@ -307,6 +366,9 @@ export class MCPService {
           );
           if (connection) {
             if (connection.status === 'connected') {
+              // Invalidate cache since connection status changed
+              this.invalidateUserConnectionsCache(userId, channelId);
+
               return {
                 success: true,
                 message: 'Successfully connected to MCP server!',
@@ -323,6 +385,8 @@ export class MCPService {
               connection.status === 'error' ||
               connection.status === 'disconnected'
             ) {
+              // Invalidate cache since connection status changed
+              this.invalidateUserConnectionsCache(userId, channelId);
               throw new Error(connection.error_message || 'Connection failed');
             } else if (connection.status === 'auth-required') {
               return {
@@ -356,6 +420,7 @@ export class MCPService {
       try {
         const finalConnection = await this.databaseService.getUserMCPConnection(
           userId,
+          channelId,
           serverId,
         );
         if (finalConnection) {
@@ -389,13 +454,18 @@ export class MCPService {
   /**
    * Disconnect from an MCP server
    */
-  async disconnectFromServer(serverId: string, userId: string): Promise<void> {
+  async disconnectFromServer(
+    serverId: string,
+    userId: string,
+    channelId: string = 'default',
+  ): Promise<void> {
     try {
       logger.info(`Disconnecting user ${userId} from server ${serverId}`);
 
       // Get the connection to find the server URL
       const connection = await this.databaseService.getUserMCPConnection(
         userId,
+        channelId,
         serverId,
       );
       let serverUrl = connection?.server_url;
@@ -409,11 +479,16 @@ export class MCPService {
       const disconnectPayload: DisconnectRequestPayload = {
         generatedAt: new Date().toISOString(),
         userId: userId,
+        channelId: channelId,
         mcpServerConfigId: serverId,
         mcpServerUrl: serverUrl,
       };
 
       await this.connectionPool.handleDisconnectRequest(disconnectPayload);
+
+      // Invalidate cache since connection was removed
+      this.invalidateUserConnectionsCache(userId, channelId);
+
       logger.info(`Successfully disconnected from server ${serverId}`);
     } catch (error) {
       logger.error(
@@ -444,9 +519,22 @@ export class MCPService {
     return toolName;
   }
 
-  async getAvailableTools(userId: string): Promise<ToolInfo[]> {
+  async getAvailableTools(
+    userId: string,
+    channelId: string,
+  ): Promise<ToolInfo[]> {
     try {
-      const connections = await this.getUserConnections(userId);
+      const cacheKey = `${userId}:${channelId}`;
+      const now = Date.now();
+
+      // Check cache first
+      const cached = this.userToolsCache.get(cacheKey);
+      if (cached && now - cached.timestamp < this.CACHE_TTL_MS) {
+        logger.debug(`Using cached tools for ${cacheKey}`);
+        return cached.tools;
+      }
+
+      const connections = await this.getUserConnections(userId, channelId);
       const tools: ToolInfo[] = [];
 
       logger.info(
@@ -493,6 +581,24 @@ export class MCPService {
       }
 
       logger.info(`Retrieved ${tools.length} tools for user ${userId}`);
+
+      // Update cache
+      this.userToolsCache.set(cacheKey, {
+        tools,
+        timestamp: now,
+      });
+
+      // Clean up old cache entries (simple cleanup)
+      if (this.userToolsCache.size > 100) {
+        const keysToDelete: string[] = [];
+        for (const [key, value] of this.userToolsCache.entries()) {
+          if (now - value.timestamp > this.CACHE_TTL_MS) {
+            keysToDelete.push(key);
+          }
+        }
+        keysToDelete.forEach((key) => this.userToolsCache.delete(key));
+      }
+
       return tools;
     } catch (error) {
       logger.error(
@@ -509,6 +615,7 @@ export class MCPService {
   async getToolDisplayName(
     userId: string,
     functionName: string,
+    channelId: string = 'default',
   ): Promise<string> {
     try {
       // Parse function name (could be "toolname" or "hash_toolname")
@@ -524,7 +631,7 @@ export class MCPService {
       }
 
       // Get all tools and find the matching one
-      const tools = await this.getAvailableTools(userId);
+      const tools = await this.getAvailableTools(userId, channelId);
       const tool = tools.find((t) => t.name === toolName);
 
       if (tool?.title) {
@@ -558,9 +665,10 @@ export class MCPService {
   async resolveServerNameToId(
     userId: string,
     serverName: string,
+    channelId: string = 'default',
   ): Promise<string | null> {
     try {
-      const connections = await this.getUserConnections(userId);
+      const connections = await this.getUserConnections(userId, channelId);
 
       // Try exact match first
       const exactMatch = connections.find(
@@ -625,9 +733,10 @@ export class MCPService {
   private async findConnectionBySanitizedName(
     userId: string,
     sanitizedName: string,
+    channelId: string = 'default',
   ): Promise<any | null> {
     try {
-      const connections = await this.getUserConnections(userId);
+      const connections = await this.getUserConnections(userId, channelId);
 
       // Find connection where sanitized server name matches
       for (const connection of connections) {
@@ -661,9 +770,12 @@ export class MCPService {
    * Convert available tools to OpenAI function format for LLM integration
    * Uses clean tool names by default, only adds prefix on collision
    */
-  async convertToolsToOpenAIFunctions(userId: string): Promise<any[]> {
+  async convertToolsToOpenAIFunctions(
+    userId: string,
+    channelId: string = 'default',
+  ): Promise<any[]> {
     try {
-      const tools = await this.getAvailableTools(userId);
+      const tools = await this.getAvailableTools(userId, channelId);
 
       // Track tool name usage to detect collisions
       const toolNameCounts = new Map<string, number>();
@@ -735,6 +847,7 @@ export class MCPService {
     functionName: string,
     functionArguments: Record<string, any>,
     userId: string,
+    channelId: string = 'default',
   ): Promise<FunctionCallResult> {
     try {
       logger.info(
@@ -742,7 +855,7 @@ export class MCPService {
       );
 
       // Get all user connections first
-      const connections = await this.getUserConnections(userId);
+      const connections = await this.getUserConnections(userId, channelId);
 
       // Strategy: Try to find the tool with the exact name first
       // Only if that fails AND the name looks like hash_toolname, try splitting it
@@ -804,6 +917,7 @@ export class MCPService {
       const toolPayload: InvokeToolRequestPayload = {
         generatedAt: new Date().toISOString(),
         userId: userId,
+        channelId: channelId,
         mcpServerConfigId: serverId,
         mcpServerUrl: serverUrl,
         toolName,
@@ -847,6 +961,7 @@ export class MCPService {
   async autoReconnectAfterOAuth(
     serverId: string,
     userId: string,
+    channelId: string = 'default',
   ): Promise<ConnectionResult> {
     try {
       logger.info(
@@ -856,6 +971,7 @@ export class MCPService {
       // Get the saved connection info
       const connection = await this.databaseService.getUserMCPConnection(
         userId,
+        channelId,
         serverId,
       );
       if (!connection) {
@@ -867,6 +983,7 @@ export class MCPService {
         serverId,
         userId,
         connection.server_url,
+        channelId,
       );
     } catch (error: any) {
       logger.error(`Error in auto-reconnect after OAuth:`, error);
@@ -880,13 +997,17 @@ export class MCPService {
   /**
    * Reset server data for a user
    */
-  async resetServerData(serverId: string, userId: string): Promise<void> {
+  async resetServerData(
+    serverId: string,
+    userId: string,
+    channelId: string = 'default',
+  ): Promise<void> {
     try {
       logger.info(`Resetting server data for ${serverId}, user ${userId}`);
 
       // Disconnect if connected
       try {
-        await this.disconnectFromServer(serverId, userId);
+        await this.disconnectFromServer(serverId, userId, channelId);
       } catch (error) {
         // Ignore disconnect errors during reset
         logger.warn('Error during disconnect in reset', {
@@ -897,7 +1018,11 @@ export class MCPService {
       }
 
       // Delete saved connection data
-      await this.databaseService.deleteUserMCPConnection(userId, serverId);
+      await this.databaseService.deleteUserMCPConnection(
+        userId,
+        channelId,
+        serverId,
+      );
 
       // Delete OAuth tokens if they exist
       await this.databaseService.deleteOAuthTokens(serverId, userId);
@@ -918,13 +1043,14 @@ export class MCPService {
   async deleteServerConnection(
     serverId: string,
     userId: string,
+    channelId: string = 'default',
   ): Promise<void> {
     try {
       logger.info(`Deleting server connection ${serverId} for user ${userId}`);
 
       // First disconnect from the server if connected
       try {
-        await this.disconnectFromServer(serverId, userId);
+        await this.disconnectFromServer(serverId, userId, channelId);
       } catch (error) {
         // Ignore disconnect errors - might already be disconnected
         logger.warn(
@@ -933,7 +1059,7 @@ export class MCPService {
       }
 
       // Then delete all database records and OAuth tokens
-      await this.resetServerData(serverId, userId);
+      await this.resetServerData(serverId, userId, channelId);
 
       logger.info(
         `Successfully deleted server connection ${serverId} for user ${userId}`,
@@ -974,14 +1100,19 @@ export class MCPService {
   /**
    * Get diagnostic information about connection states
    */
-  async getConnectionDiagnostics(userId: string): Promise<{
+  async getConnectionDiagnostics(
+    userId: string,
+    channelId: string = 'default',
+  ): Promise<{
     databaseConnections: any[];
     activeConnections: any;
     mismatchedConnections: string[];
   }> {
     // Get connections from database
-    const dbConnections =
-      await this.databaseService.getUserMCPConnections(userId);
+    const dbConnections = await this.databaseService.getUserMCPConnections(
+      userId,
+      channelId,
+    );
 
     // Get active connections from pool
     const activeConnectionsInfo = this.connectionPool.getDiagnosticInfo();
@@ -1007,12 +1138,15 @@ export class MCPService {
   /**
    * Clean up stale connections that exist in database but not in active pool
    */
-  async cleanupStaleConnections(userId: string): Promise<{
+  async cleanupStaleConnections(
+    userId: string,
+    channelId: string = 'default',
+  ): Promise<{
     cleanedCount: number;
     cleanedConnections: string[];
     remainingConnections: number;
   }> {
-    const diagnostics = await this.getConnectionDiagnostics(userId);
+    const diagnostics = await this.getConnectionDiagnostics(userId, channelId);
     const cleanedConnections: string[] = [];
 
     // Find connections that are marked as connected in DB but not active in pool
@@ -1029,6 +1163,7 @@ export class MCPService {
         // Update the connection status in database to disconnected
         await this.databaseService.updateUserMCPConnection(
           dbConn.user_id,
+          dbConn.channel_id,
           dbConn.server_id,
           {
             status: 'disconnected',
@@ -1054,7 +1189,10 @@ export class MCPService {
   /**
    * Repair corrupted database records by fixing missing required fields
    */
-  async repairCorruptedConnections(userId: string): Promise<{
+  async repairCorruptedConnections(
+    userId: string,
+    channelId: string = 'default',
+  ): Promise<{
     repairedCount: number;
     repairedConnections: Array<{
       id: string;
@@ -1063,8 +1201,10 @@ export class MCPService {
     }>;
     healthyConnections: number;
   }> {
-    const dbConnections =
-      await this.databaseService.getUserMCPConnections(userId);
+    const dbConnections = await this.databaseService.getUserMCPConnections(
+      userId,
+      channelId,
+    );
     const repairedConnections: Array<{
       id: string;
       issues: string[];
@@ -1087,6 +1227,7 @@ export class MCPService {
 
         await this.databaseService.updateUserMCPConnection(
           dbConn.user_id,
+          dbConn.channel_id,
           dbConn.server_id,
           {
             status: 'disconnected',
@@ -1116,6 +1257,7 @@ export class MCPService {
 
         await this.databaseService.updateUserMCPConnection(
           dbConn.user_id,
+          dbConn.channel_id,
           dbConn.server_id,
           { server_name: serverName },
         );
