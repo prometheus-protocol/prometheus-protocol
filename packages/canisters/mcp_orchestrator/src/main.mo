@@ -578,6 +578,194 @@ shared (deployer) actor class ICRC120Canister<system>(
     icrc3().get_tip();
   };
 
+  // Tracing functions
+  public query func get_reconstitution_traces() : async [TT.ReconstitutionTrace] {
+    tt().getReconstitutionTraces();
+  };
+
+  public query func get_latest_reconstitution_trace() : async ?TT.ReconstitutionTrace {
+    tt().getLatestReconstitutionTrace();
+  };
+
+  public shared func clear_reconstitution_traces() : async () {
+    tt().clearReconstitutionTraces();
+  };
+
+  public query func validate_timer_state() : async [Text] {
+    tt().validateTimerState();
+  };
+
+  public query func get_timer_diagnostics() : async TT.TimerDiagnostics {
+    tt().getTimerDiagnostics();
+  };
+
+  // Cancellation functions
+  public shared func cancel_actions_by_filter(filter : TT.ActionFilter) : async TT.CancellationResult {
+    tt().cancelActionsByFilter(filter);
+  };
+
+  public shared func cancel_actions_by_ids(ids : [Nat]) : async TT.CancellationResult {
+    tt().cancelActionsByIds(ids);
+  };
+
+  public query func get_actions_by_filter(filter : TT.ActionFilter) : async [TT.ActionDetail] {
+    tt().getActionsByFilter(filter);
+  };
+
+  public shared func emergency_clear_all_timers() : async Nat {
+    tt().emergencyClearAllTimers();
+  };
+
+  public shared func force_system_timer_cancel() : async Bool {
+    tt().forceSystemTimerCancel();
+  };
+
+  public shared func force_release_lock() : async ?Time.Time {
+    tt().forceReleaseLock();
+  };
+
+  // =====================================================================================
+  // CANISTER MANAGEMENT
+  // =====================================================================================
+
+  /**
+   * [OWNER ONLY] Add a principal as a controller to a managed canister.
+   * This is useful for manually fixing controller issues or adding the orchestrator
+   * itself as a controller for direct management.
+   */
+  public shared ({ caller }) func add_controller_to_canister(
+    canister_id : Principal,
+    new_controller : Principal,
+  ) : async Result.Result<(), Text> {
+    if (caller != _owner) {
+      return #err("Unauthorized: Only the owner can add controllers");
+    };
+
+    // Verify this is a managed canister
+    switch (Map.get(reverse_managed_canisters, Map.phash, canister_id)) {
+      case (null) {
+        return #err("Canister is not managed by this orchestrator");
+      };
+      case (?namespace) {
+        try {
+          // Get current settings
+          let status = await ic.canister_status({ canister_id = canister_id });
+
+          // Add the new controller to the existing list
+          let current_controllers = status.settings.controllers;
+          let new_controllers = Array.append(current_controllers, [new_controller]);
+
+          // Update settings with new controller list
+          await ic.update_settings({
+            canister_id = canister_id;
+            sender_canister_version = null;
+            settings = {
+              controllers = ?new_controllers;
+              compute_allocation = null;
+              memory_allocation = null;
+              freezing_threshold = null;
+              reserved_cycles_limit = null;
+              log_visibility = null;
+              wasm_memory_limit = null;
+              wasm_memory_threshold = null;
+            };
+          });
+
+          Debug.print("Added controller " # Principal.toText(new_controller) # " to canister " # Principal.toText(canister_id));
+          return #ok(());
+        } catch (e) {
+          return #err("Failed to add controller: " # Error.message(e));
+        };
+      };
+    };
+  };
+
+  /**
+   * [OWNER ONLY] Remove a principal from a canister's controller list.
+   * Use with caution - removing all controllers will make the canister unmanageable.
+   */
+  public shared ({ caller }) func remove_controller_from_canister(
+    canister_id : Principal,
+    controller_to_remove : Principal,
+  ) : async Result.Result<(), Text> {
+    if (caller != _owner) {
+      return #err("Unauthorized: Only the owner can remove controllers");
+    };
+
+    // Verify this is a managed canister
+    switch (Map.get(reverse_managed_canisters, Map.phash, canister_id)) {
+      case (null) {
+        return #err("Canister is not managed by this orchestrator");
+      };
+      case (?namespace) {
+        try {
+          // Get current settings
+          let status = await ic.canister_status({ canister_id = canister_id });
+
+          // Remove the controller from the existing list
+          let current_controllers = status.settings.controllers;
+          let new_controllers = Array.filter(
+            current_controllers,
+            func(c : Principal) : Bool {
+              c != controller_to_remove;
+            },
+          );
+
+          if (new_controllers.size() == 0) {
+            return #err("Cannot remove all controllers - canister would become unmanageable");
+          };
+
+          // Update settings with new controller list
+          await ic.update_settings({
+            canister_id = canister_id;
+            sender_canister_version = null;
+            settings = {
+              controllers = ?new_controllers;
+              compute_allocation = null;
+              memory_allocation = null;
+              freezing_threshold = null;
+              reserved_cycles_limit = null;
+              log_visibility = null;
+              wasm_memory_limit = null;
+              wasm_memory_threshold = null;
+            };
+          });
+
+          Debug.print("Removed controller " # Principal.toText(controller_to_remove) # " from canister " # Principal.toText(canister_id));
+          return #ok(());
+        } catch (e) {
+          return #err("Failed to remove controller: " # Error.message(e));
+        };
+      };
+    };
+  };
+
+  /**
+   * [OWNER ONLY] Get the list of controllers for a managed canister.
+   */
+  public shared ({ caller }) func get_canister_controllers(
+    canister_id : Principal
+  ) : async Result.Result<[Principal], Text> {
+    if (caller != _owner) {
+      return #err("Unauthorized: Only the owner can view controllers");
+    };
+
+    // Verify this is a managed canister
+    switch (Map.get(reverse_managed_canisters, Map.phash, canister_id)) {
+      case (null) {
+        return #err("Canister is not managed by this orchestrator");
+      };
+      case (?namespace) {
+        try {
+          let status = await ic.canister_status({ canister_id = canister_id });
+          return #ok(status.settings.controllers);
+        } catch (e) {
+          return #err("Failed to get controllers: " # Error.message(e));
+        };
+      };
+    };
+  };
+
   // =====================================================================================
   // NEW DEPLOYMENT/UPGRADE WRAPPER
   // =====================================================================================
@@ -1316,8 +1504,8 @@ shared (deployer) actor class ICRC120Canister<system>(
       deployment_type = #provisioned;
       hash = hash;
       args = encoded_args; // Automated deploys use the encoded owner as init args
-      stop = false;
-      restart = false;
+      stop = true; // Always stop before upgrade to handle outstanding callbacks
+      restart = true; // Always restart after successful upgrade
       snapshot = false;
       timeout = 0;
       mode = mode; // Automated deploys are either install or upgrade with defaults
@@ -1365,8 +1553,8 @@ shared (deployer) actor class ICRC120Canister<system>(
       deployment_type = #global;
       hash = request.hash;
       args = encoded_args; // Automated deploys use the encoded owner as init args
-      stop = false;
-      restart = false;
+      stop = true; // Always stop before upgrade to handle outstanding callbacks
+      restart = true; // Always restart after successful upgrade
       snapshot = false;
       timeout = 0;
       mode = mode; // Automated deploys are either install or upgrade with defaults

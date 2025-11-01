@@ -8,16 +8,25 @@ import {
 } from '@/components/ui/accordion';
 import { ServerTool } from '@prometheus-protocol/ic-js';
 import { BarChart3, Wrench } from 'lucide-react';
-import { useGetToolInvocations } from '@/hooks/useLeaderboard';
+import { useNamespaceTools } from '@/hooks/useNamespaceTools';
 
-// The props are now much simpler
+// Updated props to use namespace instead of wasmId
 interface ToolsAndResourcesProps {
   tools: ServerTool[];
-  wasmId: string;
+  namespace: string;
 }
 
-export function ToolsAndResources({ tools, wasmId }: ToolsAndResourcesProps) {
-  const { data: invocationCounts } = useGetToolInvocations(wasmId);
+export function ToolsAndResources({
+  tools,
+  namespace,
+}: ToolsAndResourcesProps) {
+  const { data: namespaceTools } = useNamespaceTools(namespace);
+
+  // Create a map of tool name to invocation count for quick lookup
+  const toolInvocations = new Map<string, bigint>();
+  namespaceTools?.forEach((tool) => {
+    toolInvocations.set(tool.tool_id, tool.total_invocations);
+  });
 
   return (
     <section>
@@ -29,7 +38,7 @@ export function ToolsAndResources({ tools, wasmId }: ToolsAndResourcesProps) {
       </div>
       <Accordion type="single" collapsible className="w-full space-y-3">
         {tools.map((tool, index) => {
-          const count = invocationCounts?.get(tool.name);
+          const count = toolInvocations.get(tool.name);
 
           return (
             <AccordionItem
@@ -42,7 +51,7 @@ export function ToolsAndResources({ tools, wasmId }: ToolsAndResourcesProps) {
                     {tool.name}
                   </span>
                   <div className="flex items-center gap-4 ml-auto">
-                    {count && count > 0 && (
+                    {count && count > 0n && (
                       <div className="flex items-center gap-1.5 text-sm text-muted-foreground font-mono">
                         <BarChart3 className="h-3 w-3" />
                         <span>{count.toLocaleString()}</span>

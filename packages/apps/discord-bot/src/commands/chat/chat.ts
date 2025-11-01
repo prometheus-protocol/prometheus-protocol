@@ -3,6 +3,7 @@ import {
   SlashCommandOptionsOnlyBuilder,
   ChatInputCommandInteraction,
   InteractionContextType,
+  ChannelType,
 } from 'discord.js';
 import {
   BaseCommand,
@@ -11,6 +12,7 @@ import {
   CommandCategory,
   AIFunctionCall,
   DatabaseService,
+  ConversationMessage,
 } from '../../types/index.js';
 import { LLMService } from '../../services/llm.js';
 import { chatLogger } from '../../utils/logger.js';
@@ -56,22 +58,15 @@ export class ChatCommand extends BaseCommand {
       userId: interaction.user.id,
     });
 
-    // Acknowledge the interaction immediately - before any other processing
+    // Reply immediately with brief acknowledgment
     try {
-      await interaction.deferReply();
-      console.log(
-        '✅ Successfully deferred reply for interaction:',
-        interaction.id,
-      );
-    } catch (error) {
-      console.error('❌ Failed to defer reply:', error);
-      console.log('🔍 Interaction state when defer failed:', {
-        interactionId: interaction.id,
-        isDeferred: interaction.deferred,
-        isReplied: interaction.replied,
-        createdTimestamp: interaction.createdTimestamp,
-        age: Date.now() - interaction.createdTimestamp,
+      await interaction.reply({
+        content: `� *Processing your request...*`,
+        fetchReply: true,
       });
+      console.log('✅ Successfully replied:', interaction.id);
+    } catch (error) {
+      console.error('❌ Failed to reply:', error);
       return;
     }
 
@@ -81,29 +76,161 @@ export class ChatCommand extends BaseCommand {
     });
 
     try {
-      // Create a context object compatible with the existing execute method
-      // In DMs, interaction.guildId will be null, so we handle that properly
-      const context: CommandContext = {
-        interaction,
-        args: [],
-        userId: interaction.user.id,
-        channelId: interaction.channelId,
-        guildId: interaction.guildId || undefined, // Will be undefined in DMs
-      };
+      // Check if this is in a guild channel (not DM)
+      if (interaction.inGuild() && interaction.channel) {
+        // Check if channel supports threads
+        if ('threads' in interaction.channel) {
+          // Create a thread name from the prompt (max 100 chars for Discord)
+          const threadName =
+            prompt.length > 100 ? prompt.substring(0, 97) + '...' : prompt;
 
-      // Call the existing execute method
-      const response = await this.executeInternal(context, prompt);
+          chatLogger.info('Creating thread for conversation', {
+            channelId: interaction.channelId,
+            threadName,
+          });
 
-      // Send the response using editReply since we deferred
-      if (response) {
-        await interaction.editReply({
-          content: response.content || undefined,
-          embeds: response.embeds || undefined,
-          files: response.files || undefined,
-          components: response.components || undefined,
-        });
+          const thread = await interaction.channel.threads.create({
+            name: threadName,
+            autoArchiveDuration: 10080, // Archive after 7 days (1 week) of inactivity
+            reason: `Chat conversation started by ${interaction.user.tag}`,
+          });
+
+          chatLogger.info('Thread created successfully', {
+            threadId: thread.id,
+            channelId: interaction.channelId,
+          });
+
+          // Store thread in database
+          await this.database.createChatThread({
+            thread_id: thread.id,
+            channel_id: interaction.channelId,
+            user_id: interaction.user.id,
+          });
+
+          chatLogger.info('Thread stored in database', {
+            threadId: thread.id,
+          });
+
+          // Truncate prompt for display if too long
+          const displayPrompt =
+            prompt.length > 80 ? prompt.substring(0, 77) + '...' : prompt;
+
+          // Update the original reply with the prompt and link to the thread
+          await interaction.editReply({
+            content: `💬 **"${displayPrompt}"**\n\nContinue in <#${thread.id}>`,
+          });
+
+          // Create a context object for processing
+          // Use parent channelId for tool access, but we'll pass thread.id separately for alerts
+          const context: CommandContext = {
+            interaction,
+            args: [],
+            userId: interaction.user.id,
+            channelId: interaction.channelId, // Parent channel for MCP tool access
+            guildId: interaction.guildId || undefined,
+            threadId: thread.id, // Store thread ID in context for task creation
+          };
+
+          // Generate the AI response with empty history since this is a new thread
+          // Create a status callback that updates a single message
+          let statusMessage: any = null;
+          const statusCallback = async (status: string) => {
+            try {
+              if (statusMessage) {
+                // Edit existing status message
+                await statusMessage.edit(status);
+              } else {
+                // Create first status message
+                statusMessage = await thread.send(status);
+              }
+            } catch (error) {
+              chatLogger.warn('Failed to send status update to thread', {
+                error,
+              });
+            }
+          };
+
+          const response = await this.executeInternal(
+            context,
+            prompt,
+            statusCallback, // Send tool execution updates to thread
+            [], // Empty history - new thread starts fresh
+            true, // Skip conversation save - thread manages its own history
+          );
+
+          // Keep the status message visible for transparency
+          // Don't delete it - users should see what tools were used
+
+          // Send the response to the thread
+          if (response) {
+            await thread.send({
+              content: response.content || undefined,
+              embeds: response.embeds || undefined,
+              files: response.files || undefined,
+              components: response.components || undefined,
+            });
+
+            // Store the conversation turn in thread history
+            await this.database.updateThreadHistory(thread.id, {
+              role: 'user',
+              content: prompt,
+            });
+            await this.database.updateThreadHistory(thread.id, {
+              role: 'assistant',
+              content: response.content || '',
+            });
+          }
+        } else {
+          // Channel doesn't support threads, fall back to follow-up
+          chatLogger.info('Channel does not support threads, using follow-up', {
+            channelId: interaction.channelId,
+          });
+
+          const context: CommandContext = {
+            interaction,
+            args: [],
+            userId: interaction.user.id,
+            channelId: interaction.channelId,
+            guildId: interaction.guildId || undefined,
+          };
+
+          const response = await this.executeInternal(context, prompt);
+
+          if (response) {
+            await interaction.followUp({
+              content: response.content || undefined,
+              embeds: response.embeds || undefined,
+              files: response.files || undefined,
+              components: response.components || undefined,
+            });
+          }
+        }
       } else {
-        await interaction.editReply({ content: '✅ Done.' });
+        // Handle DM or non-guild context - use traditional follow-up
+        chatLogger.info('Processing in DM context', {
+          userId: interaction.user.id,
+        });
+
+        const context: CommandContext = {
+          interaction,
+          args: [],
+          userId: interaction.user.id,
+          channelId: interaction.channelId,
+          guildId: interaction.guildId || undefined,
+        };
+
+        // Call the existing execute method
+        const response = await this.executeInternal(context, prompt);
+
+        // Send the final response as a follow-up message
+        if (response) {
+          await interaction.followUp({
+            content: response.content || undefined,
+            embeds: response.embeds || undefined,
+            files: response.files || undefined,
+            components: response.components || undefined,
+          });
+        }
       }
     } catch (error) {
       chatLogger.error(
@@ -111,7 +238,7 @@ export class ChatCommand extends BaseCommand {
         error instanceof Error ? error : new Error(String(error)),
       );
 
-      await interaction.editReply({
+      await interaction.followUp({
         content:
           'Sorry, I encountered an error while processing your request. Please try again later.',
       });
@@ -121,6 +248,9 @@ export class ChatCommand extends BaseCommand {
   private async executeInternal(
     context: CommandContext,
     prompt: string,
+    statusCallback?: (status: string) => Promise<void>,
+    overrideHistory?: ConversationMessage[], // Optional: override history (for new threads)
+    skipConversationSave?: boolean, // Optional: skip saving to conversation_history table (for threads)
   ): Promise<CommandResponse> {
     chatLogger.info('Chat command executed', {
       userId: context.userId,
@@ -145,47 +275,52 @@ export class ChatCommand extends BaseCommand {
         'Chat command no longer includes task management functions',
       );
 
-      // Load conversation history from database
-      const history = await this.database.getConversationHistory(
-        context.userId,
-        context.channelId,
-        50, // Keep last 50 messages for context
-      );
+      // Load conversation history from database (or use override for new threads)
+      const history =
+        overrideHistory !== undefined
+          ? overrideHistory
+          : await this.database.getConversationHistory(
+              context.userId,
+              context.channelId,
+              50, // Keep last 50 messages for context
+            );
       chatLogger.info('Loaded conversation history', {
         userId: context.userId,
         channelId: context.channelId,
         historyCount: history.length,
+        isOverride: overrideHistory !== undefined,
       });
 
       // Generate response from LLM with status updates
       chatLogger.info('Calling LLM service', { userId: context.userId });
 
-      // Update user with initial status
-      if (context.interaction && context.interaction.deferred) {
-        await context.interaction.editReply({
-          content: '🤖 Processing your request...',
-        });
-      }
+      // No initial status update needed - user message is already visible
 
       const response = await this.llmService.generateResponse(
         prompt,
         {
           userId: context.userId,
           channelId: context.channelId,
+          threadId: context.threadId, // Pass thread ID for task alerts
           history: history, // Use actual conversation history
         },
         context.userId, // Pass userId for MCP integration
         // Pass callback for status updates
-        async (status: string) => {
-          if (context.interaction && context.interaction.deferred) {
-            try {
-              await context.interaction.editReply({ content: `🤖 ${status}` });
-            } catch (error) {
-              // If update fails, log but don't break the flow
-              chatLogger.warn('Failed to update status', { status, error });
+        statusCallback ||
+          (async (status: string) => {
+            if (context.interaction) {
+              try {
+                // Status already includes emoji from LLM service
+                await context.interaction.followUp({ content: status });
+              } catch (error) {
+                // If update fails, log but don't break the flow
+                chatLogger.warn('Failed to send status update', {
+                  status,
+                  error,
+                });
+              }
             }
-          }
-        },
+          }),
       );
 
       const isFunction = Array.isArray(response);
@@ -208,8 +343,10 @@ export class ChatCommand extends BaseCommand {
         // (The LLM service should already handle this, but this is a backup)
         const finalResponse = this.ensureDiscordLimit(response);
 
-        // Save conversation to database
-        await this.saveConversationTurn(context, prompt, finalResponse);
+        // Save conversation to database (unless we're in a thread that manages its own history)
+        if (!skipConversationSave) {
+          await this.saveConversationTurn(context, prompt, finalResponse);
+        }
         return { content: finalResponse };
       }
     } catch (error) {

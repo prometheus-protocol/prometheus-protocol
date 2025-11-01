@@ -44,6 +44,7 @@ describe('MCP Discord Integration', () => {
         serverName: 'Test Server',
         generatedAt: new Date().toISOString(),
         oauthAuthorizationUrl: 'https://auth.example.com/oauth?code=abc123',
+        channelId: 'channel-789',
       };
 
       // Call the auth required handler directly
@@ -71,6 +72,7 @@ describe('MCP Discord Integration', () => {
         serverName: 'Test Server',
         generatedAt: new Date().toISOString(),
         oauthAuthorizationUrl: 'https://auth.example.com/oauth?code=abc123',
+        channelId: 'channel-789',
       };
 
       // Should throw when Discord notification fails (current behavior)
@@ -97,6 +99,7 @@ describe('MCP Discord Integration', () => {
         serverName: 'Test Server',
         generatedAt: new Date().toISOString(),
         oauthAuthorizationUrl: 'https://auth.example.com/oauth?code=abc123',
+        channelId: 'channel-789',
       };
 
       // Should not throw even without Discord service

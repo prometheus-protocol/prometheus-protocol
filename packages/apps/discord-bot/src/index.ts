@@ -1,5 +1,12 @@
 import 'dotenv/config';
-import { Client, GatewayIntentBits, Events } from 'discord.js';
+import {
+  Client,
+  GatewayIntentBits,
+  Events,
+  REST,
+  Routes,
+  Partials,
+} from 'discord.js';
 import express, { Request, Response } from 'express';
 import { ConfigManager } from './config/index.js';
 import { CommandRegistryImpl } from './commands/registry.js';
@@ -16,7 +23,6 @@ import { DiscordNotificationService } from './services/discord-notification.serv
 import { MCPEventService } from './services/event-emitter.service.js';
 import { ConnectionPoolService } from './services/connections.js';
 import { MCPCoordinatorService } from './services/mcp-coordinator.service.js';
-import { RegistryService } from './services/registry.service.js';
 import { auth } from './mcp/oauth.js';
 import { ConnectionManagerOAuthProvider } from './mcp/oauth-provider.js';
 
@@ -33,7 +39,6 @@ class DiscordBot {
   private mcpEventService: MCPEventService;
   private connectionPool: ConnectionPoolService;
   private mcpCoordinator: MCPCoordinatorService;
-  private registryService: RegistryService;
   private webApp = express();
   private webServer?: any;
 
@@ -44,9 +49,11 @@ class DiscordBot {
       intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildIntegrations,
+        GatewayIntentBits.GuildMessages, // Enable reading messages in guild channels/threads
         GatewayIntentBits.DirectMessages, // Enable DM listening
         GatewayIntentBits.MessageContent, // Needed for reading message content
       ],
+      partials: [Partials.Channel, Partials.Message], // Enable DM events
     });
 
     this.commandRegistry = new CommandRegistryImpl();
@@ -66,7 +73,6 @@ class DiscordBot {
       this.database,
       this.discordNotification,
     );
-    this.registryService = new RegistryService();
 
     // Initialize MCP service with all required dependencies
     this.mcpService = new MCPService(
@@ -74,24 +80,34 @@ class DiscordBot {
       this.mcpEventService,
       this.connectionPool,
       this.mcpCoordinator,
-      this.registryService,
+      undefined, // No registry service needed
       this.discordNotification,
     );
 
     // Initialize the MCP service after all dependencies are set up
     this.mcpService.initialize();
 
-    this.llmService = new LLMService(this.config, this.mcpService);
+    // Create scheduler and task functions first (LLM service needs task functions)
     this.scheduler = new AlertScheduler(
       this.client,
       this.database,
       this.config,
-      this.llmService,
+      null as any, // Will be set after LLM service is created
     );
     this.taskFunctions = new TaskManagementFunctions(
       this.scheduler,
       this.database,
     );
+
+    // Now create LLM service with both MCP and task functions
+    this.llmService = new LLMService(
+      this.config,
+      this.mcpService,
+      this.taskFunctions,
+    );
+
+    // Set the LLM service in scheduler now that it's created
+    (this.scheduler as any).llmService = this.llmService;
 
     this.setupEventHandlers();
     this.registerCommands();
@@ -126,72 +142,53 @@ class DiscordBot {
           console.log(`📍 Guild: ${guild.name} (${guild.id})`);
         });
 
-        // Get current MCP tools available for chat
-        const mcpTools = await this.mcpService.getAvailableTools('system');
-        console.log(`🤖 AI Chat available with ${mcpTools.length} MCP tools`);
-        console.log(`⚡ Task management available via /tasks command`);
-
-        // Check MCP system status
-        try {
-          const mcpStatus = await this.mcpService.getSystemStatus();
-          console.log(
-            `🔌 MCP Registry: ${mcpStatus.registryConnected ? 'Connected' : 'Disconnected'}`,
-          );
-          console.log(`🌐 Available MCP Servers: ${mcpStatus.totalServers}`);
-        } catch (error) {
-          console.error('⚠️ MCP system initialization error:', error);
-        }
-
         // Start scheduler with alert loading
-        try {
-          await this.scheduler.start();
-        } catch (error) {
-          console.error('⚠️ Scheduler initialization error:', error);
+        // Skip loading alerts in development if DISABLE_SCHEDULER is set
+        if (process.env.DISABLE_SCHEDULER === 'true') {
+          console.log('⏸️ Scheduler disabled via DISABLE_SCHEDULER env var');
+        } else {
+          try {
+            await this.scheduler.start();
+          } catch (error) {
+            console.error('⚠️ Scheduler initialization error:', error);
+          }
         }
 
-        // Reestablish persistent MCP connections
+        // NOTE: Reestablishing persistent MCP connections on startup is disabled
+        // for scalability. With thousands of users, this would create too many
+        // simultaneous connections. MCP connections are now lazy-loaded only when
+        // users actually interact with the bot.
+        // If you need to re-enable this for development/testing, uncomment below:
+        /*
         try {
           await this.mcpService.reestablishPersistentConnections();
         } catch (error) {
           console.error('⚠️ MCP connection reestablishment error:', error);
         }
+        */
       }
     });
 
     this.client.on(Events.InteractionCreate, async (interaction) => {
-      console.log('🔔 INTERACTION RECEIVED:', {
+      const startTime = Date.now();
+
+      // Log interaction details (keep logging brief to minimize delays)
+      const isSlash = interaction.isChatInputCommand();
+      const isAutocomplete = interaction.isAutocomplete();
+      const commandName =
+        isSlash || isAutocomplete ? interaction.commandName : 'N/A';
+
+      console.log('🔔 INTERACTION:', {
         type: interaction.type,
-        isSlash: interaction.isChatInputCommand(),
-        isAutocomplete: interaction.isAutocomplete(),
-        commandName:
-          interaction.isChatInputCommand() || interaction.isAutocomplete()
-            ? interaction.commandName
-            : 'N/A',
-        userId: interaction.user.id,
-        guildId: interaction.guildId,
-        channelId: interaction.channelId,
-        isDM: !interaction.guildId, // Flag DM interactions
+        cmd: commandName,
+        user: interaction.user.id,
+        isDM: !interaction.guildId,
+        receivedAt: startTime,
       });
 
       // Handle autocomplete interactions
-      if (interaction.isAutocomplete()) {
-        console.log('🔍 AUTOCOMPLETE DEBUG:', {
-          commandName: interaction.commandName,
-          focusedOption: interaction.options.getFocused(true),
-        });
-
-        const command = this.commandRegistry.getCommand(
-          interaction.commandName,
-        );
-        console.log('🔍 COMMAND LOOKUP:', {
-          commandFound: !!command,
-          commandName: command?.name,
-          hasAutocompleteMethod: command && 'handleAutocomplete' in command,
-          methodType: command && typeof (command as any).handleAutocomplete,
-          allCommandNames: this.commandRegistry
-            .getAllCommands()
-            .map((c) => c.name),
-        });
+      if (isAutocomplete) {
+        const command = this.commandRegistry.getCommand(commandName);
 
         if (
           command &&
@@ -199,35 +196,28 @@ class DiscordBot {
           typeof command.handleAutocomplete === 'function'
         ) {
           try {
-            console.log('🔍 CALLING AUTOCOMPLETE HANDLER...');
             await (command as any).handleAutocomplete(interaction);
-            console.log('🔍 AUTOCOMPLETE HANDLER COMPLETED');
           } catch (error) {
             console.error(
-              `Error handling autocomplete for ${interaction.commandName}:`,
+              `Error handling autocomplete for ${commandName}:`,
               error,
             );
             // Respond with empty choices on error
             await interaction.respond([]);
           }
         } else {
-          console.log(
-            '🔍 NO AUTOCOMPLETE HANDLER FOUND - RESPONDING WITH EMPTY',
-          );
           // No autocomplete handler found
           await interaction.respond([]);
         }
         return;
       }
 
-      if (!interaction.isChatInputCommand()) return;
+      if (!isSlash) return;
 
-      const command = this.commandRegistry.getCommand(interaction.commandName);
+      const command = this.commandRegistry.getCommand(commandName);
 
       if (!command) {
-        console.error(
-          `No command matching ${interaction.commandName} was found.`,
-        );
+        console.error(`No command matching ${commandName} was found.`);
         try {
           await interaction.reply({
             content: 'Command not found!',
@@ -239,12 +229,17 @@ class DiscordBot {
         return;
       }
 
+      const preExecuteTime = Date.now();
+      console.log(
+        `⏱️ Time to execute command: ${preExecuteTime - startTime}ms`,
+      );
+
       try {
-        // Execute the slash command
+        // Execute the slash command immediately
         await command.executeSlash(interaction);
       } catch (error) {
         console.error(
-          `Error during interaction for command ${interaction.commandName}:`,
+          `Error during interaction for command ${commandName}:`,
           error,
         );
         // Safely reply or follow up if an error occurs
@@ -265,6 +260,253 @@ class DiscordBot {
         }
       }
     });
+
+    // Handle messages for thread and DM conversations
+    this.client.on(Events.MessageCreate, async (message) => {
+      // Ignore bot messages
+      if (message.author.bot) return;
+
+      // Check if this is a thread message
+      if (message.channel.isThread()) {
+        await this.handleThreadMessage(message);
+      }
+      // Check if this is a DM message
+      else if (!message.guildId) {
+        await this.handleDMMessage(message);
+      }
+    });
+  }
+
+  private async handleThreadMessage(message: any): Promise<void> {
+    console.log('🔵 handleThreadMessage called', {
+      threadId: message.channel.id,
+      userId: message.author.id,
+      contentPreview: message.content.substring(0, 50),
+    });
+
+    try {
+      const threadId = message.channel.id;
+
+      // Check if this thread is tracked in our database
+      const chatThread = await this.database.getChatThread(threadId);
+
+      if (!chatThread) {
+        console.log('⚠️ Thread not tracked in database, ignoring', {
+          threadId,
+        });
+        // Not a tracked thread, ignore
+        return;
+      }
+
+      // Security: Only allow the thread owner to use their tools
+      if (message.author.id !== chatThread.user_id) {
+        console.log('🔒 User not authorized for thread', {
+          messageUserId: message.author.id,
+          threadUserId: chatThread.user_id,
+        });
+        await message.reply(
+          '🔒 This thread belongs to another user. Please start your own conversation with `/chat`.',
+        );
+        return;
+      }
+
+      console.log('💬 Thread message authorized and processing', {
+        threadId,
+        userId: message.author.id,
+        contentPreview: message.content.substring(0, 50),
+      });
+
+      // Create status callback that updates a single message
+      let statusMessage: any = null;
+      const sendStatus = async (status: string) => {
+        try {
+          if (statusMessage) {
+            // Edit existing status message
+            await statusMessage.edit(status);
+          } else {
+            // Create first status message
+            statusMessage = await message.reply(status);
+          }
+        } catch (error) {
+          console.warn('Failed to update status message:', error);
+        }
+      };
+
+      // Show typing indicator and keep it going
+      await message.channel.sendTyping();
+      const typingInterval = setInterval(() => {
+        message.channel.sendTyping().catch(() => clearInterval(typingInterval));
+      }, 5000); // Refresh every 5 seconds
+
+      try {
+        // Load conversation history from database
+        const history = chatThread.conversation_history.map((msg: any) => ({
+          role: msg.role as 'user' | 'assistant' | 'system',
+          content: msg.content,
+          timestamp: new Date(),
+        }));
+
+        // Generate AI response
+        const response = await this.llmService.generateResponse(
+          message.content,
+          {
+            userId: message.author.id,
+            channelId: chatThread.channel_id, // Use parent channel for MCP tool access
+            threadId: threadId, // Pass thread ID for task alerts
+            history: history,
+          },
+          message.author.id,
+          sendStatus, // Pass status callback for tool execution updates
+        );
+
+        // Clear typing interval
+        clearInterval(typingInterval);
+
+        // Keep the status message visible for transparency
+        // Don't delete it - users should see what tools were used
+
+        // Handle function calls or text response
+        if (Array.isArray(response)) {
+          // Function calls are supported - this would be handled by the chat command logic
+          // For now, inform the user that complex operations should use /chat
+          await message.reply(
+            "I received a complex request. For tool execution and tasks, please ensure you're in a thread created by the `/chat` command.",
+          );
+        } else {
+          // Send response
+          await message.reply(response);
+
+          // Update thread history
+          await this.database.updateThreadHistory(threadId, {
+            role: 'user',
+            content: message.content,
+          });
+          await this.database.updateThreadHistory(threadId, {
+            role: 'assistant',
+            content: response,
+          });
+        }
+      } finally {
+        // Ensure typing is cleared even if there's an error
+        clearInterval(typingInterval);
+      }
+    } catch (error) {
+      console.error('Error handling thread message:', error);
+      console.error(
+        'Error stack:',
+        error instanceof Error ? error.stack : 'No stack trace',
+      );
+      console.error('Error details:', {
+        threadId: message.channel.id,
+        userId: message.author.id,
+        messageContent: message.content.substring(0, 100),
+      });
+      try {
+        await message.reply(
+          'Sorry, I encountered an error processing your message. Please check the logs for details.',
+        );
+      } catch (replyError) {
+        console.error('Failed to send error reply:', replyError);
+      }
+    }
+  }
+
+  private async handleDMMessage(message: any): Promise<void> {
+    try {
+      console.log('📩 DM message received', {
+        userId: message.author.id,
+        contentPreview: message.content.substring(0, 50),
+      });
+
+      // Create status callback that updates a single message
+      let dmStatusMessage: any = null;
+      const sendStatus = async (status: string) => {
+        try {
+          if (dmStatusMessage) {
+            // Edit existing status message
+            await dmStatusMessage.edit(status);
+          } else {
+            // Create first status message
+            dmStatusMessage = await message.reply(status);
+          }
+        } catch (error) {
+          console.warn('Failed to update status message:', error);
+        }
+      };
+
+      // Show typing indicator and keep it going
+      await message.channel.sendTyping();
+      const typingInterval = setInterval(() => {
+        message.channel.sendTyping().catch(() => clearInterval(typingInterval));
+      }, 5000); // Refresh every 5 seconds
+
+      try {
+        // Load conversation history for this DM
+        const history = await this.database.getConversationHistory(
+          message.author.id,
+          message.channel.id,
+          50,
+        );
+
+        // Generate AI response
+        const response = await this.llmService.generateResponse(
+          message.content,
+          {
+            userId: message.author.id,
+            channelId: message.channel.id,
+            history: history,
+          },
+          message.author.id,
+          sendStatus, // Pass status callback for tool execution updates
+        );
+
+        // Clear typing interval
+        clearInterval(typingInterval);
+
+        // Keep the status message visible for transparency
+        // Don't delete it - users should see what tools were used
+
+        // Handle function calls or text response
+        if (Array.isArray(response)) {
+          // For now, don't support function calls in DMs
+          await message.reply(
+            "I can't execute tools in DM conversations yet. Please use the `/chat` command in a server for tool access.",
+          );
+        } else {
+          // Send response
+          await message.reply(response);
+
+          // Save conversation turn
+          await this.database.saveConversationTurn(
+            message.author.id,
+            message.channel.id,
+            message.content,
+            response,
+          );
+        }
+      } finally {
+        // Ensure typing is cleared even if there's an error
+        clearInterval(typingInterval);
+      }
+    } catch (error) {
+      console.error('Error handling DM message:', error);
+      console.error(
+        'Error stack:',
+        error instanceof Error ? error.stack : 'No stack trace',
+      );
+      console.error('Error details:', {
+        userId: message.author.id,
+        channelId: message.channel.id,
+        messageContent: message.content.substring(0, 100),
+      });
+      try {
+        await message.reply(
+          'Sorry, I encountered an error processing your message. Please check the logs for details.',
+        );
+      } catch (replyError) {
+        console.error('Failed to send error reply:', replyError);
+      }
+    }
   }
 
   private registerCommands(): void {
@@ -276,10 +518,8 @@ class DiscordBot {
     // Register clear chat memory command
     this.commandRegistry.register(new ClearChatCommand(this.database));
 
-    // Register MCP management command
-    this.commandRegistry.register(
-      new MCPCommand(this.mcpService, this.registryService),
-    );
+    // Register MCP management command (no registry service needed)
+    this.commandRegistry.register(new MCPCommand(this.mcpService));
 
     // Register dedicated tasks management command
     this.commandRegistry.register(
@@ -294,13 +534,14 @@ class DiscordBot {
   private async handleAutoReconnectAfterOAuth(
     serverId: string,
     userId: string,
+    channelId: string,
   ): Promise<void> {
     console.log(
-      `🔄 [AutoReconnect] Starting auto-reconnect for server=${serverId}, user=${userId}`,
+      `🔄 [AutoReconnect] Starting auto-reconnect for server=${serverId}, user=${userId}, channel=${channelId}`,
     );
 
     // Attempt auto-reconnect
-    await this.mcpService.autoReconnectAfterOAuth(serverId, userId);
+    await this.mcpService.autoReconnectAfterOAuth(serverId, userId, channelId);
   }
 
   private setupWebServer(): void {
@@ -348,22 +589,45 @@ class DiscordBot {
 
         // Exchange the authorization code for tokens directly
         try {
-          // Get the actual MCP server URL from the saved connection
+          // Get the channel_id from the oauth_pending table
+          const channelId = pending.channel_id || 'default';
+          console.log(
+            `🔐 [Callback] Using channelId: ${channelId} (from pending.channel_id: ${pending.channel_id})`,
+          );
+          console.log(
+            `🔐 [Callback] Looking up connection with: userId=${pending.user_id}, channelId=${channelId}, serverId=${pending.server_id}`,
+          );
+
           const connection = await this.database.getUserMCPConnection(
             pending.user_id,
+            channelId,
             pending.server_id,
           );
 
           if (!connection) {
+            // Log all connections for this user to help debug
+            const allUserConnections =
+              await this.database.getUserMCPConnections(
+                pending.user_id,
+                channelId,
+              );
+            console.log(
+              `🔐 [Callback] No connection found. User has ${allUserConnections.length} connection(s) in this channel:`,
+              allUserConnections.map((c) => ({
+                server_id: c.server_id,
+                server_name: c.server_name,
+                channel_id: c.channel_id,
+              })),
+            );
             throw new Error('No saved MCP connection found');
           }
-
           const authProvider = new ConnectionManagerOAuthProvider(
             pending.server_id,
             pending.user_id,
             this.database,
             this.mcpService.getEventService(),
             connection.server_url,
+            channelId, // Pass channelId to the provider
           );
 
           // Call auth with the authorization code to complete token exchange
@@ -401,6 +665,7 @@ class DiscordBot {
           this.handleAutoReconnectAfterOAuth(
             pending.server_id,
             pending.user_id,
+            channelId,
           );
         } catch (tokenError) {
           console.error(`🔐 [Callback] Token exchange failed:`, tokenError);
