@@ -392,11 +392,43 @@ export class SupabaseService implements DatabaseService {
       .eq('user_id', userId)
       .single();
 
-    if (error || !data) {
+    if (error) {
+      // No row exists yet, return empty object
+      if (error.code === 'PGRST116') {
+        dbLogger.debug('No preferences found for user, returning empty object', {
+          userId,
+        });
+        return {};
+      }
+      // Log the full error object to see what's actually there
+      dbLogger.error('Error fetching user preferences:', new Error(JSON.stringify(error)), {
+        userId,
+        rawError: error,
+        errorCode: error.code,
+        errorMessage: error.message,
+        errorDetails: error.details,
+        errorHint: error.hint,
+      });
       return {};
     }
 
-    return JSON.parse(data.preferences);
+    if (!data || !data.preferences) {
+      return {};
+    }
+
+    try {
+      return JSON.parse(data.preferences);
+    } catch (parseError) {
+      dbLogger.error(
+        'Error parsing user preferences JSON:',
+        parseError as Error,
+        {
+          userId,
+          rawPreferences: data.preferences,
+        },
+      );
+      return {};
+    }
   }
 
   // User task management methods

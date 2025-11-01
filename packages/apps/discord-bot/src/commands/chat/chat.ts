@@ -132,16 +132,23 @@ export class ChatCommand extends BaseCommand {
           };
 
           // Generate the AI response with empty history since this is a new thread
-          // Create a status callback that updates a single message
+          // Create a status callback that tracks tool invocations
           let statusMessage: any = null;
+          let toolInvocations: string[] = [];
           const statusCallback = async (status: string) => {
             try {
+              // Add new tool invocation to the list
+              toolInvocations.push(status);
+              
+              // Build the combined message with all tool invocations
+              const combinedStatus = toolInvocations.join('\n');
+              
               if (statusMessage) {
-                // Edit existing status message
-                await statusMessage.edit(status);
+                // Edit existing status message to show all invocations
+                await statusMessage.edit(combinedStatus);
               } else {
                 // Create first status message
-                statusMessage = await thread.send(status);
+                statusMessage = await thread.send(combinedStatus);
               }
             } catch (error) {
               chatLogger.warn('Failed to send status update to thread', {

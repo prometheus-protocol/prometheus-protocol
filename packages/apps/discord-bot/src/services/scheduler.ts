@@ -336,6 +336,35 @@ export class AlertScheduler {
         isRecurring: alert.recurring !== false,
       });
 
+      // Fetch user preferences to get timezone
+      let timezoneContext = '';
+      try {
+        const preferences = await this.database.getUserPreferences(userId);
+        if (preferences.timezone) {
+          try {
+            const formatter = new Intl.DateTimeFormat('en-US', {
+              timeZone: preferences.timezone,
+              dateStyle: 'full',
+              timeStyle: 'long',
+            });
+            const userLocalTime = formatter.format(new Date());
+            timezoneContext = `\n\n[CURRENT TIME CONTEXT]\nUTC time: ${new Date().toISOString()}\nYour timezone: ${preferences.timezone}\nYour local time: ${userLocalTime}`;
+          } catch (e) {
+            // Invalid timezone, skip context
+            schedulerLogger.warn('Invalid timezone in user preferences', {
+              userId,
+              timezone: preferences.timezone,
+            });
+          }
+        }
+      } catch (error) {
+        // Failed to fetch preferences, continue without timezone context
+        schedulerLogger.warn('Failed to fetch user preferences for timezone', {
+          userId,
+          error,
+        });
+      }
+
       // NOTE: Conversation history loading has been disabled for recurring tasks
       // to reduce API costs. Recurring tasks now execute with only their prompt
       // and available MCP tools, without previous conversation context.
@@ -346,9 +375,12 @@ export class AlertScheduler {
         { taskName: alert.name },
       );
 
+      // Inject timezone context into the prompt
+      const enrichedPrompt = alert.prompt + timezoneContext;
+
       // Execute the AI prompt with MCP tools - generateResponse handles all tool calling internally
       const result = await this.llmService.generateResponse(
-        alert.prompt,
+        enrichedPrompt,
         {
           userId: userId,
           channelId: alert.channelId,

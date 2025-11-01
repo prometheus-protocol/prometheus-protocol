@@ -11,6 +11,7 @@ import {
 import { ConfigManager } from '../config/index.js';
 import { MCPService } from './mcp/index.js';
 import { openaiLogger, llmLogger } from '../utils/logger.js';
+import { PromptBuilder, buildTimeContext } from '../prompts/prompt-builder.js';
 
 export class OpenAIProvider implements LLMProvider {
   name = 'OpenAI';
@@ -151,7 +152,7 @@ export class AnthropicProvider implements LLMProvider {
         system: systemPrompt,
         messages: messages,
         tools: tools,
-        tool_choice: { type: 'auto' }, // Let Claude decide when to use tools
+        tool_choice: { type: 'auto', disable_parallel_tool_use: true },
       });
 
       let iterationCount = 0;
@@ -413,7 +414,7 @@ export class LLMService {
       content: prompt,
     });
 
-    const systemPrompt = this.getSystemPrompt();
+    const systemPrompt = await this.getSystemPrompt(userId, allFunctions);
 
     // Create a function executor that routes to the appropriate handler
     const functionExecutor = async (name: string, args: any) => {
@@ -475,8 +476,9 @@ export class LLMService {
     allFunctions?: AIFunction[],
   ): Promise<string | AIFunctionCall[]> {
     // Initialize conversation history
+    const systemPrompt = await this.getSystemPrompt(userId, allFunctions);
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-      { role: 'system', content: this.getSystemPrompt() },
+      { role: 'system', content: systemPrompt },
     ];
     if (context?.history) {
       messages.push(
@@ -750,32 +752,57 @@ export class LLMService {
     return allFunctions;
   }
 
-  private getSystemPrompt(): string {
-    let basePrompt = `You are an AI assistant in Discord. You help users interact with their connected tools.
+  private async getSystemPrompt(
+    userId?: string,
+    availableTools?: AIFunction[],
+  ): Promise<string> {
+    // Get user preferences for timezone
+    let timezone: string | undefined;
+    if (userId && this.taskFunctions?.database) {
+      try {
+        const prefs =
+          await this.taskFunctions.database.getUserPreferences(userId);
+        timezone = prefs.timezone;
+      } catch (error) {
+        llmLogger.warn('Failed to fetch user preferences for system prompt', {
+          userId,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          errorStack: error instanceof Error ? error.stack : undefined,
+        });
+      }
+    } else if (userId && !this.taskFunctions?.database) {
+      llmLogger.warn(
+        'Cannot fetch user preferences: taskFunctions.database not available',
+        { userId },
+      );
+    }
 
-Key Capabilities:
-- Execute tool functions to retrieve information and perform actions
-- Provide helpful responses based on available information and tool results
+    // Build time context
+    const timeContext = buildTimeContext(timezone);
 
-You can help users by:
-- Answering questions based on tool results
-- Explaining what tools are available and how to use them
+    // Extract MCP tool names from available tools
+    // MCP tools are those not in the core task management set
+    const coreToolNames = new Set([
+      'respond_to_user',
+      'create_task',
+      'list_my_tasks',
+      'update_task',
+      'delete_task',
+      'check_task_status',
+      'save_user_timezone',
+    ]);
+    const mcpToolNames = (availableTools || [])
+      .filter((tool) => !coreToolNames.has(tool.name))
+      .map((tool) => tool.name);
 
-IMPORTANT GUIDELINES:
-- Keep responses concise and under 1800 characters to fit Discord message limits
-- Be direct and focused - summarize key points
-- Use tools to gather information as needed
-- After each tool call, analyze the results to determine if more information is needed
-- When you have all the information needed to answer the user, provide your complete response
-
-CRITICAL TOOL USAGE RULES:
-- ALWAYS actually call the tool function - NEVER narrate or describe what you would do without calling it
-- If a user asks you to perform an action (create, delete, update, list), you MUST call the corresponding tool
-- DO NOT say things like "✅ Created task" or "🔧 List My Tasks" without actually executing the function call
-- Your response should be based on the ACTUAL results returned by the tool, not simulated/imagined results
-- DO NOT create duplicate items - if you successfully created something once, don't create it again`;
-
-    return basePrompt;
+    // Use PromptBuilder to construct the system prompt
+    return PromptBuilder.buildStandard({
+      utcTime: timeContext.utcTime,
+      userTimezone: timezone,
+      userLocalTime: timeContext.userLocalTime,
+      availableTools: availableTools || [],
+      mcpToolNames,
+    });
   }
 
   // Execute promises with controlled concurrency to avoid overwhelming MCP servers
@@ -898,6 +925,7 @@ CRITICAL TOOL USAGE RULES:
         'update_task',
         'delete_task',
         'check_task_status',
+        'save_user_timezone',
       ];
 
       if (taskFunctionNames.includes(functionCall.name)) {
