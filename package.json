@@ -14,16 +14,6 @@
   ],
   "private": true,
   "description": "The monorepo for the Prometheus Protocol, the trust layer for decentralized commerce on the Internet Computer.",
-  "pnpm": {
-    "overrides": {
-      "@noble/hashes": "1.8.0"
-    },
-    "peerDependencyRules": {
-      "allowedVersions": {
-        "@noble/hashes": "1.8.0"
-      }
-    }
-  },
   "scripts": {
     "dev": "DFX_NETWORK=local pnpm --filter @prometheus-protocol/frontend dev",
     "build": "pnpm --filter \"./packages/**\" build",
