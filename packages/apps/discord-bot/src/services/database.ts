@@ -72,6 +72,13 @@ export class SupabaseService implements DatabaseService {
       dbLogger.error('Error saving conversation turn:', error);
       throw error;
     }
+
+    // Prune old messages to keep only the last 50 (async, don't await to avoid blocking)
+    this.pruneOldMessages(userId, channelId, 50).catch((err) => {
+      dbLogger.warn('Failed to prune old messages (non-blocking)', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
   }
 
   async getConversationHistory(
@@ -125,6 +132,60 @@ export class SupabaseService implements DatabaseService {
     return deletedCount;
   }
 
+  async pruneOldMessages(
+    userId: string,
+    channelId: string,
+    keepCount: number = 50,
+  ): Promise<number> {
+    try {
+      // Get all messages for this user/channel ordered by date
+      const { data: allMessages, error: fetchError } = await this.client
+        .from('conversation_history')
+        .select('id, created_at')
+        .eq('user_id', userId)
+        .eq('channel_id', channelId)
+        .order('created_at', { ascending: false });
+
+      if (fetchError) {
+        dbLogger.error('Error fetching messages for pruning:', fetchError);
+        return 0;
+      }
+
+      // If we have more than keepCount messages, delete the oldest ones
+      if (allMessages && allMessages.length > keepCount) {
+        const messagesToDelete = allMessages.slice(keepCount);
+        const idsToDelete = messagesToDelete.map((msg) => msg.id);
+
+        const { error: deleteError } = await this.client
+          .from('conversation_history')
+          .delete()
+          .in('id', idsToDelete);
+
+        if (deleteError) {
+          dbLogger.error('Error pruning old messages:', deleteError);
+          return 0;
+        }
+
+        dbLogger.info('Pruned old conversation messages', {
+          userId,
+          channelId,
+          deletedCount: idsToDelete.length,
+          kept: keepCount,
+        });
+
+        return idsToDelete.length;
+      }
+
+      return 0;
+    } catch (error) {
+      dbLogger.error(
+        'Error in pruneOldMessages:',
+        error instanceof Error ? error : new Error(String(error)),
+      );
+      return 0;
+    }
+  }
+
   async saveAlertState(
     alertId: string,
     data: any,
@@ -164,9 +225,13 @@ export class SupabaseService implements DatabaseService {
         id: alert.id,
         name: alert.name,
         description: alert.description,
+        user_id: alert.userId, // Save userId field
         channel_id: alert.channelId,
+        target_channel_id: alert.targetChannelId || null, // Save target channel
+        thread_id: alert.threadId || null, // Save thread ID for context
         interval: alert.interval,
         enabled: alert.enabled,
+        recurring: alert.recurring ?? true, // Default to true if not specified
         prompt: alert.prompt,
         last_run: alert.lastRun?.toISOString() || null,
         last_data: alert.lastData ? JSON.stringify(alert.lastData) : null,
@@ -212,9 +277,13 @@ export class SupabaseService implements DatabaseService {
         id: row.id,
         name: row.name,
         description: row.description,
+        userId: row.user_id, // Load userId field
         channelId: row.channel_id,
+        targetChannelId: row.target_channel_id || undefined, // Load target channel
+        threadId: row.thread_id || undefined, // Load thread ID
         interval: row.interval,
         enabled: row.enabled,
+        recurring: row.recurring ?? true, // Default to true for backwards compatibility
         prompt: row.prompt,
         lastRun: row.last_run ? new Date(row.last_run) : undefined,
         lastData: row.last_data ? JSON.parse(row.last_data) : undefined,
@@ -242,9 +311,13 @@ export class SupabaseService implements DatabaseService {
         .update({
           name: alert.name,
           description: alert.description,
+          user_id: alert.userId, // Include userId in updates
           channel_id: alert.channelId,
+          target_channel_id: alert.targetChannelId || null, // Include target channel
+          thread_id: alert.threadId || null, // Include thread ID
           interval: alert.interval,
           enabled: alert.enabled,
+          recurring: alert.recurring ?? true, // Include recurring field
           prompt: alert.prompt,
           last_run: alert.lastRun?.toISOString() || null,
           last_data: alert.lastData ? JSON.stringify(alert.lastData) : null,
@@ -319,11 +392,43 @@ export class SupabaseService implements DatabaseService {
       .eq('user_id', userId)
       .single();
 
-    if (error || !data) {
+    if (error) {
+      // No row exists yet, return empty object
+      if (error.code === 'PGRST116') {
+        dbLogger.debug('No preferences found for user, returning empty object', {
+          userId,
+        });
+        return {};
+      }
+      // Log the full error object to see what's actually there
+      dbLogger.error('Error fetching user preferences:', new Error(JSON.stringify(error)), {
+        userId,
+        rawError: error,
+        errorCode: error.code,
+        errorMessage: error.message,
+        errorDetails: error.details,
+        errorHint: error.hint,
+      });
       return {};
     }
 
-    return JSON.parse(data.preferences);
+    if (!data || !data.preferences) {
+      return {};
+    }
+
+    try {
+      return JSON.parse(data.preferences);
+    } catch (parseError) {
+      dbLogger.error(
+        'Error parsing user preferences JSON:',
+        parseError as Error,
+        {
+          userId,
+          rawPreferences: data.preferences,
+        },
+      );
+      return {};
+    }
   }
 
   // User task management methods
@@ -336,6 +441,7 @@ export class SupabaseService implements DatabaseService {
       interval: task.interval,
       description: task.description,
       enabled: task.enabled,
+      recurring: task.recurring ?? true, // Default to true if not specified
       created_at: task.createdAt.toISOString(),
       last_run: task.lastRun?.toISOString(),
     });
@@ -361,6 +467,7 @@ export class SupabaseService implements DatabaseService {
       interval: row.interval,
       description: row.description,
       enabled: row.enabled,
+      recurring: row.recurring ?? true, // Default to true for backwards compatibility
       createdAt: new Date(row.created_at),
       lastRun: row.last_run ? new Date(row.last_run) : undefined,
     }));
@@ -389,6 +496,7 @@ export class SupabaseService implements DatabaseService {
       interval: data.interval,
       description: data.description,
       enabled: data.enabled,
+      recurring: data.recurring ?? true, // Default to true for backwards compatibility
       createdAt: new Date(data.created_at),
       lastRun: data.last_run ? new Date(data.last_run) : undefined,
     };
@@ -402,8 +510,36 @@ export class SupabaseService implements DatabaseService {
     await this.client.from('user_tasks').update({ interval }).eq('id', taskId);
   }
 
+  async updateTaskLastRun(taskId: string, lastRun: Date): Promise<void> {
+    await this.client
+      .from('user_tasks')
+      .update({ last_run: lastRun.toISOString() })
+      .eq('id', taskId);
+  }
+
   async deleteUserTask(taskId: string): Promise<void> {
-    await this.client.from('user_tasks').delete().eq('id', taskId);
+    try {
+      const { error } = await this.client
+        .from('user_tasks')
+        .delete()
+        .eq('id', taskId);
+
+      if (error) {
+        dbLogger.error('Failed to delete user task', error, {
+          taskId,
+        });
+        throw new Error(`Failed to delete user task: ${error.message}`);
+      }
+
+      dbLogger.info('User task deleted successfully', { taskId });
+    } catch (error) {
+      dbLogger.error(
+        'Error deleting user task',
+        error instanceof Error ? error : new Error(String(error)),
+        { taskId },
+      );
+      throw error;
+    }
   }
 
   // === OAuth Persistence ===
@@ -413,6 +549,7 @@ export class SupabaseService implements DatabaseService {
     state: string;
     code_verifier: string;
     auth_url: string;
+    channel_id?: string;
   }): Promise<void> {
     dbLogger.info(`🔍 [DB] saveOAuthPending called with:`, {
       server_id: pending.server_id,
@@ -420,6 +557,7 @@ export class SupabaseService implements DatabaseService {
       state: pending.state,
       code_verifier: pending.code_verifier?.substring(0, 20) + '...',
       auth_url: pending.auth_url?.substring(0, 50) + '...',
+      channel_id: pending.channel_id,
     });
 
     // First, let's see what currently exists
@@ -444,6 +582,7 @@ export class SupabaseService implements DatabaseService {
         state: pending.state,
         code_verifier: pending.code_verifier,
         auth_url: pending.auth_url,
+        channel_id: pending.channel_id || 'default',
       },
       {
         onConflict: 'server_id,user_id',
@@ -537,6 +676,7 @@ export class SupabaseService implements DatabaseService {
       state: data.state,
       code_verifier: data.code_verifier,
       auth_url: data.auth_url,
+      channel_id: data.channel_id,
     };
   }
 
@@ -958,6 +1098,7 @@ export class SupabaseService implements DatabaseService {
   async saveUserMCPConnection(connection: SavedMCPConnection): Promise<void> {
     dbLogger.info(`🔗 [DB] saveUserMCPConnection called:`, {
       user_id: connection.user_id,
+      channel_id: connection.channel_id,
       server_id: connection.server_id,
       server_name: connection.server_name,
       status: connection.status,
@@ -967,6 +1108,7 @@ export class SupabaseService implements DatabaseService {
     const { data, error } = await this.client.from('mcp_connections').upsert(
       {
         user_id: connection.user_id,
+        channel_id: connection.channel_id,
         server_id: connection.server_id,
         server_name: connection.server_name,
         server_url: connection.server_url,
@@ -978,13 +1120,24 @@ export class SupabaseService implements DatabaseService {
         updated_at: new Date().toISOString(),
       },
       {
-        onConflict: 'user_id,server_id',
+        onConflict: 'user_id,channel_id,server_id',
       },
     );
 
     if (error) {
-      dbLogger.error(`🔗 [DB] Error saving MCP connection:`, error);
-      throw error;
+      const dbError = new Error(
+        `Failed to save MCP connection: ${error.message}`,
+      );
+      dbLogger.error(
+        `🔗 [DB] Error saving MCP connection: ${error.message} (code: ${(error as any).code})`,
+        dbError,
+        {
+          details: (error as any).details,
+          hint: (error as any).hint,
+          serverId: connection.server_id,
+        } as any,
+      );
+      throw dbError;
     }
 
     dbLogger.info(`🔗 [DB] MCP connection saved successfully`);
@@ -992,27 +1145,43 @@ export class SupabaseService implements DatabaseService {
 
   async getUserMCPConnection(
     userId: string,
+    channelId: string,
     serverId: string,
   ): Promise<SavedMCPConnection | null> {
-    dbLogger.info(`🔗 [DB] getUserMCPConnection called:`, { userId, serverId });
+    dbLogger.info(`🔗 [DB] getUserMCPConnection called:`, {
+      userId,
+      channelId,
+      serverId,
+    });
 
     const { data, error } = await this.client
       .from('mcp_connections')
       .select('*')
       .eq('user_id', userId)
+      .eq('channel_id', channelId)
       .eq('server_id', serverId)
       .limit(1)
       .single();
 
     if (error || !data) {
+      // Also check what connections exist for this user/server combo
+      const { data: allForServer } = await this.client
+        .from('mcp_connections')
+        .select('channel_id')
+        .eq('user_id', userId)
+        .eq('server_id', serverId);
+
       dbLogger.info('No MCP connection found', {
         error: error?.message || 'no data',
+        searchedChannelId: channelId,
+        existingChannelsForServer: allForServer?.map((c) => c.channel_id) || [],
       });
       return null;
     }
 
     const connection: SavedMCPConnection = {
       user_id: data.user_id,
+      channel_id: data.channel_id,
       server_id: data.server_id,
       server_name: data.server_name,
       server_url: data.server_url,
@@ -1031,13 +1200,20 @@ export class SupabaseService implements DatabaseService {
     return connection;
   }
 
-  async getUserMCPConnections(userId: string): Promise<SavedMCPConnection[]> {
-    dbLogger.info('getUserMCPConnections called for user', { userId });
+  async getUserMCPConnections(
+    userId: string,
+    channelId: string,
+  ): Promise<SavedMCPConnection[]> {
+    dbLogger.info('getUserMCPConnections called for user', {
+      userId,
+      channelId,
+    });
 
     const { data, error } = await this.client
       .from('mcp_connections')
       .select('*')
       .eq('user_id', userId)
+      .eq('channel_id', channelId)
       .order('connected_at', { ascending: false });
 
     if (error) {
@@ -1047,6 +1223,7 @@ export class SupabaseService implements DatabaseService {
 
     const connections: SavedMCPConnection[] = (data || []).map((row: any) => ({
       user_id: row.user_id,
+      channel_id: row.channel_id,
       server_id: row.server_id,
       server_name: row.server_name,
       server_url: row.server_url,
@@ -1058,18 +1235,20 @@ export class SupabaseService implements DatabaseService {
     }));
 
     dbLogger.info(
-      `🔗 [DB] Found ${connections.length} MCP connections for user ${userId}`,
+      `🔗 [DB] Found ${connections.length} MCP connections for user ${userId} in channel ${channelId}`,
     );
     return connections;
   }
 
   async updateUserMCPConnection(
     userId: string,
+    channelId: string,
     serverId: string,
     updates: Partial<SavedMCPConnection>,
   ): Promise<void> {
     dbLogger.info(`🔗 [DB] updateUserMCPConnection called:`, {
       userId,
+      channelId,
       serverId,
       updates,
     });
@@ -1091,6 +1270,7 @@ export class SupabaseService implements DatabaseService {
       .from('mcp_connections')
       .update(updateData)
       .eq('user_id', userId)
+      .eq('channel_id', channelId)
       .eq('server_id', serverId);
 
     if (error) {
@@ -1103,10 +1283,12 @@ export class SupabaseService implements DatabaseService {
 
   async deleteUserMCPConnection(
     userId: string,
+    channelId: string,
     serverId: string,
   ): Promise<void> {
     dbLogger.info(`🔗 [DB] deleteUserMCPConnection called:`, {
       userId,
+      channelId,
       serverId,
     });
 
@@ -1114,6 +1296,7 @@ export class SupabaseService implements DatabaseService {
       .from('mcp_connections')
       .delete()
       .eq('user_id', userId)
+      .eq('channel_id', channelId)
       .eq('server_id', serverId);
 
     if (error) {
@@ -1127,28 +1310,35 @@ export class SupabaseService implements DatabaseService {
   // Connection Pool Service methods
   async storeConnectionDetails(
     userId: string,
+    channelId: string,
     mcpServerConfigId: string,
     status: string,
     metadata?: any,
+    mcpServerUrl?: string,
   ): Promise<void> {
     // Log the connection attempt for tracking purposes
     console.log('Storing connection details:', {
       userId,
+      channelId,
       mcpServerConfigId,
       status,
       metadata,
+      mcpServerUrl,
     });
 
     dbLogger.info(`🔗 [DB] storeConnectionDetails called:`, {
       userId,
+      channelId,
       mcpServerConfigId,
       status,
       metadata,
+      mcpServerUrl,
     });
 
     // First check if connection already exists
     const existingConnection = await this.getUserMCPConnection(
       userId,
+      channelId,
       mcpServerConfigId,
     );
 
@@ -1165,19 +1355,69 @@ export class SupabaseService implements DatabaseService {
         .from('mcp_connections')
         .update(updateData)
         .eq('user_id', userId)
+        .eq('channel_id', channelId)
         .eq('server_id', mcpServerConfigId);
 
       if (error) {
-        dbLogger.error(`🔗 [DB] Error updating connection details:`, error);
-        throw error;
+        const dbError = new Error(
+          `Failed to update connection details: ${error.message}`,
+        );
+        dbLogger.error(
+          `🔗 [DB] Error updating connection details: ${error.message} (code: ${(error as any).code})`,
+          dbError,
+        );
+        throw dbError;
       }
 
       dbLogger.info(`🔗 [DB] Connection details updated successfully`);
     } else {
-      // Create new connection record (though this should rarely happen as connections are usually created via saveUserMCPConnection)
-      dbLogger.warn(
-        `🔗 [DB] Connection not found, cannot store details without server_url`,
-      );
+      // Create new connection record if we have a server URL
+      if (mcpServerUrl) {
+        dbLogger.info(
+          `🔗 [DB] Creating new connection record for ${mcpServerConfigId}`,
+        );
+
+        // Generate a fallback name from URL
+        let fallbackName = 'MCP Server';
+        try {
+          const url = new URL(mcpServerUrl);
+          fallbackName = url.hostname;
+        } catch {
+          fallbackName = 'MCP Server';
+        }
+
+        const dbStatus = this.mapStatusToDatabase(status);
+        const { error } = await this.client.from('mcp_connections').insert({
+          user_id: userId,
+          channel_id: channelId,
+          server_id: mcpServerConfigId,
+          server_name: fallbackName,
+          server_url: mcpServerUrl,
+          status: dbStatus,
+          tools: '[]',
+          error_message: null,
+          connected_at: null,
+          last_used: null,
+          updated_at: new Date().toISOString(),
+        });
+
+        if (error) {
+          const dbError = new Error(
+            `Failed to create connection record: ${error.message}`,
+          );
+          dbLogger.error(
+            `🔗 [DB] Error creating connection record: ${error.message} (code: ${(error as any).code})`,
+            dbError,
+          );
+          throw dbError;
+        }
+
+        dbLogger.info(`🔗 [DB] Connection record created successfully`);
+      } else {
+        dbLogger.warn(
+          `🔗 [DB] Connection not found and no server_url provided, cannot create connection`,
+        );
+      }
     }
   }
 
@@ -1202,6 +1442,7 @@ export class SupabaseService implements DatabaseService {
 
   async updateConnectionStatus(
     userId: string,
+    channelId: string,
     mcpServerConfigId: string,
     mcpServerUrl: string,
     status: string,
@@ -1210,6 +1451,7 @@ export class SupabaseService implements DatabaseService {
     // Log the connection status update for tracking purposes
     console.log('Updating connection status:', {
       userId,
+      channelId,
       mcpServerConfigId,
       mcpServerUrl,
       status,
@@ -1218,6 +1460,7 @@ export class SupabaseService implements DatabaseService {
 
     dbLogger.info(`🔗 [DB] updateConnectionStatus called:`, {
       userId,
+      channelId,
       mcpServerConfigId,
       mcpServerUrl,
       status,
@@ -1225,22 +1468,12 @@ export class SupabaseService implements DatabaseService {
     });
 
     const dbStatus = this.mapStatusToDatabase(status);
+
+    // Build update data - only update status and error-related fields
+    // DO NOT overwrite tools, server_name, or other existing data
     const updateData: any = {
       status: dbStatus,
-      server_url: mcpServerUrl,
-    };
-
-    // Note: metadata and updated_at are not stored in the database schema, only logged for debugging
-
-    // Use UPSERT to handle both insert and update cases
-    const connectionData: any = {
-      user_id: userId,
-      server_id: mcpServerConfigId,
-      server_url: mcpServerUrl,
-      server_name: mcpServerConfigId, // Use server ID as fallback name initially
-      status: dbStatus,
-      tools: '[]',
-      connected_at: new Date().toISOString(),
+      server_url: mcpServerUrl, // Keep URL updated in case it changed
     };
 
     // Add error message if it's a failed connection
@@ -1248,24 +1481,96 @@ export class SupabaseService implements DatabaseService {
       (dbStatus === 'error' || dbStatus === 'disconnected') &&
       metadata?.lastFailureError
     ) {
-      connectionData.error_message = metadata.lastFailureError;
+      updateData.error_message = metadata.lastFailureError;
+    } else if (dbStatus === 'connected') {
+      // Clear error message on successful connection
+      updateData.error_message = null;
     }
 
-    const { data, error } = await this.client
+    // First, try to UPDATE the existing record
+    const { data: updateResult, error: updateError } = await this.client
       .from('mcp_connections')
-      .upsert(connectionData, {
-        onConflict: 'user_id,server_id',
-        ignoreDuplicates: false,
-      })
+      .update(updateData)
+      .eq('user_id', userId)
+      .eq('channel_id', channelId)
+      .eq('server_id', mcpServerConfigId)
       .select();
 
-    if (error) {
-      dbLogger.error(`🔗 [DB] Error upserting connection status:`, error);
-      throw error;
+    // If no rows were updated, the connection doesn't exist yet - create it
+    if (!updateError && (!updateResult || updateResult.length === 0)) {
+      dbLogger.info(`🔗 [DB] Connection not found, creating new record`);
+
+      // Generate a human-readable fallback name from the URL
+      let fallbackServerName = 'MCP Server';
+      try {
+        const url = new URL(mcpServerUrl);
+        fallbackServerName = url.hostname;
+      } catch {
+        fallbackServerName = 'MCP Server';
+      }
+
+      const connectionData: any = {
+        user_id: userId,
+        channel_id: channelId,
+        server_id: mcpServerConfigId,
+        server_url: mcpServerUrl,
+        server_name: fallbackServerName,
+        status: dbStatus,
+        tools: '[]',
+        connected_at: new Date().toISOString(),
+      };
+
+      if (updateData.error_message) {
+        connectionData.error_message = updateData.error_message;
+      }
+
+      const { data, error } = await this.client
+        .from('mcp_connections')
+        .insert(connectionData)
+        .select();
+
+      if (error) {
+        const dbError = new Error(
+          `Failed to insert connection: ${error.message}`,
+        );
+        dbLogger.error(
+          `🔗 [DB] Error inserting connection status: ${error.message} (code: ${(error as any).code})`,
+          dbError,
+          {
+            details: (error as any).details,
+            hint: (error as any).hint,
+            connectionData: JSON.stringify(connectionData),
+          } as any,
+        );
+        throw dbError;
+      }
+
+      dbLogger.info(`🔗 [DB] Connection created successfully`, {
+        serverId: mcpServerConfigId,
+        status: dbStatus,
+      });
+      return;
     }
 
-    dbLogger.info(`🔗 [DB] Connection status upserted successfully`, {
-      rowsAffected: data ? data.length : 0,
+    // Handle UPDATE error
+    if (updateError) {
+      const dbError = new Error(
+        `Failed to update connection: ${updateError.message}`,
+      );
+      dbLogger.error(
+        `🔗 [DB] Error updating connection status: ${updateError.message} (code: ${(updateError as any).code})`,
+        dbError,
+        {
+          details: (updateError as any).details,
+          hint: (updateError as any).hint,
+          updateData: JSON.stringify(updateData),
+        } as any,
+      );
+      throw dbError;
+    }
+
+    dbLogger.info(`🔗 [DB] Connection status updated successfully`, {
+      rowsAffected: updateResult ? updateResult.length : 0,
       serverId: mcpServerConfigId,
       status: dbStatus,
     });
@@ -1282,10 +1587,12 @@ export class SupabaseService implements DatabaseService {
           'RECONNECTING',
           'CONNECTION_REQUESTED',
           'connected',
+          'error',
           'FAILED_INVOKE_TOOL',
         ])
         .not('status', 'eq', 'DISCONNECTED_BY_USER')
-        .not('status', 'eq', 'CONNECTION_FAILED');
+        .not('status', 'eq', 'CONNECTION_FAILED')
+        .not('server_url', 'is', null); // Filter out connections without server_url
 
       if (error) {
         dbLogger.error('Error fetching reconnectable connections:', error);
@@ -1295,8 +1602,28 @@ export class SupabaseService implements DatabaseService {
       dbLogger.info(
         `Found ${data?.length || 0} reconnectable connections in database`,
       );
-      return (data || []).map((conn: any) => ({
+
+      // Additionally filter in JavaScript to ensure we have valid data
+      const validConnections = (data || []).filter((conn: any) => {
+        const isValid =
+          conn.user_id && conn.server_id && conn.server_url && conn.channel_id;
+        if (!isValid) {
+          dbLogger.warn(
+            `Skipping invalid connection record: ${conn.server_id} - missing required fields`,
+            {
+              hasUserId: !!conn.user_id,
+              hasServerId: !!conn.server_id,
+              hasServerUrl: !!conn.server_url,
+              hasChannelId: !!conn.channel_id,
+            } as any,
+          );
+        }
+        return isValid;
+      });
+
+      return validConnections.map((conn: any) => ({
         userId: conn.user_id,
+        channel_id: conn.channel_id,
         mcpServerConfigId: conn.server_id,
         mcpServerBaseUrl: conn.server_url,
         status: conn.status,
@@ -1305,6 +1632,130 @@ export class SupabaseService implements DatabaseService {
     } catch (error) {
       dbLogger.error('Error in getReconnectableConnections:', error as Error);
       return [];
+    }
+  }
+
+  // ===========================
+  // Chat Threads Methods
+  // ===========================
+
+  async createChatThread(data: {
+    thread_id: string;
+    channel_id: string;
+    user_id: string;
+  }): Promise<void> {
+    try {
+      const { error } = await this.client.from('chat_threads').insert({
+        thread_id: data.thread_id,
+        channel_id: data.channel_id,
+        user_id: data.user_id,
+        conversation_history: [],
+        is_active: true,
+        last_activity: new Date().toISOString(),
+      });
+
+      if (error) {
+        dbLogger.error('Error creating chat thread:', error as Error);
+        throw error;
+      }
+
+      dbLogger.info(`Chat thread created: ${data.thread_id}`);
+    } catch (error) {
+      dbLogger.error('Error in createChatThread:', error as Error);
+      throw error;
+    }
+  }
+
+  async getChatThread(threadId: string): Promise<{
+    id: string;
+    thread_id: string;
+    channel_id: string;
+    user_id: string;
+    conversation_history: Array<{ role: string; content: string }>;
+    is_active: boolean;
+    created_at: Date;
+    last_activity: Date;
+  } | null> {
+    try {
+      const { data, error } = await this.client
+        .from('chat_threads')
+        .select('*')
+        .eq('thread_id', threadId)
+        .single();
+
+      if (error || !data) {
+        return null;
+      }
+
+      return {
+        id: data.id,
+        thread_id: data.thread_id,
+        channel_id: data.channel_id,
+        user_id: data.user_id,
+        conversation_history: data.conversation_history || [],
+        is_active: data.is_active,
+        created_at: new Date(data.created_at),
+        last_activity: new Date(data.last_activity),
+      };
+    } catch (error) {
+      dbLogger.error('Error in getChatThread:', error as Error);
+      return null;
+    }
+  }
+
+  async updateThreadHistory(
+    threadId: string,
+    message: { role: string; content: string },
+  ): Promise<void> {
+    try {
+      // Get current history
+      const thread = await this.getChatThread(threadId);
+      if (!thread) {
+        throw new Error(`Thread ${threadId} not found`);
+      }
+
+      // Append new message to history, keep last 50 messages
+      const history = thread.conversation_history;
+      history.push(message);
+      if (history.length > 50) {
+        history.shift();
+      }
+
+      // Update thread
+      const { error } = await this.client
+        .from('chat_threads')
+        .update({
+          conversation_history: history,
+          last_activity: new Date().toISOString(),
+        })
+        .eq('thread_id', threadId);
+
+      if (error) {
+        dbLogger.error('Error updating thread history:', error as Error);
+        throw error;
+      }
+    } catch (error) {
+      dbLogger.error('Error in updateThreadHistory:', error as Error);
+      throw error;
+    }
+  }
+
+  async deactivateChatThread(threadId: string): Promise<void> {
+    try {
+      const { error } = await this.client
+        .from('chat_threads')
+        .update({ is_active: false })
+        .eq('thread_id', threadId);
+
+      if (error) {
+        dbLogger.error('Error deactivating chat thread:', error as Error);
+        throw error;
+      }
+
+      dbLogger.info(`Chat thread deactivated: ${threadId}`);
+    } catch (error) {
+      dbLogger.error('Error in deactivateChatThread:', error as Error);
+      throw error;
     }
   }
 }

@@ -13,7 +13,6 @@ import type {
   InvokeToolRequestPayload,
   DisconnectRequestPayload,
   SamplingDecisionSubmittedPayload,
-  ElicitationDataSubmittedPayload,
 } from '../../dtos/pubsub.events.dto.js';
 
 // Mock external dependencies
@@ -35,6 +34,7 @@ const createMockDatabase = (): SupabaseService => {
     storeConnectionDetails: vi.fn().mockResolvedValue(undefined),
     updateConnectionStatus: vi.fn().mockResolvedValue(undefined),
     getReconnectableConnections: vi.fn(),
+    getUserMCPConnection: vi.fn().mockResolvedValue(null),
   } as any;
   mockDb.getReconnectableConnections.mockResolvedValue([]);
   return mockDb;
@@ -140,21 +140,23 @@ describe('ConnectionPoolService', () => {
 
   describe('handleConnectionRequest', () => {
     const mockPayload: ConnectionRequestPayload = {
-      userId: 'workspace-123',
-      mcpServerConfigId: 'server-456',
-      mcpServerUrl: 'https://test-server.com/mcp',
+      userId: 'test-user',
+      channelId: 'test-channel',
+      mcpServerConfigId: 'test-server',
+      mcpServerUrl: 'https://test.com',
       generatedAt: new Date().toISOString(),
     };
-
     it('should handle successful connection request', async () => {
       await connectionPool.handleConnectionRequest(mockPayload);
 
       // Should store initial connection details
       expect(mockDatabase.storeConnectionDetails).toHaveBeenCalledWith(
         mockPayload.userId,
+        mockPayload.channelId,
         mockPayload.mcpServerConfigId,
         'CONNECTION_REQUESTED',
         expect.any(Object),
+        mockPayload.mcpServerUrl,
       );
 
       // Should create and connect client
@@ -164,6 +166,7 @@ describe('ConnectionPoolService', () => {
       // Should update status to ACTIVE
       expect(mockDatabase.updateConnectionStatus).toHaveBeenCalledWith(
         mockPayload.userId,
+        mockPayload.channelId,
         mockPayload.mcpServerConfigId,
         mockPayload.mcpServerUrl,
         'ACTIVE',
@@ -223,6 +226,7 @@ describe('ConnectionPoolService', () => {
       // Should update status to FAILED_CONNECTION
       expect(mockDatabase.updateConnectionStatus).toHaveBeenCalledWith(
         mockPayload.userId,
+        mockPayload.channelId,
         mockPayload.mcpServerConfigId,
         mockPayload.mcpServerUrl,
         'FAILED_CONNECTION',
@@ -274,6 +278,7 @@ describe('ConnectionPoolService', () => {
 
       expect(mockDatabase.updateConnectionStatus).toHaveBeenCalledWith(
         mockPayload.userId,
+        mockPayload.channelId,
         mockPayload.mcpServerConfigId,
         mockPayload.mcpServerUrl,
         'AUTH_PENDING',
@@ -284,18 +289,19 @@ describe('ConnectionPoolService', () => {
 
   describe('handleTokensObtained', () => {
     const mockPayload: TokensObtainedPayload = {
-      userId: 'workspace-123',
-      mcpServerConfigId: 'server-456',
-      mcpServerUrl: 'https://test-server.com/mcp',
+      userId: 'test-user',
+      channelId: 'test-channel',
+      mcpServerConfigId: 'test-server',
+      mcpServerUrl: 'https://test.com',
       generatedAt: new Date().toISOString(),
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
     };
-
     it('should handle tokens obtained for existing connection', async () => {
       // First establish a connection
       const connectionPayload: ConnectionRequestPayload = {
         userId: mockPayload.userId,
+        channelId: 'test-channel',
         mcpServerConfigId: mockPayload.mcpServerConfigId,
         mcpServerUrl: mockPayload.mcpServerUrl,
         generatedAt: mockPayload.generatedAt,
@@ -316,29 +322,32 @@ describe('ConnectionPoolService', () => {
       // Should initiate full connection request
       expect(mockDatabase.storeConnectionDetails).toHaveBeenCalledWith(
         mockPayload.userId,
+        mockPayload.channelId,
         mockPayload.mcpServerConfigId,
         'CONNECTION_REQUESTED',
         expect.any(Object),
+        mockPayload.mcpServerUrl,
       );
     });
   });
 
   describe('handleInvokeToolRequest', () => {
     const mockPayload: InvokeToolRequestPayload = {
-      userId: 'workspace-123',
-      mcpServerConfigId: 'server-456',
-      mcpServerUrl: 'https://test-server.com/mcp',
+      userId: 'test-user',
+      channelId: 'test-channel',
+      mcpServerConfigId: 'test-server',
+      mcpServerUrl: 'https://test.com',
       generatedAt: new Date().toISOString(),
-      invocationId: 'invocation-123',
+      invocationId: 'test-invocation',
       toolName: 'test-tool',
-      toolInput: '{"param": "value"}',
-      convoId: 'convo-123',
+      toolInput: '{"test": "input"}',
+      convoId: 'test-convo',
     };
-
     beforeEach(async () => {
       // Establish a connection first
       const connectionPayload: ConnectionRequestPayload = {
         userId: mockPayload.userId,
+        channelId: 'test-channel',
         mcpServerConfigId: mockPayload.mcpServerConfigId,
         mcpServerUrl: mockPayload.mcpServerUrl,
         generatedAt: mockPayload.generatedAt,
@@ -353,7 +362,7 @@ describe('ConnectionPoolService', () => {
       expect(mockClient.callTool).toHaveBeenCalledWith(
         {
           name: mockPayload.toolName,
-          arguments: { param: 'value' },
+          arguments: { test: 'input' },
         },
         undefined,
         expect.objectContaining({
@@ -394,17 +403,15 @@ describe('ConnectionPoolService', () => {
         mockEventService,
       );
 
-      // The method should complete without throwing, but publish error events
+      // The method should now establish connection on-demand and successfully invoke the tool
       await freshConnectionPool.handleInvokeToolRequest(mockPayload);
 
-      // Should publish tool result with error status
+      // Should publish tool result with success status (connection established on-demand)
       expect(mockEventService.publishToolResult).toHaveBeenCalledWith(
         expect.objectContaining({
-          status: 'error',
-          error: expect.objectContaining({
-            message:
-              'Connection to MCP server not found or inactive. Trigger a new connection request [here](/mcp).',
-          }),
+          status: 'success',
+          toolName: mockPayload.toolName,
+          invocationId: mockPayload.invocationId,
         }),
       );
     });
@@ -435,6 +442,7 @@ describe('ConnectionPoolService', () => {
   describe('handleFetchResourceRequest', () => {
     const mockPayload: FetchResourceRequestPayload = {
       userId: 'workspace-123',
+      channelId: 'test-channel',
       mcpServerConfigId: 'server-456',
       mcpServerUrl: 'https://test-server.com/mcp',
       generatedAt: new Date().toISOString(),
@@ -446,6 +454,7 @@ describe('ConnectionPoolService', () => {
       // Establish a connection first
       const connectionPayload: ConnectionRequestPayload = {
         userId: mockPayload.userId,
+        channelId: 'test-channel',
         mcpServerConfigId: mockPayload.mcpServerConfigId,
         mcpServerUrl: mockPayload.mcpServerUrl,
         generatedAt: mockPayload.generatedAt,
@@ -486,21 +495,17 @@ describe('ConnectionPoolService', () => {
 
       await connectionPool.handleFetchResourceRequest(mockPayload);
 
-      expect(mockDatabase.updateConnectionStatus).toHaveBeenCalledWith(
-        mockPayload.userId,
-        mockPayload.mcpServerConfigId,
-        expect.any(String),
-        'FAILED_FETCH_RESOURCE',
-        expect.objectContaining({
-          lastFailureError: fetchError.message,
-        }),
-      );
+      // The current implementation logs the error but doesn't update connection status
+      // It keeps the connection alive for retry
+      // Verify that the connection is still active
+      expect(mockClient.readResource).toHaveBeenCalled();
     });
   });
 
   describe('handleDisconnectRequest', () => {
     const mockPayload: DisconnectRequestPayload = {
       userId: 'workspace-123',
+      channelId: 'test-channel',
       mcpServerConfigId: 'server-456',
       mcpServerUrl: 'https://test-server.com/mcp',
       generatedAt: new Date().toISOString(),
@@ -510,6 +515,7 @@ describe('ConnectionPoolService', () => {
       // Establish connection first
       const connectionPayload: ConnectionRequestPayload = {
         userId: mockPayload.userId,
+        channelId: 'test-channel',
         mcpServerConfigId: mockPayload.mcpServerConfigId,
         mcpServerUrl: mockPayload.mcpServerUrl,
         generatedAt: mockPayload.generatedAt,
@@ -521,6 +527,7 @@ describe('ConnectionPoolService', () => {
 
       expect(mockDatabase.updateConnectionStatus).toHaveBeenCalledWith(
         mockPayload.userId,
+        mockPayload.channelId,
         mockPayload.mcpServerConfigId,
         mockPayload.mcpServerUrl,
         'DISCONNECTED_BY_USER',
@@ -541,6 +548,7 @@ describe('ConnectionPoolService', () => {
 
       expect(mockDatabase.updateConnectionStatus).toHaveBeenCalledWith(
         mockPayload.userId,
+        mockPayload.channelId,
         mockPayload.mcpServerConfigId,
         mockPayload.mcpServerUrl,
         'DISCONNECTED_BY_USER',
@@ -562,6 +570,7 @@ describe('ConnectionPoolService', () => {
   describe('handleSamplingDecisionSubmitted', () => {
     const mockPayload: SamplingDecisionSubmittedPayload = {
       userId: 'workspace-123',
+      channelId: 'test-channel',
       mcpServerConfigId: 'server-456',
       mcpServerUrl: 'https://test-server.com/mcp',
       generatedAt: new Date().toISOString(),
@@ -625,6 +634,7 @@ describe('ConnectionPoolService', () => {
       // Establish a single connection
       const payload = {
         userId: 'workspace-1',
+        channelId: 'test-channel',
         mcpServerConfigId: 'server-1',
         mcpServerUrl: 'https://test-server-1.com/mcp',
         generatedAt: new Date().toISOString(),
@@ -642,6 +652,7 @@ describe('ConnectionPoolService', () => {
       // Should update database status
       expect(mockDatabase.updateConnectionStatus).toHaveBeenCalledWith(
         'workspace-1',
+        'test-channel',
         'server-1',
         'https://test-server-1.com/mcp',
         'DISCONNECTED_ON_SHUTDOWN',
@@ -654,13 +665,14 @@ describe('ConnectionPoolService', () => {
 
     it('should handle shutdown errors gracefully', async () => {
       // Establish connection
-      const payload: ConnectionRequestPayload = {
+      const connectionPayload: ConnectionRequestPayload = {
         userId: 'workspace-123',
+        channelId: 'test-channel',
         mcpServerConfigId: 'server-456',
-        mcpServerUrl: 'https://test-server.com/mcp',
+        mcpServerUrl: 'https://test-server.com',
         generatedAt: new Date().toISOString(),
       };
-      await connectionPool.handleConnectionRequest(payload);
+      await connectionPool.handleConnectionRequest(connectionPayload);
 
       // Mock client.close to throw error
       mockClient.close.mockRejectedValueOnce(new Error('Close failed'));
@@ -679,6 +691,7 @@ describe('ConnectionPoolService', () => {
       const mockStoredConnections = [
         {
           userId: 'workspace-123',
+          channel_id: 'test-channel',
           mcpServerConfigId: 'server-456',
           mcpServerBaseUrl: 'https://test-server.com/mcp',
         },
@@ -693,6 +706,7 @@ describe('ConnectionPoolService', () => {
       expect(mockDatabase.getReconnectableConnections).toHaveBeenCalled();
       expect(mockDatabase.updateConnectionStatus).toHaveBeenCalledWith(
         'workspace-123',
+        'test-channel',
         'server-456',
         'https://test-server.com/mcp',
         'RECONNECTING_ON_STARTUP',

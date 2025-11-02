@@ -21,3 +21,19 @@ export const getNamespaceMetrics = async (
   const res = await usageTrackerActor.get_namespace_metrics(namespace);
   return fromNullable(res);
 };
+
+export const getNamespaceTools = async (
+  namespace: string,
+): Promise<UsageTracker.ToolMetrics[]> => {
+  const usageTrackerActor = getUsageTrackerActor();
+  const res = await usageTrackerActor.get_namespace_tools(namespace);
+  return res;
+};
+
+export const getNamespaceMetricsDetailed = async (
+  namespace: string,
+): Promise<UsageTracker.NamespaceMetricsDetailed | undefined> => {
+  const usageTrackerActor = getUsageTrackerActor();
+  const res = await usageTrackerActor.get_namespace_metrics_detailed(namespace);
+  return fromNullable(res);
+};

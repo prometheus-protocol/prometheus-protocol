@@ -1167,6 +1167,22 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     return Nat.toText(major) # "." # Nat.toText(minor) # "." # Nat.toText(patch);
   };
 
+  /**
+   * Fetches the full WASM record for a given hash.
+   * This includes the `created` timestamp which is not available in CanisterVersion.
+   */
+  private func _get_wasm_by_hash(wasm_hash : Blob) : ?Service.Wasm {
+    let results = icrc118wasmregistry().icrc118_get_wasms({
+      filter = ?[#hash(wasm_hash)];
+      prev = null;
+      take = ?1;
+    });
+    if (results.size() == 1) {
+      return ?results[0];
+    };
+    return null;
+  };
+
   // --- PRIVATE HELPER: Encapsulates the logic for building a single listing ---
   // This takes a CanisterType and returns a fully formed AppListing, or null if it shouldn't be listed.
   private func _build_listing_for_canister_type(canister_type : ICRC118WasmRegistry.CanisterType) : ?AppStore.AppListing {
@@ -1203,6 +1219,13 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     let audit_records = _get_audit_records_for_wasm(wasm_id);
     let completed_audits = AppStore.get_completed_audit_types(audit_records);
 
+    // Fetch the full WASM record to get the created timestamp
+    let wasm_record_opt = _get_wasm_by_hash(latest_version.calculated_hash);
+    let created_timestamp = switch (wasm_record_opt) {
+      case (?wasm_record) { wasm_record.created };
+      case (null) { 0 }; // Fallback to 0 if not found (shouldn't happen)
+    };
+
     let verification_request = Map.get(icrc126().state.requests, Map.thash, wasm_id);
     switch (verification_request) {
       case (?req) {
@@ -1233,6 +1256,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
             version_string = _format_version_number(latest_version.version_number);
             security_tier = AppStore.calculate_security_tier(is_latest_verified, completed_audits);
             status = if (is_latest_verified) #Verified else #Pending;
+            created = created_timestamp;
           };
         };
       };
@@ -1436,11 +1460,20 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       if (is_verified) {
         let records = _get_audit_records_for_wasm(wasm_id);
         let completed_audits = AppStore.get_completed_audit_types(records);
+
+        // Fetch the full WASM record to get the created timestamp
+        let wasm_record_opt = _get_wasm_by_hash(version_record.calculated_hash);
+        let created_timestamp = switch (wasm_record_opt) {
+          case (?wasm_record) { wasm_record.created };
+          case (null) { 0 }; // Fallback to 0 if not found (shouldn't happen)
+        };
+
         all_versions_summary.add({
           wasm_id = wasm_id;
           version_string = _format_version_number(version_record.version_number);
           security_tier = AppStore.calculate_security_tier(true, completed_audits);
           status = #Verified;
+          created = created_timestamp;
         });
       };
     };
@@ -1449,6 +1482,14 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     let latest_build_info = _build_build_info(latest_audit_records);
     let is_verified = _is_wasm_verified(wasm_id_to_load);
     let status = if (is_verified) { #Verified } else { #Pending };
+
+    // Fetch the full WASM record to get the created timestamp
+    let latest_wasm_record_opt = _get_wasm_by_hash(version_to_load_record.calculated_hash);
+    let latest_created_timestamp = switch (latest_wasm_record_opt) {
+      case (?wasm_record) { wasm_record.created };
+      case (null) { 0 }; // Fallback to 0 if not found (shouldn't happen)
+    };
+
     let latest_version_details : AppStore.AppVersionDetails = {
       wasm_id = wasm_id_to_load;
       version_string = _format_version_number(version_to_load_record.version_number);
@@ -1459,6 +1500,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       data_safety = _get_data_safety_from_records(latest_audit_records);
       bounties = latest_bounties;
       audit_records = latest_audit_records;
+      created = latest_created_timestamp;
     };
 
     // 6. Assemble the stable, top-level app information.

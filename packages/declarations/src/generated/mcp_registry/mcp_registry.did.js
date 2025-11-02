@@ -42,6 +42,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const AppVersionSummary = IDL.Record({
     'status' : AppListingStatus,
+    'created' : IDL.Nat,
     'security_tier' : SecurityTier,
     'wasm_id' : IDL.Text,
     'version_string' : IDL.Text,
@@ -177,6 +178,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const AppVersionDetails = IDL.Record({
     'status' : AppListingStatus,
+    'created' : IDL.Nat,
     'tools' : IDL.Vec(ICRC16Map),
     'bounties' : IDL.Vec(Bounty),
     'security_tier' : SecurityTier,

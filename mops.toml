@@ -2,7 +2,7 @@
 base = "0.14.14"
 new-base = "0.4.0"
 class-plus = "0.0.2"
-timer-tool = "0.1.1"
+timer-tool = "https://github.com/jneums/timerTool#2a60096"
 map = "9.0.1"
 icrc10-mo = "0.0.1"
 stable-local-log = "0.1.1"

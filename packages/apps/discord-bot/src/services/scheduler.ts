@@ -1,6 +1,11 @@
 import { schedulerLogger } from '../utils/logger.js';
 import * as cron from 'node-cron';
-import { AlertConfig, AlertResult, DatabaseService } from '../types/index.js';
+import {
+  AlertConfig,
+  AlertResult,
+  DatabaseService,
+  ConversationMessage,
+} from '../types/index.js';
 import { ConfigManager } from '../config/index.js';
 import { Client } from 'discord.js';
 import { LLMService } from './llm.js';
@@ -96,9 +101,10 @@ export class AlertScheduler {
     }
     this.alerts.delete(alertId);
 
-    // Remove from database
+    // Remove from database (both alert_configs and user_tasks)
     try {
       await this.database.deleteAlert(alertId);
+      await this.database.deleteUserTask(alertId);
       schedulerLogger.info('Alert removed and deleted from database', {
         alertId,
       });
@@ -171,6 +177,46 @@ export class AlertScheduler {
         task.stop();
         this.tasks.delete(alertId);
       }
+    }
+  }
+
+  async updateAlertInterval(
+    alertId: string,
+    newInterval: number,
+  ): Promise<void> {
+    const alert = this.alerts.get(alertId);
+    if (!alert) {
+      throw new Error(`Alert ${alertId} not found`);
+    }
+
+    // Update the interval
+    alert.interval = newInterval;
+
+    // Update in database
+    try {
+      await this.database.updateAlert(alert);
+      schedulerLogger.info('Alert interval updated in database', {
+        alertId,
+        alertName: alert.name,
+        newInterval,
+      });
+    } catch (error) {
+      schedulerLogger.error(
+        'Failed to update alert interval in database',
+        error instanceof Error ? error : new Error(String(error)),
+        { alertId },
+      );
+      throw error;
+    }
+
+    // If the alert is enabled, reschedule it with the new interval
+    if (alert.enabled && this.running) {
+      schedulerLogger.info('Rescheduling alert with new interval', {
+        alertId,
+        alertName: alert.name,
+        newInterval,
+      });
+      this.scheduleAlert(alert);
     }
   }
 
@@ -280,21 +326,65 @@ export class AlertScheduler {
     try {
       schedulerLogger.info(`Executing alert: ${alert.name}`);
 
-      // Extract userId for MCP server access
-      const userId = alert.id.split('_')[0];
+      // Use the userId from the alert config (stored when task was created)
+      const userId = alert.userId;
 
       schedulerLogger.info(`Executing scheduled task with MCP access`, {
         taskName: alert.name,
         userId: userId,
+        hasThread: !!alert.threadId,
+        isRecurring: alert.recurring !== false,
       });
+
+      // Fetch user preferences to get timezone
+      let timezoneContext = '';
+      try {
+        const preferences = await this.database.getUserPreferences(userId);
+        if (preferences.timezone) {
+          try {
+            const formatter = new Intl.DateTimeFormat('en-US', {
+              timeZone: preferences.timezone,
+              dateStyle: 'full',
+              timeStyle: 'long',
+            });
+            const userLocalTime = formatter.format(new Date());
+            timezoneContext = `\n\n[CURRENT TIME CONTEXT]\nUTC time: ${new Date().toISOString()}\nYour timezone: ${preferences.timezone}\nYour local time: ${userLocalTime}`;
+          } catch (e) {
+            // Invalid timezone, skip context
+            schedulerLogger.warn('Invalid timezone in user preferences', {
+              userId,
+              timezone: preferences.timezone,
+            });
+          }
+        }
+      } catch (error) {
+        // Failed to fetch preferences, continue without timezone context
+        schedulerLogger.warn('Failed to fetch user preferences for timezone', {
+          userId,
+          error,
+        });
+      }
+
+      // NOTE: Conversation history loading has been disabled for recurring tasks
+      // to reduce API costs. Recurring tasks now execute with only their prompt
+      // and available MCP tools, without previous conversation context.
+      // One-shot tasks also don't need history as they execute once.
+      const history: ConversationMessage[] = [];
+      schedulerLogger.info(
+        `Executing task without conversation history to reduce costs`,
+        { taskName: alert.name },
+      );
+
+      // Inject timezone context into the prompt
+      const enrichedPrompt = alert.prompt + timezoneContext;
 
       // Execute the AI prompt with MCP tools - generateResponse handles all tool calling internally
       const result = await this.llmService.generateResponse(
-        alert.prompt,
+        enrichedPrompt,
         {
           userId: userId,
           channelId: alert.channelId,
-          history: [],
+          history: history,
         },
         userId, // Pass userId for MCP integration
       );
@@ -307,10 +397,44 @@ export class AlertScheduler {
 
       // Send the result if we have content
       if (finalMessage.trim()) {
+        // Use targetChannelId if available, otherwise use channelId
+        const targetChannel = alert.targetChannelId || alert.channelId;
         await this.sendAlertMessage(
-          alert.channelId,
+          targetChannel,
           `🔔 **${alert.name}**\n\n${finalMessage}`,
         );
+
+        // Save the task execution to conversation history so future executions have context
+        try {
+          if (alert.threadId) {
+            // Save to thread history
+            await this.database.updateThreadHistory(alert.threadId, {
+              role: 'user',
+              content: `[Scheduled task: ${alert.name}] ${alert.prompt}`,
+            });
+            await this.database.updateThreadHistory(alert.threadId, {
+              role: 'assistant',
+              content: finalMessage,
+            });
+            schedulerLogger.info('Saved task execution to thread history');
+          } else {
+            // Save to channel conversation history
+            await this.database.saveConversationTurn(
+              userId,
+              alert.channelId,
+              `[Scheduled task: ${alert.name}] ${alert.prompt}`,
+              finalMessage,
+            );
+            schedulerLogger.info(
+              'Saved task execution to conversation history',
+            );
+          }
+        } catch (historyError) {
+          schedulerLogger.warn('Failed to save task execution to history', {
+            error: historyError,
+          });
+          // Don't fail the task if history save fails
+        }
 
         // Save the current state
         await this.database.saveAlertState(
@@ -349,8 +473,53 @@ export class AlertScheduler {
 
       // Update last run time and save to database
       alert.lastRun = new Date();
+
+      // If this is a one-shot task (not recurring), disable it after execution
+      if (alert.recurring === false) {
+        alert.enabled = false;
+        schedulerLogger.info(
+          `One-shot task "${alert.name}" executed - disabling and auto-deleting`,
+          {
+            alertId: alert.id,
+            alertName: alert.name,
+          },
+        );
+
+        // Stop the scheduled task
+        const task = this.tasks.get(alert.id);
+        if (task) {
+          task.stop();
+          this.tasks.delete(alert.id);
+        }
+
+        try {
+          // Update alert_configs table one last time
+          await this.database.updateAlert(alert);
+          // Also update user_tasks table so list_my_tasks shows correct last run
+          await this.database.updateTaskLastRun(alert.id, alert.lastRun);
+
+          // Auto-delete completed one-shot tasks immediately
+          await this.removeAlert(alert.id);
+          schedulerLogger.info(
+            `Auto-deleted completed one-shot task "${alert.name}"`,
+            { alertId: alert.id },
+          );
+
+          return; // Exit early to avoid duplicate database update below
+        } catch (error) {
+          schedulerLogger.error(
+            'Failed to update one-shot task after execution',
+            error instanceof Error ? error : new Error(String(error)),
+            { alertId: alert.id },
+          );
+        }
+      }
+
       try {
+        // Update alert_configs table
         await this.database.updateAlert(alert);
+        // Also update user_tasks table so list_my_tasks shows correct last run
+        await this.database.updateTaskLastRun(alert.id, alert.lastRun);
       } catch (error) {
         schedulerLogger.error(
           'Failed to update alert lastRun time in database',
@@ -564,7 +733,10 @@ export class AlertScheduler {
         });
       } catch (dmError) {
         try {
-          await this.sendAlertMessage(alert.channelId, permissionErrorMessage);
+          await this.sendAlertMessage(
+            alert.targetChannelId || alert.channelId,
+            permissionErrorMessage,
+          );
           schedulerLogger.info(
             'Sent permission error notification to channel',
             {
@@ -620,7 +792,10 @@ export class AlertScheduler {
         `The alert will continue trying to run and will work automatically once you reconnect.`;
 
       try {
-        await this.sendAlertMessage(alert.channelId, authErrorMessage);
+        await this.sendAlertMessage(
+          alert.targetChannelId || alert.channelId,
+          authErrorMessage,
+        );
       } catch (sendError) {
         // If we can't send to the channel, try DM
         try {
@@ -664,7 +839,10 @@ export class AlertScheduler {
     if (errorCount <= 3) {
       const regularErrorMessage = `⚠️ Alert "${alert.name}" failed: ${errorMessage}`;
       try {
-        await this.sendAlertMessage(alert.channelId, regularErrorMessage);
+        await this.sendAlertMessage(
+          alert.targetChannelId || alert.channelId,
+          regularErrorMessage,
+        );
       } catch (sendError) {
         schedulerLogger.error(
           'Could not send error notification to channel',
@@ -688,7 +866,10 @@ export class AlertScheduler {
         await user.send(disableMessage);
       } catch (dmError) {
         try {
-          await this.sendAlertMessage(alert.channelId, disableMessage);
+          await this.sendAlertMessage(
+            alert.targetChannelId || alert.channelId,
+            disableMessage,
+          );
         } catch (channelError) {
           schedulerLogger.error(
             'Could not send alert disable notification',

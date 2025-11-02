@@ -95,8 +95,10 @@ export function VersionSelector({
                     className={cn('w-4 h-4', tierInfo.textColorClass)}
                   />
                   <span className="font-mono">{version.versionString}</span>
-                  <span className="text-muted-foreground">
-                    ({version.securityTier})
+                  <span className="text-muted-foreground text-xs">
+                    {new Date(
+                      Number(version.created / 1_000_000n),
+                    ).toLocaleDateString()}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 ml-4">

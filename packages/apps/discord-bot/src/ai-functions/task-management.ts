@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { logger } from '../utils/logger.js';
 import {
   AIFunction,
@@ -20,15 +21,15 @@ export class TaskManagementFunctions {
 
   private registerFunctions(): void {
     this.functions.set(
-      'create_monitoring_task',
+      'create_task',
       new CreateTaskHandler(this.scheduler, this.database),
     );
     this.functions.set(
-      'list_user_tasks',
+      'list_my_tasks',
       new ListTasksHandler(this.scheduler, this.database),
     );
     this.functions.set(
-      'modify_task',
+      'update_task',
       new ModifyTaskHandler(this.scheduler, this.database),
     );
     this.functions.set(
@@ -36,51 +37,56 @@ export class TaskManagementFunctions {
       new DeleteTaskHandler(this.scheduler, this.database),
     );
     this.functions.set(
-      'get_task_status',
+      'check_task_status',
       new GetTaskStatusHandler(this.scheduler, this.database),
+    );
+    this.functions.set(
+      'save_user_timezone',
+      new SaveTimezoneHandler(this.database),
     );
   }
 
   getFunctions(): AIFunction[] {
     return [
       {
-        name: 'create_monitoring_task',
+        name: 'create_task',
+        title: 'Create Task',
         description:
-          'Create a new monitoring task that will periodically execute an AI prompt with MCP tools and alert the user',
+          'Create a new scheduled task for the current user. Use this to set up recurring monitoring or one-time checks using their available tools. IMPORTANT: Tasks execute without conversation history to reduce costs - make prompts self-contained with all necessary context.\n\nTIME & TIMEZONE IMPORTANT:\n- All tasks run on UTC time internally\n- Current UTC time: ' +
+          new Date().toISOString() +
+          '\n- If user specifies a specific time (like "6:45pm"), ASK them what timezone they mean\n- Once you learn their timezone, call save_user_timezone to remember it for future use\n- Always confirm the time in BOTH UTC and their local timezone to avoid confusion\n- Example: "I\'ll run this at 6:45 PM your time (which is 1:45 AM UTC tomorrow)"\n- For natural language times, calculate the delay from NOW',
         parameters: {
           type: 'object',
           properties: {
+            title: {
+              type: 'string',
+              description:
+                'Clear, descriptive title for this task. Examples: "Check my account balance", "Monitor match predictions", "Alert me about market changes"',
+            },
             prompt: {
               type: 'string',
               description:
-                'AI prompt to execute with MCP tools. This prompt will be run periodically and should check for conditions and return alert messages when needed.',
+                "The AI prompt that will be executed when this task runs. IMPORTANT: Tasks don't have access to conversation history, so this prompt must be completely self-contained. Include all necessary context, parameters, and instructions. Use the user's available tools to gather information.",
+            },
+            recurring: {
+              type: 'boolean',
+              description:
+                'True = task repeats at the interval indefinitely. False = task runs once then stops automatically.',
             },
             interval: {
               type: 'string',
               description:
-                'How often to execute the prompt (e.g., "5 minutes", "1 hour", "daily")',
-              enum: [
-                '1 minute',
-                '5 minutes',
-                '15 minutes',
-                '30 minutes',
-                '1 hour',
-                '6 hours',
-                '12 hours',
-                'daily',
-              ],
-            },
-            description: {
-              type: 'string',
-              description: 'Human-readable description of what this task does',
+                'How often to run this task. You MUST handle time parsing and provide one of:\n\n1. Predefined interval: "1 minute", "5 minutes", "15 minutes", "30 minutes", "1 hour", "6 hours", "12 hours", "daily"\n\n2. Milliseconds as string: For natural language times (like "at 6:45pm", "in 2 hours", "tomorrow at noon"), YOU calculate the milliseconds from NOW and pass it as a string number. Example: User says "in 2 hours" -> you pass "7200000" (2 * 60 * 60 * 1000)\n\nFor specific times (like "6:45pm"), first ask user their timezone, then calculate milliseconds until that time.\n\nIMPORTANT: When confirming with user, explain the time in BOTH UTC and their local timezone to avoid confusion.',
             },
           },
-          required: ['prompt', 'interval', 'description'],
+          required: ['title', 'prompt', 'recurring', 'interval'],
         },
       },
       {
-        name: 'list_user_tasks',
-        description: 'List all monitoring tasks for the current user',
+        name: 'list_my_tasks',
+        title: 'List My Tasks',
+        description:
+          'List all scheduled tasks belonging to the current user, showing their status, intervals, and when they last ran.',
         parameters: {
           type: 'object',
           properties: {},
@@ -88,33 +94,27 @@ export class TaskManagementFunctions {
         },
       },
       {
-        name: 'modify_task',
+        name: 'update_task',
+        title: 'Update Task',
         description:
-          'Modify an existing monitoring task (enable/disable, change interval, etc.)',
+          'Update an existing task. Use this to enable/disable a task or change how often it runs. IMPORTANT: Always call list_my_tasks first to get the correct task_id.',
         parameters: {
           type: 'object',
           properties: {
             task_id: {
               type: 'string',
-              description: 'ID of the task to modify',
+              description:
+                'The exact task ID from list_my_tasks output. This is a UUID like "a1b2c3d4-e5f6-7890-abcd-ef1234567890".',
             },
             enabled: {
               type: 'boolean',
-              description: 'Whether the task should be enabled or disabled',
+              description:
+                'Set to true to enable/resume the task, false to pause it',
             },
             interval: {
               type: 'string',
-              description: 'New interval for the task',
-              enum: [
-                '1 minute',
-                '5 minutes',
-                '15 minutes',
-                '30 minutes',
-                '1 hour',
-                '6 hours',
-                '12 hours',
-                'daily',
-              ],
+              description:
+                'Change how often the task runs. Same rules as create_task: predefined intervals OR milliseconds as string for natural language times.',
             },
           },
           required: ['task_id'],
@@ -122,31 +122,53 @@ export class TaskManagementFunctions {
       },
       {
         name: 'delete_task',
-        description: 'Delete a monitoring task completely',
+        title: 'Delete Task',
+        description:
+          'Permanently delete a scheduled task. This cannot be undone. IMPORTANT: Always call list_my_tasks first to get the correct task_id before deleting.',
         parameters: {
           type: 'object',
           properties: {
             task_id: {
               type: 'string',
-              description: 'ID of the task to delete',
+              description:
+                'The exact task ID from list_my_tasks output. This is a UUID like "a1b2c3d4-e5f6-7890-abcd-ef1234567890".',
             },
           },
           required: ['task_id'],
         },
       },
       {
-        name: 'get_task_status',
+        name: 'check_task_status',
+        title: 'Check Task Status',
         description:
-          'Get the current status and last run information for a specific task',
+          "Get detailed information about a specific task including when it last ran, if it's enabled, and any recent results. IMPORTANT: Always call list_my_tasks first to get the correct task_id.",
         parameters: {
           type: 'object',
           properties: {
             task_id: {
               type: 'string',
-              description: 'ID of the task to check',
+              description:
+                'The exact task ID from list_my_tasks output. This is a UUID like "a1b2c3d4-e5f6-7890-abcd-ef1234567890".',
             },
           },
           required: ['task_id'],
+        },
+      },
+      {
+        name: 'save_user_timezone',
+        title: 'Save User Timezone',
+        description:
+          'Save the user\'s timezone for future reference. Use this when you learn the user\'s timezone through conversation (e.g., they mention "I\'m in Eastern time" or "I\'m in New York"). This will help provide better time-related assistance in the future.\n\nIMPORTANT: Validate the timezone first by checking if it\'s a valid IANA timezone identifier (e.g., "America/New_York", "Europe/London", "Asia/Tokyo").',
+        parameters: {
+          type: 'object',
+          properties: {
+            timezone: {
+              type: 'string',
+              description:
+                'IANA timezone identifier (e.g., "America/New_York", "Europe/London", "Asia/Tokyo", "America/Los_Angeles"). Must be a valid timezone name.',
+            },
+          },
+          required: ['timezone'],
         },
       },
     ];
@@ -191,7 +213,7 @@ class CreateTaskHandler implements AIFunctionHandler {
     args: Record<string, any>,
     context: AIFunctionContext,
   ): Promise<AIFunctionResult> {
-    const { prompt, interval, description } = args;
+    const { prompt, interval, title, recurring = true } = args;
 
     // Parse interval to milliseconds
     const intervalMs = this.parseInterval(interval);
@@ -202,31 +224,37 @@ class CreateTaskHandler implements AIFunctionHandler {
       };
     }
 
-    // Check if task name already exists for this user
+    // Check if task title already exists for this user
     const existingTasks = await this.database.getUserTasks(context.userId);
     const existingTask = existingTasks.find(
-      (task) => task.description === description,
+      (task) => task.description === title,
     );
     if (existingTask) {
       return {
         success: false,
-        message: `A task named "${description}" already exists. Please choose a different name.`,
+        message: `A task titled "${title}" already exists. Please choose a different title.`,
       };
     }
 
-    // Create unique task ID
-    const taskId = `${context.userId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Create unique task ID using UUID
+    const taskId = randomUUID();
 
     try {
       // Create alert configuration with the prompt
       const alertConfig = {
         id: taskId,
-        name: description,
-        description: `AI prompt-based task: ${description}`,
-        channelId: context.channelId,
+        name: title,
+        description: recurring
+          ? `Recurring task: ${title}`
+          : `One-shot task: ${title}`,
+        userId: context.userId, // Include userId for MCP tool access
+        channelId: context.channelId, // Parent channel for MCP tool access
+        targetChannelId: context.threadId || context.channelId, // Post alerts to thread if available
+        threadId: context.threadId, // Store thread ID for loading thread history
         interval: intervalMs,
         enabled: true,
         prompt: prompt,
+        recurring: recurring,
       };
 
       // Add to scheduler
@@ -236,18 +264,25 @@ class CreateTaskHandler implements AIFunctionHandler {
       await this.database.saveUserTask({
         id: taskId,
         userId: context.userId,
-        channelId: context.channelId,
+        channelId: context.channelId, // Parent channel for MCP tool access
+        targetChannelId: context.threadId || context.channelId, // Post alerts to thread if available
         prompt,
         interval: intervalMs,
-        description,
+        description: title,
         enabled: true,
+        recurring: recurring,
         createdAt: new Date(),
       });
 
+      const taskType = recurring ? 'recurring' : 'one-shot';
+      const executionMsg = recurring
+        ? `I'll execute your prompt every ${interval}`
+        : `I'll execute your prompt once in ${interval}`;
+
       return {
         success: true,
-        message: `✅ Created monitoring task: "${description}". Task ID: ${taskId}. I'll execute your prompt every ${interval} and alert you based on the results.`,
-        data: { taskId, description, interval, prompt },
+        message: `✅ Created ${taskType} task: "${title}". ${executionMsg} and alert you based on the results.`,
+        data: { taskId, title, interval, prompt, recurring },
       };
     } catch (error) {
       return {
@@ -258,6 +293,7 @@ class CreateTaskHandler implements AIFunctionHandler {
   }
 
   private parseInterval(interval: string): number | null {
+    // First check predefined intervals
     const intervalMap: Record<string, number> = {
       '1 minute': 60 * 1000,
       '5 minutes': 5 * 60 * 1000,
@@ -269,7 +305,19 @@ class CreateTaskHandler implements AIFunctionHandler {
       daily: 24 * 60 * 60 * 1000,
     };
 
-    return intervalMap[interval] || null;
+    if (intervalMap[interval]) {
+      return intervalMap[interval];
+    }
+
+    // Try to parse as a number (milliseconds passed directly by AI)
+    const numericInterval = parseInt(interval, 10);
+    if (!isNaN(numericInterval) && numericInterval > 0) {
+      return numericInterval;
+    }
+
+    // If it's not a predefined interval or number, AI should have already calculated it
+    console.log('⚠️ Received unexpected interval format:', interval);
+    return null;
   }
 }
 
@@ -296,7 +344,7 @@ class ListTasksHandler implements AIFunctionHandler {
       }
 
       const taskList = tasks
-        .map((task) => {
+        .map((task, index) => {
           const alert = this.scheduler.getAlert(task.id);
           const errorState = alert?.errorState;
 
@@ -318,21 +366,39 @@ class ListTasksHandler implements AIFunctionHandler {
             }
           }
 
+          const truncatedPrompt =
+            task.prompt.length > 100
+              ? task.prompt.substring(0, 100) + '...'
+              : task.prompt;
+
+          // Determine task type
+          const taskType =
+            task.recurring === false ? '🎯 One-Shot' : '🔄 Recurring';
+
           return (
-            `• **${task.description}** (${statusIcon})\n` +
-            `  ID: \`${task.id}\`\n` +
-            `  Prompt: ${task.prompt.length > 100 ? task.prompt.substring(0, 100) + '...' : task.prompt}\n` +
-            `  Interval: ${this.formatInterval(task.interval)}\n` +
-            `  ${task.lastRun ? `Last run: ${task.lastRun.toLocaleString()}` : 'Never run'}` +
+            `${index + 1}. **${task.description}** (${statusIcon})\n` +
+            `   Task ID: \`${task.id}\`\n` +
+            `   Type: ${taskType}\n` +
+            `   Prompt: ${truncatedPrompt}\n` +
+            `   Interval: ${this.formatInterval(task.interval)}\n` +
+            `   ${task.lastRun ? `Last run: ${task.lastRun.toLocaleString()}` : 'Never run'}` +
             errorInfo
           );
         })
         .join('\n\n');
 
+      // Include task ID mapping in data for LLM reference
+      const taskMapping = tasks.map((task, index) => ({
+        number: index + 1,
+        id: task.id,
+        description: task.description,
+        enabled: task.enabled,
+      }));
+
       return {
         success: true,
-        message: `📋 **Your Monitoring Tasks:**\n\n${taskList}`,
-        data: { tasks },
+        message: `📋 **Your Monitoring Tasks:**\n\n${taskList}\n\n_To modify or delete a task, use its Task ID shown above._`,
+        data: { tasks, taskMapping },
       };
     } catch (error) {
       return {
@@ -378,6 +444,23 @@ class ModifyTaskHandler implements AIFunctionHandler {
       // Update enabled status
       if (typeof enabled === 'boolean') {
         if (enabled) {
+          // When re-enabling a task, update its target location to current context
+          // This allows users to move alerts to different channels/threads
+          const alert = this.scheduler.getAlert(task_id);
+          if (alert) {
+            // Update target channel to current location
+            alert.targetChannelId = context.threadId || context.channelId;
+            alert.threadId = context.threadId;
+
+            // Also update channelId if we're in a different channel (for MCP tool access)
+            if (context.channelId) {
+              alert.channelId = context.channelId;
+            }
+
+            // Update in database
+            await this.database.updateAlert(alert);
+          }
+
           await this.scheduler.enableAlert(task_id);
         } else {
           await this.scheduler.disableAlert(task_id);
@@ -389,13 +472,8 @@ class ModifyTaskHandler implements AIFunctionHandler {
       if (interval) {
         const intervalMs = this.parseInterval(interval);
         if (intervalMs) {
-          // Update scheduler
-          const alert = this.scheduler.getAlert(task_id);
-          if (alert) {
-            alert.interval = intervalMs;
-            await this.scheduler.removeAlert(task_id);
-            await this.scheduler.addAlert(alert);
-          }
+          // Update scheduler with new interval - this will reschedule if enabled
+          await this.scheduler.updateAlertInterval(task_id, intervalMs);
           await this.database.updateTaskInterval(task_id, intervalMs);
         }
       }
@@ -414,7 +492,7 @@ class ModifyTaskHandler implements AIFunctionHandler {
   }
 
   private parseInterval(interval: string): number | null {
-    // Same as CreateTaskHandler
+    // Same as CreateTaskHandler - supports predefined intervals and numeric milliseconds
     const intervalMap: Record<string, number> = {
       '1 minute': 60 * 1000,
       '5 minutes': 5 * 60 * 1000,
@@ -426,7 +504,18 @@ class ModifyTaskHandler implements AIFunctionHandler {
       daily: 24 * 60 * 60 * 1000,
     };
 
-    return intervalMap[interval] || null;
+    if (intervalMap[interval]) {
+      return intervalMap[interval];
+    }
+
+    // Try to parse as a number (milliseconds passed directly by AI)
+    const numericInterval = parseInt(interval, 10);
+    if (!isNaN(numericInterval) && numericInterval > 0) {
+      return numericInterval;
+    }
+
+    console.log('⚠️ Received unexpected interval format:', interval);
+    return null;
   }
 }
 
@@ -499,7 +588,13 @@ class GetTaskStatusHandler implements AIFunctionHandler {
       let status = task.enabled ? '✅ Active' : '❌ Disabled';
       let errorInfo = '';
 
-      if (errorState?.hasError) {
+      // Note: Completed one-shot tasks are deleted immediately, so this case shouldn't occur
+      // But we'll keep the check in case there's any delay in deletion
+      if (task.recurring === false && task.lastRun && !task.enabled) {
+        status = '✔️ Completed (One-Shot)';
+        errorInfo =
+          '\nℹ️ This task ran once and has been automatically disabled. It will be deleted momentarily.';
+      } else if (errorState?.hasError) {
         if (errorState.errorType === 'permission') {
           status = '🚫 Permission Error (Disabled)';
           errorInfo = `\nError: ${errorState.errorMessage}\nOccurred: ${errorState.lastErrorDate?.toLocaleString() || 'Unknown'}\nSuggestion: Fix bot permissions and use /modify_task to re-enable`;
@@ -516,16 +611,33 @@ class GetTaskStatusHandler implements AIFunctionHandler {
       }
 
       const lastRun = task.lastRun ? task.lastRun.toLocaleString() : 'Never';
-      const nextRun =
-        task.enabled && task.lastRun && !errorState?.disabledDueToError
-          ? new Date(task.lastRun.getTime() + task.interval).toLocaleString()
-          : 'N/A';
+
+      // For one-shot tasks, there is no next run (they run once and stop)
+      let nextRun = 'N/A';
+      if (
+        task.recurring !== false &&
+        task.enabled &&
+        task.lastRun &&
+        !errorState?.disabledDueToError
+      ) {
+        // Only show next run for recurring tasks
+        nextRun = new Date(
+          task.lastRun.getTime() + task.interval,
+        ).toLocaleString();
+      } else if (task.recurring === false && !task.lastRun && task.enabled) {
+        // One-shot task that hasn't run yet
+        nextRun = 'Scheduled (one-time)';
+      }
+
+      const taskType =
+        task.recurring === false ? '🎯 One-Shot' : '🔄 Recurring';
 
       return {
         success: true,
         message:
           `📊 **Task Status: ${task.description}**\n\n` +
           `Status: ${status}\n` +
+          `Type: ${taskType}\n` +
           `Prompt: ${task.prompt}\n` +
           `Interval: ${this.formatInterval(task.interval)}\n` +
           `Last run: ${lastRun}\n` +
@@ -549,5 +661,62 @@ class GetTaskStatusHandler implements AIFunctionHandler {
     if (days >= 1) return `${days} day${days > 1 ? 's' : ''}`;
     if (hours >= 1) return `${hours} hour${hours > 1 ? 's' : ''}`;
     return `${minutes} minute${minutes > 1 ? 's' : ''}`;
+  }
+}
+
+class SaveTimezoneHandler implements AIFunctionHandler {
+  constructor(private database: DatabaseService) {}
+
+  async execute(
+    args: Record<string, any>,
+    context: AIFunctionContext,
+  ): Promise<AIFunctionResult> {
+    const { timezone } = args;
+
+    // Validate timezone
+    try {
+      // Test if the timezone is valid by creating a date formatter
+      new Intl.DateTimeFormat('en-US', { timeZone: timezone });
+    } catch (error) {
+      return {
+        success: false,
+        message: `"${timezone}" is not a valid timezone identifier. Please use IANA timezone names like "America/New_York", "Europe/London", or "Asia/Tokyo".`,
+      };
+    }
+
+    try {
+      // Get existing preferences
+      const existingPrefs = await this.database.getUserPreferences(
+        context.userId,
+      );
+
+      // Update timezone
+      const updatedPrefs = {
+        ...existingPrefs,
+        timezone: timezone,
+      };
+
+      await this.database.saveUserPreferences(context.userId, updatedPrefs);
+
+      // Show current time in their timezone as confirmation
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        dateStyle: 'full',
+        timeStyle: 'long',
+      });
+      const localTime = formatter.format(new Date());
+
+      return {
+        success: true,
+        message: `✅ Saved your timezone as ${timezone}. Your current local time is: ${localTime}`,
+        data: { timezone, localTime },
+      };
+    } catch (error) {
+      console.error('Failed to save timezone:', error);
+      return {
+        success: false,
+        message: `Failed to save timezone: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
   }
 }

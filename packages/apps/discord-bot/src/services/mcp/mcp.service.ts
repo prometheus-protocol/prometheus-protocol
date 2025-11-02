@@ -60,6 +60,7 @@ interface SystemStatus {
 
 interface ToolInfo {
   name: string;
+  title?: string; // Human-readable display name from MCP tool metadata
   description: string;
   parameters: Record<string, any>;
   serverId: string;
@@ -80,6 +81,15 @@ interface MCPFunctionCall {
  */
 export class MCPService {
   private pendingInvocations: PendingToolInvocationsService;
+  private userConnectionsCache: Map<
+    string,
+    { connections: any[]; timestamp: number }
+  > = new Map();
+  private userToolsCache: Map<
+    string,
+    { tools: ToolInfo[]; timestamp: number }
+  > = new Map();
+  private readonly CACHE_TTL_MS = 5000; // 5 second cache
 
   constructor(
     private databaseService: SupabaseService,
@@ -160,34 +170,21 @@ export class MCPService {
   async getSystemStatus(): Promise<SystemStatus> {
     try {
       // Get active connections from database
-      const connections =
-        await this.databaseService.getUserMCPConnections('system'); // Use system user for overall stats
+      // TODO: Update to query across all channels for system-level stats
+      const connections = await this.databaseService.getUserMCPConnections(
+        'system',
+        'default',
+      ); // Use system user for overall stats
       const activeConnections = connections.filter(
         (conn) => conn.status === 'connected',
       ).length;
-
-      // Check registry health by attempting a simple search
-      let registryConnected = false;
-      try {
-        const testResult = await this.registryService?.searchServers({
-          limit: 1,
-        });
-        registryConnected = !!testResult;
-      } catch (error) {
-        registryConnected = false;
-      }
-
-      // Get sample of servers from registry to determine total available
-      const registryServers = await this.registryService?.searchServers({
-        limit: 1,
-      });
-      const totalServers = registryServers?.servers?.length ?? 0;
 
       // Calculate total available tools across all connected users
       let totalAvailableTools = 0;
       try {
         // Get tools for system user (overall stats)
-        const systemTools = await this.getAvailableTools('system');
+        // TODO: Update to aggregate across all channels
+        const systemTools = await this.getAvailableTools('system', 'default');
         totalAvailableTools = systemTools.length;
       } catch (toolsError) {
         logger.warn(
@@ -197,15 +194,10 @@ export class MCPService {
 
       const status: SystemStatus = {
         activeConnections,
-        totalServers,
-        healthStatus:
-          registryConnected && activeConnections >= 0
-            ? 'healthy'
-            : registryConnected
-              ? 'degraded'
-              : 'offline',
+        totalServers: 0, // No longer using registry
+        healthStatus: activeConnections >= 0 ? 'healthy' : 'degraded',
         uptime: process.uptime(),
-        registryConnected,
+        registryConnected: false, // No longer using registry
         userConnections: activeConnections,
         availableTools: totalAvailableTools,
       };
@@ -236,198 +228,100 @@ export class MCPService {
   }
 
   /**
-   * Get user's MCP connections
+   * Get user's MCP connections (with caching to avoid redundant DB calls)
    */
-  async getUserConnections(userId: string): Promise<any[]> {
+  async getUserConnections(userId: string, channelId: string): Promise<any[]> {
     try {
-      const connections =
-        await this.databaseService.getUserMCPConnections(userId);
-      logger.info(
-        `Retrieved ${connections.length} connections for user ${userId}`,
+      const cacheKey = `${userId}:${channelId}`;
+      const now = Date.now();
+
+      // Check cache first
+      const cached = this.userConnectionsCache.get(cacheKey);
+      if (cached && now - cached.timestamp < this.CACHE_TTL_MS) {
+        logger.debug(`Using cached connections for ${cacheKey}`);
+        return cached.connections;
+      }
+
+      // Fetch from database
+      const connections = await this.databaseService.getUserMCPConnections(
+        userId,
+        channelId,
       );
+
+      // Update cache
+      this.userConnectionsCache.set(cacheKey, {
+        connections,
+        timestamp: now,
+      });
+
+      // Clean up old cache entries (simple cleanup)
+      if (this.userConnectionsCache.size > 100) {
+        const keysToDelete: string[] = [];
+        for (const [key, value] of this.userConnectionsCache.entries()) {
+          if (now - value.timestamp > this.CACHE_TTL_MS) {
+            keysToDelete.push(key);
+          }
+        }
+        keysToDelete.forEach((key) => this.userConnectionsCache.delete(key));
+      }
+
       return connections;
     } catch (error) {
-      logger.error(
-        `Error getting connections for user ${userId}:`,
-        error instanceof Error ? error : new Error(String(error)),
-      );
+      logger.error(`Error fetching user connections: ${error}`);
       return [];
     }
   }
 
   /**
-   * Search for available MCP servers using the external registry
+   * Invalidate cached connections for a user
    */
-  async searchServers(
-    query: ServerSearchOptions,
-  ): Promise<PaginatedServerSearchResult> {
-    try {
-      logger.info('Searching servers with query', {
-        service: 'MCPService',
-        query: query.query,
-        queryLength: query.query?.length || 0,
-        category: query.category,
-        limit: query.limit,
-      });
-
-      // Use the registry service to search for real servers
-      logger.debug('Calling registry service with params', {
-        service: 'MCPService',
-        searchQuery: query.query,
-        searchQueryType: typeof query.query,
-        searchQueryLength: query.query?.length || 0,
-        limit: query.limit || 10,
-        hasRegistryService: !!this.registryService,
-      });
-
-      if (!this.registryService) {
-        logger.error('Registry service is not available');
-        return {
-          servers: [],
-          pagination: {
-            page: 1,
-            totalPages: 0,
-            totalResults: 0,
-            currentPage: 1,
-            totalItems: 0,
-            hasNextPage: false,
-            hasPreviousPage: false,
-          },
-        };
-      }
-
-      // Add timeout to prevent hanging
-      const registryResponse = await Promise.race([
-        this.registryService.searchServers({
-          search: query.query,
-          limit: query.limit || 10,
-        }),
-        new Promise<{ servers: []; nextCursor: null }>((_, reject) =>
-          setTimeout(() => reject(new Error('Registry search timeout')), 8000),
-        ),
-      ]);
-
-      logger.debug('Registry service response', {
-        service: 'MCPService',
-        hasResponse: !!registryResponse,
-        hasServers: !!registryResponse?.servers,
-        serverCount: registryResponse?.servers?.length || 0,
-      });
-
-      if (!registryResponse || !registryResponse.servers) {
-        return {
-          servers: [],
-          pagination: {
-            page: 1,
-            totalPages: 0,
-            totalResults: 0,
-            currentPage: 1,
-            totalItems: 0,
-            hasNextPage: false,
-            hasPreviousPage: false,
-          },
-        };
-      }
-
-      // Convert minimal server objects to the format expected by the Discord bot
-      const servers: ServerSearchResult[] = registryResponse.servers.map(
-        (server) => this.convertMinimalServerToResult(server),
-      );
-
-      // Since the new registry service doesn't provide pagination info,
-      // we'll simulate it based on the results
-      const currentPage = query.page || 1;
-      const totalItems = servers.length;
-      const hasNextPage = !!registryResponse.nextCursor;
-
-      return {
-        servers,
-        pagination: {
-          page: currentPage,
-          totalPages: hasNextPage ? currentPage + 1 : currentPage,
-          totalResults: totalItems,
-          currentPage: currentPage,
-          totalItems: totalItems,
-          hasNextPage: hasNextPage,
-          hasPreviousPage: currentPage > 1,
-        },
-      };
-    } catch (error) {
-      logger.error(
-        'Error searching servers:',
-        error instanceof Error ? error : new Error(String(error)),
-      );
-      return {
-        servers: [],
-        pagination: {
-          page: 1,
-          totalPages: 0,
-          totalResults: 0,
-          currentPage: 1,
-          totalItems: 0,
-          hasNextPage: false,
-          hasPreviousPage: false,
-        },
-      };
-    }
+  private invalidateUserConnectionsCache(
+    userId: string,
+    channelId: string,
+  ): void {
+    const cacheKey = `${userId}:${channelId}`;
+    this.userConnectionsCache.delete(cacheKey);
+    this.userToolsCache.delete(cacheKey);
+    logger.debug(`Invalidated connection and tools cache for ${cacheKey}`);
   }
 
   /**
    * Connect to an MCP server
+   * @param channelId - Discord channel ID for channel-scoped connections
    */
   async connectToServer(
     serverId: string,
     userId: string,
     serverUrl?: string,
+    channelId: string = 'default',
   ): Promise<ConnectionResult> {
     try {
       logger.info(`Connecting user ${userId} to server ${serverId}`);
 
-      // Check if this is a custom URL server (serverId starts with 'custom-url-')
-      const isCustomUrl = serverId.startsWith('custom-url-');
-
+      // All connections are now URL-based (no registry)
       let actualServerUrl = serverUrl;
       if (!actualServerUrl) {
-        if (isCustomUrl) {
-          // For custom URLs, first try to get the URL from existing connection
-          // This handles the case where user is reconnecting via namespace
-          const existingConnection =
-            await this.databaseService.getUserMCPConnection(userId, serverId);
+        // Try to get the URL from existing connection
+        // This handles the case where user is reconnecting
+        const existingConnection =
+          await this.databaseService.getUserMCPConnection(
+            userId,
+            channelId,
+            serverId,
+          );
 
-          if (existingConnection && existingConnection.server_url) {
-            actualServerUrl = existingConnection.server_url;
-            logger.info(
-              `Found saved URL for custom server: ${actualServerUrl}`,
-              {
-                service: 'MCPService',
-                serverId,
-                serverUrl: actualServerUrl,
-              },
-            );
-          } else {
-            // If no saved URL and no serverUrl provided, this is an error
-            throw new Error(
-              `Custom URL server ${serverId} requires serverUrl parameter to be provided or have a saved connection with server_url`,
-            );
-          }
+        if (existingConnection && existingConnection.server_url) {
+          actualServerUrl = existingConnection.server_url;
+          logger.info(`Found saved URL for server: ${actualServerUrl}`, {
+            service: 'MCPService',
+            serverId,
+            serverUrl: actualServerUrl,
+          });
         } else {
-          // For registry servers, look up the URL from the registry
-          const serverInfo =
-            await this.registryService?.getServerById(serverId);
-          if (serverInfo && serverInfo.url) {
-            actualServerUrl = serverInfo.url;
-            logger.info(`Found server URL from registry: ${actualServerUrl}`, {
-              service: 'MCPService',
-              serverId,
-              serverUrl: actualServerUrl,
-            });
-          } else if (serverInfo) {
-            throw new Error(
-              `Server ${serverId} found in registry but has no url property`,
-            );
-          } else {
-            throw new Error(`Server ${serverId} not found in registry`);
-          }
+          // If no saved URL and no serverUrl provided, this is an error
+          throw new Error(
+            `Server ${serverId} requires serverUrl parameter or existing connection with server_url`,
+          );
         }
       }
 
@@ -445,6 +339,7 @@ export class MCPService {
       const connectionPayload: ConnectionRequestPayload = {
         generatedAt: new Date().toISOString(),
         userId: userId, // Using userId as userId for Discord bot
+        channelId: channelId,
         mcpServerConfigId: serverId,
         mcpServerUrl: actualServerUrl,
       };
@@ -463,6 +358,7 @@ export class MCPService {
         try {
           const connection = await this.databaseService.getUserMCPConnection(
             userId,
+            channelId,
             serverId,
           );
           logger.info(
@@ -470,6 +366,9 @@ export class MCPService {
           );
           if (connection) {
             if (connection.status === 'connected') {
+              // Invalidate cache since connection status changed
+              this.invalidateUserConnectionsCache(userId, channelId);
+
               return {
                 success: true,
                 message: 'Successfully connected to MCP server!',
@@ -486,6 +385,8 @@ export class MCPService {
               connection.status === 'error' ||
               connection.status === 'disconnected'
             ) {
+              // Invalidate cache since connection status changed
+              this.invalidateUserConnectionsCache(userId, channelId);
               throw new Error(connection.error_message || 'Connection failed');
             } else if (connection.status === 'auth-required') {
               return {
@@ -519,6 +420,7 @@ export class MCPService {
       try {
         const finalConnection = await this.databaseService.getUserMCPConnection(
           userId,
+          channelId,
           serverId,
         );
         if (finalConnection) {
@@ -552,52 +454,41 @@ export class MCPService {
   /**
    * Disconnect from an MCP server
    */
-  async disconnectFromServer(serverId: string, userId: string): Promise<void> {
+  async disconnectFromServer(
+    serverId: string,
+    userId: string,
+    channelId: string = 'default',
+  ): Promise<void> {
     try {
       logger.info(`Disconnecting user ${userId} from server ${serverId}`);
-
-      // Check if this is a custom URL server (serverId starts with 'custom-url-')
-      const isCustomUrl = serverId.startsWith('custom-url-');
 
       // Get the connection to find the server URL
       const connection = await this.databaseService.getUserMCPConnection(
         userId,
+        channelId,
         serverId,
       );
       let serverUrl = connection?.server_url;
 
-      // If no saved server URL, handle based on server type
+      // If no saved server URL, use a fallback
       if (!serverUrl) {
-        if (isCustomUrl) {
-          // For custom URLs, we need the saved URL from the connection
-          // If it's missing, use a fallback that won't cause registry lookups
-          logger.warn(
-            `Custom URL server ${serverId} missing server_url, using fallback`,
-          );
-          serverUrl = `https://custom-server/${serverId}`;
-        } else {
-          // For registry servers, try to get it from registry
-          const serverInfo =
-            await this.registryService?.getServerById(serverId);
-          if (serverInfo) {
-            serverUrl = serverInfo.url;
-          } else {
-            logger.warn(
-              `Could not find server URL for ${serverId}, using fallback`,
-            );
-            serverUrl = `https://unknown-server/${serverId}`;
-          }
-        }
+        logger.warn(`Server ${serverId} missing server_url, using fallback`);
+        serverUrl = `https://server/${serverId}`;
       }
 
       const disconnectPayload: DisconnectRequestPayload = {
         generatedAt: new Date().toISOString(),
         userId: userId,
+        channelId: channelId,
         mcpServerConfigId: serverId,
-        mcpServerUrl: serverUrl || `https://unknown-server/${serverId}`,
+        mcpServerUrl: serverUrl,
       };
 
       await this.connectionPool.handleDisconnectRequest(disconnectPayload);
+
+      // Invalidate cache since connection was removed
+      this.invalidateUserConnectionsCache(userId, channelId);
+
       logger.info(`Successfully disconnected from server ${serverId}`);
     } catch (error) {
       logger.error(
@@ -611,22 +502,67 @@ export class MCPService {
   /**
    * Get available tools for a user across all their connections
    */
-  async getAvailableTools(userId: string): Promise<ToolInfo[]> {
+  /**
+   * Strip legacy prefix from tool names (backward compatibility)
+   * Old format: mcpcustom_url_https_example_com_toolname
+   * New format: toolname
+   */
+  private stripLegacyPrefix(toolName: string): string {
+    // Match pattern: mcpcustom_url_*_actualToolName
+    const legacyPattern = /^mcpcustom_url_[^_]+_(.+)$/;
+    const match = toolName.match(legacyPattern);
+
+    if (match && match[1]) {
+      return match[1];
+    }
+
+    return toolName;
+  }
+
+  async getAvailableTools(
+    userId: string,
+    channelId: string,
+  ): Promise<ToolInfo[]> {
     try {
-      const connections = await this.getUserConnections(userId);
+      const cacheKey = `${userId}:${channelId}`;
+      const now = Date.now();
+
+      // Check cache first
+      const cached = this.userToolsCache.get(cacheKey);
+      if (cached && now - cached.timestamp < this.CACHE_TTL_MS) {
+        logger.debug(`Using cached tools for ${cacheKey}`);
+        return cached.tools;
+      }
+
+      const connections = await this.getUserConnections(userId, channelId);
       const tools: ToolInfo[] = [];
+
+      logger.info(
+        `[MCPService] getAvailableTools - found ${connections.length} connections for user ${userId}`,
+      );
 
       // Fetch available tools from each connected MCP server
       for (const connection of connections) {
+        logger.info(
+          `[MCPService] Connection ${connection.server_name}: status=${connection.status}, has_tools=${!!connection.tools}, tools_length=${connection.tools?.length || 0}`,
+        );
+
         if (connection.status === 'connected' && connection.tools) {
           try {
             // Parse the tools JSON from the database
             const serverTools = JSON.parse(connection.tools);
+            logger.info(
+              `[MCPService] Parsed ${serverTools.length} tools from ${connection.server_name}`,
+            );
 
             // Convert MCP SDK Tool objects to ToolInfo format
             for (const tool of serverTools) {
+              // Strip legacy prefix for backward compatibility
+              const cleanName = this.stripLegacyPrefix(tool.name);
+
               const toolInfo: ToolInfo = {
-                name: tool.name,
+                name: cleanName,
+                title: tool.title, // Include human-readable title if available
                 description:
                   tool.description || `Tool from ${connection.server_name}`,
                 parameters: tool.inputSchema || {},
@@ -645,6 +581,24 @@ export class MCPService {
       }
 
       logger.info(`Retrieved ${tools.length} tools for user ${userId}`);
+
+      // Update cache
+      this.userToolsCache.set(cacheKey, {
+        tools,
+        timestamp: now,
+      });
+
+      // Clean up old cache entries (simple cleanup)
+      if (this.userToolsCache.size > 100) {
+        const keysToDelete: string[] = [];
+        for (const [key, value] of this.userToolsCache.entries()) {
+          if (now - value.timestamp > this.CACHE_TTL_MS) {
+            keysToDelete.push(key);
+          }
+        }
+        keysToDelete.forEach((key) => this.userToolsCache.delete(key));
+      }
+
       return tools;
     } catch (error) {
       logger.error(
@@ -652,6 +606,43 @@ export class MCPService {
         error instanceof Error ? error : new Error(String(error)),
       );
       return [];
+    }
+  }
+
+  /**
+   * Get display name for a tool (uses title if available, falls back to name)
+   */
+  async getToolDisplayName(
+    userId: string,
+    functionName: string,
+    channelId: string = 'default',
+  ): Promise<string> {
+    try {
+      // Parse function name (could be "toolname" or "hash_toolname")
+      let toolName: string;
+
+      if (functionName.includes('_') && functionName.match(/^[a-z0-9]{4}_/)) {
+        // Format: hash_toolname (collision case)
+        const parts = functionName.split('_');
+        toolName = parts.slice(1).join('_');
+      } else {
+        // Format: toolname (no collision)
+        toolName = functionName;
+      }
+
+      // Get all tools and find the matching one
+      const tools = await this.getAvailableTools(userId, channelId);
+      const tool = tools.find((t) => t.name === toolName);
+
+      if (tool?.title) {
+        return tool.title;
+      }
+
+      // Fallback to the original function name
+      return functionName;
+    } catch (error) {
+      logger.warn(`Could not get tool display name for ${functionName}`);
+      return functionName;
     }
   }
 
@@ -674,9 +665,10 @@ export class MCPService {
   async resolveServerNameToId(
     userId: string,
     serverName: string,
+    channelId: string = 'default',
   ): Promise<string | null> {
     try {
-      const connections = await this.getUserConnections(userId);
+      const connections = await this.getUserConnections(userId, channelId);
 
       // Try exact match first
       const exactMatch = connections.find(
@@ -741,9 +733,10 @@ export class MCPService {
   private async findConnectionBySanitizedName(
     userId: string,
     sanitizedName: string,
+    channelId: string = 'default',
   ): Promise<any | null> {
     try {
-      const connections = await this.getUserConnections(userId);
+      const connections = await this.getUserConnections(userId, channelId);
 
       // Find connection where sanitized server name matches
       for (const connection of connections) {
@@ -760,12 +753,45 @@ export class MCPService {
   }
 
   /**
-   * Convert available tools to OpenAI function format for LLM integration
+   * Generate a short 4-character hash from a string
    */
-  async convertToolsToOpenAIFunctions(userId: string): Promise<any[]> {
-    try {
-      const tools = await this.getAvailableTools(userId);
+  private generateShortHash(str: string): string {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = (hash << 5) - hash + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    // Convert to base36 and take first 4 characters
+    return Math.abs(hash).toString(36).substring(0, 4);
+  }
 
+  /**
+   * Convert available tools to OpenAI function format for LLM integration
+   * Uses clean tool names by default, only adds prefix on collision
+   */
+  async convertToolsToOpenAIFunctions(
+    userId: string,
+    channelId: string = 'default',
+  ): Promise<any[]> {
+    try {
+      const tools = await this.getAvailableTools(userId, channelId);
+
+      // Track tool name usage to detect collisions
+      const toolNameCounts = new Map<string, number>();
+      const toolNameToServer = new Map<string, string[]>();
+
+      // First pass: count occurrences of each tool name
+      for (const tool of tools) {
+        const count = toolNameCounts.get(tool.name) || 0;
+        toolNameCounts.set(tool.name, count + 1);
+
+        const servers = toolNameToServer.get(tool.name) || [];
+        servers.push(tool.serverName);
+        toolNameToServer.set(tool.name, servers);
+      }
+
+      // Second pass: generate function names with prefixes only for collisions
       const openAIFunctions = tools.map((tool) => {
         // tool.parameters contains the inputSchema from MCP
         // If it's already a proper schema, use it directly, otherwise wrap it
@@ -780,11 +806,21 @@ export class MCPService {
           };
         }
 
-        // Use sanitized server name instead of UUID for AI-friendly function names
-        const sanitizedServerName = this.sanitizeServerName(tool.serverName);
+        // Check if this tool name has collisions
+        const hasCollision = (toolNameCounts.get(tool.name) || 0) > 1;
+
+        let functionName: string;
+        if (hasCollision) {
+          // Generate a short 4-character hash from the server name
+          const serverHash = this.generateShortHash(tool.serverName);
+          functionName = `${serverHash}_${tool.name}`;
+        } else {
+          // No collision, use the clean tool name
+          functionName = tool.name;
+        }
 
         return {
-          name: `mcp__${sanitizedServerName}__${tool.name}`,
+          name: functionName,
           description: tool.description,
           parameters: parameters,
         };
@@ -805,61 +841,83 @@ export class MCPService {
 
   /**
    * Handle MCP function calls from LLM
+   * Now handles both clean tool names and prefixed names (hash_toolname)
    */
   async handleMCPFunctionCall(
     functionName: string,
     functionArguments: Record<string, any>,
     userId: string,
+    channelId: string = 'default',
   ): Promise<FunctionCallResult> {
     try {
       logger.info(
         `Handling MCP function call: ${functionName} for user ${userId}`,
       );
 
-      // Parse the function name to extract server and tool info
-      const parts = functionName.split('__');
-      if (parts.length < 3 || parts[0] !== 'mcp') {
-        throw new Error('Invalid MCP function call format');
+      // Get all user connections first
+      const connections = await this.getUserConnections(userId, channelId);
+
+      // Strategy: Try to find the tool with the exact name first
+      // Only if that fails AND the name looks like hash_toolname, try splitting it
+      let toolName: string = functionName;
+      let serverHash: string | null = null;
+      let targetConnection = null;
+
+      // First attempt: Try to find a connection with the exact function name
+      for (const conn of connections) {
+        const connTools = JSON.parse(conn.tools || '[]');
+        if (connTools.some((t: any) => t.name === functionName)) {
+          targetConnection = conn;
+          toolName = functionName;
+          break;
+        }
       }
 
-      const sanitizedServerName = parts[1];
-      const toolName = parts.slice(2).join('__');
+      // Second attempt: If not found and name matches hash pattern, try splitting
+      if (
+        !targetConnection &&
+        functionName.includes('_') &&
+        functionName.match(/^[a-z0-9]{4}_/)
+      ) {
+        // Format might be: hash_toolname (collision case)
+        const parts = functionName.split('_');
+        const potentialHash = parts[0];
+        const potentialToolName = parts.slice(1).join('_');
 
-      // Find the connection by sanitized server name
-      const connection = await this.findConnectionBySanitizedName(
-        userId,
-        sanitizedServerName,
-      );
-
-      if (!connection) {
-        throw new Error(
-          `No connection found for server with name: ${sanitizedServerName}`,
-        );
-      }
-
-      const serverId = connection.server_id;
-      const isCustomUrl = serverId.startsWith('custom-url-');
-      let serverUrl = connection?.server_url;
-
-      if (!serverUrl) {
-        if (isCustomUrl) {
-          throw new Error(
-            `Custom URL server ${serverId} is missing server_url in database`,
-          );
-        } else {
-          const serverInfo =
-            await this.registryService?.getServerById(serverId);
-          if (serverInfo) {
-            serverUrl = serverInfo.url;
-          } else {
-            throw new Error(`Server ${serverId} not found`);
+        // Find the connection with matching hash
+        for (const conn of connections) {
+          const connHash = this.generateShortHash(conn.server_name);
+          if (connHash === potentialHash) {
+            // Verify this connection actually has the tool
+            const connTools = JSON.parse(conn.tools || '[]');
+            if (connTools.some((t: any) => t.name === potentialToolName)) {
+              targetConnection = conn;
+              toolName = potentialToolName;
+              serverHash = potentialHash;
+              break;
+            }
           }
         }
+      }
+
+      if (!targetConnection) {
+        logger.error(
+          `[MCPService] Failed to find tool ${toolName}. Available connections: ${connections.map((c) => c.server_name).join(', ')}`,
+        );
+        throw new Error(`No connection found with tool: ${functionName}`);
+      }
+
+      const serverId = targetConnection.server_id;
+      let serverUrl = targetConnection?.server_url;
+
+      if (!serverUrl) {
+        throw new Error(`Server ${serverId} is missing server_url in database`);
       }
 
       const toolPayload: InvokeToolRequestPayload = {
         generatedAt: new Date().toISOString(),
         userId: userId,
+        channelId: channelId,
         mcpServerConfigId: serverId,
         mcpServerUrl: serverUrl,
         toolName,
@@ -903,6 +961,7 @@ export class MCPService {
   async autoReconnectAfterOAuth(
     serverId: string,
     userId: string,
+    channelId: string = 'default',
   ): Promise<ConnectionResult> {
     try {
       logger.info(
@@ -912,6 +971,7 @@ export class MCPService {
       // Get the saved connection info
       const connection = await this.databaseService.getUserMCPConnection(
         userId,
+        channelId,
         serverId,
       );
       if (!connection) {
@@ -923,6 +983,7 @@ export class MCPService {
         serverId,
         userId,
         connection.server_url,
+        channelId,
       );
     } catch (error: any) {
       logger.error(`Error in auto-reconnect after OAuth:`, error);
@@ -936,13 +997,17 @@ export class MCPService {
   /**
    * Reset server data for a user
    */
-  async resetServerData(serverId: string, userId: string): Promise<void> {
+  async resetServerData(
+    serverId: string,
+    userId: string,
+    channelId: string = 'default',
+  ): Promise<void> {
     try {
       logger.info(`Resetting server data for ${serverId}, user ${userId}`);
 
       // Disconnect if connected
       try {
-        await this.disconnectFromServer(serverId, userId);
+        await this.disconnectFromServer(serverId, userId, channelId);
       } catch (error) {
         // Ignore disconnect errors during reset
         logger.warn('Error during disconnect in reset', {
@@ -953,7 +1018,11 @@ export class MCPService {
       }
 
       // Delete saved connection data
-      await this.databaseService.deleteUserMCPConnection(userId, serverId);
+      await this.databaseService.deleteUserMCPConnection(
+        userId,
+        channelId,
+        serverId,
+      );
 
       // Delete OAuth tokens if they exist
       await this.databaseService.deleteOAuthTokens(serverId, userId);
@@ -974,13 +1043,14 @@ export class MCPService {
   async deleteServerConnection(
     serverId: string,
     userId: string,
+    channelId: string = 'default',
   ): Promise<void> {
     try {
       logger.info(`Deleting server connection ${serverId} for user ${userId}`);
 
       // First disconnect from the server if connected
       try {
-        await this.disconnectFromServer(serverId, userId);
+        await this.disconnectFromServer(serverId, userId, channelId);
       } catch (error) {
         // Ignore disconnect errors - might already be disconnected
         logger.warn(
@@ -989,7 +1059,7 @@ export class MCPService {
       }
 
       // Then delete all database records and OAuth tokens
-      await this.resetServerData(serverId, userId);
+      await this.resetServerData(serverId, userId, channelId);
 
       logger.info(
         `Successfully deleted server connection ${serverId} for user ${userId}`,
@@ -1030,14 +1100,19 @@ export class MCPService {
   /**
    * Get diagnostic information about connection states
    */
-  async getConnectionDiagnostics(userId: string): Promise<{
+  async getConnectionDiagnostics(
+    userId: string,
+    channelId: string = 'default',
+  ): Promise<{
     databaseConnections: any[];
     activeConnections: any;
     mismatchedConnections: string[];
   }> {
     // Get connections from database
-    const dbConnections =
-      await this.databaseService.getUserMCPConnections(userId);
+    const dbConnections = await this.databaseService.getUserMCPConnections(
+      userId,
+      channelId,
+    );
 
     // Get active connections from pool
     const activeConnectionsInfo = this.connectionPool.getDiagnosticInfo();
@@ -1063,12 +1138,15 @@ export class MCPService {
   /**
    * Clean up stale connections that exist in database but not in active pool
    */
-  async cleanupStaleConnections(userId: string): Promise<{
+  async cleanupStaleConnections(
+    userId: string,
+    channelId: string = 'default',
+  ): Promise<{
     cleanedCount: number;
     cleanedConnections: string[];
     remainingConnections: number;
   }> {
-    const diagnostics = await this.getConnectionDiagnostics(userId);
+    const diagnostics = await this.getConnectionDiagnostics(userId, channelId);
     const cleanedConnections: string[] = [];
 
     // Find connections that are marked as connected in DB but not active in pool
@@ -1085,6 +1163,7 @@ export class MCPService {
         // Update the connection status in database to disconnected
         await this.databaseService.updateUserMCPConnection(
           dbConn.user_id,
+          dbConn.channel_id,
           dbConn.server_id,
           {
             status: 'disconnected',
@@ -1110,7 +1189,10 @@ export class MCPService {
   /**
    * Repair corrupted database records by fixing missing required fields
    */
-  async repairCorruptedConnections(userId: string): Promise<{
+  async repairCorruptedConnections(
+    userId: string,
+    channelId: string = 'default',
+  ): Promise<{
     repairedCount: number;
     repairedConnections: Array<{
       id: string;
@@ -1119,8 +1201,10 @@ export class MCPService {
     }>;
     healthyConnections: number;
   }> {
-    const dbConnections =
-      await this.databaseService.getUserMCPConnections(userId);
+    const dbConnections = await this.databaseService.getUserMCPConnections(
+      userId,
+      channelId,
+    );
     const repairedConnections: Array<{
       id: string;
       issues: string[];
@@ -1132,115 +1216,51 @@ export class MCPService {
       const fixes: string[] = [];
       const poolKey = `${dbConn.user_id}::${dbConn.server_id}`;
 
-      // Check if this is a custom URL server
-      const isCustomUrl = dbConn.server_id.startsWith('custom-url-');
-
       // Check for missing or empty server_url
       if (!dbConn.server_url || dbConn.server_url.trim() === '') {
         issues.push('Missing server_url');
 
-        if (isCustomUrl) {
-          // For custom URLs, we can't repair missing URLs from registry
-          // Mark as disconnected and require manual reconnection
-          fixes.push(
-            'Custom URL server missing URL - marked as disconnected (requires manual reconnection)',
-          );
+        // All servers are now URL-based, mark as disconnected and require manual reconnection
+        fixes.push(
+          'Server missing URL - marked as disconnected (requires manual reconnection)',
+        );
 
-          await this.databaseService.updateUserMCPConnection(
-            dbConn.user_id,
-            dbConn.server_id,
-            {
-              status: 'disconnected',
-              error_message: 'Custom URL missing - please reconnect manually',
-            },
-          );
-        } else {
-          // Try to get the server_url from the registry based on server_id (registry servers only)
-          try {
-            console.log('REGISTRY SERVICE:', this.registryService);
-            const serverInfo = await this.registryService?.getServerById(
-              dbConn.server_id,
-            );
-            console.log('SERVER INFO:', serverInfo);
-            if (serverInfo && serverInfo.url) {
-              fixes.push(`Set server_url to: ${serverInfo.url}`);
-
-              // Update the database record
-              await this.databaseService.updateUserMCPConnection(
-                dbConn.user_id,
-                dbConn.server_id,
-                {
-                  server_url: serverInfo.url,
-                  error_message: null, // Clear any previous error
-                },
-              );
-            } else {
-              fixes.push(
-                'Could not find server URL in registry - marked as disconnected',
-              );
-
-              // If we can't find the server, mark it as disconnected
-              await this.databaseService.updateUserMCPConnection(
-                dbConn.user_id,
-                dbConn.server_id,
-                {
-                  status: 'disconnected',
-                  error_message: 'Server not found in registry - URL missing',
-                },
-              );
-            }
-          } catch (error) {
-            logger.error(
-              `[MCPService] Error repairing connection ${poolKey}:`,
-              error instanceof Error ? error : new Error(String(error)),
-            );
-            fixes.push('Error occurred during repair - marked as disconnected');
-
-            await this.databaseService.updateUserMCPConnection(
-              dbConn.user_id,
-              dbConn.server_id,
-              {
-                status: 'disconnected',
-                error_message: 'Repair failed - please reconnect manually',
-              },
-            );
-          }
-        }
+        await this.databaseService.updateUserMCPConnection(
+          dbConn.user_id,
+          dbConn.channel_id,
+          dbConn.server_id,
+          {
+            status: 'disconnected',
+            error_message: 'Server URL missing - please reconnect manually',
+          },
+        );
       }
 
       // Check for missing server_name
       if (!dbConn.server_name || dbConn.server_name.trim() === '') {
         issues.push('Missing server_name');
 
-        if (isCustomUrl) {
-          // For custom URLs, generate a name from the server_id
-          const serverName = `Custom Server ${dbConn.server_id.replace('custom-url-', '').substring(0, 20)}`;
-          fixes.push(`Set server_name to: ${serverName}`);
-
-          await this.databaseService.updateUserMCPConnection(
-            dbConn.user_id,
-            dbConn.server_id,
-            { server_name: serverName },
-          );
-        } else {
-          // For registry servers, try to get name from registry
+        // Generate a name from the server_url if available
+        let serverName = 'Unnamed Server';
+        if (dbConn.server_url) {
           try {
-            const serverInfo = await this.registryService?.getServerById(
-              dbConn.server_id,
-            );
-            if (serverInfo && serverInfo.name) {
-              fixes.push(`Set server_name to: ${serverInfo.name}`);
-
-              await this.databaseService.updateUserMCPConnection(
-                dbConn.user_id,
-                dbConn.server_id,
-                { server_name: serverInfo.name },
-              );
-            }
-          } catch (error) {
-            fixes.push('Could not repair server_name');
+            const url = new URL(dbConn.server_url);
+            serverName = `${url.hostname}`;
+          } catch {
+            serverName = dbConn.server_id.substring(0, 20);
           }
+        } else {
+          serverName = dbConn.server_id.substring(0, 20);
         }
+
+        fixes.push(`Set server_name to: ${serverName}`);
+
+        await this.databaseService.updateUserMCPConnection(
+          dbConn.user_id,
+          dbConn.channel_id,
+          dbConn.server_id,
+          { server_name: serverName },
+        );
       }
 
       if (issues.length > 0) {

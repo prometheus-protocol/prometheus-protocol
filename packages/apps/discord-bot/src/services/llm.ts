@@ -1,4 +1,6 @@
 import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
+import { betaTool } from '@anthropic-ai/sdk/helpers/beta/json-schema';
 import {
   LLMProvider,
   ConversationContext,
@@ -9,6 +11,7 @@ import {
 import { ConfigManager } from '../config/index.js';
 import { MCPService } from './mcp/index.js';
 import { openaiLogger, llmLogger } from '../utils/logger.js';
+import { PromptBuilder, buildTimeContext } from '../prompts/prompt-builder.js';
 
 export class OpenAIProvider implements LLMProvider {
   name = 'OpenAI';
@@ -50,7 +53,11 @@ export class OpenAIProvider implements LLMProvider {
           parameters: func.parameters,
         },
       }));
-      completionParams.tool_choice = 'auto';
+      // Use 'required' to force the model to use one of the provided tools
+      // This prevents the model from narrating instead of calling tools
+      completionParams.tool_choice = 'required';
+      // Disable parallel tool calls - execute one tool at a time
+      completionParams.parallel_tool_calls = false;
     }
 
     try {
@@ -70,17 +77,249 @@ export class OpenAIProvider implements LLMProvider {
   }
 }
 
+export class AnthropicProvider implements LLMProvider {
+  name = 'Anthropic';
+  private client: Anthropic;
+  private config: ReturnType<ConfigManager['getLLM']>;
+
+  supports = {
+    streaming: true,
+    functions: true,
+    vision: true,
+  };
+
+  constructor(config: ConfigManager) {
+    this.config = config.getLLM();
+    this.client = new Anthropic({
+      apiKey: this.config.apiKey,
+    });
+  }
+
+  // New method using Anthropic's beta tool runner
+  async generateWithToolRunner(
+    messages: Anthropic.MessageParam[],
+    systemPrompt: string,
+    functions: AIFunction[],
+    functionExecutor: (name: string, args: any) => Promise<any>,
+    onToolCall?: (toolName: string) => Promise<void>,
+  ): Promise<string> {
+    try {
+      // Convert AIFunction[] to beta tools
+      const tools = functions.map((func) =>
+        betaTool({
+          name: func.name,
+          description: func.description,
+          inputSchema: func.parameters as any,
+          run: async (input: any) => {
+            if (onToolCall) {
+              await onToolCall(func.name);
+            }
+
+            llmLogger.info(`Tool runner executing: ${func.name}`, {
+              arguments: JSON.stringify(input),
+            });
+
+            const result = await functionExecutor(func.name, input);
+
+            // Handle different result formats
+            // MCP tools return: { content: [...], structuredContent: {...}, isError: false }
+            // Task management returns: { message: "..." } or { error: "..." }
+            if (result.content && Array.isArray(result.content)) {
+              // MCP format - return the content array directly
+              return result.content;
+            } else if (result.error) {
+              // Error format - return as string
+              return `Error: ${result.error}`;
+            } else if (result.message) {
+              // Task management format - return as string
+              return result.message;
+            } else {
+              // Fallback - stringify the result
+              return JSON.stringify(result);
+            }
+          },
+        }),
+      );
+
+      llmLogger.info(
+        `Starting tool runner with ${tools.length} tools available`,
+      );
+
+      const runner = this.client.beta.messages.toolRunner({
+        model: this.config.model || 'claude-sonnet-4-5-20250929',
+        max_tokens: this.config.maxTokens || 1500,
+        temperature: this.config.temperature || 0.7,
+        system: systemPrompt,
+        messages: messages,
+        tools: tools,
+        tool_choice: { type: 'auto', disable_parallel_tool_use: true },
+      });
+
+      let iterationCount = 0;
+      const maxIterations = 25;
+
+      for await (const message of runner) {
+        iterationCount++;
+
+        if (iterationCount > maxIterations) {
+          llmLogger.warn('Tool runner reached max iterations', {
+            iterations: iterationCount,
+          });
+          break;
+        }
+
+        llmLogger.info(`Tool runner iteration ${iterationCount}`, {
+          stopReason: message.stop_reason,
+          contentBlocks: message.content.length,
+        });
+
+        // Check if Claude is done (no more tool uses)
+        if (message.stop_reason === 'end_turn') {
+          // Extract text from content blocks
+          const textContent = message.content
+            .filter((block) => block.type === 'text')
+            .map((block: any) => block.text)
+            .join('\n');
+
+          llmLogger.info('Tool runner finished with text response', {
+            iterations: iterationCount,
+            responseLength: textContent.length,
+          });
+
+          return textContent || 'Request completed.';
+        }
+      }
+
+      // If we exit the loop without a final text response, await the final message
+      const finalMessage = await runner;
+      const textContent = finalMessage.content
+        .filter((block) => block.type === 'text')
+        .map((block: any) => block.text)
+        .join('\n');
+
+      llmLogger.info('Tool runner completed', {
+        iterations: iterationCount,
+        responseLength: textContent.length,
+      });
+
+      return textContent || 'Request completed.';
+    } catch (error) {
+      llmLogger.error('Anthropic tool runner failed', error as Error);
+      throw error;
+    }
+  }
+
+  async generateChatCompletion(
+    messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+    functions?: AIFunction[],
+  ): Promise<OpenAI.Chat.Completions.ChatCompletion.Choice> {
+    try {
+      // Convert OpenAI format to Anthropic format
+      const anthropicMessages: Anthropic.MessageParam[] = messages
+        .filter((m) => m.role !== 'system') // System message handled separately
+        .map((m) => ({
+          role: m.role === 'assistant' ? 'assistant' : 'user',
+          content:
+            typeof m.content === 'string'
+              ? m.content
+              : JSON.stringify(m.content),
+        }));
+
+      const systemMessage = messages.find((m) => m.role === 'system');
+
+      const params: Anthropic.MessageCreateParams = {
+        model: this.config.model || 'claude-sonnet-4-5-20250929',
+        max_tokens: this.config.maxTokens || 1500,
+        temperature: this.config.temperature || 0.7,
+        messages: anthropicMessages,
+        ...(systemMessage && {
+          system:
+            typeof systemMessage.content === 'string'
+              ? systemMessage.content
+              : JSON.stringify(systemMessage.content),
+        }),
+      };
+
+      // Add tools if provided
+      if (functions && functions.length > 0) {
+        params.tools = functions.map((func) => ({
+          name: func.name,
+          description: func.description,
+          input_schema: func.parameters,
+        }));
+        // Use 'any' to force Claude to use one of the provided tools
+        // This prevents Claude from narrating instead of calling tools
+        params.tool_choice = { type: 'any', disable_parallel_tool_use: true };
+      }
+
+      const response = await this.client.messages.create(params);
+
+      // Convert Anthropic response to OpenAI format
+      const content = response.content
+        .map((block) => {
+          if (block.type === 'text') {
+            return block.text;
+          } else if (block.type === 'tool_use') {
+            return null; // Handle tool calls separately
+          }
+          return '';
+        })
+        .filter(Boolean)
+        .join('\n');
+
+      const toolCalls = response.content
+        .filter((block) => block.type === 'tool_use')
+        .map((block: any) => ({
+          id: block.id,
+          type: 'function' as const,
+          function: {
+            name: block.name,
+            arguments: JSON.stringify(block.input),
+          },
+        }));
+
+      // Return in OpenAI format
+      const choice: OpenAI.Chat.Completions.ChatCompletion.Choice = {
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: content || null,
+          refusal: null,
+          ...(toolCalls.length > 0 && { tool_calls: toolCalls }),
+        },
+        finish_reason:
+          response.stop_reason === 'end_turn' ? 'stop' : 'tool_calls',
+        logprobs: null,
+      };
+
+      return choice;
+    } catch (error) {
+      llmLogger.error('Anthropic API call failed', error as Error);
+      throw error;
+    }
+  }
+}
+
 export class LLMService {
   private provider: LLMProvider;
   private mcpService?: MCPService;
   private config: ConfigManager;
+  private taskFunctions?: any; // TaskManagementFunctions
 
-  constructor(config: ConfigManager, mcpService?: MCPService) {
+  constructor(
+    config: ConfigManager,
+    mcpService?: MCPService,
+    taskFunctions?: any,
+  ) {
     this.config = config;
+    this.taskFunctions = taskFunctions;
     // Factory pattern - can easily add other providers
     switch (config.getLLM().provider) {
       case 'openai':
         this.provider = new OpenAIProvider(config);
+        break;
+      case 'anthropic':
+        this.provider = new AnthropicProvider(config);
         break;
       default:
         throw new Error(
@@ -103,30 +342,143 @@ export class LLMService {
       metadata: { promptLength: prompt.length },
     });
 
-    // Ensure we have the OpenAI provider to access the new method
-    if (!(this.provider instanceof OpenAIProvider)) {
+    // Ensure we have a compatible provider (OpenAI or Anthropic) to access the tool loop method
+    if (
+      !(this.provider instanceof OpenAIProvider) &&
+      !(this.provider instanceof AnthropicProvider)
+    ) {
       throw new Error(
-        'Tool-calling loop is only supported for OpenAI provider.',
+        'Tool-calling loop is only supported for OpenAI and Anthropic providers.',
       );
     }
 
-    // 1. Prepare available functions (local + MCP)
-    if (statusCallback) {
-      await statusCallback('Loading your connected tools...');
-    }
-
     // Load all available functions including MCP tools
-    const allFunctions = await this.getAllFunctions(userId);
+    const allFunctions = await this.getAllFunctions(userId, context?.channelId);
 
     llmLogger.info('Functions loaded for tool loop', {
       userId,
+      channelId: context?.channelId,
       totalFunctions: allFunctions.length,
-      mcpFunctions: allFunctions.length,
     });
 
-    // 2. Initialize conversation history
+    // If using Anthropic provider, use the new tool runner
+    if (this.provider instanceof AnthropicProvider) {
+      return await this.generateResponseWithToolRunner(
+        prompt,
+        context,
+        userId,
+        statusCallback,
+        allFunctions,
+      );
+    }
+
+    // Otherwise use the existing manual loop for OpenAI
+    return await this.generateResponseManual(
+      prompt,
+      context,
+      userId,
+      statusCallback,
+      allFunctions,
+    );
+  }
+
+  // New method using Anthropic's tool runner
+  private async generateResponseWithToolRunner(
+    prompt: string,
+    context?: ConversationContext,
+    userId?: string,
+    statusCallback?: (status: string) => Promise<void>,
+    allFunctions?: AIFunction[],
+  ): Promise<string> {
+    if (!(this.provider instanceof AnthropicProvider)) {
+      throw new Error('Tool runner only works with Anthropic provider');
+    }
+
+    // Build messages in Anthropic format
+    const anthropicMessages: Anthropic.MessageParam[] = [];
+
+    if (context?.history) {
+      anthropicMessages.push(
+        ...context.history.map((msg) => ({
+          role:
+            msg.role === 'assistant'
+              ? ('assistant' as const)
+              : ('user' as const),
+          content: msg.content,
+        })),
+      );
+    }
+
+    anthropicMessages.push({
+      role: 'user',
+      content: prompt,
+    });
+
+    const systemPrompt = await this.getSystemPrompt(userId, allFunctions);
+
+    // Create a function executor that routes to the appropriate handler
+    const functionExecutor = async (name: string, args: any) => {
+      return await this.handleFunctionCall(
+        { name, arguments: args, id: 'tool-runner' },
+        userId!,
+        context,
+      );
+    };
+
+    // Optional callback for tool invocations
+    const onToolCall = async (toolName: string) => {
+      if (statusCallback && allFunctions) {
+        // Get display name for the tool
+        const func = allFunctions.find((f) => f.name === toolName);
+        let displayName = toolName;
+
+        if (func?.title) {
+          displayName = func.title;
+        } else if (this.mcpService && userId) {
+          displayName = await this.mcpService.getToolDisplayName(
+            userId,
+            toolName,
+            context?.channelId || 'default',
+          );
+        }
+
+        // Don't show status for respond_to_user
+        if (toolName !== 'respond_to_user') {
+          await statusCallback(`🔧 ${displayName}`);
+        }
+      }
+    };
+
+    try {
+      const response = await this.provider.generateWithToolRunner(
+        anthropicMessages,
+        systemPrompt,
+        allFunctions || [],
+        functionExecutor,
+        onToolCall,
+      );
+
+      return this.truncateResponse(response);
+    } catch (error) {
+      llmLogger.error('Tool runner failed', error as Error, { userId });
+      return this.truncateResponse(
+        'Sorry, I encountered an error while processing your request.',
+      );
+    }
+  }
+
+  // Existing manual loop method (for OpenAI)
+  private async generateResponseManual(
+    prompt: string,
+    context?: ConversationContext,
+    userId?: string,
+    statusCallback?: (status: string) => Promise<void>,
+    allFunctions?: AIFunction[],
+  ): Promise<string | AIFunctionCall[]> {
+    // Initialize conversation history
+    const systemPrompt = await this.getSystemPrompt(userId, allFunctions);
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-      { role: 'system', content: this.getSystemPrompt() },
+      { role: 'system', content: systemPrompt },
     ];
     if (context?.history) {
       messages.push(
@@ -147,10 +499,11 @@ export class LLMService {
 
       try {
         // 3. Call the LLM with the current conversation history
-        if (statusCallback) {
-          await statusCallback(
-            i === 0 ? 'Thinking...' : `Continuing analysis (step ${i + 1})...`,
-          );
+        if (
+          !(this.provider instanceof OpenAIProvider) &&
+          !(this.provider instanceof AnthropicProvider)
+        ) {
+          throw new Error('Unsupported provider');
         }
         const choice = await this.provider.generateChatCompletion(
           messages,
@@ -165,12 +518,23 @@ export class LLMService {
           assistantMessage.tool_calls.length === 0
         ) {
           // NO TOOL CALLS: We are done. Return the text response.
+          const contentValue = assistantMessage.content;
+          const contentType = typeof contentValue;
+
           llmLogger.info('Loop finished. Returning text response.', {
             userId,
-            responseLength: (assistantMessage.content || '').length,
+            contentType,
+            contentValue: String(contentValue).substring(0, 100),
+            responseLength: (contentValue || '').length,
           });
+
+          // Handle null, undefined, empty string, or literal "null" string
           const finalResponse =
-            assistantMessage.content || 'Request completed.';
+            contentValue &&
+            contentValue !== 'null' &&
+            contentValue.trim() !== ''
+              ? contentValue
+              : 'Request completed.';
 
           // Smart truncation as safety net for Discord's 2000 character limit
           return this.truncateResponse(finalResponse);
@@ -182,19 +546,49 @@ export class LLMService {
           { userId },
         );
 
-        if (statusCallback) {
-          const toolNames = assistantMessage.tool_calls.map(
-            (tc) => tc.function.name,
+        // Show the assistant's reasoning if present
+        if (statusCallback && assistantMessage.content) {
+          await statusCallback(`💭 ${assistantMessage.content}`);
+        }
+
+        if (statusCallback && allFunctions) {
+          // Get display names (titles) for tools, excluding respond_to_user
+          const toolDisplayNames = await Promise.all(
+            assistantMessage.tool_calls
+              .filter((tc: any) => tc.function.name !== 'respond_to_user')
+              .map(async (tc: any) => {
+                // Check if this is one of our built-in functions (task management)
+                const builtInFunc = allFunctions.find(
+                  (f: AIFunction) => f.name === tc.function.name,
+                );
+                if (builtInFunc?.title) {
+                  return builtInFunc.title;
+                }
+
+                // Otherwise check MCP tools
+                if (this.mcpService) {
+                  return await this.mcpService.getToolDisplayName(
+                    userId!,
+                    tc.function.name,
+                    context?.channelId || 'default',
+                  );
+                }
+                return tc.function.name;
+              }),
           );
-          const toolList =
-            toolNames.length > 3
-              ? `${toolNames.slice(0, 3).join(', ')} and ${toolNames.length - 3} more`
-              : toolNames.join(', ');
-          await statusCallback(`Executing tools: ${toolList}...`);
+
+          // Only show tool status if there are actual tools (not just respond_to_user)
+          if (toolDisplayNames.length > 0) {
+            const toolList =
+              toolDisplayNames.length > 3
+                ? `${toolDisplayNames.slice(0, 3).join(', ')} and ${toolDisplayNames.length - 3} more`
+                : toolDisplayNames.join(', ');
+            await statusCallback(`🔧 ${toolList}`);
+          }
         }
 
         // Create task functions for each tool call
-        const toolTasks = assistantMessage.tool_calls.map((toolCall) => {
+        const toolTasks = assistantMessage.tool_calls.map((toolCall: any) => {
           return async () => {
             const functionCall: AIFunctionCall = {
               name: toolCall.function.name,
@@ -202,7 +596,19 @@ export class LLMService {
               id: toolCall.id,
             };
 
-            const result = await this.handleFunctionCall(functionCall, userId!);
+            const result = await this.handleFunctionCall(
+              functionCall,
+              userId!,
+              context,
+            );
+
+            // Check if this is the special end-loop marker
+            if (result.__END_LOOP__) {
+              return {
+                __END_LOOP__: true,
+                message: result.message,
+              };
+            }
 
             // Format the result for the 'tool' role message
             let resultContent = '';
@@ -234,7 +640,19 @@ export class LLMService {
           toolTasks,
           concurrencyLimit,
         );
-        messages.push(...toolResults); // Add tool results to history
+
+        // Check if any tool result is the end-loop marker
+        const endLoopResult = toolResults.find((r: any) => r.__END_LOOP__);
+        if (endLoopResult) {
+          llmLogger.info('Tool loop ended by respond_to_user call', { userId });
+          return this.truncateResponse((endLoopResult as any).message);
+        }
+
+        // Filter out any end-loop markers and add remaining tool results to history
+        const validToolResults = toolResults.filter(
+          (r: any) => !r.__END_LOOP__,
+        ) as OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+        messages.push(...validToolResults);
 
         // The loop will continue with the updated message history...
       } catch (error) {
@@ -256,38 +674,135 @@ export class LLMService {
   }
 
   // Helper to consolidate function loading logic
-  private async getAllFunctions(userId?: string): Promise<AIFunction[]> {
+  private async getAllFunctions(
+    userId?: string,
+    channelId?: string,
+  ): Promise<AIFunction[]> {
     let allFunctions: AIFunction[] = [];
+
+    // For Anthropic provider using tool runner, we don't need respond_to_user
+    // The tool runner handles conversation ending automatically
+    const needsRespondToUser = !(this.provider instanceof AnthropicProvider);
+
+    // Add the special respond_to_user function (only for OpenAI/manual loop)
+    if (needsRespondToUser) {
+      allFunctions.push({
+        name: 'respond_to_user',
+        title: 'Send Response',
+        description:
+          'Send your final response to the user. Use this when you have gathered all necessary information and are ready to answer. This will end the tool loop and deliver your message.',
+        parameters: {
+          type: 'object',
+          properties: {
+            message: {
+              type: 'string',
+              description:
+                'Your complete response to the user. Be helpful, concise, and friendly.',
+            },
+          },
+          required: ['message'],
+        },
+      });
+    }
+
+    // Add task management functions (always available)
+    if (this.taskFunctions) {
+      try {
+        const taskFuncs = this.taskFunctions.getFunctions();
+        allFunctions = [...allFunctions, ...taskFuncs];
+        llmLogger.info('Loaded task management functions', {
+          count: taskFuncs.length,
+        });
+      } catch (error) {
+        llmLogger.error(
+          'Failed to load task management functions',
+          error as Error,
+        );
+      }
+    }
+
+    // Add MCP tools (user-specific and channel-specific)
     if (this.mcpService && userId) {
       try {
+        llmLogger.info('Loading MCP functions for LLM', {
+          userId,
+          channelId,
+          channelIdOrDefault: channelId || 'default',
+        });
         const mcpFunctions =
-          await this.mcpService.convertToolsToOpenAIFunctions(userId);
+          await this.mcpService.convertToolsToOpenAIFunctions(
+            userId,
+            channelId || 'default',
+          );
+        llmLogger.info('MCP functions loaded', {
+          userId,
+          channelId,
+          mcpFunctionCount: mcpFunctions.length,
+          functionNames: mcpFunctions.map((f) => f.name),
+        });
         allFunctions = [...allFunctions, ...mcpFunctions];
       } catch (error) {
         llmLogger.error(
           'Failed to load MCP functions for user',
           error as Error,
-          { userId },
+          { userId, channelId },
         );
       }
     }
     return allFunctions;
   }
 
-  private getSystemPrompt(): string {
-    let basePrompt = `You are an AI assistant for Prometheus Protocol Discord. You help users interact with their connected tools.
+  private async getSystemPrompt(
+    userId?: string,
+    availableTools?: AIFunction[],
+  ): Promise<string> {
+    // Get user preferences for timezone
+    let timezone: string | undefined;
+    if (userId && this.taskFunctions?.database) {
+      try {
+        const prefs =
+          await this.taskFunctions.database.getUserPreferences(userId);
+        timezone = prefs.timezone;
+      } catch (error) {
+        llmLogger.warn('Failed to fetch user preferences for system prompt', {
+          userId,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          errorStack: error instanceof Error ? error.stack : undefined,
+        });
+      }
+    } else if (userId && !this.taskFunctions?.database) {
+      llmLogger.warn(
+        'Cannot fetch user preferences: taskFunctions.database not available',
+        { userId },
+      );
+    }
 
-Key Capabilities:
-- Execute tool functions to retrieve information and perform actions
-- Provide helpful responses based on available information and tool results
+    // Build time context
+    const timeContext = buildTimeContext(timezone);
 
-You can help users by:
-- Answering questions based on tool results
-- Explaining what tools are available and how to use them
+    // Extract MCP tool names from available tools
+    // MCP tools are those not in the core task management set
+    const coreToolNames = new Set([
+      'respond_to_user',
+      'create_task',
+      'list_my_tasks',
+      'update_task',
+      'delete_task',
+      'check_task_status',
+      'save_user_timezone',
+    ]);
+    const mcpToolNames = (availableTools || [])
+      .filter((tool) => !coreToolNames.has(tool.name))
+      .map((tool) => tool.name);
 
-IMPORTANT: Keep your responses concise and under 1800 characters to fit Discord message limits. Be direct and focused. If you need to provide detailed information, summarize the key points and offer to provide more details if asked.`;
-
-    return basePrompt;
+    // Use PromptBuilder to construct the system prompt
+    return PromptBuilder.buildStandard({
+      utcTime: timeContext.utcTime,
+      userTimezone: timezone,
+      userLocalTime: timeContext.userLocalTime,
+      availableTools: availableTools || [],
+      mcpToolNames,
+    });
   }
 
   // Execute promises with controlled concurrency to avoid overwhelming MCP servers
@@ -382,6 +897,7 @@ IMPORTANT: Keep your responses concise and under 1800 characters to fit Discord 
   async handleFunctionCall(
     functionCall: AIFunctionCall,
     userId: string,
+    context?: ConversationContext,
   ): Promise<any> {
     llmLogger.info('handleFunctionCall called', {
       userId,
@@ -391,16 +907,70 @@ IMPORTANT: Keep your responses concise and under 1800 characters to fit Discord 
       },
     });
 
-    // Check if this is an MCP function call
-    if (functionCall.name.startsWith('mcp__') && this.mcpService) {
-      llmLogger.debug('Detected MCP function call, routing to MCP service', {
+    // Check if this is the special respond_to_user function
+    if (functionCall.name === 'respond_to_user') {
+      llmLogger.info('Responding to user - ending tool loop', { userId });
+      // Return a special marker that signals the loop should end
+      return {
+        __END_LOOP__: true,
+        message: functionCall.arguments.message,
+      };
+    }
+
+    // Check if this is a task management function
+    if (this.taskFunctions) {
+      const taskFunctionNames = [
+        'create_task',
+        'list_my_tasks',
+        'update_task',
+        'delete_task',
+        'check_task_status',
+        'save_user_timezone',
+      ];
+
+      if (taskFunctionNames.includes(functionCall.name)) {
+        llmLogger.debug('Routing function call to task management', {
+          userId,
+          functionName: functionCall.name,
+        });
+        try {
+          const result = await this.taskFunctions.executeFunction(
+            functionCall.name,
+            functionCall.arguments,
+            {
+              userId,
+              channelId: context?.channelId || '',
+              threadId: context?.threadId, // Pass thread ID for task alerts
+              history: context?.history || [],
+            },
+          );
+          llmLogger.info('Task management function call succeeded', { userId });
+          return result;
+        } catch (error) {
+          llmLogger.error(
+            'Task management function call failed',
+            error as Error,
+            { userId },
+          );
+          return {
+            error: `Failed to execute task management function: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          };
+        }
+      }
+    }
+
+    // All other function calls are routed to MCP service
+    if (this.mcpService) {
+      llmLogger.debug('Routing function call to MCP service', {
         userId,
+        channelId: context?.channelId,
       });
       try {
         const result = await this.mcpService.handleMCPFunctionCall(
           functionCall.name,
           functionCall.arguments,
           userId,
+          context?.channelId || 'default',
         );
         llmLogger.info('MCP function call succeeded', { userId });
         return result;
@@ -412,12 +982,12 @@ IMPORTANT: Keep your responses concise and under 1800 characters to fit Discord 
       }
     }
 
-    llmLogger.warn(
-      'Not an MCP function call (prefix check failed or no MCP service)',
-      { userId },
+    llmLogger.warn('No MCP service available to handle function call', {
+      userId,
+    });
+    throw new Error(
+      `Unable to execute function: ${functionCall.name} (no MCP service available)`,
     );
-    // Handle local AI functions (existing implementation)
-    throw new Error(`Unknown function: ${functionCall.name}`);
   }
 
   async getMCPFunctions(userId: string): Promise<AIFunction[]> {

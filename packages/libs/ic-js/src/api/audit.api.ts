@@ -619,6 +619,7 @@ export interface AppVersionDetails {
   bounties: AuditBounty[];
   auditRecords: ProcessedAuditRecord[];
   results?: AuditResults;
+  created: bigint; // Timestamp in nanoseconds since epoch
 }
 
 // The new, primary data structure for the App Details page.

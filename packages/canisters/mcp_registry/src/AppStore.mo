@@ -30,6 +30,7 @@ module {
     version_string : Text; // e.g., "1.2.0"
     security_tier : SecurityTier;
     status : AppListingStatus; // #Verified or #Pending
+    created : Nat; // Timestamp (nanoseconds) when this version was published
   };
 
   // The main object for the app store's list view.
@@ -73,6 +74,7 @@ module {
     data_safety : DataSafetyInfo;
     bounties : [ICRC127.Bounty];
     audit_records : [ICRC126.AuditRecord];
+    created : Nat; // Timestamp (nanoseconds) when this version was published
   };
 
   public type AppDetailsResponse = {

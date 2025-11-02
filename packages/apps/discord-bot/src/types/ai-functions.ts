@@ -1,6 +1,7 @@
 // AI Function Types
 export interface AIFunction {
   name: string;
+  title?: string; // Optional human-readable display name
   description: string;
   parameters: {
     type: 'object';
@@ -40,6 +41,7 @@ export interface AIFunctionContext {
   channelId: string;
   guildId?: string;
   username: string;
+  threadId?: string; // Optional: thread ID for posting alerts when in a thread
 }
 
 // Task Management Types
