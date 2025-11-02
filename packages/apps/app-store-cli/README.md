@@ -6,6 +6,7 @@ The official command-line interface for the Prometheus Protocol. This tool provi
 
 - [Node.js](https://nodejs.org/) (v18 or higher)
 - [DFX SDK](https://internetcomputer.org/docs/current/developer-docs/setup/install/) (for identity management)
+- [Docker](https://docs.docker.com/get-docker/) (for reproducible builds)
 
 ## Installation & Usage
 
@@ -86,11 +87,65 @@ Commands for discovering, auditing, and claiming rewards.
 
 This example shows the complete journey, using the correct invocation for each role.
 
-#### 1. Developer Submits for Audit (from their project)
+#### 1. Developer Builds and Submits for Audit (from their project)
 
-- `npm run app-store init`
-- `npm run app-store submit`
-- `npm run app-store status`
+**⚠️ CRITICAL: Build Reproducibility**
+
+Your WASM **must** be built using the reproducible Docker environment. The verifier will rebuild your code from source and compare SHA-256 hashes. If you build natively (e.g., `dfx build`), the hashes **will not match** and verification will fail.
+
+**Step 1: Build your WASM reproducibly**
+
+```bash
+# Build using Docker (this ensures reproducibility across platforms)
+docker-compose run --rm wasm
+
+# Your WASM will be in: out/out_Linux_x86_64.wasm
+# The build script will print the SHA-256 hash
+```
+
+**Step 2: Specify your moc version in mops.toml**
+
+```toml
+[toolchain]
+moc = "0.16.0"  # ← The verifier will automatically use this version!
+```
+
+**Step 3: Update your manifest**
+
+Edit `prometheus.yml` to point to the reproducibly-built WASM:
+
+```yaml
+namespace: my-app
+submission:
+  repo_url: https://github.com/yourname/your-app
+  wasm_path: ./out/out_Linux_x86_64.wasm # ← Must be the Docker build output
+  git_commit: abc123... # ← Current commit hash
+  name: My Application
+  description: A secure MCP server
+```
+
+**Step 4: Submit for verification**
+
+```bash
+npm run app-store init  # If you haven't already
+npm run app-store submit
+npm run app-store status
+```
+
+**Why Docker?**
+
+The Docker build environment uses pinned toolchain versions specified in your `mops.toml`:
+
+- `moc` (Motoko compiler) - **Your choice!** (e.g., `0.16.0`)
+- `ic-wasm` version 0.9.3
+- `mops-cli` version 0.2.0
+
+The verifier automatically detects your `moc` version from `mops.toml` and uses the matching Docker image. This ensures your WASM hash **exactly matches** what the verifier produces, regardless of your host OS (macOS, Windows, Linux).
+
+**📚 For detailed build instructions, troubleshooting, and CI/CD examples, see:**
+
+- [Developer Guide: Reproducible Builds](../verifier-bot/DEVELOPER-GUIDE.md)
+- [Reproducible Build Template](../../libs/icrc118/README.md)
 
 #### 2. Sponsor Creates a Bounty (standalone)
 

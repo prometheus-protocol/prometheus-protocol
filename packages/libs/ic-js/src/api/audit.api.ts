@@ -864,3 +864,15 @@ export const getAuditRecordsForWasm = async (
     }
   });
 };
+
+/**
+ * Helper function to get bounties for a specific WASM ID.
+ * Used by the verifier bot to check if a pending verification has a bounty.
+ */
+export const getBountiesForWasm = async (
+  wasmId: string,
+): Promise<AuditBounty[]> => {
+  const registryActor = getRegistryActor();
+  const bounties = await registryActor.get_bounties_for_wasm(wasmId);
+  return bounties.map(processBounty);
+};

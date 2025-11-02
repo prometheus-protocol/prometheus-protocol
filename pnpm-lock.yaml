@@ -581,6 +581,34 @@ importers:
         specifier: ^2.1.5
         version: 2.1.9(@types/node@20.19.11)(@vitest/ui@2.1.9)(lightningcss@1.30.1)
 
+  packages/apps/verifier-bot:
+    dependencies:
+      '@dfinity/agent':
+        specifier: ^2.1.2
+        version: 2.4.1(@dfinity/candid@2.4.1(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1)
+      '@dfinity/identity':
+        specifier: ^2.1.2
+        version: 2.4.1(@dfinity/agent@2.4.1(@dfinity/candid@2.4.1(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1)
+      '@dfinity/identity-secp256k1':
+        specifier: ^2.1.2
+        version: 2.4.1(@dfinity/candid@2.4.1(@dfinity/principal@2.4.1))(@dfinity/principal@2.4.1)
+      '@dfinity/principal':
+        specifier: ^2.1.2
+        version: 2.4.1
+      '@prometheus-protocol/ic-js':
+        specifier: workspace:*
+        version: link:../../libs/ic-js
+      pem-file:
+        specifier: ^1.0.1
+        version: 1.0.1
+    devDependencies:
+      '@types/node':
+        specifier: ^20.10.0
+        version: 20.19.11
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.2
+
   packages/canisters/app_bounties:
     devDependencies:
       '@dfinity/pic':
@@ -6853,7 +6881,7 @@ snapshots:
   '@types/body-parser@1.19.6':
     dependencies:
       '@types/connect': 3.4.38
-      '@types/node': 24.3.0
+      '@types/node': 20.19.11
 
   '@types/chai@5.2.2':
     dependencies:
@@ -6861,7 +6889,7 @@ snapshots:
 
   '@types/connect@3.4.38':
     dependencies:
-      '@types/node': 24.3.0
+      '@types/node': 20.19.11
 
   '@types/debug@4.1.12':
     dependencies:
@@ -6879,7 +6907,7 @@ snapshots:
 
   '@types/express-serve-static-core@5.0.7':
     dependencies:
-      '@types/node': 24.3.0
+      '@types/node': 20.19.11
       '@types/qs': 6.14.0
       '@types/range-parser': 1.2.7
       '@types/send': 0.17.5
@@ -6910,7 +6938,7 @@ snapshots:
 
   '@types/node-fetch@2.6.13':
     dependencies:
-      '@types/node': 24.3.0
+      '@types/node': 20.19.11
       form-data: 4.0.4
 
   '@types/node@18.19.127':
@@ -6951,12 +6979,12 @@ snapshots:
   '@types/send@0.17.5':
     dependencies:
       '@types/mime': 1.3.5
-      '@types/node': 24.3.0
+      '@types/node': 20.19.11
 
   '@types/serve-static@1.15.8':
     dependencies:
       '@types/http-errors': 2.0.5
-      '@types/node': 24.3.0
+      '@types/node': 20.19.11
       '@types/send': 0.17.5
 
   '@types/unist@2.0.11': {}
@@ -6965,7 +6993,7 @@ snapshots:
 
   '@types/ws@8.18.1':
     dependencies:
-      '@types/node': 24.3.0
+      '@types/node': 20.19.11
 
   '@ungap/structured-clone@1.3.0': {}
 
