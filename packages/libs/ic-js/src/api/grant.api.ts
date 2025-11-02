@@ -1,4 +1,4 @@
-import { Identity } from '@dfinity/agent';
+import { Identity } from '@icp-sdk/core/agent';
 import { getAuthActor } from '../actors.js';
 import { Auth } from '@prometheus-protocol/declarations';
 

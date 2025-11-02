@@ -2,7 +2,7 @@
 
 import path from 'node:path';
 import { Actor, PocketIc, createIdentity } from '@dfinity/pic';
-import { IDL } from '@dfinity/candid';
+import { IDL } from '@icp-sdk/core/candid';
 import { describe, beforeAll, afterAll, it, expect, inject } from 'vitest';
 
 import { idlFactory as registryIdlFactory } from '@declarations/mcp_registry';
@@ -13,9 +13,9 @@ import {
   UpdateWasmRequest,
   UploadRequest,
 } from '@declarations/mcp_registry/mcp_registry.did.js';
-import { Identity } from '@dfinity/agent';
+import { Identity } from '@icp-sdk/core/agent';
 import { createHash } from 'node:crypto';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 
 const REGISTRY_WASM_PATH = path.resolve(
   __dirname,

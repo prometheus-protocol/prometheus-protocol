@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
-import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
+import { Secp256k1KeyIdentity } from '@icp-sdk/core/identity/secp256k1';
 import { loadDfxIdentity } from '../src/identity.node';
 
 // Mock the filesystem

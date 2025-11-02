@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { AppVersionDetails, Token, Tokens } from '@prometheus-protocol/ic-js';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { TokenAllowanceItem } from './TokenAllowanceItem';
 
 // --- 1. Updated Props ---

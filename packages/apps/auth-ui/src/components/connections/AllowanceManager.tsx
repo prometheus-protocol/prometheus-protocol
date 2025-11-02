@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { Label } from '@/components/ui/label';
 import { Auth } from '@prometheus-protocol/declarations';
 import { Tokens } from '@prometheus-protocol/ic-js';

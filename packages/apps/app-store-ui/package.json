@@ -8,13 +8,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@dfinity/agent": "^3.4.1",
-    "@dfinity/candid": "^3.4.1",
-    "@dfinity/identity": "^3.4.1",
-    "@dfinity/identity-secp256k1": "^3.4.1",
     "@dfinity/ledger-icrc": "^4.1.2",
-    "@dfinity/principal": "^3.4.1",
     "@dfinity/utils": "^3.2.0",
+    "@icp-sdk/core": "^4.0.1",
     "@hookform/resolvers": "^5.1.1",
     "@prometheus-protocol/declarations": "workspace:*",
     "@prometheus-protocol/ic-js": "workspace:*",

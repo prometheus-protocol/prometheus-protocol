@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { getCanisterWasmHash } from '@prometheus-protocol/ic-js';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 
 export interface WasmHashVerification {
   expectedWasmId: string; // The expected WASM hash as hex string

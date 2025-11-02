@@ -14,33 +14,21 @@ importers:
       '@anolilab/semantic-release-pnpm':
         specifier: ^2.0.3
         version: 2.0.5(@types/node@24.9.2)(yaml@2.8.1)
-      '@dfinity/agent':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0)
-      '@dfinity/candid':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/principal@3.4.1)
       '@dfinity/ic-management':
         specifier: ^7.1.3
         version: 7.1.3(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@dfinity/utils@3.2.0(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1))
-      '@dfinity/identity':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0)
-      '@dfinity/identity-secp256k1':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0)
       '@dfinity/pic':
         specifier: ^0.16.1
         version: 0.16.1(@noble/curves@1.9.7)(@noble/hashes@1.8.0)
-      '@dfinity/principal':
-        specifier: ^3.4.1
-        version: 3.4.1
       '@dfinity/utils':
         specifier: ^3.2.0
         version: 3.2.0(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)
       '@faker-js/faker':
         specifier: ^10.0.0
         version: 10.1.0
+      '@icp-sdk/core':
+        specifier: ^4.0.1
+        version: 4.2.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/identity-secp256k1@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/identity@3.4.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/principal@3.4.1)
       '@semantic-release/commit-analyzer':
         specifier: ^13.0.1
         version: 13.0.1(semantic-release@24.2.9(typescript@5.9.3))
@@ -86,27 +74,15 @@ importers:
 
   packages/apps/app-store-cli:
     dependencies:
-      '@dfinity/agent':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0)
-      '@dfinity/candid':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/principal@3.4.1)
-      '@dfinity/identity':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0)
-      '@dfinity/identity-secp256k1':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0)
       '@dfinity/ledger-icrc':
         specifier: ^4.1.2
         version: 4.1.2(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@dfinity/utils@3.2.0(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1))
-      '@dfinity/principal':
-        specifier: ^3.4.1
-        version: 3.4.1
       '@dfinity/utils':
         specifier: ^3.2.0
         version: 3.2.0(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)
+      '@icp-sdk/core':
+        specifier: ^4.0.1
+        version: 4.2.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/identity-secp256k1@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/identity@3.4.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/principal@3.4.1)
       '@prometheus-protocol/declarations':
         specifier: workspace:*
         version: link:../../declarations
@@ -153,30 +129,18 @@ importers:
 
   packages/apps/app-store-ui:
     dependencies:
-      '@dfinity/agent':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0)
-      '@dfinity/candid':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/principal@3.4.1)
-      '@dfinity/identity':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0)
-      '@dfinity/identity-secp256k1':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0)
       '@dfinity/ledger-icrc':
         specifier: ^4.1.2
         version: 4.1.2(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@dfinity/utils@3.2.0(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1))
-      '@dfinity/principal':
-        specifier: ^3.4.1
-        version: 3.4.1
       '@dfinity/utils':
         specifier: ^3.2.0
         version: 3.2.0(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)
       '@hookform/resolvers':
         specifier: ^5.1.1
         version: 5.2.2(react-hook-form@7.66.0(react@19.2.0))
+      '@icp-sdk/core':
+        specifier: ^4.0.1
+        version: 4.2.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/identity-secp256k1@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/identity@3.4.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/principal@3.4.1)
       '@prometheus-protocol/declarations':
         specifier: workspace:*
         version: link:../../declarations
@@ -334,27 +298,15 @@ importers:
 
   packages/apps/auth-cli:
     dependencies:
-      '@dfinity/agent':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0)
-      '@dfinity/candid':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/principal@3.4.1)
-      '@dfinity/identity':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0)
-      '@dfinity/identity-secp256k1':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0)
       '@dfinity/ledger-icrc':
         specifier: ^4.1.2
         version: 4.1.2(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@dfinity/utils@3.2.0(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1))
-      '@dfinity/principal':
-        specifier: ^3.4.1
-        version: 3.4.1
       '@dfinity/utils':
         specifier: ^3.2.0
         version: 3.2.0(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)
+      '@icp-sdk/core':
+        specifier: ^4.0.1
+        version: 4.2.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/identity-secp256k1@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/identity@3.4.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/principal@3.4.1)
       '@prometheus-protocol/declarations':
         specifier: workspace:*
         version: link:../../declarations
@@ -398,30 +350,18 @@ importers:
 
   packages/apps/auth-ui:
     dependencies:
-      '@dfinity/agent':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0)
-      '@dfinity/candid':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/principal@3.4.1)
-      '@dfinity/identity':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0)
-      '@dfinity/identity-secp256k1':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0)
       '@dfinity/ledger-icrc':
         specifier: ^4.1.2
         version: 4.1.2(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@dfinity/utils@3.2.0(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1))
-      '@dfinity/principal':
-        specifier: ^3.4.1
-        version: 3.4.1
       '@dfinity/utils':
         specifier: ^3.2.0
         version: 3.2.0(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)
       '@hookform/resolvers':
         specifier: ^5.1.1
         version: 5.2.2(react-hook-form@7.66.0(react@19.2.0))
+      '@icp-sdk/core':
+        specifier: ^4.0.1
+        version: 4.2.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/identity-secp256k1@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/identity@3.4.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/principal@3.4.1)
       '@prometheus-protocol/declarations':
         specifier: workspace:*
         version: link:../../declarations
@@ -660,36 +600,24 @@ importers:
 
   packages/libs/ic-js:
     dependencies:
-      '@dfinity/agent':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0)
       '@dfinity/auth-client':
         specifier: ^3.4.1
         version: 3.4.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/identity@3.4.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/principal@3.4.1)
-      '@dfinity/candid':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/principal@3.4.1)
       '@dfinity/ic-management':
         specifier: ^7.1.3
         version: 7.1.3(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@dfinity/utils@3.2.0(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1))
-      '@dfinity/identity':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0)
-      '@dfinity/identity-secp256k1':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0)
       '@dfinity/ledger-icp':
         specifier: ^6.1.2
         version: 6.1.2(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@dfinity/utils@3.2.0(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1))
       '@dfinity/ledger-icrc':
         specifier: ^4.1.2
         version: 4.1.2(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@dfinity/utils@3.2.0(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1))
-      '@dfinity/principal':
-        specifier: ^3.4.1
-        version: 3.4.1
       '@dfinity/utils':
         specifier: ^3.2.0
         version: 3.2.0(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)
+      '@icp-sdk/core':
+        specifier: ^4.0.1
+        version: 4.2.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/identity-secp256k1@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/identity@3.4.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/principal@3.4.1)
       '@prometheus-protocol/declarations':
         specifier: workspace:*
         version: link:../../declarations
@@ -711,25 +639,13 @@ importers:
         version: 5.9.3
 
   packages/tests/e2e:
-    devDependencies:
-      '@dfinity/agent':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0)
-      '@dfinity/candid':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/principal@3.4.1)
-      '@dfinity/identity':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0)
-      '@dfinity/identity-secp256k1':
-        specifier: ^3.4.1
-        version: 3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0)
-      '@dfinity/principal':
-        specifier: ^3.4.1
-        version: 3.4.1
+    dependencies:
       '@dfinity/utils':
         specifier: ^3.2.0
         version: 3.2.0(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)
+      '@icp-sdk/core':
+        specifier: ^4.0.1
+        version: 4.2.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/identity-secp256k1@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/identity@3.4.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/principal@3.4.1)
       '@types/node':
         specifier: ^24.0.15
         version: 24.9.2
@@ -1286,6 +1202,15 @@ packages:
     resolution: {integrity: sha512-A/IxlMLShx3KjV/HeTcTfaMxdwy690+L/ZADoeaTltLx+CVuzkeVIPuybK3jrRfw7YZnmdKsVVHAlEPIAEUNlA==}
     peerDependencies:
       react-hook-form: ^7.55.0
+
+  '@icp-sdk/core@4.2.1':
+    resolution: {integrity: sha512-9Fvl/8uvTiTVCF8vQAqS0vX4ik/gNtqqd5yLhh1YR1xy8BCwmXsLAfgKnu6QqSdpnH9h1CBJU+JiYg14WdUUsw==}
+    peerDependencies:
+      '@dfinity/agent': 3.4.1
+      '@dfinity/candid': 3.4.1
+      '@dfinity/identity': 3.4.1
+      '@dfinity/identity-secp256k1': 3.4.1
+      '@dfinity/principal': 3.4.1
 
   '@inquirer/ansi@1.0.1':
     resolution: {integrity: sha512-yqq0aJW/5XPhi5xOAL1xRCpe1eh8UFVgYFpFsjEqmIR8rKLyP+HINvFXwUaxYICflJrVlxnp7lLN6As735kVpw==}
@@ -6416,6 +6341,14 @@ snapshots:
     dependencies:
       '@standard-schema/utils': 0.3.0
       react-hook-form: 7.66.0(react@19.2.0)
+
+  '@icp-sdk/core@4.2.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/identity-secp256k1@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/identity@3.4.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/principal@3.4.1)':
+    dependencies:
+      '@dfinity/agent': 3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0)
+      '@dfinity/candid': 3.4.1(@dfinity/principal@3.4.1)
+      '@dfinity/identity': 3.4.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0)
+      '@dfinity/identity-secp256k1': 3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0)
+      '@dfinity/principal': 3.4.1
 
   '@inquirer/ansi@1.0.1': {}
 

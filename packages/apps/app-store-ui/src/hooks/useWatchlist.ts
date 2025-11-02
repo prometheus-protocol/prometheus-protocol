@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useInternetIdentity } from 'ic-use-internet-identity';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { useMemo } from 'react';
 import {
   getMyWatchlist,

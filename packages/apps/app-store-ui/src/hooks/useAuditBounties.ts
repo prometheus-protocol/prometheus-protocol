@@ -23,7 +23,7 @@ import {
 } from '@prometheus-protocol/ic-js';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import useMutation from './useMutation';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { useState } from 'react';
 
 /**

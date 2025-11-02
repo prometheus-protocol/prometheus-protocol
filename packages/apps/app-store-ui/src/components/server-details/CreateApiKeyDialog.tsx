@@ -27,7 +27,7 @@ import { Input } from '@/components/ui/input';
 import { Loader2, Copy, AlertTriangle } from 'lucide-react';
 import { useCreateApiKey } from '@/hooks/useApiKeys';
 import { AppVersionDetails } from '@prometheus-protocol/ic-js';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 
 const formSchema = z.object({
   name: z.string().min(3, { message: 'Name must be at least 3 characters.' }),

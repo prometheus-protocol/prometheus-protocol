@@ -3,9 +3,9 @@ import path from 'node:path';
 import os from 'node:os';
 import pemfile from 'pem-file';
 import { execSync } from 'node:child_process';
-import { Ed25519KeyIdentity } from '@dfinity/identity';
-import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
-import type { Identity } from '@dfinity/agent';
+import { Ed25519KeyIdentity } from '@icp-sdk/core/identity';
+import { Secp256k1KeyIdentity } from '@icp-sdk/core/identity/secp256k1';
+import type { Identity } from '@icp-sdk/core/agent';
 
 /**
  * Creates an identity from the raw string content of a plaintext PEM file.

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { Token, getCanisterId } from '@prometheus-protocol/ic-js';
 
 // KongSwap API base URL

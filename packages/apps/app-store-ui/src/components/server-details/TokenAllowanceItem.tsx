@@ -20,7 +20,7 @@ import {
   useUpdateAllowance,
 } from '@/hooks/usePayment';
 import { useEffect } from 'react';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { Token } from '@prometheus-protocol/ic-js';
 import TokenIcon from '../Token';
 

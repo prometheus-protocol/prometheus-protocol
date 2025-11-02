@@ -3,10 +3,10 @@ import {
   HttpAgent,
   Identity,
   LookupPathStatus,
-} from '@dfinity/agent';
+} from '@icp-sdk/core/agent';
 import { getRegistryActor } from '../actors.js';
 import { Registry } from '@prometheus-protocol/declarations';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import {
   AppListing,
   CanisterType,

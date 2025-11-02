@@ -7,7 +7,7 @@ import {
   Token,
   withdraw as mcpWithdraw,
 } from '@prometheus-protocol/ic-js';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { useQuery } from '@tanstack/react-query';
 import useMutation from './useMutation';
 import { useInternetIdentity } from 'ic-use-internet-identity';

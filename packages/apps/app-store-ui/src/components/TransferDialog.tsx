@@ -21,7 +21,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Loader2 } from 'lucide-react';
 import { useTransfer } from '@/hooks/usePayment'; // This hook needs to be created
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { Token } from '@prometheus-protocol/ic-js';
 
 interface TransferUsdcDialogProps {

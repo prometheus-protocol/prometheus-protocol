@@ -5,10 +5,10 @@
  *       Audit Hub canister for staking and reservations.
  */
 
-import { Identity } from '@dfinity/agent';
+import { Identity } from '@icp-sdk/core/agent';
 import { getAuditHubActor, getRegistryActor } from '../actors.js';
 import { AuditHub, Registry } from '@prometheus-protocol/declarations';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import {
   BountyListingRequest,
   ICRC16Map,

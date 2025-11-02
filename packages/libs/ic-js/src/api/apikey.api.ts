@@ -1,7 +1,7 @@
 // src/lib/apikey.api.ts
 
-import { Identity } from '@dfinity/agent';
-import { Principal } from '@dfinity/principal';
+import { Identity } from '@icp-sdk/core/agent';
+import { Principal } from '@icp-sdk/core/principal';
 import { getMcpServerActor } from '../actors.js';
 import { McpServer } from '@prometheus-protocol/declarations';
 

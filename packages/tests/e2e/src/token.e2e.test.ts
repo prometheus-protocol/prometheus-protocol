@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll } from 'vitest';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import * as jose from 'jose';
 import canisterIds from '../../../../.dfx/local/canister_ids.json';
 import * as dotenv from 'dotenv';

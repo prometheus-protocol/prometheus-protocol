@@ -4,7 +4,7 @@ import * as api from '@prometheus-protocol/ic-js';
 import * as identityApi from '../../src/identity.node.js';
 import { Command } from 'commander';
 import { registerBountyCommands } from '../../src/commands/bounty/bounty.commands.js';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 
 // Mock all external dependencies
 vi.mock('prompts');

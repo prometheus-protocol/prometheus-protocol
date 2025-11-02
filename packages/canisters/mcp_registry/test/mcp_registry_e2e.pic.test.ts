@@ -3,10 +3,10 @@
 import path from 'node:path';
 import { PocketIc, createIdentity } from '@dfinity/pic';
 import { describe, beforeAll, it, expect, afterAll, inject } from 'vitest';
-import { IDL } from '@dfinity/candid';
+import { IDL } from '@icp-sdk/core/candid';
 import type { Actor } from '@dfinity/pic';
-import { Identity } from '@dfinity/agent';
-import { Principal } from '@dfinity/principal';
+import { Identity } from '@icp-sdk/core/agent';
+import { Principal } from '@icp-sdk/core/principal';
 import { sha256 } from '@noble/hashes/sha2.js';
 
 // --- Import Declarations ---

@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '../ui/badge';
 import { useInstalledVersion } from '@/hooks/useInstalledVersion';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import {
   Tooltip,
   TooltipContent,

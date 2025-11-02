@@ -8,7 +8,7 @@ import {
   getVerificationStatus,
   getVersions,
 } from '@prometheus-protocol/ic-js';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { getCurrentIdentityName, loadDfxIdentity } from '../identity.node.js';
 
 // 1. Update the interface to use the standardized 'namespace' key.

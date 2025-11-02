@@ -2,10 +2,10 @@
 
 import path from 'node:path';
 import { Actor, PocketIc, createIdentity } from '@dfinity/pic';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { describe, beforeAll, it, expect, inject, beforeEach } from 'vitest';
-import { IDL } from '@dfinity/candid';
-import { Identity } from '@dfinity/agent';
+import { IDL } from '@icp-sdk/core/candid';
+import { Identity } from '@icp-sdk/core/agent';
 
 // Update these imports to match your new canister's declarations
 import { idlFactory } from '@declarations/audit_hub';
