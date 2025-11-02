@@ -5,7 +5,7 @@ import {
   Token,
 } from '@prometheus-protocol/ic-js';
 import { useMutation } from './useMutation';
-import { Principal } from '@dfinity/principal';
+import type { Principal } from '@dfinity/principal';
 import { useQuery } from '@tanstack/react-query';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 

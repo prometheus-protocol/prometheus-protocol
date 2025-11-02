@@ -3,7 +3,7 @@ import {
   completeAuthorize as apiCompleteAuthorize,
   denyConsent as apiDenyConsent,
 } from '@prometheus-protocol/ic-js';
-import { Identity } from '@dfinity/agent';
+import type { Identity } from '@dfinity/agent';
 import useMutation from './useMutation';
 
 // Define the types for clarity

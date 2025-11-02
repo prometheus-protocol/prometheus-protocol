@@ -1,11 +1,11 @@
-import { type Identity } from '@dfinity/agent';
-import { Ed25519KeyIdentity } from '@dfinity/identity';
-import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import pemfile from 'pem-file';
 import { execSync } from 'node:child_process';
+import { Ed25519KeyIdentity } from '@dfinity/identity';
+import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
+import type { Identity } from '@dfinity/agent';
 
 /**
  * Creates an identity from the raw string content of a plaintext PEM file.
@@ -30,11 +30,10 @@ function identityFromPemContent(
     // 1. Get the 32-byte secret key as a Buffer slice.
     const secretKeySlice = rawKey.subarray(7, 39);
 
-    // 2. CONVERT BUFFER TO ARRAYBUFFER
-    // Create a new Uint8Array from the slice, then get its underlying buffer.
-    const secretKeyArrayBuffer = new Uint8Array(secretKeySlice).buffer;
+    // 2. In v3, fromSecretKey expects Uint8Array, not ArrayBuffer
+    const secretKeyUint8Array = new Uint8Array(secretKeySlice);
 
-    return Secp256k1KeyIdentity.fromSecretKey(secretKeyArrayBuffer);
+    return Secp256k1KeyIdentity.fromSecretKey(secretKeyUint8Array);
   }
 
   // This is an Ed25519 key
@@ -44,8 +43,8 @@ function identityFromPemContent(
     );
   }
   const secretKey = rawKey.subarray(16, 48);
-  const secretKeyArrayBuffer = new Uint8Array(secretKey).buffer;
-  return Ed25519KeyIdentity.fromSecretKey(secretKeyArrayBuffer);
+  const secretKeyUint8Array = new Uint8Array(secretKey);
+  return Ed25519KeyIdentity.fromSecretKey(secretKeyUint8Array);
 }
 
 /**

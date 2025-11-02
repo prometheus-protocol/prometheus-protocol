@@ -5,12 +5,12 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@dfinity/agent": "^2.4.1",
-    "@dfinity/candid": "^2.4.1",
-    "@dfinity/identity": "^2.4.1",
-    "@dfinity/identity-secp256k1": "^2.4.1",
-    "@dfinity/principal": "^2.4.1",
-    "@dfinity/utils": "^2.13.2",
+    "@dfinity/agent": "^3.4.1",
+    "@dfinity/candid": "^3.4.1",
+    "@dfinity/identity": "^3.4.1",
+    "@dfinity/identity-secp256k1": "^3.4.1",
+    "@dfinity/principal": "^3.4.1",
+    "@dfinity/utils": "^3.2.0",
     "@types/node": "^24.0.15",
     "dotenv": "^17.2.0",
     "cross-fetch": "^4.1.0",
