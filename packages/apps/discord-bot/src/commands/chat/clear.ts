@@ -13,7 +13,6 @@ import {
   DatabaseService,
 } from '../../types/index.js';
 import { chatLogger } from '../../utils/logger.js';
-import { ErrorHandler } from '../../utils/errors.js';
 
 export class ClearChatCommand extends BaseCommand {
   name = 'clear-chat';
@@ -49,7 +48,8 @@ export class ClearChatCommand extends BaseCommand {
 
       if (!confirm) {
         await interaction.editReply({
-          content: '❌ Chat memory clearing cancelled. Set `confirm` to `true` to proceed.',
+          content:
+            '❌ Chat memory clearing cancelled. Set `confirm` to `true` to proceed.',
         });
         return;
       }
@@ -93,7 +93,9 @@ export class ClearChatCommand extends BaseCommand {
     }
   }
 
-  private async executeInternal(context: CommandContext): Promise<CommandResponse> {
+  private async executeInternal(
+    context: CommandContext,
+  ): Promise<CommandResponse> {
     chatLogger.info('Clear chat command executed', {
       userId: context.userId,
       channelId: context.channelId,
@@ -115,11 +117,13 @@ export class ClearChatCommand extends BaseCommand {
         .addFields(
           {
             name: 'What was cleared?',
-            value: 'All previous conversation history between you and the AI in this channel.',
+            value:
+              'All previous conversation history between you and the AI in this channel.',
           },
           {
             name: 'What happens next?',
-            value: 'The AI will start fresh with no memory of previous conversations in this channel.',
+            value:
+              'The AI will start fresh with no memory of previous conversations in this channel.',
           },
         )
         .setTimestamp();
