@@ -40,6 +40,10 @@ export class TaskManagementFunctions {
       'check_task_status',
       new GetTaskStatusHandler(this.scheduler, this.database),
     );
+    this.functions.set(
+      'save_user_timezone',
+      new SaveTimezoneHandler(this.database),
+    );
   }
 
   getFunctions(): AIFunction[] {
@@ -48,7 +52,9 @@ export class TaskManagementFunctions {
         name: 'create_task',
         title: 'Create Task',
         description:
-          'Create a new scheduled task for the current user. Use this to set up recurring monitoring or one-time checks using their available tools. IMPORTANT: Tasks execute without conversation history to reduce costs - make prompts self-contained with all necessary context.',
+          'Create a new scheduled task for the current user. Use this to set up recurring monitoring or one-time checks using their available tools. IMPORTANT: Tasks execute without conversation history to reduce costs - make prompts self-contained with all necessary context.\n\nTIME & TIMEZONE IMPORTANT:\n- All tasks run on UTC time internally\n- Current UTC time: ' +
+          new Date().toISOString() +
+          '\n- If user specifies a specific time (like "6:45pm"), ASK them what timezone they mean\n- Once you learn their timezone, call save_user_timezone to remember it for future use\n- Always confirm the time in BOTH UTC and their local timezone to avoid confusion\n- Example: "I\'ll run this at 6:45 PM your time (which is 1:45 AM UTC tomorrow)"\n- For natural language times, calculate the delay from NOW',
         parameters: {
           type: 'object',
           properties: {
@@ -70,17 +76,7 @@ export class TaskManagementFunctions {
             interval: {
               type: 'string',
               description:
-                'How often to run this task. For one-time tasks, this is the delay before first execution.',
-              enum: [
-                '1 minute',
-                '5 minutes',
-                '15 minutes',
-                '30 minutes',
-                '1 hour',
-                '6 hours',
-                '12 hours',
-                'daily',
-              ],
+                'How often to run this task. You MUST handle time parsing and provide one of:\n\n1. Predefined interval: "1 minute", "5 minutes", "15 minutes", "30 minutes", "1 hour", "6 hours", "12 hours", "daily"\n\n2. Milliseconds as string: For natural language times (like "at 6:45pm", "in 2 hours", "tomorrow at noon"), YOU calculate the milliseconds from NOW and pass it as a string number. Example: User says "in 2 hours" -> you pass "7200000" (2 * 60 * 60 * 1000)\n\nFor specific times (like "6:45pm"), first ask user their timezone, then calculate milliseconds until that time.\n\nIMPORTANT: When confirming with user, explain the time in BOTH UTC and their local timezone to avoid confusion.',
             },
           },
           required: ['title', 'prompt', 'recurring', 'interval'],
@@ -117,17 +113,8 @@ export class TaskManagementFunctions {
             },
             interval: {
               type: 'string',
-              description: 'Change how often the task runs',
-              enum: [
-                '1 minute',
-                '5 minutes',
-                '15 minutes',
-                '30 minutes',
-                '1 hour',
-                '6 hours',
-                '12 hours',
-                'daily',
-              ],
+              description:
+                'Change how often the task runs. Same rules as create_task: predefined intervals OR milliseconds as string for natural language times.',
             },
           },
           required: ['task_id'],
@@ -165,6 +152,23 @@ export class TaskManagementFunctions {
             },
           },
           required: ['task_id'],
+        },
+      },
+      {
+        name: 'save_user_timezone',
+        title: 'Save User Timezone',
+        description:
+          'Save the user\'s timezone for future reference. Use this when you learn the user\'s timezone through conversation (e.g., they mention "I\'m in Eastern time" or "I\'m in New York"). This will help provide better time-related assistance in the future.\n\nIMPORTANT: Validate the timezone first by checking if it\'s a valid IANA timezone identifier (e.g., "America/New_York", "Europe/London", "Asia/Tokyo").',
+        parameters: {
+          type: 'object',
+          properties: {
+            timezone: {
+              type: 'string',
+              description:
+                'IANA timezone identifier (e.g., "America/New_York", "Europe/London", "Asia/Tokyo", "America/Los_Angeles"). Must be a valid timezone name.',
+            },
+          },
+          required: ['timezone'],
         },
       },
     ];
@@ -289,6 +293,7 @@ class CreateTaskHandler implements AIFunctionHandler {
   }
 
   private parseInterval(interval: string): number | null {
+    // First check predefined intervals
     const intervalMap: Record<string, number> = {
       '1 minute': 60 * 1000,
       '5 minutes': 5 * 60 * 1000,
@@ -300,7 +305,19 @@ class CreateTaskHandler implements AIFunctionHandler {
       daily: 24 * 60 * 60 * 1000,
     };
 
-    return intervalMap[interval] || null;
+    if (intervalMap[interval]) {
+      return intervalMap[interval];
+    }
+
+    // Try to parse as a number (milliseconds passed directly by AI)
+    const numericInterval = parseInt(interval, 10);
+    if (!isNaN(numericInterval) && numericInterval > 0) {
+      return numericInterval;
+    }
+
+    // If it's not a predefined interval or number, AI should have already calculated it
+    console.log('⚠️ Received unexpected interval format:', interval);
+    return null;
   }
 }
 
@@ -475,7 +492,7 @@ class ModifyTaskHandler implements AIFunctionHandler {
   }
 
   private parseInterval(interval: string): number | null {
-    // Same as CreateTaskHandler
+    // Same as CreateTaskHandler - supports predefined intervals and numeric milliseconds
     const intervalMap: Record<string, number> = {
       '1 minute': 60 * 1000,
       '5 minutes': 5 * 60 * 1000,
@@ -487,7 +504,18 @@ class ModifyTaskHandler implements AIFunctionHandler {
       daily: 24 * 60 * 60 * 1000,
     };
 
-    return intervalMap[interval] || null;
+    if (intervalMap[interval]) {
+      return intervalMap[interval];
+    }
+
+    // Try to parse as a number (milliseconds passed directly by AI)
+    const numericInterval = parseInt(interval, 10);
+    if (!isNaN(numericInterval) && numericInterval > 0) {
+      return numericInterval;
+    }
+
+    console.log('⚠️ Received unexpected interval format:', interval);
+    return null;
   }
 }
 
@@ -633,5 +661,62 @@ class GetTaskStatusHandler implements AIFunctionHandler {
     if (days >= 1) return `${days} day${days > 1 ? 's' : ''}`;
     if (hours >= 1) return `${hours} hour${hours > 1 ? 's' : ''}`;
     return `${minutes} minute${minutes > 1 ? 's' : ''}`;
+  }
+}
+
+class SaveTimezoneHandler implements AIFunctionHandler {
+  constructor(private database: DatabaseService) {}
+
+  async execute(
+    args: Record<string, any>,
+    context: AIFunctionContext,
+  ): Promise<AIFunctionResult> {
+    const { timezone } = args;
+
+    // Validate timezone
+    try {
+      // Test if the timezone is valid by creating a date formatter
+      new Intl.DateTimeFormat('en-US', { timeZone: timezone });
+    } catch (error) {
+      return {
+        success: false,
+        message: `"${timezone}" is not a valid timezone identifier. Please use IANA timezone names like "America/New_York", "Europe/London", or "Asia/Tokyo".`,
+      };
+    }
+
+    try {
+      // Get existing preferences
+      const existingPrefs = await this.database.getUserPreferences(
+        context.userId,
+      );
+
+      // Update timezone
+      const updatedPrefs = {
+        ...existingPrefs,
+        timezone: timezone,
+      };
+
+      await this.database.saveUserPreferences(context.userId, updatedPrefs);
+
+      // Show current time in their timezone as confirmation
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        dateStyle: 'full',
+        timeStyle: 'long',
+      });
+      const localTime = formatter.format(new Date());
+
+      return {
+        success: true,
+        message: `✅ Saved your timezone as ${timezone}. Your current local time is: ${localTime}`,
+        data: { timezone, localTime },
+      };
+    } catch (error) {
+      console.error('Failed to save timezone:', error);
+      return {
+        success: false,
+        message: `Failed to save timezone: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
   }
 }
