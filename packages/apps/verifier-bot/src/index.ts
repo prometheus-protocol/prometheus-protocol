@@ -80,18 +80,12 @@ async function pollAndVerify(): Promise<void> {
         });
         console.log(`   ✅ Bounty reserved, stake locked for 3 days`);
 
-        // Extract canister name from metadata (if available)
-        const canisterName =
-          job.metadata?.canister_name || extractCanisterNameFromRepo(job.repo);
-        console.log(`   📦 Canister: ${canisterName}`);
-
-        // Run the reproducible build
+        // Run the reproducible build (auto-detects canister name from dfx.json)
         console.log(`\n🔨 Starting reproducible build...`);
         const result = await verifyBuild(
           job.repo,
           job.commit_hash,
           job.wasm_hash,
-          canisterName,
         );
 
         console.log(`\n📊 Build completed in ${result.duration}s`);
@@ -160,23 +154,6 @@ async function pollAndVerify(): Promise<void> {
     console.error(`\n❌ Polling error: ${error.message}`);
     console.error(error.stack);
   }
-}
-
-/**
- * Attempts to extract the canister name from the repository URL.
- * Falls back to 'mcp_registry' if extraction fails.
- */
-function extractCanisterNameFromRepo(repo: string): string {
-  try {
-    // Try to extract from repo name (e.g., "mcp-registry" -> "mcp_registry")
-    const match = repo.match(/\/([^/]+?)(?:\.git)?$/);
-    if (match) {
-      return match[1].replace(/-/g, '_');
-    }
-  } catch (e) {
-    // Ignore
-  }
-  return 'mcp_registry'; // Sensible default
 }
 
 /**

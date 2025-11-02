@@ -7,12 +7,12 @@ import type { BuildResult } from './types.js';
 /**
  * Verifies that a git repository at a specific commit produces the expected WASM hash.
  * Uses Docker-based reproducible builds to ensure deterministic compilation.
+ * Automatically detects the canister name from dfx.json.
  */
 export async function verifyBuild(
   repo: string,
   commitHash: string,
   expectedWasmHash: string,
-  canisterName: string = 'mcp_registry',
 ): Promise<BuildResult> {
   const startTime = Date.now();
   const workDir = `/tmp/verify-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -35,6 +35,10 @@ export async function verifyBuild(
       timeout: 10_000,
       stdio: 'pipe',
     });
+
+    // Auto-detect canister name from dfx.json
+    const canisterName = extractCanisterNameFromDfx(workDir);
+    console.log(`📦 Detected canister: ${canisterName}`);
 
     // Locate the canister directory
     const canisterPath = findCanisterPath(workDir, canisterName);
@@ -107,6 +111,56 @@ export async function verifyBuild(
     } catch (e) {
       console.error('⚠️  Cleanup failed:', e);
     }
+  }
+}
+
+/**
+ * Extracts the canister name from dfx.json by finding which canister
+ * has src/main.mo as its main file.
+ */
+function extractCanisterNameFromDfx(repoPath: string): string {
+  try {
+    const dfxJsonPath = path.join(repoPath, 'dfx.json');
+
+    if (!fs.existsSync(dfxJsonPath)) {
+      console.warn(`   ⚠️  dfx.json not found, using fallback`);
+      return 'canister';
+    }
+
+    const dfxJson = JSON.parse(fs.readFileSync(dfxJsonPath, 'utf8'));
+
+    if (!dfxJson.canisters) {
+      console.warn(`   ⚠️  No canisters in dfx.json, using fallback`);
+      return 'canister';
+    }
+
+    // Look for a canister with src/main.mo as its main file
+    for (const [name, config] of Object.entries(dfxJson.canisters)) {
+      const canisterConfig = config as any;
+
+      // Check if this is a Motoko canister with src/main.mo
+      if (
+        canisterConfig.type === 'motoko' &&
+        (canisterConfig.main === 'src/main.mo' ||
+          canisterConfig.main?.endsWith('/src/main.mo'))
+      ) {
+        return name;
+      }
+    }
+
+    // If no exact match, return the first Motoko canister
+    for (const [name, config] of Object.entries(dfxJson.canisters)) {
+      const canisterConfig = config as any;
+      if (canisterConfig.type === 'motoko') {
+        return name;
+      }
+    }
+
+    console.warn(`   ⚠️  No Motoko canisters in dfx.json, using fallback`);
+    return 'canister';
+  } catch (error: any) {
+    console.warn(`   ⚠️  Error reading dfx.json: ${error.message}`);
+    return 'canister';
   }
 }
 
@@ -237,7 +291,7 @@ async function generateMopsToml(
 
   // Default dependencies for Motoko projects
   const dependencies = {
-    base: '0.11.1',
+    base: '0.16.0',
   };
 
   try {
