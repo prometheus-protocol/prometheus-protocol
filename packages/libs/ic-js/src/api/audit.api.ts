@@ -5,10 +5,10 @@
  *       Audit Hub canister for staking and reservations.
  */
 
-import { Identity } from '@dfinity/agent';
+import { Identity } from '@icp-sdk/core/agent';
 import { getAuditHubActor, getRegistryActor } from '../actors.js';
 import { AuditHub, Registry } from '@prometheus-protocol/declarations';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import {
   BountyListingRequest,
   ICRC16Map,
@@ -173,7 +173,8 @@ export const getVerificationStatus = async (
     registryActor.get_bounties_for_wasm(wasmId),
   ]);
 
-  const verificationRequest = fromNullable(verificationResult);
+  const verificationRequest =
+    fromNullable<Registry.VerificationRequest>(verificationResult);
   const processedRequest: ProcessedVerificationRequest | null =
     verificationRequest
       ? processVerificationRequest(verificationRequest)
@@ -395,13 +396,15 @@ export const getAuditBounty = async (
   if (identity && status === 'Completed') {
     const currentUserPrincipal = identity.getPrincipal();
     // Find if the current user submitted the record for THIS bounty.
-    const userSubmission = allAuditRecords.find((record) => {
-      if (record.metadata.bounty_id !== bountyId) return false;
+    const userSubmission = allAuditRecords.find(
+      (record: ProcessedAuditRecord) => {
+        if (record.metadata.bounty_id !== bountyId) return false;
 
-      const author =
-        record.type === 'attestation' ? record.auditor : record.reporter;
-      return author.compareTo(currentUserPrincipal) === 'eq';
-    });
+        const author =
+          record.type === 'attestation' ? record.auditor : record.reporter;
+        return author.compareTo(currentUserPrincipal) === 'eq';
+      },
+    );
 
     if (userSubmission && processed.claims.length === 0) {
       status = 'AwaitingClaim';
@@ -838,7 +841,7 @@ export const getAuditRecordsForWasm = async (
   const actor = getRegistryActor();
   const rawRecords = await actor.get_audit_records_for_wasm(wasmId);
 
-  return rawRecords.map((record) => {
+  return rawRecords.map((record: Registry.AuditRecord) => {
     if ('Attestation' in record) {
       const att = record.Attestation;
       return {

@@ -1,9 +1,9 @@
 import path from 'node:path';
 import { Actor, PocketIc, createIdentity } from '@dfinity/pic';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { describe, beforeAll, it, expect, beforeEach, inject } from 'vitest';
-import { Identity } from '@dfinity/agent';
-import { IDL } from '@dfinity/candid';
+import { Identity } from '@icp-sdk/core/agent';
+import { IDL } from '@icp-sdk/core/candid';
 
 // --- Import declarations for the canisters ---
 import { idlFactory as registryIdl } from '@declarations/mcp_registry';

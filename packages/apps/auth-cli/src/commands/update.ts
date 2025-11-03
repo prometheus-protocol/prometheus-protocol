@@ -1,6 +1,6 @@
 import type { Command } from 'commander';
 import prompts from 'prompts';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 
 // --- Import from your clean service layer and identity helpers ---
 import {

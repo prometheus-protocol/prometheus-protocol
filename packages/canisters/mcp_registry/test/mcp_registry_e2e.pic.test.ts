@@ -3,10 +3,10 @@
 import path from 'node:path';
 import { PocketIc, createIdentity } from '@dfinity/pic';
 import { describe, beforeAll, it, expect, afterAll, inject } from 'vitest';
-import { IDL } from '@dfinity/candid';
+import { IDL } from '@icp-sdk/core/candid';
 import type { Actor } from '@dfinity/pic';
-import { Identity } from '@dfinity/agent';
-import { Principal } from '@dfinity/principal';
+import { Identity } from '@icp-sdk/core/agent';
+import { Principal } from '@icp-sdk/core/principal';
 import { sha256 } from '@noble/hashes/sha2.js';
 
 // --- Import Declarations ---
@@ -134,10 +134,10 @@ describe('MCP Registry Full E2E Lifecycle', () => {
             fee_collector_account: [],
             max_memo_length: [],
             index_principal: [],
-            feature_flags: [],
-          },
+          feature_flags: [],
         },
-      ]),
+      },
+    ]).buffer,
     });
     ledgerActor = ledgerFixture.actor;
     ledgerCanisterId = ledgerFixture.canisterId;
@@ -147,7 +147,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       idlFactory: registryIdlFactory,
       wasm: REGISTRY_WASM_PATH,
       sender: daoIdentity.getPrincipal(),
-      arg: IDL.encode(registryInit({ IDL }), [[]]),
+      arg: IDL.encode(registryInit({ IDL }), [[]]).buffer,
     });
     registryActor = registryFixture.actor;
     registryCanisterId = registryFixture.canisterId;
@@ -156,7 +156,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       idlFactory: indexerIdlFactory,
       wasm: INDEXER_WASM_PATH,
       sender: daoIdentity.getPrincipal(),
-      arg: IDL.encode(indexerInit({ IDL }), []),
+      arg: IDL.encode(indexerInit({ IDL }), []).buffer,
     });
     indexerActor = indexerFixture.actor;
     indexerCanisterId = indexerFixture.canisterId;
@@ -166,7 +166,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       idlFactory: orchestratorIdlFactory,
       wasm: ORCHESTRATOR_WASM_PATH,
       sender: daoIdentity.getPrincipal(),
-      arg: IDL.encode(orchestratorInit({ IDL }), [[]]),
+      arg: IDL.encode(orchestratorInit({ IDL }), [[]]).buffer,
     });
     orchestratorActor = orchestratorFixture.actor;
 
@@ -495,7 +495,8 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       await orchestratorActor.get_canisters(appNamespace);
     expect(managedCanisters).toHaveLength(1);
     const deployedCanisterId = managedCanisters[0];
-    expect(deployedCanisterId).toBeInstanceOf(Principal);
+    expect(typeof deployedCanisterId.toText).toBe('function'); // Check it's a Principal-like object
+    expect(deployedCanisterId.toText()).toMatch(/^[a-z0-9]{5}-[a-z0-9]{5}-[a-z0-9]{5}-[a-z0-9]{5}-cai$/);
 
     // // ASSERT 3 (THE ULTIMATE PROOF): Inspect the newly created canister directly.
     // const deployedWasmHash = await pic.getWasmHash(deployedCanisterId);

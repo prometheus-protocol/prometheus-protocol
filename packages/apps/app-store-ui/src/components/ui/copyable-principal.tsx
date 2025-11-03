@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { Button } from '@/components/ui/button';
 import { Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';

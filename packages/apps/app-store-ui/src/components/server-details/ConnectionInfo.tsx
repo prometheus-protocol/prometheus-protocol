@@ -14,7 +14,7 @@ import {
   TooltipTrigger,
 } from '../ui/tooltip';
 import { UpgradePrompt } from './UpgradePrompt';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 
 interface ConnectionInfoProps {
   namespace: string;

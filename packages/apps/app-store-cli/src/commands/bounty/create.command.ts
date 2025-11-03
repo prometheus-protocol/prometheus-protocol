@@ -6,7 +6,7 @@ import {
   getCanisterId,
   Tokens, // 1. Import the entire Tokens module
 } from '@prometheus-protocol/ic-js';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import {
   getCurrentIdentityName,
   loadDfxIdentity,

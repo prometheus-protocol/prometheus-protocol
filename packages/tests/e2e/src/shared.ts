@@ -1,8 +1,8 @@
-import { HttpAgent, Identity } from '@dfinity/agent';
-import { Principal } from '@dfinity/principal';
+import { HttpAgent, Identity } from '@icp-sdk/core/agent';
+import { Principal } from '@icp-sdk/core/principal';
 import * as jose from 'jose';
 import canisterIds from '../../../../.dfx/local/canister_ids.json';
-import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
+import { Secp256k1KeyIdentity } from '@icp-sdk/core/identity/secp256k1';
 import { createActor } from '@declarations/auth_server';
 
 // --- Test Configuration ---

@@ -1,4 +1,4 @@
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { useWasmHash, uint8ArrayToHex } from '@/hooks/useWasmHash';
 import {
   CheckCircle2,

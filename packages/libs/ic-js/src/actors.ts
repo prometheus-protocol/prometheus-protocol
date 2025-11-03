@@ -1,5 +1,5 @@
-import { Actor, HttpAgent, type Identity } from '@dfinity/agent';
-import { Principal } from '@dfinity/principal';
+import { Actor, HttpAgent, type Identity } from '@icp-sdk/core/agent';
+import { Principal } from '@icp-sdk/core/principal';
 import {
   Registry,
   Orchestrator,
@@ -28,20 +28,15 @@ const createActor = <T>(
   identity?: Identity,
 ): T => {
   const host = getHost();
-  const agent = new HttpAgent({
+  const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
+
+  // In v3, use HttpAgent.createSync with shouldFetchRootKey for local development
+  // This will fetch the root key before the first request is made
+  const agent = HttpAgent.createSync({
     host,
     identity,
+    shouldFetchRootKey: isLocal,
   });
-
-  // Only fetch the root key for local development
-  if (host.includes('localhost') || host.includes('127.0.0.1')) {
-    agent.fetchRootKey().catch((err) => {
-      console.warn(
-        'Unable to fetch root key. Check to ensure that your local replica is running',
-      );
-      console.error(err);
-    });
-  }
 
   return Actor.createActor<T>(idlFactory, {
     agent,

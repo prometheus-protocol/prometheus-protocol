@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import { Actor, PocketIc, createIdentity } from '@dfinity/pic';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import {
   describe,
   beforeAll,
@@ -12,8 +12,8 @@ import {
   inject,
   beforeEach,
 } from 'vitest';
-import { IDL } from '@dfinity/candid';
-import type { Identity } from '@dfinity/agent';
+import { IDL } from '@icp-sdk/core/candid';
+import type { Identity } from '@icp-sdk/core/agent';
 
 // --- Import Declarations ---
 import {

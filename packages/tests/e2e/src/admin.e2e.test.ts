@@ -6,9 +6,9 @@ import {
   beforeEach,
   afterEach,
 } from 'vitest';
-import { HttpAgent, Identity } from '@dfinity/agent';
-import { Principal } from '@dfinity/principal';
-import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
+import { HttpAgent, Identity } from '@icp-sdk/core/agent';
+import { Principal } from '@icp-sdk/core/principal';
+import { Secp256k1KeyIdentity } from '@icp-sdk/core/identity/secp256k1';
 import { toNullable } from '@dfinity/utils';
 import { createActor } from '@declarations/auth_server';
 import {

@@ -1,4 +1,4 @@
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { AppVersionSummary } from '@prometheus-protocol/ic-js';
 import { useWasmHash, uint8ArrayToHex } from './useWasmHash';
 

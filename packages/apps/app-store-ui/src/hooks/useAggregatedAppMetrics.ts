@@ -1,4 +1,4 @@
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { getAppMetrics, UsageTracker } from '@prometheus-protocol/ic-js';
 import { useQueries } from '@tanstack/react-query';
 import { useMemo } from 'react';

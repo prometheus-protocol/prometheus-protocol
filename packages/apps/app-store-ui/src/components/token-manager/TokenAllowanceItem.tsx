@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { Token } from '@prometheus-protocol/ic-js';
 import { toast } from 'sonner';
 import { Loader2, Copy, X } from 'lucide-react';

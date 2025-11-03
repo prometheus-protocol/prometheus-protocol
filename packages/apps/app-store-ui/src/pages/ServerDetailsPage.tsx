@@ -47,7 +47,7 @@ import { useAggregatedAppMetrics } from '@/hooks/useAggregatedAppMetrics';
 import { useNamespaceMetrics } from '@/hooks/useNamespaceMetrics';
 import { getServerCanisterId } from '@prometheus-protocol/ic-js';
 import { useQueries } from '@tanstack/react-query';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 
 // --- NEW High-Fidelity Skeleton Component ---
 const ServerDetailsSkeleton = () => (

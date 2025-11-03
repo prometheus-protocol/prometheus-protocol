@@ -16,13 +16,9 @@
     "prepublishOnly": "pnpm build"
   },
   "dependencies": {
-    "@dfinity/agent": "^2.4.1",
-    "@dfinity/candid": "^2.4.1",
-    "@dfinity/identity": "^2.4.1",
-    "@dfinity/identity-secp256k1": "^2.4.1",
-    "@dfinity/ledger-icrc": "^2.9.1",
-    "@dfinity/principal": "^2.4.1",
-    "@dfinity/utils": "^2.13.2",
+    "@dfinity/ledger-icrc": "^4.1.2",
+    "@icp-sdk/core": "^4.0.1",
+    "@dfinity/utils": "^3.2.0",
     "@prometheus-protocol/declarations": "workspace:*",
     "@prometheus-protocol/ic-js": "workspace:*",
     "commander": "^12.1.0",

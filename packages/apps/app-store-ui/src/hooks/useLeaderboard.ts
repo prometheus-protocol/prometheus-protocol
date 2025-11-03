@@ -7,7 +7,7 @@ import {
   Leaderboard,
   getToolInvocationsForServer,
 } from '@prometheus-protocol/ic-js';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 
 /**
  * React Query hook to fetch the ranked list of top users.

@@ -1,6 +1,6 @@
-import { Identity } from '@dfinity/agent';
+import { Identity } from '@icp-sdk/core/agent';
 import { toNullable } from '@dfinity/utils';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { getIcrcActor } from '../actors.js';
 import { Token } from '../tokens.js';
 

@@ -4,6 +4,6 @@
   "version": "0.1.0",
   "description": "A token watchlist canister.",
   "devDependencies": {
-    "@dfinity/pic": "^0.13.1"
+    "@dfinity/pic": "^0.16.1"
   }
 }

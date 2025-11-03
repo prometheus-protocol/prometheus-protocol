@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Command } from 'commander';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 // 1. Import the group registration function for the command under test
 import { registerLeaderboardCommands } from '../../src/commands/leaderboard/leaderboard.commands.js';
 import * as api from '@prometheus-protocol/ic-js';

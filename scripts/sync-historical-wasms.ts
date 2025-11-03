@@ -8,7 +8,7 @@
  *   pnpm tsx scripts/sync-historical-wasms.ts --network ic
  */
 
-import { Actor, HttpAgent } from '@dfinity/agent';
+import { Actor, HttpAgent } from '@icp-sdk/core/agent';
 import { loadDfxIdentity } from '../packages/apps/app-store-cli/src/identity.node.js';
 import { idlFactory as registryIdl } from '../packages/declarations/src/generated/mcp_registry/mcp_registry.did.js';
 import { idlFactory as trackerIdl } from '../packages/declarations/src/generated/usage_tracker/usage_tracker.did.js';

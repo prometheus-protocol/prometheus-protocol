@@ -14,7 +14,7 @@ import { AppStoreDetails, buildServerUrl } from '@prometheus-protocol/ic-js';
 import { Button } from '../ui/button';
 import { Copy } from 'lucide-react';
 import { toast } from 'sonner';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 
 const clientSetups = [
   {

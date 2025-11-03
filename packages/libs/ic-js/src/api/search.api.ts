@@ -30,7 +30,7 @@ export const search = async (queryString: string): Promise<AppListing[]> => {
   }
 
   // --- HOP 2: Get full app listings from the Registry for the matched namespaces ---
-  const filter = matchingNamespaces.map((ns) => ({ namespace: ns }));
+  const filter = matchingNamespaces.map((ns: string) => ({ namespace: ns }));
 
   // Note: Your candid might expect the filter to be wrapped in an outer array.
   // Adjust if necessary, e.g., `filter: [filter]`

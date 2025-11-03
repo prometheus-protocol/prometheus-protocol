@@ -1,7 +1,7 @@
 // packages/canisters/auth_server/test/auth_server.pic.test.ts
 
 import path from 'node:path';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { Actor, PocketIc, createIdentity } from '@dfinity/pic';
 import {
   describe,
@@ -24,7 +24,7 @@ import {
   ResourceServer,
   UpdateResourceServerArgs,
 } from '@declarations/auth_server/auth_server.did.js';
-import { Identity } from '@dfinity/agent';
+import { Identity } from '@icp-sdk/core/agent';
 
 const AUTH_SERVER_WASM_PATH = path.resolve(
   __dirname,

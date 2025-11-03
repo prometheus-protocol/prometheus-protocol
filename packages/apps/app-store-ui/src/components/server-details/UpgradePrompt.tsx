@@ -1,4 +1,4 @@
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { AppVersionSummary } from '@prometheus-protocol/ic-js';
 import { useInstalledVersion } from '@/hooks/useInstalledVersion';
 import { Button } from '@/components/ui/button';

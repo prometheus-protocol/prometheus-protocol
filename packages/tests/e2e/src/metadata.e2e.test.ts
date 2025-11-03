@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import canisterIds from '../../../../.dfx/local/canister_ids.json';
 
 // --- Test Configuration ---

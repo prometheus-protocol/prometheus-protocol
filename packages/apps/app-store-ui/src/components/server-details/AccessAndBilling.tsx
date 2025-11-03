@@ -17,7 +17,7 @@ import {
 
 import { useListApiKeys, useRevokeApiKey } from '@/hooks/useApiKeys';
 import { AppVersionDetails } from '@prometheus-protocol/ic-js';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { CreateApiKeyDialog } from './CreateApiKeyDialog';
 
 export const AccessAndBilling = ({

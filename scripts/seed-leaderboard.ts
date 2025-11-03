@@ -1,8 +1,8 @@
 #!/usr/bin/env zx
 import { $ } from 'zx';
 import { faker } from '@faker-js/faker';
-import { Principal } from '@dfinity/principal';
-import { Actor, HttpAgent } from '@dfinity/agent';
+import { Principal } from '@icp-sdk/core/principal';
+import { Actor, HttpAgent } from '@icp-sdk/core/agent';
 import { idlFactory as trackerIdl } from '../packages/declarations/dist/generated/usage_tracker/index.js';
 import type { _SERVICE as TrackerService } from '../packages/declarations/dist/generated/usage_tracker/usage_tracker.did.js';
 import { idlFactory as aggregatorIdl } from '../packages/declarations/dist/generated/leaderboard/index.js';

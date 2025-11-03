@@ -1,7 +1,7 @@
-import { Identity } from '@dfinity/agent';
+import { Identity } from '@icp-sdk/core/agent';
 import { getTokenWatchlistActor } from '../actors.js';
 import { TokenWatchlist } from '@prometheus-protocol/declarations';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 
 export type { TokenWatchlist };
 export type WatchlistTokenInfo = TokenWatchlist.TokenInfo;
