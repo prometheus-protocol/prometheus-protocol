@@ -215,15 +215,70 @@ export class AnthropicProvider implements LLMProvider {
   ): Promise<OpenAI.Chat.Completions.ChatCompletion.Choice> {
     try {
       // Convert OpenAI format to Anthropic format
-      const anthropicMessages: Anthropic.MessageParam[] = messages
-        .filter((m) => m.role !== 'system') // System message handled separately
-        .map((m) => ({
-          role: m.role === 'assistant' ? 'assistant' : 'user',
-          content:
-            typeof m.content === 'string'
-              ? m.content
-              : JSON.stringify(m.content),
-        }));
+      const anthropicMessages: Anthropic.MessageParam[] = [];
+
+      // Process messages, handling tool calls and results
+      for (let i = 0; i < messages.length; i++) {
+        const m = messages[i];
+
+        if (m.role === 'system') {
+          // System messages handled separately
+          continue;
+        } else if (m.role === 'user') {
+          anthropicMessages.push({
+            role: 'user',
+            content:
+              typeof m.content === 'string'
+                ? m.content
+                : JSON.stringify(m.content),
+          });
+        } else if (m.role === 'assistant') {
+          // Assistant message, possibly with tool calls
+          const contentBlocks: any[] = [];
+
+          // Add text content if present
+          if (m.content) {
+            contentBlocks.push({
+              type: 'text',
+              text:
+                typeof m.content === 'string'
+                  ? m.content
+                  : JSON.stringify(m.content),
+            });
+          }
+
+          // Add tool use blocks if present
+          if (m.tool_calls && m.tool_calls.length > 0) {
+            for (const toolCall of m.tool_calls) {
+              contentBlocks.push({
+                type: 'tool_use',
+                id: toolCall.id,
+                name: toolCall.function.name,
+                input: JSON.parse(toolCall.function.arguments),
+              });
+            }
+          }
+
+          anthropicMessages.push({
+            role: 'assistant',
+            content: contentBlocks.length > 0 ? contentBlocks : '',
+          });
+        } else if (m.role === 'tool') {
+          // Tool result message - needs to be converted to Anthropic format
+          // Anthropic expects tool results to follow the assistant message with tool_use
+          // We need to add a user message with tool_result content
+          anthropicMessages.push({
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: m.tool_call_id,
+                content: m.content || '',
+              },
+            ],
+          });
+        }
+      }
 
       const systemMessage = messages.find((m) => m.role === 'system');
 
@@ -336,7 +391,13 @@ export class LLMService {
     context?: ConversationContext,
     userId?: string,
     statusCallback?: (status: string) => Promise<void>,
-  ): Promise<string | AIFunctionCall[]> {
+  ): Promise<
+    | string
+    | {
+        response: string;
+        messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+      }
+  > {
     llmLogger.info('generateResponse called, starting tool-calling loop', {
       userId,
       metadata: { promptLength: prompt.length },
@@ -361,18 +422,8 @@ export class LLMService {
       totalFunctions: allFunctions.length,
     });
 
-    // If using Anthropic provider, use the new tool runner
-    if (this.provider instanceof AnthropicProvider) {
-      return await this.generateResponseWithToolRunner(
-        prompt,
-        context,
-        userId,
-        statusCallback,
-        allFunctions,
-      );
-    }
-
-    // Otherwise use the existing manual loop for OpenAI
+    // Use manual loop for both OpenAI and Anthropic to preserve full message history
+    // The Anthropic tool runner doesn't expose message history, so we need the manual approach
     return await this.generateResponseManual(
       prompt,
       context,
@@ -398,15 +449,22 @@ export class LLMService {
     const anthropicMessages: Anthropic.MessageParam[] = [];
 
     if (context?.history) {
-      anthropicMessages.push(
-        ...context.history.map((msg) => ({
-          role:
-            msg.role === 'assistant'
-              ? ('assistant' as const)
-              : ('user' as const),
-          content: msg.content,
-        })),
-      );
+      // Convert history to Anthropic format, handling all message types
+      for (const msg of context.history) {
+        if (msg.role === 'user') {
+          anthropicMessages.push({
+            role: 'user',
+            content: msg.content || '',
+          });
+        } else if (msg.role === 'assistant') {
+          anthropicMessages.push({
+            role: 'assistant',
+            content: msg.content || '',
+          });
+        }
+        // Note: Anthropic's tool runner handles tool messages differently
+        // We only include user and assistant messages in the initial history
+      }
     }
 
     anthropicMessages.push({
@@ -474,21 +532,46 @@ export class LLMService {
     userId?: string,
     statusCallback?: (status: string) => Promise<void>,
     allFunctions?: AIFunction[],
-  ): Promise<string | AIFunctionCall[]> {
+  ): Promise<{
+    response: string;
+    messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+  }> {
     // Initialize conversation history
     const systemPrompt = await this.getSystemPrompt(userId, allFunctions);
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       { role: 'system', content: systemPrompt },
     ];
     if (context?.history) {
-      messages.push(
-        ...context.history.map((msg) => ({
-          role: msg.role as 'user' | 'assistant',
-          content: msg.content,
-        })),
-      );
+      // Convert history to OpenAI format, handling all message types
+      for (const msg of context.history) {
+        if (msg.role === 'user' || msg.role === 'system') {
+          messages.push({
+            role: msg.role,
+            content: msg.content || '',
+          });
+        } else if (msg.role === 'assistant') {
+          const assistantMsg: OpenAI.Chat.Completions.ChatCompletionAssistantMessageParam =
+            {
+              role: 'assistant',
+              content: msg.content,
+            };
+          if (msg.tool_calls && msg.tool_calls.length > 0) {
+            assistantMsg.tool_calls = msg.tool_calls;
+          }
+          messages.push(assistantMsg);
+        } else if (msg.role === 'tool') {
+          messages.push({
+            role: 'tool',
+            tool_call_id: msg.tool_call_id!,
+            content: msg.content || '',
+          });
+        }
+      }
     }
     messages.push({ role: 'user', content: prompt });
+
+    // Track messages added during this conversation turn (excludes history and system)
+    const turnStartIndex = messages.length - 1; // Index of the user prompt
 
     const maxIterations = 100; // Safety break
 
@@ -517,7 +600,7 @@ export class LLMService {
           !assistantMessage.tool_calls ||
           assistantMessage.tool_calls.length === 0
         ) {
-          // NO TOOL CALLS: We are done. Return the text response.
+          // NO TOOL CALLS: We are done. Return the text response with full message history.
           const contentValue = assistantMessage.content;
           const contentType = typeof contentValue;
 
@@ -537,7 +620,13 @@ export class LLMService {
               : 'Request completed.';
 
           // Smart truncation as safety net for Discord's 2000 character limit
-          return this.truncateResponse(finalResponse);
+          const truncatedResponse = this.truncateResponse(finalResponse);
+
+          // Return the response along with NEW messages from this turn (excluding history and system)
+          return {
+            response: truncatedResponse,
+            messages: messages.slice(turnStartIndex),
+          };
         }
 
         // TOOL CALLS PRESENT: Execute them with concurrency control
@@ -645,7 +734,13 @@ export class LLMService {
         const endLoopResult = toolResults.find((r: any) => r.__END_LOOP__);
         if (endLoopResult) {
           llmLogger.info('Tool loop ended by respond_to_user call', { userId });
-          return this.truncateResponse((endLoopResult as any).message);
+          const truncatedResponse = this.truncateResponse(
+            (endLoopResult as any).message,
+          );
+          return {
+            response: truncatedResponse,
+            messages: messages.slice(turnStartIndex),
+          };
         }
 
         // Filter out any end-loop markers and add remaining tool results to history
@@ -661,16 +756,24 @@ export class LLMService {
           error as Error,
           { userId },
         );
-        return this.truncateResponse(
+        const errorResponse = this.truncateResponse(
           'Sorry, I encountered an error while processing your request.',
         );
+        return {
+          response: errorResponse,
+          messages: messages.slice(turnStartIndex),
+        };
       }
     }
 
     llmLogger.warn('Loop exited due to max iterations.', { userId });
-    return this.truncateResponse(
+    const maxIterResponse = this.truncateResponse(
       'I performed several actions but reached the processing limit. The tasks have been completed.',
     );
+    return {
+      response: maxIterResponse,
+      messages: messages.slice(turnStartIndex),
+    };
   }
 
   // Helper to consolidate function loading logic
@@ -680,30 +783,25 @@ export class LLMService {
   ): Promise<AIFunction[]> {
     let allFunctions: AIFunction[] = [];
 
-    // For Anthropic provider using tool runner, we don't need respond_to_user
-    // The tool runner handles conversation ending automatically
-    const needsRespondToUser = !(this.provider instanceof AnthropicProvider);
-
-    // Add the special respond_to_user function (only for OpenAI/manual loop)
-    if (needsRespondToUser) {
-      allFunctions.push({
-        name: 'respond_to_user',
-        title: 'Send Response',
-        description:
-          'Send your final response to the user. Use this when you have gathered all necessary information and are ready to answer. This will end the tool loop and deliver your message.',
-        parameters: {
-          type: 'object',
-          properties: {
-            message: {
-              type: 'string',
-              description:
-                'Your complete response to the user. Be helpful, concise, and friendly.',
-            },
+    // Both providers now use manual loop, so both need respond_to_user
+    // This function signals when the agent is done and ready to respond
+    allFunctions.push({
+      name: 'respond_to_user',
+      title: 'Send Response',
+      description:
+        'Send your final response to the user. Use this when you have gathered all necessary information and are ready to answer. This will end the tool loop and deliver your message.',
+      parameters: {
+        type: 'object',
+        properties: {
+          message: {
+            type: 'string',
+            description:
+              'Your complete response to the user. Be helpful, concise, and friendly.',
           },
-          required: ['message'],
         },
-      });
-    }
+        required: ['message'],
+      },
+    });
 
     // Add task management functions (always available)
     if (this.taskFunctions) {

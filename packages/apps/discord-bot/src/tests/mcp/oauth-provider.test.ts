@@ -15,28 +15,24 @@ const createMockDatabaseService = (): DatabaseService => ({
   getOAuthServerMetadata: vi.fn(),
   deleteOAuthServerMetadata: vi.fn(),
 
-  // OAuth client methods
+  // OAuth client info methods
   saveOAuthClientInfo: vi.fn(),
   getOAuthClientInfo: vi.fn(),
   deleteOAuthClientInfo: vi.fn(),
 
-  // OAuth tokens methods
-  saveOAuthTokens: vi.fn(),
-  getOAuthTokens: vi.fn(),
-  deleteOAuthTokens: vi.fn(),
-
   // OAuth pending methods
   saveOAuthPending: vi.fn(),
   getOAuthPending: vi.fn(),
-  getOAuthPendingByState: vi.fn(),
   deleteOAuthPending: vi.fn(),
 
-  // Conversation methods (not used in OAuth provider)
+  // Conversation history methods
   saveConversation: vi.fn(),
   saveConversationTurn: vi.fn(),
+  saveMessages: vi.fn(),
   getConversationHistory: vi.fn(),
+  clearConversationHistory: vi.fn(),
 
-  // Alert methods (not used in OAuth provider)
+  // Alert management methods
   saveAlertState: vi.fn(),
   getLastAlertState: vi.fn(),
   saveAlert: vi.fn(),
@@ -44,11 +40,11 @@ const createMockDatabaseService = (): DatabaseService => ({
   updateAlert: vi.fn(),
   deleteAlert: vi.fn(),
 
-  // User preferences (not used in OAuth provider)
-  saveUserPreferences: vi.fn(),
+  // User preferences
   getUserPreferences: vi.fn(),
+  saveUserPreferences: vi.fn(),
 
-  // User tasks (not used in OAuth provider)
+  // User task management
   saveUserTask: vi.fn(),
   getUserTasks: vi.fn(),
   getUserTask: vi.fn(),
@@ -57,15 +53,20 @@ const createMockDatabaseService = (): DatabaseService => ({
   updateTaskLastRun: vi.fn(),
   deleteUserTask: vi.fn(),
 
-  // MCP connections (not used in OAuth provider)
+  // OAuth tokens
+  saveOAuthTokens: vi.fn(),
+  getOAuthTokens: vi.fn(),
+  deleteOAuthTokens: vi.fn(),
+  getOAuthPendingByState: vi.fn(),
+
+  // MCP connection persistence
   saveUserMCPConnection: vi.fn(),
   getUserMCPConnection: vi.fn(),
   getUserMCPConnections: vi.fn(),
   updateUserMCPConnection: vi.fn(),
   deleteUserMCPConnection: vi.fn(),
-  clearConversationHistory: vi.fn(),
 
-  // Chat thread methods (not used in OAuth provider)
+  // Chat thread management
   createChatThread: vi.fn(),
   getChatThread: vi.fn(),
   updateThreadHistory: vi.fn(),

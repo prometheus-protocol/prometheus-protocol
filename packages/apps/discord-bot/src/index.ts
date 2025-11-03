@@ -365,27 +365,34 @@ class DiscordBot {
         // Keep the status message visible for transparency
         // Don't delete it - users should see what tools were used
 
-        // Handle function calls or text response
-        if (Array.isArray(response)) {
-          // Function calls are supported - this would be handled by the chat command logic
-          // For now, inform the user that complex operations should use /chat
+        // Handle response format (should always be structured now)
+        let textResponse: string;
+
+        if (typeof response === 'object' && 'response' in response) {
+          // Structured response with message history (both providers)
+          textResponse = response.response;
+        } else if (Array.isArray(response)) {
+          // Deprecated function call format
           await message.reply(
             "I received a complex request. For tool execution and tasks, please ensure you're in a thread created by the `/chat` command.",
           );
+          return;
         } else {
-          // Send response
-          await message.reply(response);
-
-          // Update thread history
-          await this.database.updateThreadHistory(threadId, {
-            role: 'user',
-            content: message.content,
-          });
-          await this.database.updateThreadHistory(threadId, {
-            role: 'assistant',
-            content: response,
-          });
+          throw new Error('Unexpected response format from LLM service');
         }
+
+        // Send response
+        await message.reply(textResponse);
+
+        // Update thread history
+        await this.database.updateThreadHistory(threadId, {
+          role: 'user',
+          content: message.content,
+        });
+        await this.database.updateThreadHistory(threadId, {
+          role: 'assistant',
+          content: textResponse,
+        });
       } finally {
         // Ensure typing is cleared even if there's an error
         clearInterval(typingInterval);
@@ -466,24 +473,32 @@ class DiscordBot {
         // Keep the status message visible for transparency
         // Don't delete it - users should see what tools were used
 
-        // Handle function calls or text response
-        if (Array.isArray(response)) {
-          // For now, don't support function calls in DMs
+        // Handle response format (should always be structured now)
+        let textResponse: string;
+
+        if (typeof response === 'object' && 'response' in response) {
+          // Structured response with message history (both providers)
+          textResponse = response.response;
+        } else if (Array.isArray(response)) {
+          // Deprecated function call format
           await message.reply(
             "I can't execute tools in DM conversations yet. Please use the `/chat` command in a server for tool access.",
           );
+          return;
         } else {
-          // Send response
-          await message.reply(response);
-
-          // Save conversation turn
-          await this.database.saveConversationTurn(
-            message.author.id,
-            message.channel.id,
-            message.content,
-            response,
-          );
+          throw new Error('Unexpected response format from LLM service');
         }
+
+        // Send response
+        await message.reply(textResponse);
+
+        // Save conversation turn
+        await this.database.saveConversationTurn(
+          message.author.id,
+          message.channel.id,
+          message.content,
+          textResponse,
+        );
       } finally {
         // Ensure typing is cleared even if there's an error
         clearInterval(typingInterval);

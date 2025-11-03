@@ -19,10 +19,26 @@ export interface ConversationContext {
   threadId?: string; // Optional: thread ID for posting alerts when in a thread
 }
 
+// Tool call structure for assistant messages
+export interface ToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string; // JSON string
+  };
+}
+
+// Enhanced conversation message supporting all message types including tool calls
 export interface ConversationMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
+  role: 'user' | 'assistant' | 'system' | 'tool';
+  content: string | null;
   timestamp: Date;
+  // For assistant messages with tool calls
+  tool_calls?: ToolCall[];
+  // For tool result messages
+  tool_call_id?: string;
+  tool_name?: string;
 }
 
 export interface ChatThread {
@@ -30,7 +46,13 @@ export interface ChatThread {
   thread_id: string;
   channel_id: string;
   user_id: string;
-  conversation_history: Array<{ role: string; content: string }>;
+  conversation_history: Array<{
+    role: string;
+    content: string | null;
+    tool_calls?: ToolCall[];
+    tool_call_id?: string;
+    tool_name?: string;
+  }>;
   is_active: boolean;
   created_at: Date;
   last_activity: Date;
@@ -45,11 +67,12 @@ export interface AlertConfig {
   channelId: string; // Channel where MCP tools are connected
   targetChannelId?: string; // Optional: specific channel/thread to post alerts to
   threadId?: string; // Optional: thread ID if task was created in a thread (for loading thread history)
-  interval: number; // milliseconds
+  interval: number; // milliseconds - time between executions (for recurring) or delay until first execution
   enabled: boolean;
   recurring?: boolean; // If false, alert will be disabled after first execution
   prompt: string; // AI prompt to execute with MCP tools
   lastRun?: Date;
+  nextRun?: Date; // When the task should execute next
   lastData?: any;
   errorState?: {
     hasError: boolean;
@@ -70,7 +93,14 @@ export interface AlertResult {
 
 // Database Service Types
 export interface DatabaseService {
-  // Conversation history
+  // Conversation history - new methods
+  saveMessages(
+    userId: string,
+    channelId: string,
+    messages: ConversationMessage[],
+  ): Promise<void>;
+
+  // Legacy method - deprecated but kept for backward compatibility
   saveConversation(context: ConversationContext): Promise<void>;
   saveConversationTurn(
     userId: string,
@@ -215,7 +245,13 @@ export interface DatabaseService {
   getChatThread(threadId: string): Promise<ChatThread | null>;
   updateThreadHistory(
     threadId: string,
-    message: { role: string; content: string },
+    message: {
+      role: string;
+      content: string | null;
+      tool_calls?: ToolCall[];
+      tool_call_id?: string;
+      tool_name?: string;
+    },
   ): Promise<void>;
   deactivateChatThread(threadId: string): Promise<void>;
 }
