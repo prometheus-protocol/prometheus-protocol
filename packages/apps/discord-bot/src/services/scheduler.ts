@@ -1,5 +1,4 @@
 import { schedulerLogger } from '../utils/logger.js';
-import * as cron from 'node-cron';
 import {
   AlertConfig,
   AlertResult,
@@ -12,7 +11,7 @@ import { LLMService } from './llm.js';
 
 export class AlertScheduler {
   private alerts = new Map<string, AlertConfig>();
-  private tasks = new Map<string, cron.ScheduledTask>();
+  private tasks = new Map<string, NodeJS.Timeout>();
   private running = false;
 
   constructor(
@@ -38,7 +37,7 @@ export class AlertScheduler {
 
         // Schedule enabled alerts
         if (alert.enabled) {
-          this.scheduleAlert(alert);
+          await this.scheduleAlert(alert);
         }
       }
 
@@ -63,7 +62,7 @@ export class AlertScheduler {
     // Stop all scheduled tasks
     const taskArray = Array.from(this.tasks.values());
     for (const task of taskArray) {
-      task.stop();
+      clearTimeout(task);
     }
     this.tasks.clear();
     this.running = false;
@@ -89,14 +88,14 @@ export class AlertScheduler {
     }
 
     if (alert.enabled && this.running) {
-      this.scheduleAlert(alert);
+      await this.scheduleAlert(alert);
     }
   }
 
   async removeAlert(alertId: string): Promise<void> {
     const task = this.tasks.get(alertId);
     if (task) {
-      task.stop();
+      clearTimeout(task);
       this.tasks.delete(alertId);
     }
     this.alerts.delete(alertId);
@@ -147,7 +146,7 @@ export class AlertScheduler {
       }
 
       if (this.running) {
-        this.scheduleAlert(alert);
+        await this.scheduleAlert(alert);
       }
     }
   }
@@ -174,7 +173,7 @@ export class AlertScheduler {
 
       const task = this.tasks.get(alertId);
       if (task) {
-        task.stop();
+        clearTimeout(task);
         this.tasks.delete(alertId);
       }
     }
@@ -216,7 +215,7 @@ export class AlertScheduler {
         alertName: alert.name,
         newInterval,
       });
-      this.scheduleAlert(alert);
+      await this.scheduleAlert(alert);
     }
   }
 
@@ -234,7 +233,7 @@ export class AlertScheduler {
 
         // If the alert was disabled due to error and should be re-enabled
         if (alert.enabled && this.running) {
-          this.scheduleAlert(alert);
+          await this.scheduleAlert(alert);
         }
 
         return true;
@@ -272,7 +271,7 @@ export class AlertScheduler {
       alert.enabled = false;
       const task = this.tasks.get(alert.id);
       if (task) {
-        task.stop();
+        clearTimeout(task);
         this.tasks.delete(alert.id);
       }
       schedulerLogger.warn('Alert disabled due to persistent error', {
@@ -294,31 +293,81 @@ export class AlertScheduler {
     }
   }
 
-  private scheduleAlert(alert: AlertConfig): void {
+  private async scheduleAlert(alert: AlertConfig): Promise<void> {
     // Remove existing task if any
     const existingTask = this.tasks.get(alert.id);
     if (existingTask) {
-      existingTask.stop();
+      clearTimeout(existingTask);
+      this.tasks.delete(alert.id);
     }
 
-    // Convert interval to cron expression (for simplicity, using interval in minutes)
-    const intervalMinutes = Math.max(1, Math.floor(alert.interval / 60000));
-    const cronExpression = `*/${intervalMinutes} * * * *`;
+    // Calculate when to run next
+    const now = new Date();
+    let nextRunTime: Date;
 
-    const task = cron.schedule(
-      cronExpression,
-      async () => {
-        await this.executeAlert(alert);
-      },
-      {
-        scheduled: false,
-      },
-    );
+    if (alert.nextRun && alert.nextRun > now) {
+      // Use existing nextRun if it's in the future
+      nextRunTime = alert.nextRun;
+    } else if (alert.lastRun) {
+      // For recurring tasks that have run before, schedule from last run + interval
+      nextRunTime = new Date(alert.lastRun.getTime() + alert.interval);
+      // If that time has already passed, schedule for now + interval
+      if (nextRunTime <= now) {
+        nextRunTime = new Date(now.getTime() + alert.interval);
+      }
+    } else {
+      // First execution: schedule for now + interval
+      nextRunTime = new Date(now.getTime() + alert.interval);
+    }
 
-    task.start();
-    this.tasks.set(alert.id, task);
+    // Update the alert's nextRun time
+    alert.nextRun = nextRunTime;
+
+    // Save the updated nextRun to database
+    try {
+      await this.database.updateAlert(alert);
+      schedulerLogger.debug('Updated nextRun in database', {
+        alertId: alert.id,
+        nextRun: nextRunTime.toISOString(),
+      });
+    } catch (error) {
+      schedulerLogger.warn('Failed to update nextRun in database', {
+        alertId: alert.id,
+        error,
+      });
+      // Continue with scheduling even if database update fails
+    }
+
+    // Calculate delay in milliseconds
+    const delay = nextRunTime.getTime() - now.getTime();
+
+    // Schedule the task
+    const timeout = setTimeout(async () => {
+      await this.executeAlert(alert);
+
+      // If recurring, reschedule
+      if (alert.recurring !== false && alert.enabled) {
+        await this.scheduleAlert(alert);
+      }
+    }, delay);
+
+    this.tasks.set(alert.id, timeout);
+
+    const delayMinutes = Math.round(delay / 60000);
+    const nextRunFormatted = nextRunTime.toLocaleString('en-US', {
+      timeZone: 'America/Denver',
+      dateStyle: 'short',
+      timeStyle: 'short',
+    });
+
     schedulerLogger.info(
-      `Scheduled alert "${alert.name}" with interval ${intervalMinutes} minutes`,
+      `Scheduled ${alert.recurring !== false ? 'recurring' : 'one-shot'} task "${alert.name}"`,
+      {
+        alertId: alert.id,
+        delayMinutes,
+        nextRun: nextRunFormatted,
+        nextRunUTC: nextRunTime.toISOString(),
+      },
     );
   }
 
@@ -389,11 +438,11 @@ export class AlertScheduler {
         userId, // Pass userId for MCP integration
       );
 
-      // The unified generateResponse always returns a string (tool calls are handled internally)
+      // Handle both string and structured response formats
       const finalMessage =
         typeof result === 'string'
           ? result
-          : 'Task completed but no response was generated.';
+          : result.response || 'Task completed but no response was generated.';
 
       // Send the result if we have content
       if (finalMessage.trim()) {
@@ -488,7 +537,7 @@ export class AlertScheduler {
         // Stop the scheduled task
         const task = this.tasks.get(alert.id);
         if (task) {
-          task.stop();
+          clearTimeout(task);
           this.tasks.delete(alert.id);
         }
 

@@ -139,10 +139,10 @@ export class ChatCommand extends BaseCommand {
             try {
               // Add new tool invocation to the list
               toolInvocations.push(status);
-              
+
               // Build the combined message with all tool invocations
               const combinedStatus = toolInvocations.join('\n');
-              
+
               if (statusMessage) {
                 // Edit existing status message to show all invocations
                 await statusMessage.edit(combinedStatus);
@@ -330,32 +330,58 @@ export class ChatCommand extends BaseCommand {
           }),
       );
 
-      const isFunction = Array.isArray(response);
-      chatLogger.info('LLM response received', {
-        type: isFunction ? 'function_calls' : 'text',
-        functionCount: isFunction ? response.length : 0,
-      });
+      // Handle different response types
+      // New format: { response: string, messages: Message[] } (both providers)
+      // Deprecated format: AIFunctionCall[] (no longer used)
+      let finalResponse: string;
+      let turnMessages: any[] | undefined;
 
-      // Handle function calls or text response
-      if (Array.isArray(response)) {
+      if (typeof response === 'object' && 'response' in response) {
+        // Structured response with full message history (both OpenAI and Anthropic)
+        finalResponse = response.response;
+        turnMessages = response.messages;
+        chatLogger.info('Received structured response with message history', {
+          responseLength: finalResponse.length,
+          messageCount: turnMessages?.length || 0,
+        });
+      } else if (Array.isArray(response)) {
+        // Deprecated function call format (should not happen anymore)
+        chatLogger.warn(
+          'Received deprecated function call array format - this should not happen',
+        );
         return await this.handleFunctionCalls(response, context, prompt);
       } else {
-        // Regular text response
-        chatLogger.info('Returning text response', {
-          length: response.length,
-          preview: response.substring(0, 100),
-        });
-
-        // Safety check: ensure response fits Discord's limits
-        // (The LLM service should already handle this, but this is a backup)
-        const finalResponse = this.ensureDiscordLimit(response);
-
-        // Save conversation to database (unless we're in a thread that manages its own history)
-        if (!skipConversationSave) {
-          await this.saveConversationTurn(context, prompt, finalResponse);
-        }
-        return { content: finalResponse };
+        throw new Error('Unexpected response format from LLM service');
       }
+
+      chatLogger.info('Returning text response', {
+        length: finalResponse.length,
+        preview: finalResponse.substring(0, 100),
+      });
+
+      // Safety check: ensure response fits Discord's limits
+      // (The LLM service should already handle this, but this is a backup)
+      const truncatedResponse = this.ensureDiscordLimit(finalResponse);
+
+      // Save conversation to database (unless we're in a thread that manages its own history)
+      if (!skipConversationSave) {
+        if (turnMessages) {
+          // Save complete message history including tool calls
+          await this.saveConversationWithMessages(
+            context,
+            turnMessages,
+            prompt,
+          );
+        } else {
+          // Shouldn't happen with current implementation, but fallback to legacy save
+          chatLogger.warn(
+            'No turn messages provided, falling back to legacy save',
+          );
+          await this.saveConversationTurn(context, prompt, truncatedResponse);
+        }
+      }
+
+      return { content: truncatedResponse };
     } catch (error) {
       chatLogger.error(
         'Error in chat command',
@@ -658,70 +684,82 @@ export class ChatCommand extends BaseCommand {
           context.userId,
         );
 
-        // If we get a text response, we're done
-        if (!Array.isArray(response)) {
-          chatLogger.info('Loop completed with text response', {
-            iterations: iteration,
-            responseLength: response.length,
-          });
-          await this.saveConversationTurn(context, originalPrompt, response);
-          return { content: response };
-        }
+        // Handle different response types
+        let textResponse: string | undefined;
 
-        // If we get function calls, execute them and continue the loop
-        if (response.length > 0) {
-          chatLogger.info(
-            `Executing ${response.length} additional function calls in iteration ${iteration}`,
-          );
+        if (typeof response === 'string') {
+          // String response - we're done
+          textResponse = response;
+        } else if (typeof response === 'object' && 'response' in response) {
+          // Structured response with message history - we're done
+          textResponse = response.response;
+        } else if (Array.isArray(response)) {
+          // Deprecated array format - execute function calls
+          const functionCalls = response as AIFunctionCall[];
+          if (functionCalls.length > 0) {
+            chatLogger.info(
+              `Executing ${functionCalls.length} additional function calls in iteration ${iteration}`,
+            );
 
-          const newFunctionResults = [];
-          for (const functionCall of response) {
-            try {
-              const result = await this.executeFunctionCall(
-                functionCall,
-                context,
-              );
-              newFunctionResults.push(result);
-            } catch (error) {
-              chatLogger.error(
-                'Function call failed in loop',
-                error instanceof Error ? error : new Error(String(error)),
-              );
-              newFunctionResults.push({
-                success: false,
-                message: `Failed to execute ${functionCall.name}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            const newFunctionResults = [];
+            for (const functionCall of functionCalls) {
+              try {
+                const result = await this.executeFunctionCall(
+                  functionCall,
+                  context,
+                );
+                newFunctionResults.push(result);
+              } catch (error) {
+                chatLogger.error(
+                  'Function call failed in loop',
+                  error instanceof Error ? error : new Error(String(error)),
+                );
+                newFunctionResults.push({
+                  success: false,
+                  message: `Failed to execute ${functionCall.name}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                });
+              }
+            }
+
+            // Add new function results to conversation history
+            const newResultsContext = this.buildFunctionContext(
+              functionCalls,
+              newFunctionResults,
+              newFunctionResults.filter((r) => r.success),
+              newFunctionResults.filter((r) => !r.success),
+            );
+
+            if (newResultsContext) {
+              conversationHistory.push({
+                role: 'assistant',
+                content: `Additional tool results:\n${newResultsContext}`,
+                timestamp: new Date(),
               });
             }
+            // Continue loop
+            continue;
+          } else {
+            // Empty array - treat as completed
+            textResponse = 'I processed your request successfully.';
           }
+        }
 
-          // Add new function results to conversation history
-          const newResultsContext = this.buildFunctionContext(
-            response,
-            newFunctionResults,
-            newFunctionResults.filter((r) => r.success),
-            newFunctionResults.filter((r) => !r.success),
-          );
-
-          if (newResultsContext) {
-            conversationHistory.push({
-              role: 'assistant',
-              content: `Additional tool results:\n${newResultsContext}`,
-              timestamp: new Date(),
-            });
-          }
-        } else {
-          // No function calls returned, but it was an array - treat as completed
-          chatLogger.info('Loop completed with empty function calls array', {
+        // If we have a text response, we're done
+        if (textResponse) {
+          chatLogger.info('Loop completed with text response', {
             iterations: iteration,
+            responseLength: textResponse.length,
           });
-          const fallbackMessage = 'I processed your request successfully.';
           await this.saveConversationTurn(
             context,
             originalPrompt,
-            fallbackMessage,
+            textResponse,
           );
-          return { content: fallbackMessage };
+          return { content: textResponse };
         }
+
+        // This shouldn't happen, but just in case
+        chatLogger.warn('Unexpected response format in loop', { iteration });
       } catch (error) {
         chatLogger.error(
           'Error in loop iteration',
@@ -807,6 +845,67 @@ export class ChatCommand extends BaseCommand {
     } catch (error) {
       chatLogger.error(
         'Failed to save conversation',
+        error instanceof Error ? error : new Error(String(error)),
+      );
+      // Don't throw - conversation saving failure shouldn't break the command
+    }
+  }
+
+  // New method: Save conversation with full message history including tool calls
+  private async saveConversationWithMessages(
+    context: CommandContext,
+    messages: any[], // OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+    userPrompt: string,
+  ): Promise<void> {
+    try {
+      chatLogger.info('Saving conversation with full message history', {
+        messageCount: messages.length,
+      });
+
+      // Convert OpenAI message format to our ConversationMessage format
+      const now = new Date();
+      const conversationMessages: ConversationMessage[] = messages.map(
+        (msg, index) => {
+          const baseMessage: ConversationMessage = {
+            role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
+            content: typeof msg.content === 'string' ? msg.content : null,
+            timestamp: new Date(now.getTime() + index), // Ensure ordering
+          };
+
+          // Handle assistant messages with tool calls
+          if (msg.role === 'assistant' && msg.tool_calls) {
+            baseMessage.tool_calls = msg.tool_calls.map((tc: any) => ({
+              id: tc.id,
+              type: 'function' as const,
+              function: {
+                name: tc.function.name,
+                arguments: tc.function.arguments,
+              },
+            }));
+          }
+
+          // Handle tool result messages
+          if (msg.role === 'tool') {
+            baseMessage.tool_call_id = msg.tool_call_id;
+            // Extract tool name from the tool_call_id or message content
+            // Tool names are typically in the format: mcp_servername_toolname
+            baseMessage.tool_name = msg.tool_call_id?.split('_')[0] || 'tool';
+          }
+
+          return baseMessage;
+        },
+      );
+
+      await this.database.saveMessages(
+        context.userId,
+        context.channelId,
+        conversationMessages,
+      );
+
+      chatLogger.info('Conversation with message history saved successfully');
+    } catch (error) {
+      chatLogger.error(
+        'Failed to save conversation with messages',
         error instanceof Error ? error : new Error(String(error)),
       );
       // Don't throw - conversation saving failure shouldn't break the command

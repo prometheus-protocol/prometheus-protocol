@@ -32,6 +32,55 @@ export class SupabaseService implements DatabaseService {
     }
   }
 
+  // New method: Save multiple messages with full tool call support
+  async saveMessages(
+    userId: string,
+    channelId: string,
+    messages: ConversationMessage[],
+  ): Promise<void> {
+    const conversationEntries = messages.map((msg) => {
+      const entry: any = {
+        user_id: userId,
+        channel_id: channelId,
+        message_type: msg.role,
+        content: msg.content,
+        created_at: msg.timestamp.toISOString(),
+      };
+
+      // Add tool-specific fields based on message type
+      if (msg.role === 'assistant' && msg.tool_calls) {
+        entry.tool_calls = JSON.stringify(msg.tool_calls);
+      } else if (msg.role === 'tool') {
+        entry.tool_call_id = msg.tool_call_id;
+        entry.tool_name = msg.tool_name;
+      }
+
+      return entry;
+    });
+
+    const { error } = await this.client
+      .from('conversation_history')
+      .insert(conversationEntries);
+
+    if (error) {
+      dbLogger.error('Error saving messages:', error);
+      throw error;
+    }
+
+    dbLogger.info('Messages saved successfully', {
+      userId,
+      channelId,
+      messageCount: messages.length,
+    });
+
+    // Prune old messages to keep only the last 50 (async, don't await to avoid blocking)
+    this.pruneOldMessages(userId, channelId, 50).catch((err) => {
+      dbLogger.warn('Failed to prune old messages (non-blocking)', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
+
   async saveConversationTurn(
     userId: string,
     channelId: string,
@@ -99,11 +148,34 @@ export class SupabaseService implements DatabaseService {
       return [];
     }
 
-    return (data || []).reverse().map((row) => ({
-      role: row.message_type as 'user' | 'assistant' | 'system',
-      content: row.content,
-      timestamp: new Date(row.created_at),
-    }));
+    return (data || []).reverse().map((row) => {
+      const message: ConversationMessage = {
+        role: row.message_type as 'user' | 'assistant' | 'system' | 'tool',
+        content: row.content,
+        timestamp: new Date(row.created_at),
+      };
+
+      // Reconstruct tool calls for assistant messages
+      if (row.message_type === 'assistant' && row.tool_calls) {
+        try {
+          message.tool_calls = JSON.parse(row.tool_calls);
+        } catch (e) {
+          dbLogger.warn('Failed to parse tool_calls JSON', {
+            userId,
+            channelId,
+            error: e,
+          });
+        }
+      }
+
+      // Add tool-specific fields for tool result messages
+      if (row.message_type === 'tool') {
+        message.tool_call_id = row.tool_call_id;
+        message.tool_name = row.tool_name;
+      }
+
+      return message;
+    });
   }
 
   async clearConversationHistory(
@@ -234,6 +306,7 @@ export class SupabaseService implements DatabaseService {
         recurring: alert.recurring ?? true, // Default to true if not specified
         prompt: alert.prompt,
         last_run: alert.lastRun?.toISOString() || null,
+        next_run: alert.nextRun?.toISOString() || null,
         last_data: alert.lastData ? JSON.stringify(alert.lastData) : null,
         error_state: alert.errorState ? JSON.stringify(alert.errorState) : null,
         created_at: new Date().toISOString(),
@@ -286,6 +359,7 @@ export class SupabaseService implements DatabaseService {
         recurring: row.recurring ?? true, // Default to true for backwards compatibility
         prompt: row.prompt,
         lastRun: row.last_run ? new Date(row.last_run) : undefined,
+        nextRun: row.next_run ? new Date(row.next_run) : undefined,
         lastData: row.last_data ? JSON.parse(row.last_data) : undefined,
         errorState: row.error_state ? JSON.parse(row.error_state) : undefined,
       }));
@@ -320,6 +394,7 @@ export class SupabaseService implements DatabaseService {
           recurring: alert.recurring ?? true, // Include recurring field
           prompt: alert.prompt,
           last_run: alert.lastRun?.toISOString() || null,
+          next_run: alert.nextRun?.toISOString() || null,
           last_data: alert.lastData ? JSON.stringify(alert.lastData) : null,
           error_state: alert.errorState
             ? JSON.stringify(alert.errorState)
@@ -395,20 +470,27 @@ export class SupabaseService implements DatabaseService {
     if (error) {
       // No row exists yet, return empty object
       if (error.code === 'PGRST116') {
-        dbLogger.debug('No preferences found for user, returning empty object', {
-          userId,
-        });
+        dbLogger.debug(
+          'No preferences found for user, returning empty object',
+          {
+            userId,
+          },
+        );
         return {};
       }
       // Log the full error object to see what's actually there
-      dbLogger.error('Error fetching user preferences:', new Error(JSON.stringify(error)), {
-        userId,
-        rawError: error,
-        errorCode: error.code,
-        errorMessage: error.message,
-        errorDetails: error.details,
-        errorHint: error.hint,
-      });
+      dbLogger.error(
+        'Error fetching user preferences:',
+        new Error(JSON.stringify(error)),
+        {
+          userId,
+          rawError: error,
+          errorCode: error.code,
+          errorMessage: error.message,
+          errorDetails: error.details,
+          errorHint: error.hint,
+        },
+      );
       return {};
     }
 
@@ -1671,7 +1753,13 @@ export class SupabaseService implements DatabaseService {
     thread_id: string;
     channel_id: string;
     user_id: string;
-    conversation_history: Array<{ role: string; content: string }>;
+    conversation_history: Array<{
+      role: string;
+      content: string | null;
+      tool_calls?: any[];
+      tool_call_id?: string;
+      tool_name?: string;
+    }>;
     is_active: boolean;
     created_at: Date;
     last_activity: Date;
@@ -1705,7 +1793,13 @@ export class SupabaseService implements DatabaseService {
 
   async updateThreadHistory(
     threadId: string,
-    message: { role: string; content: string },
+    message: {
+      role: string;
+      content: string | null;
+      tool_calls?: any[];
+      tool_call_id?: string;
+      tool_name?: string;
+    },
   ): Promise<void> {
     try {
       // Get current history
