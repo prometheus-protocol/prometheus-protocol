@@ -12,9 +12,6 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-# Copy reproducible build templates
-COPY templates/reproducible-build /app/templates/reproducible-build
-
 # Copy package files
 COPY package*.json ./
 

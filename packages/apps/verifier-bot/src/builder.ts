@@ -3,6 +3,11 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import type { BuildResult } from './types.js';
+import {
+  bootstrapBuildFiles,
+  getMocVersionFromMopsToml,
+  validateMotokoProject,
+} from '@prometheus-protocol/reproducible-build';
 
 /**
  * Verifies that a git repository at a specific commit produces the expected WASM hash.
@@ -189,89 +194,39 @@ function findCanisterPath(workDir: string, canisterName: string): string {
 
 /**
  * Sets up the reproducible build environment in the canister directory.
- * Copies Docker templates and generates necessary config files.
+ * Uses the shared reproducible-build library for consistent builds.
  */
 async function setupReproducibleBuild(
   canisterPath: string,
   canisterName: string,
   repoRoot: string,
 ): Promise<void> {
-  const templatePath = path.join('/app', 'templates', 'reproducible-build');
-
   console.log(`📝 Setting up reproducible build...`);
 
   // Read moc version from project's mops.toml
+  let mocVersion = getMocVersionFromMopsToml(canisterPath) || '0.16.0';
+  console.log(`� Using moc version: ${mocVersion}`);
+
+  // If mops.toml doesn't exist, create it
   const mopsPath = path.join(canisterPath, 'mops.toml');
-  let mocVersion = '0.16.0'; // Default fallback
-
-  if (fs.existsSync(mopsPath)) {
-    console.log(`📖 Reading toolchain version from mops.toml...`);
-    const mopsContent = fs.readFileSync(mopsPath, 'utf8');
-
-    // Parse [toolchain] section
-    const toolchainMatch = mopsContent.match(
-      /\[toolchain\][^\[]*moc\s*=\s*["']([^"']+)["']/,
-    );
-    if (toolchainMatch) {
-      mocVersion = toolchainMatch[1];
-      console.log(`🔧 Detected moc version: ${mocVersion}`);
-    } else {
-      console.warn(
-        `⚠️  No [toolchain] moc version found in mops.toml, using default: ${mocVersion}`,
-      );
-    }
-  } else {
-    console.warn(`⚠️  mops.toml not found at ${mopsPath}`);
-    console.log(
-      `📝 Generating mops.toml with default moc version ${mocVersion}...`,
-    );
+  if (!fs.existsSync(mopsPath)) {
+    console.log(`📝 Generating mops.toml with moc version ${mocVersion}...`);
     await generateMopsToml(canisterPath, canisterName, repoRoot, mocVersion);
   }
 
-  // Copy Docker build templates and update with correct moc version
-  for (const file of [
-    'docker-compose.yml',
-    'Dockerfile',
-    'Dockerfile.base',
-    'build.sh',
-  ]) {
-    const srcPath = path.join(templatePath, file);
-    const destPath = path.join(canisterPath, file);
-
-    if (!fs.existsSync(srcPath)) {
-      throw new Error(`Template file not found: ${srcPath}`);
-    }
-
-    let content = fs.readFileSync(srcPath, 'utf8');
-
-    // Update docker-compose.yml with the project's moc version
-    if (file === 'docker-compose.yml') {
-      // Replace the moc version in the x-base-image section
-      content = content.replace(/moc: &moc [0-9.]+/, `moc: &moc ${mocVersion}`);
-      content = content.replace(/dfx: &dfx [0-9.]+/, `dfx: &dfx ${mocVersion}`);
-      content = content.replace(
-        /ghcr\.io\/[^:]+:moc-[0-9.]+/,
-        `ghcr.io/research-ag/motoko-build:moc-${mocVersion}`,
-      );
-
-      console.log(
-        `🐳 Using Docker image: ghcr.io/research-ag/motoko-build:moc-${mocVersion}`,
-      );
-    }
-
-    fs.writeFileSync(destPath, content);
-
-    // Make build.sh executable
-    if (file === 'build.sh') {
-      fs.chmodSync(destPath, 0o755);
-    }
+  // Validate project structure
+  const validation = validateMotokoProject(canisterPath);
+  if (!validation.valid) {
+    throw new Error(
+      `Invalid Motoko project. Missing: ${validation.missing.join(', ')}`,
+    );
   }
 
-  // Ensure out/ directory exists
-  const outDir = path.join(canisterPath, 'out');
-  if (!fs.existsSync(outDir)) {
-    fs.mkdirSync(outDir, { recursive: true });
-  }
+  // Use shared library to bootstrap build files
+  bootstrapBuildFiles({
+    projectPath: canisterPath,
+    mocVersion,
+  });
 
   console.log(`✅ Reproducible build environment ready`);
 }

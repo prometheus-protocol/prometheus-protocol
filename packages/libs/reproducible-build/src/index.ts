@@ -1,0 +1,266 @@
+import fs from 'fs';
+import path from 'path';
+import toml from 'toml';
+
+/**
+ * Template files for reproducible Motoko builds
+ */
+export const TEMPLATES = {
+  'docker-compose.yml': `x-base-image:
+  versions:
+    moc: &moc {{MOC_VERSION}}
+    ic-wasm: &ic_wasm {{IC_WASM_VERSION}}
+    mops-cli: &mops-cli {{MOPS_CLI_VERSION}}
+  name: &base_name 'ghcr.io/research-ag/motoko-build:moc-{{MOC_VERSION}}'
+
+services:
+  base:
+    build:
+      context: .
+      dockerfile: Dockerfile.base
+      args:
+        MOC_VERSION: *moc
+        IC_WASM_VERSION: *ic_wasm
+        MOPS_CLI_VERSION: *mops-cli
+    image: *base_name
+  wasm:
+    build:
+      context: .
+      args:
+        IMAGE: *base_name
+    volumes:
+      - ./out:/project/out
+    environment:
+      compress: no
+    command: bash --login build.sh
+`,
+
+  Dockerfile: `ARG IMAGE
+FROM --platform=linux/amd64 \${IMAGE}
+
+WORKDIR /project
+
+COPY mops.toml ./
+
+# Let mops-cli install the dependencies defined in mops.toml and create
+# mops.lock.
+# Note: We trick mops-cli into not downloading binaries and not compiling
+# anything. We also make it use the moc version from the base image.
+RUN mkdir -p ~/.mops/bin \\
+    && ln -s /usr/local/bin/moc ~/.mops/bin/moc \\
+    && touch ~/.mops/bin/mo-fmt \\
+    && echo "persistent actor {}" >tmp.mo \\
+    && mops-cli build tmp.mo -- --check \\
+    && rm -r tmp.mo target/tmp
+
+COPY src /project/src/
+COPY di[d] /project/did/
+COPY build.sh /project
+
+CMD ["/bin/bash"]
+`,
+
+  'Dockerfile.base': `ARG PLATFORM=linux/amd64
+FROM --platform=\${PLATFORM} alpine:latest AS build
+
+RUN apk add --no-cache curl ca-certificates tar \\
+    && update-ca-certificates
+
+RUN mkdir -p /install/bin
+
+# Install ic-wasm
+ARG IC_WASM_VERSION
+RUN curl -L https://github.com/research-ag/ic-wasm/releases/download/\${IC_WASM_VERSION}/ic-wasm-x86_64-unknown-linux-musl.tar.gz -o ic-wasm.tgz \\
+    && tar xzf ic-wasm.tgz \\
+    && install ic-wasm /install/bin
+
+# Install mops-cli 
+ARG MOPS_CLI_VERSION
+RUN curl -L https://github.com/jneums/mops-cli/releases/download/v\${MOPS_CLI_VERSION}/mops-cli-linux64 -o mops-cli \\
+    && install mops-cli /install/bin
+
+# Install moc
+ARG MOC_VERSION
+RUN if dpkg --compare-versions "\${MOC_VERSION}" lt "0.9.5"; then \\
+      curl -L https://github.com/dfinity/motoko/releases/download/\${MOC_VERSION}/motoko-linux64-\${MOC_VERSION}.tar.gz -o motoko.tgz; \\
+    else \\
+      curl -L https://github.com/dfinity/motoko/releases/download/\${MOC_VERSION}/motoko-Linux-x86_64-\${MOC_VERSION}.tar.gz -o motoko.tgz; \\
+    fi \\
+    && tar xzf motoko.tgz \\
+    && install moc /install/bin 
+
+FROM --platform=\${PLATFORM} alpine:latest
+RUN apk add bash
+COPY --from=build /install/bin/* /usr/local/bin/
+`,
+
+  'build.sh': `#!/bin/bash
+
+MOC_GC_FLAGS="" ## place any additional flags like compacting-gc, incremental-gc here
+MOC_FLAGS="$MOC_GC_FLAGS -no-check-ir --release --public-metadata candid:service --public-metadata candid:args"
+OUT=out/out_$(uname -s)_$(uname -m).wasm
+mops-cli build --lock --name out src/main.mo -- $MOC_FLAGS
+cp target/out/out.wasm $OUT
+ic-wasm $OUT -o $OUT shrink
+if [ -f did/service.did ]; then
+    echo "Adding service.did to metadata section."
+    ic-wasm $OUT -o $OUT metadata candid:service -f did/service.did -v public
+else
+    echo "service.did not found. Skipping metadata update."
+fi
+if [ "$compress" == "yes" ] || [ "$compress" == "y" ]; then
+  gzip -nf $OUT
+  sha256sum $OUT.gz
+else
+  sha256sum $OUT
+fi
+`,
+} as const;
+
+/**
+ * Default versions for reproducible builds
+ */
+export const DEFAULT_VERSIONS = {
+  MOC_VERSION: '0.16.0',
+  IC_WASM_VERSION: '0.9.3',
+  MOPS_CLI_VERSION: '0.2.1',
+} as const;
+
+export const REQUIRED_FILES = [
+  'docker-compose.yml',
+  'Dockerfile',
+  'Dockerfile.base',
+  'build.sh',
+] as const;
+
+export interface BuildConfig {
+  projectPath: string;
+  mocVersion?: string;
+  icWasmVersion?: string;
+  mopsCliVersion?: string;
+}
+
+/**
+ * Extract Motoko compiler version from mops.toml
+ */
+export function getMocVersionFromMopsToml(projectPath: string): string | null {
+  const mopsTomlPath = path.join(projectPath, 'mops.toml');
+
+  if (!fs.existsSync(mopsTomlPath)) {
+    return null;
+  }
+
+  try {
+    const mopsTomlContent = fs.readFileSync(mopsTomlPath, 'utf-8');
+    const mopsConfig = toml.parse(mopsTomlContent);
+    return mopsConfig?.toolchain?.moc || null;
+  } catch (error) {
+    console.warn(`Failed to parse mops.toml: ${error}`);
+    return null;
+  }
+}
+
+/**
+ * Find dfx.json by walking up the directory tree (for monorepos)
+ */
+export function findDfxJson(startPath: string): string | null {
+  let currentPath = startPath;
+
+  while (currentPath !== path.parse(currentPath).root) {
+    const dfxJsonPath = path.join(currentPath, 'dfx.json');
+    if (fs.existsSync(dfxJsonPath)) {
+      return currentPath;
+    }
+    currentPath = path.dirname(currentPath);
+  }
+
+  return null;
+}
+
+/**
+ * Find mops.toml by walking up the directory tree (for monorepos)
+ */
+export function findMopsToml(startPath: string): string | null {
+  let currentPath = startPath;
+
+  while (currentPath !== path.parse(currentPath).root) {
+    const mopsTomlPath = path.join(currentPath, 'mops.toml');
+    if (fs.existsSync(mopsTomlPath)) {
+      return currentPath;
+    }
+    currentPath = path.dirname(currentPath);
+  }
+
+  return null;
+}
+
+/**
+ * Check if all required build files exist
+ */
+export function hasRequiredBuildFiles(projectPath: string): boolean {
+  return REQUIRED_FILES.every((file) =>
+    fs.existsSync(path.join(projectPath, file)),
+  );
+}
+
+/**
+ * Create reproducible build files in the project directory
+ */
+export function bootstrapBuildFiles(config: BuildConfig): void {
+  const { projectPath } = config;
+
+  // Determine moc version from mops.toml or use provided/default
+  const mocVersionFromToml = getMocVersionFromMopsToml(projectPath);
+  const mocVersion =
+    config.mocVersion || mocVersionFromToml || DEFAULT_VERSIONS.MOC_VERSION;
+
+  const versions = {
+    MOC_VERSION: mocVersion,
+    IC_WASM_VERSION: config.icWasmVersion || DEFAULT_VERSIONS.IC_WASM_VERSION,
+    MOPS_CLI_VERSION:
+      config.mopsCliVersion || DEFAULT_VERSIONS.MOPS_CLI_VERSION,
+  };
+
+  // Create build files from templates
+  for (const [filename, template] of Object.entries(TEMPLATES)) {
+    const filePath = path.join(projectPath, filename);
+
+    // Replace version placeholders
+    let content: string = template;
+    for (const [key, value] of Object.entries(versions)) {
+      content = content.replaceAll(`{{${key}}}`, value);
+    }
+
+    fs.writeFileSync(filePath, content, 'utf-8');
+
+    // Make build.sh executable
+    if (filename === 'build.sh') {
+      fs.chmodSync(filePath, 0o755);
+    }
+  }
+
+  // Create out directory if it doesn't exist
+  const outDir = path.join(projectPath, 'out');
+  if (!fs.existsSync(outDir)) {
+    fs.mkdirSync(outDir, { recursive: true });
+  }
+}
+
+/**
+ * Validate project has required Motoko files
+ */
+export function validateMotokoProject(projectPath: string): {
+  valid: boolean;
+  missing: string[];
+} {
+  const required = ['mops.toml', 'src'];
+  const missing: string[] = [];
+
+  for (const file of required) {
+    if (!fs.existsSync(path.join(projectPath, file))) {
+      missing.push(file);
+    }
+  }
+
+  return { valid: missing.length === 0, missing };
+}

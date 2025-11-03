@@ -1687,40 +1687,16 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   ) : async [ICRC126.VerificationRecord] {
     var pending_requests = Buffer.Buffer<ICRC126.VerificationRecord>(0);
     let all_requests = icrc126().state.requests;
-    let all_bounties = BTree.toValueArray(icrc127().state.bounties);
-
-    // --- NEW: Create a helper Set for fast lookups of sponsored WASM hashes ---
-    var sponsored_wasm_ids = Map.new<Text, Null>();
-    for (bounty in all_bounties.vals()) {
-      // Check if this is a build reproducibility bounty
-      switch (bounty.challenge_parameters) {
-        case (#Map(params)) {
-          let audit_type = AppStore.getICRC16TextOptional(params, "audit_type");
-          if (audit_type == ?"build_reproducibility_v1") {
-            // This is a build bounty. Add its wasm_id to our set.
-            let wasm_hash = AppStore.getICRC16BlobOptional(params, "wasm_hash");
-            switch (wasm_hash) {
-              case (?h) {
-                Map.set(sponsored_wasm_ids, Map.thash, Base16.encode(h), null);
-              };
-              case (_) {};
-            };
-          };
-        };
-        case (_) {};
-      };
-    };
 
     for ((wasm_id, request) in Map.entries(all_requests)) {
-      // Condition 1: Check if the request has been finalized.
+      // Check if the request has been finalized (verified or rejected).
       let is_finalized = BTree.get(finalization_log, Text.compare, wasm_id) != null;
 
-      // Condition 2: Check if a build bounty already exists for this wasm_id.
-      let is_sponsored = Option.isSome(Map.get(sponsored_wasm_ids, Map.thash, wasm_id));
-
-      // --- THE NEW, CORRECT LOGIC ---
-      // Only include the request if it is NOT finalized AND NOT yet sponsored.
-      if (not is_finalized and not is_sponsored) {
+      // --- UPDATED LOGIC ---
+      // Include the request if it is NOT yet finalized.
+      // This means WASMs with bounties WILL show up as pending until they're verified.
+      // The verifier bot can then claim those bounties when processing them.
+      if (not is_finalized) {
         pending_requests.add(request);
       };
     };

@@ -4,12 +4,21 @@ import {
   reserveBounty,
   fileAttestation,
   submitDivergence,
+  claimBounty,
   AttestationData,
+  configure as configureIcJs,
 } from '@prometheus-protocol/ic-js';
 import { verifyBuild } from './builder.js';
 import { identityFromPemContent } from './identity.js';
-import type { VerificationJob, BountyInfo } from './types.js';
+import 'dotenv/config';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// --- CONFIGURE THE SHARED PACKAGE ---
 // Configuration from environment variables
 const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '60000', 10);
 const VERIFIER_PEM = process.env.VERIFIER_PEM;
@@ -19,6 +28,74 @@ if (!VERIFIER_PEM) {
   console.error('❌ VERIFIER_PEM environment variable is required');
   process.exit(1);
 }
+
+// This function is ONLY for local development
+function loadLocalCanisterIds() {
+  const network = 'local';
+  const canisterIdsPath = path.resolve(
+    __dirname,
+    '..',
+    '..',
+    '..',
+    '..',
+    '.dfx',
+    network,
+    'canister_ids.json',
+  );
+
+  if (!fs.existsSync(canisterIdsPath)) {
+    throw new Error(
+      `Could not find local canister_ids.json at ${canisterIdsPath}. Run 'dfx deploy' first.`,
+    );
+  }
+
+  try {
+    const canisterIdsJson = JSON.parse(
+      fs.readFileSync(canisterIdsPath, 'utf-8'),
+    );
+    return Object.entries(canisterIdsJson).reduce(
+      (acc: Record<string, string>, [name, ids]) => {
+        acc[name.toUpperCase()] = (ids as Record<string, string>)[network];
+        return acc;
+      },
+      {},
+    );
+  } catch (e) {
+    console.error('Error parsing canister_ids.json:', e);
+    throw e;
+  }
+}
+
+// Load canister IDs based on network
+let canisterIds: Record<string, string>;
+
+if (IC_NETWORK === 'ic') {
+  console.log('[Bot] Using production canister IDs.');
+  canisterIds = __PROD_CANISTER_IDS__;
+
+  if (!canisterIds || Object.keys(canisterIds).length === 0) {
+    console.error(
+      'Error: Production canister IDs were not baked into this build. Please rebuild the bot.',
+    );
+    process.exit(1);
+  }
+} else if (IC_NETWORK === 'local') {
+  console.log('[Bot] Using local canister IDs from .dfx directory.');
+  canisterIds = loadLocalCanisterIds();
+} else {
+  console.error(
+    `Error: Invalid network specified: '${IC_NETWORK}'. Use 'ic' or 'local'.`,
+  );
+  process.exit(1);
+}
+
+// Configure the shared library with the chosen set of IDs
+const host =
+  IC_NETWORK === 'ic' ? 'https://icp-api.io' : 'http://127.0.0.1:4943';
+
+console.log(`[Bot] Host: ${host}`);
+configureIcJs({ canisterIds, host });
+// ------------------------------------
 
 // Initialize verifier identity
 const VERIFIER_IDENTITY = identityFromPemContent(VERIFIER_PEM);
@@ -53,7 +130,9 @@ async function pollAndVerify(): Promise<void> {
 
       try {
         // Check if this job has a build_reproducibility_v1 bounty
+        console.log(`   🔍 Checking bounties for WASM: ${job.wasm_hash}`);
         const bounties = await getBountiesForWasm(job.wasm_hash);
+        console.log(`   📋 Found ${bounties.length} bounties for this WASM`);
 
         const buildBounty = bounties.find((b: any) => {
           const auditType = b.challengeParameters?.audit_type;
@@ -117,10 +196,19 @@ async function pollAndVerify(): Promise<void> {
           });
 
           console.log(`   ✅ Attestation filed successfully`);
+
+          // Claim the bounty to trigger payout
+          console.log(`   💰 Claiming bounty...`);
+          const claimId = await claimBounty(VERIFIER_IDENTITY, {
+            bounty_id: buildBounty.id,
+            wasm_id: job.wasm_hash,
+          });
+
+          console.log(`   ✅ Bounty claimed! Claim ID: ${claimId}`);
           console.log(
             `   ✅ WASM ${job.wasm_hash.slice(0, 12)}... is now VERIFIED`,
           );
-          console.log(`   💰 Bounty claimed automatically\n`);
+          console.log(`   💰 Reward transferred to verifier\n`);
         } else {
           // Failure: File divergence
           console.log(
@@ -135,10 +223,19 @@ async function pollAndVerify(): Promise<void> {
           });
 
           console.log(`   ✅ Divergence report filed`);
+
+          // Claim the bounty for reporting divergence
+          console.log(`   💰 Claiming bounty for divergence report...`);
+          const claimId = await claimBounty(VERIFIER_IDENTITY, {
+            bounty_id: buildBounty.id,
+            wasm_id: job.wasm_hash,
+          });
+
+          console.log(`   ✅ Bounty claimed! Claim ID: ${claimId}`);
           console.log(
             `   ❌ WASM ${job.wasm_hash.slice(0, 12)}... is now REJECTED`,
           );
-          console.log(`   💰 Bounty claimed for reporting divergence\n`);
+          console.log(`   💰 Reward transferred for reporting divergence\n`);
         }
       } catch (error: any) {
         console.error(`\n❌ Error processing ${jobSummary}:`);
