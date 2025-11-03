@@ -56,7 +56,9 @@ export default defineConfig(({ mode }) => {
   const internetIdentityUrl =
     network === 'local'
       ? `http://${canisterEnvVariables['CANISTER_ID_INTERNET_IDENTITY']}.localhost:4943/`
-      : `https://id.ai`;
+      : `https://identity.ic0.app`;
+
+  console.log(`[VITE CONFIG] Internet Identity URL: ${internetIdentityUrl}`);
 
   return {
     publicDir: 'assets',

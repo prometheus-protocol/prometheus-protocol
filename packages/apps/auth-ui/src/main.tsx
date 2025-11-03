@@ -21,7 +21,11 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <InternetIdentityProvider>
+    <InternetIdentityProvider
+      loginOptions={{
+        identityProvider: process.env.II_URL,
+        maxTimeToLive: BigInt(7 * 24 * 60 * 60 * 1000 * 1000 * 1000), // 7 days in nanoseconds
+      }}>
       <QueryClientProvider client={queryClient}>
         <App />
       </QueryClientProvider>

@@ -67,6 +67,7 @@ export const getReputationDisplayInfo = (auditType: string) => {
 export function LoginButton() {
   const { identity, login, clear, status } = useInternetIdentity();
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
+
   const { data: usdcBalance, isLoading: isBalanceLoading } = useGetTokenBalance(
     Tokens.USDC,
   );

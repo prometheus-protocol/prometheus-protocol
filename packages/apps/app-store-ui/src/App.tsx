@@ -55,6 +55,7 @@ const canisterIds = {
 
 const network = process.env.DFX_NETWORK || 'local'; // 'ic' for mainnet, 'local' for local dev
 const host = network === 'ic' ? 'https://icp-api.io' : 'http://127.0.0.1:4943';
+
 // Pass the static, build-time configuration to the shared library.
 configureIcJs({ canisterIds, host });
 // ------------------------------------
@@ -78,7 +79,8 @@ function App() {
     // This will manage the Internet Identity client and user state.
     <InternetIdentityProvider
       loginOptions={{
-        maxTimeToLive: 1_000_000_000n * 60n * 60n * 24n * 7n * 30n,
+        identityProvider: process.env.II_URL,
+        maxTimeToLive: BigInt(7 * 24 * 60 * 60 * 1000 * 1000 * 1000), // 7 days in nanoseconds
       }}>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
