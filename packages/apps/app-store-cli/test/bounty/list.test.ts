@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Command } from 'commander';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import * as api from '@prometheus-protocol/ic-js';
 import * as identityApi from '../../src/identity.node.js';
 import { registerBountyCommands } from '../../src/commands/bounty/bounty.commands.js';

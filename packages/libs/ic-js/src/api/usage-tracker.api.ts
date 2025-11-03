@@ -1,4 +1,4 @@
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { getUsageTrackerActor } from '../actors.js';
 
 import { fromNullable } from '@dfinity/utils';

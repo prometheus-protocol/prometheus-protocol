@@ -1,6 +1,6 @@
-import { Identity } from '@dfinity/agent';
+import { Identity } from '@icp-sdk/core/agent';
 import { getOrchestratorActor } from '../actors.js';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { Orchestrator } from '@prometheus-protocol/declarations';
 import { fromNullable } from '@dfinity/utils';
 

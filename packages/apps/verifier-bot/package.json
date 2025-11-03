@@ -20,10 +20,7 @@
   "author": "Prometheus Protocol",
   "license": "MIT",
   "dependencies": {
-    "@dfinity/agent": "^2.1.2",
-    "@dfinity/identity": "^2.1.2",
-    "@dfinity/identity-secp256k1": "^2.1.2",
-    "@dfinity/principal": "^2.1.2",
+    "@icp-sdk/core": "^4.0.1",
     "@prometheus-protocol/ic-js": "workspace:*",
     "pem-file": "^1.0.1"
   },

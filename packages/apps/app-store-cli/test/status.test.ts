@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import yaml from 'js-yaml';
 import * as api from '@prometheus-protocol/ic-js';
 import * as identityApi from '../src/identity.node.js';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { Command } from 'commander';
 import { registerStatusCommand } from '../src/commands/status.command.js';
 

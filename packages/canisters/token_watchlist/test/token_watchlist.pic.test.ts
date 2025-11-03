@@ -1,7 +1,7 @@
 // packages/canisters/token_watchlist/test/token_watchlist.pic.test.ts
 
 import path from 'node:path';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { Actor, PocketIc, createIdentity } from '@dfinity/pic';
 import {
   describe,
@@ -12,7 +12,7 @@ import {
   inject,
   beforeEach,
 } from 'vitest';
-import { Identity } from '@dfinity/agent';
+import { Identity } from '@icp-sdk/core/agent';
 
 // Import from the token_watchlist declarations
 import { idlFactory as watchlistIdlFactory } from '@declarations/token_watchlist';
@@ -26,7 +26,7 @@ import {
   init as ledgerInit,
   type _SERVICE as LedgerService,
 } from '@declarations/icrc1_ledger/icrc1_ledger.did.js';
-import { IDL } from '@dfinity/candid';
+import { IDL } from '@icp-sdk/core/candid';
 
 const WATCHLIST_WASM_PATH = path.resolve(
   __dirname,

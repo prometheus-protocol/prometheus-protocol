@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { Actor, PocketIc, createIdentity } from '@dfinity/pic';
 import { describe, beforeEach, it, expect, inject } from 'vitest';
-import { Identity } from '@dfinity/agent';
+import { Identity } from '@icp-sdk/core/agent';
 
 // --- 1. Update imports for the AppBounty canister ---
 import { idlFactory } from '@declarations/app_bounties';

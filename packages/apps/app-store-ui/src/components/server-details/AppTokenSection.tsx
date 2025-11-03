@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import { WithdrawDialog } from '../WithdrawDialog';
 import { DepositDialog } from '../DepositDialog';

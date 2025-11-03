@@ -1,4 +1,4 @@
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { Token } from '@prometheus-protocol/ic-js';
 
 export interface TokenManagerProps {

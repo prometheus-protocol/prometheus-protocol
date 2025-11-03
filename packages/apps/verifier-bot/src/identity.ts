@@ -1,6 +1,6 @@
-import { type Identity } from '@dfinity/agent';
-import { Ed25519KeyIdentity } from '@dfinity/identity';
-import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
+import { type Identity } from '@icp-sdk/core/agent';
+import { Ed25519KeyIdentity } from '@icp-sdk/core/identity';
+import { Secp256k1KeyIdentity } from '@icp-sdk/core/identity/secp256k1';
 import pemfile from 'pem-file';
 
 /**
@@ -26,11 +26,11 @@ export function identityFromPemContent(
     // 1. Get the 32-byte secret key as a Buffer slice.
     const secretKeySlice = rawKey.subarray(7, 39);
 
-    // 2. CONVERT BUFFER TO ARRAYBUFFER
-    // Create a new Uint8Array from the slice, then get its underlying buffer.
-    const secretKeyArrayBuffer = new Uint8Array(secretKeySlice).buffer;
+    // 2. CONVERT BUFFER TO UINT8ARRAY
+    // Create a new Uint8Array from the slice (v4 expects Uint8Array).
+    const secretKeyUint8Array = new Uint8Array(secretKeySlice);
 
-    return Secp256k1KeyIdentity.fromSecretKey(secretKeyArrayBuffer);
+    return Secp256k1KeyIdentity.fromSecretKey(secretKeyUint8Array);
   }
 
   // This is an Ed25519 key
@@ -40,6 +40,6 @@ export function identityFromPemContent(
     );
   }
   const secretKey = rawKey.subarray(16, 48);
-  const secretKeyArrayBuffer = new Uint8Array(secretKey).buffer;
-  return Ed25519KeyIdentity.fromSecretKey(secretKeyArrayBuffer);
+  const secretKeyUint8Array = new Uint8Array(secretKey);
+  return Ed25519KeyIdentity.fromSecretKey(secretKeyUint8Array);
 }

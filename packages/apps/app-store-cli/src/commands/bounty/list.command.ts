@@ -1,7 +1,7 @@
 // packages/cli/src/commands/bounty/list.command.ts
 
 import type { Command } from 'commander';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 // --- CHANGE 1: Import the new getBountyLock function ---
 import {
   listBounties,

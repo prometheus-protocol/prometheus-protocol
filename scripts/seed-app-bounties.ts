@@ -1,7 +1,7 @@
 #!/usr/bin/env zx
 import { $ } from 'zx';
-import { Principal } from '@dfinity/principal';
-import { Actor, HttpAgent } from '@dfinity/agent';
+import { Principal } from '@icp-sdk/core/principal';
+import { Actor, HttpAgent } from '@icp-sdk/core/agent';
 import { idlFactory as bountyIdl } from '../packages/declarations/dist/generated/app_bounties/index.js';
 import type { _SERVICE as BountyService } from '../packages/declarations/dist/generated/app_bounties/app_bounties.did.js';
 import { loadDfxIdentity } from './identity.js';

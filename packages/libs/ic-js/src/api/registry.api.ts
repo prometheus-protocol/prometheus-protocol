@@ -1,7 +1,12 @@
-import { Certificate, HttpAgent, Identity } from '@dfinity/agent';
+import {
+  Certificate,
+  HttpAgent,
+  Identity,
+  LookupPathStatus,
+} from '@icp-sdk/core/agent';
 import { getRegistryActor } from '../actors.js';
 import { Registry } from '@prometheus-protocol/declarations';
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import {
   AppListing,
   CanisterType,
@@ -358,41 +363,24 @@ export const createCanisterType = async (
 export const getCanisterWasmHash = async (
   canisterId: Principal,
 ): Promise<Uint8Array | null> => {
-  // We still need a mainnet agent to query the mainnet's state tree.
-  const agent = new HttpAgent({
-    host:
-      process.env.DFX_NETWORK === 'ic'
-        ? 'https://icp-api.io'
-        : 'http://127.0.0.1:4943',
-  });
+  const isLocal = process.env.DFX_NETWORK !== 'ic';
+  const host = isLocal ? 'http://127.0.0.1:4943' : 'https://icp-api.io';
 
-  if (process.env.DFX_NETWORK !== 'ic') {
-    // Only fetch the root key for local development
-    await agent.fetchRootKey().catch((err) => {
-      console.warn(
-        'Unable to fetch root key. Check to ensure that your local replica is running',
-      );
-      console.error(err);
-    });
-  }
+  // In v3, use HttpAgent.createSync with shouldFetchRootKey for local development
+  // This will fetch the root key before the first request is made
+  const agent = HttpAgent.createSync({
+    host,
+    shouldFetchRootKey: isLocal,
+  });
 
   const canisterSegment = new TextEncoder().encode('canister');
   const principalSegment = canisterId.toUint8Array();
   const moduleHashSegment = new TextEncoder().encode('module_hash');
 
-  const path: ArrayBuffer[] = [
-    canisterSegment.buffer.slice(
-      canisterSegment.byteOffset,
-      canisterSegment.byteOffset + canisterSegment.byteLength,
-    ),
-    principalSegment.buffer.slice(
-      principalSegment.byteOffset,
-      principalSegment.byteOffset + principalSegment.byteLength,
-    ) as ArrayBuffer,
-    moduleHashSegment.buffer.slice(
-      moduleHashSegment.byteOffset,
-      moduleHashSegment.byteOffset + moduleHashSegment.byteLength,
-    ),
+  const path: Uint8Array[] = [
+    canisterSegment,
+    principalSegment,
+    moduleHashSegment,
   ];
 
   try {
@@ -408,14 +396,13 @@ export const getCanisterWasmHash = async (
       canisterId: canisterId,
     });
 
-    // 2. Use the certificate's high-level `lookup` method. This returns the
+    // 2. Use the certificate's high-level `lookup_path` method. This returns the
     //    value directly if the path is found and the certificate is valid.
-    const result = cert.lookup(path);
+    const result = cert.lookup_path(path);
 
-    // 3. The result will be an ArrayBuffer if found, or undefined otherwise.
-    if (result.status === 'found') {
-      const hash = new Uint8Array(result.value as ArrayBuffer);
-      return hash;
+    // 3. The result will be a Uint8Array if found, or undefined otherwise.
+    if (result.status === LookupPathStatus.Found) {
+      return result.value;
     }
 
     return null;

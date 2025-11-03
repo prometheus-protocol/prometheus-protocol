@@ -1,6 +1,6 @@
 // packages/ic-js/src/bounties.api.ts
 
-import { Identity } from '@dfinity/agent';
+import { Identity } from '@icp-sdk/core/agent';
 import { getAppBountiesActor } from '../actors.js';
 import { AppBounties } from '@prometheus-protocol/declarations';
 

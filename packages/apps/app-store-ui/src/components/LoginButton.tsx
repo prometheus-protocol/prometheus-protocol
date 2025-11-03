@@ -65,7 +65,7 @@ export const getReputationDisplayInfo = (auditType: string) => {
 };
 
 export function LoginButton() {
-  const { identity, login, clear, loginStatus } = useInternetIdentity();
+  const { identity, login, clear, status } = useInternetIdentity();
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
   const { data: usdcBalance, isLoading: isBalanceLoading } = useGetTokenBalance(
     Tokens.USDC,
@@ -120,7 +120,7 @@ export function LoginButton() {
     }
   }, [isCopied]);
 
-  if (loginStatus === 'logging-in') {
+  if (status === 'logging-in') {
     return (
       <Button disabled>
         <Loader2 className="mr-2 h-4 w-4 animate-spin" />

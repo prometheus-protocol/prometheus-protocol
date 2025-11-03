@@ -1,6 +1,6 @@
 // src/hooks/useApiKeyManager.ts
 
-import { Principal } from '@dfinity/principal';
+import { Principal } from '@icp-sdk/core/principal';
 import { useQuery } from '@tanstack/react-query';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import useMutation from './useMutation'; // Your custom mutation hook
