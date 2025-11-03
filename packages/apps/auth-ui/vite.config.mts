@@ -36,12 +36,15 @@ function getCanisterIds() {
 
   try {
     const canisterIds = JSON.parse(fs.readFileSync(canisterIdsPath, 'utf-8'));
-    return Object.entries(canisterIds).reduce((acc, [name, ids]) => {
-      const key = `CANISTER_ID_${name.toUpperCase()}`;
-      const value = (ids as Record<string, string>)[network];
-      acc[key] = value;
-      return acc;
-    }, {});
+    return Object.entries(canisterIds).reduce(
+      (acc, [name, ids]) => {
+        const key = `CANISTER_ID_${name.toUpperCase()}`;
+        const value = (ids as Record<string, string>)[network];
+        acc[key] = value;
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
   } catch (e) {
     console.error('Error parsing canister_ids.json:', e);
     return {};
@@ -56,7 +59,7 @@ export default defineConfig(({ mode }) => {
   const internetIdentityUrl =
     network === 'local'
       ? `http://${canisterEnvVariables['CANISTER_ID_INTERNET_IDENTITY']}.localhost:4943/`
-      : `https://identity.ic0.app`;
+      : `https://id.ai`;
 
   console.log(`[VITE CONFIG] Internet Identity URL: ${internetIdentityUrl}`);
 
