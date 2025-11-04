@@ -160,12 +160,15 @@ export default function ServerDetailsPage() {
             server.namespace,
             version.wasmId,
           );
+          // Explicitly return null if id is undefined
           return id ?? null;
         } catch {
           return null;
         }
       },
       enabled: !!server?.namespace && !!version.wasmId && !!identity,
+      // Add a placeholder data to prevent undefined issues
+      placeholderData: null,
     })),
   });
 
@@ -584,7 +587,7 @@ export default function ServerDetailsPage() {
                   latestVersion={server.latestVersion}
                   onConnectClick={handleInstallClick}
                   isArchived={isViewingArchivedVersion}
-                  canisterId={canisterId}
+                  canisterId={canisterId ?? undefined}
                   onUpgradeClick={handleUpgradeClick}
                   isUpgrading={provisionMutation.isPending}
                   isPollingForCanister={isPollingForCanister}
@@ -593,20 +596,7 @@ export default function ServerDetailsPage() {
             </div>
             {/* Conditionally render the new container component */}
 
-            {hasAppInfo ? (
-              <AboutSection server={server} />
-            ) : (
-              <SponsorPrompt
-                icon={AlertTriangle}
-                title="App Info"
-                description="Sponsor the App Info audit to provide users with detailed information about this application."
-                auditType="app_info_v1"
-                paymentToken={Tokens.USDC}
-                bounty={appInfoBounty} // Assuming no bounty for app_info_v1 in this context
-                wasmId={server.latestVersion.wasmId}
-                isArchived={isViewingArchivedVersion}
-              />
-            )}
+            <AboutSection server={server} />
 
             {/* Conditional rendering now correctly checks the nested status. */}
             {hasToolsInfo ? (
@@ -642,23 +632,10 @@ export default function ServerDetailsPage() {
               />
             )}
 
-            {hasToolsInfo ? (
-              <AccessAndBilling
-                latestVersion={server.latestVersion}
-                canisterId={canisterId}
-              />
-            ) : (
-              <SponsorPrompt
-                icon={Wallet}
-                title="API Keys"
-                description="Sponsor the Tools audit to enable API key creation for this app."
-                auditType="tools_v1"
-                bounty={toolsBounty}
-                paymentToken={Tokens.USDC}
-                wasmId={server.latestVersion.wasmId}
-                isArchived={isViewingArchivedVersion}
-              />
-            )}
+            <AccessAndBilling
+              latestVersion={server.latestVersion}
+              canisterId={canisterId ?? undefined}
+            />
 
             {/* Token Watchlist Section */}
             {identity && canisterId && (
@@ -678,7 +655,7 @@ export default function ServerDetailsPage() {
                   allVersions={allVersions}
                   currentVersionWasmId={latestVersion.wasmId}
                   namespace={server.namespace}
-                  canisterId={canisterId}
+                  canisterId={canisterId ?? undefined}
                 />
               </div>
             </div>

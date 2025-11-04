@@ -52,16 +52,45 @@ export async function verifyBuild(
     // Set up reproducible build environment
     await setupReproducibleBuild(canisterPath, canisterName, workDir);
 
-    console.log(`🔨 Building with Docker (this may take several minutes)...`);
-    const buildLog = execSync(`docker-compose run --rm wasm`, {
+    // Clean any existing output and Docker resources to ensure fresh build
+    const outPath = path.join(canisterPath, 'out');
+    if (fs.existsSync(outPath)) {
+      console.log(`🧹 Cleaning existing output directory...`);
+      execSync(`rm -rf ${outPath}`, { cwd: canisterPath });
+    }
+
+    console.log(`🧹 Cleaning Docker compose resources...`);
+    try {
+      execSync(`docker-compose down -v`, {
+        cwd: canisterPath,
+        timeout: 60_000,
+        stdio: 'pipe',
+      });
+    } catch (e) {
+      // Ignore errors if compose isn't running
+    }
+
+    console.log(`🔨 Building Docker image (no cache)...`);
+    execSync(`docker-compose build --no-cache`, {
       cwd: canisterPath,
       timeout: 600_000, // 10 minutes max
       stdio: 'pipe',
-      env: {
-        ...process.env,
-        DOCKER_BUILDKIT: '1',
+    });
+
+    console.log(`🔨 Running build in Docker...`);
+    // Remove --rm flag so we can exec into container for cleanup
+    const buildLog = execSync(
+      `docker-compose run --name verify-container-${Date.now()} wasm`,
+      {
+        cwd: canisterPath,
+        timeout: 600_000, // 10 minutes max
+        stdio: 'pipe',
+        env: {
+          ...process.env,
+          DOCKER_BUILDKIT: '1',
+        },
       },
-    }).toString();
+    ).toString();
 
     console.log(`📋 Build output:\n${buildLog.slice(-500)}`); // Last 500 chars
 
@@ -112,9 +141,53 @@ export async function verifyBuild(
     // Cleanup
     try {
       console.log(`🧹 Cleaning up ${workDir}...`);
+
+      // First, try to remove root-owned files using Docker
+      const outPath = path.join(workDir, 'out');
+      if (fs.existsSync(outPath)) {
+        try {
+          console.log(`🐳 Using Docker to remove root-owned files...`);
+          // Use alpine container to remove files as root
+          // Remove contents but not the mount point itself
+          execSync(
+            `docker run --rm -v ${outPath}:/cleanup alpine sh -c "rm -rf /cleanup/*"`,
+            { timeout: 10_000, stdio: 'pipe' },
+          );
+        } catch (dockerErr) {
+          console.log('⚠️  Docker cleanup failed, files may remain');
+        }
+      }
+
+      // Clean up any leftover containers
+      try {
+        const containers = execSync(
+          `docker ps -a -q -f name=verify-container`,
+          { encoding: 'utf-8', timeout: 5_000 },
+        )
+          .trim()
+          .split('\n')
+          .filter(Boolean);
+
+        if (containers.length > 0) {
+          console.log(
+            `🐳 Removing ${containers.length} Docker container(s)...`,
+          );
+          for (const containerId of containers) {
+            execSync(`docker rm -f ${containerId}`, {
+              timeout: 10_000,
+              stdio: 'pipe',
+            });
+          }
+        }
+      } catch (dockerErr) {
+        // Ignore errors
+      }
+
+      // Now remove the entire work directory
       execSync(`rm -rf ${workDir}`, { timeout: 30_000 });
+      console.log(`✅ Cleanup completed successfully`);
     } catch (e) {
-      console.error('⚠️  Cleanup failed:', e);
+      console.error('⚠️  Cleanup failed (non-critical):', e);
     }
   }
 }

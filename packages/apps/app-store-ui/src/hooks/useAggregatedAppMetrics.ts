@@ -33,10 +33,15 @@ export const useAggregatedAppMetrics = (
     queries: (canisterIds ?? []).filter(Boolean).map((canisterId) => ({
       queryKey: ['appMetrics', canisterId?.toText()],
       queryFn: async (): Promise<UsageTracker.AppMetrics | null> => {
+        if (!canisterId) {
+          return null;
+        }
         const metrics = await getAppMetrics(canisterId);
         return metrics ?? null;
       },
       enabled: !!canisterId,
+      // Provide placeholder to prevent undefined issues
+      placeholderData: null,
     })),
   });
 

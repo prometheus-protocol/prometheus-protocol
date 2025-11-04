@@ -34,23 +34,27 @@ export const useProvisionInstance = (namespace?: string) => {
 };
 
 /**
- * React Query hook to fetch the list of all app store listings.
- * This is used for the main discovery/landing page.
+ * React Query hook to fetch the canister ID for a specific MCP server instance.
+ * Returns null if the canister ID is not available.
  */
 export const useGetCanisterId = (namespace?: string, wasmId?: string) => {
   const { identity } = useInternetIdentity();
 
-  return useQuery<Principal | undefined>({
+  return useQuery<Principal | null>({
     // The query is public, but we include the principal to maintain a consistent
     // pattern and ensure reactivity if the identity changes.
     queryKey: ['serverCanisterId', namespace, wasmId],
-    queryFn: async () => {
+    queryFn: async (): Promise<Principal | null> => {
       if (!namespace || !wasmId || !identity) {
-        throw new Error('Namespace and wasmId must be provided');
+        return null;
       }
 
-      return getServerCanisterId(identity, namespace, wasmId);
+      const result = await getServerCanisterId(identity, namespace, wasmId);
+      // Explicitly convert undefined to null for React Query
+      return result ?? null;
     },
     enabled: !!namespace && !!wasmId && !!identity,
+    // Provide a placeholder to prevent undefined issues during initialization
+    placeholderData: null,
   });
 };

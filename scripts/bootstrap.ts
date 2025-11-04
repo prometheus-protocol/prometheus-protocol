@@ -147,11 +147,15 @@ async function main() {
   console.log(chalk.green('✅ Registry configured.'));
   console.log('');
 
-  // 7. Configure the Usage Tracker canister
-  console.log(chalk.bold('📈 Configuring Usage Tracker Canister...'));
-  console.log('  - Setting Orchestrator canister...');
-  await $`dfx canister call ${canisterIds.mcp_registry} set_orchestrator_canister_id '(principal "${canisterIds.mcp_orchestrator}")'`;
+  // 7. Configure the Orchestrator canister
+  console.log(chalk.bold('🎭 Configuring Orchestrator Canister...'));
+  console.log('  - Setting Registry canister...');
+  await $`dfx canister call ${canisterIds.mcp_orchestrator} set_mcp_registry_id '(principal "${canisterIds.mcp_registry}")'`;
+  console.log(chalk.green('✅ Orchestrator configured.'));
+  console.log('');
 
+  // 8. Configure the Usage Tracker canister
+  console.log(chalk.bold('📈 Configuring Usage Tracker Canister...'));
   await $`dfx canister call ${canisterIds.usage_tracker} set_owner '(principal "${canisterIds.mcp_registry}")'`;
   console.log(chalk.green('✅ Usage Tracker configured.'));
   console.log('');

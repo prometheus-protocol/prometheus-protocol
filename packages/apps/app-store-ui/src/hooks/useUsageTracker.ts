@@ -10,7 +10,7 @@ export const useGetAppMetrics = (canisterId?: Principal) => {
     queryKey: canisterId
       ? ['appMetrics', canisterId]
       : ['appMetrics', 'no-canister'],
-    queryFn: async () => {
+    queryFn: async (): Promise<UsageTracker.AppMetrics | null> => {
       if (!canisterId) {
         // Return null when no canister ID is provided instead of throwing
         return null;
@@ -21,5 +21,7 @@ export const useGetAppMetrics = (canisterId?: Principal) => {
       return metrics ?? null;
     },
     enabled: !!canisterId,
+    // Provide placeholder to prevent undefined issues
+    placeholderData: null,
   });
 };

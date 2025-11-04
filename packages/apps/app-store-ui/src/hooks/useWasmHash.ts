@@ -29,13 +29,15 @@ export const useWasmHash = (
     error,
   } = useQuery<Uint8Array | null>({
     queryKey: ['canisterWasmHash', canisterId?.toText()],
-    queryFn: async () => {
+    queryFn: async (): Promise<Uint8Array | null> => {
       if (!canisterId) {
-        throw new Error('Canister ID is required');
+        return null;
       }
       return getCanisterWasmHash(canisterId);
     },
     enabled: !!canisterId,
+    // Provide placeholder to prevent undefined issues
+    placeholderData: null,
   });
 
   // Convert expected WASM ID from hex to Uint8Array for comparison

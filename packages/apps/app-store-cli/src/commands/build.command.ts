@@ -134,6 +134,10 @@ export function registerBuildCommand(program: Command) {
         );
 
         try {
+          // Build the Docker image without cache to ensure fresh build
+          execSync('docker-compose build --no-cache', { stdio: 'inherit' });
+
+          // Run the build
           execSync('docker-compose run --rm wasm', { stdio: 'inherit' });
         } catch (error: any) {
           if (error.status === 130) {

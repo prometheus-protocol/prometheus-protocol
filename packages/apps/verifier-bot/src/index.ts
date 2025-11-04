@@ -178,7 +178,9 @@ async function pollAndVerify(): Promise<void> {
             build_duration_seconds: result.duration,
             verifier_version: '1.0.0',
             verifier_principal: VERIFIER_PRINCIPAL,
-            build_timestamp: Date.now(),
+            build_timestamp: Date.now() * 1_000_000, // Convert to nanoseconds (IC standard)
+            git_commit: job.commit_hash,
+            repo_url: job.repo,
           };
 
           // Add truncated build log if available
