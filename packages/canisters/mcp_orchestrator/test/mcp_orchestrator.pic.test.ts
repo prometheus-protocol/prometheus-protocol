@@ -811,7 +811,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       // Arrange
       // Set the threshold HIGHER to create a top-up condition
       const threshold = 999_999_999_999_999n; // Very high threshold
-      
+
       // But disable the feature
       orchestratorActor.setIdentity(daoIdentity);
       await orchestratorActor.set_cycle_top_up_config({
@@ -823,7 +823,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
 
       // Allow the config change to take effect and any pending timers to be cancelled/complete
       await pic.tick(10);
-      
+
       // Record balance AFTER cleanup
       const balanceBefore = await pic.getCyclesBalance(managedCanisterId);
 

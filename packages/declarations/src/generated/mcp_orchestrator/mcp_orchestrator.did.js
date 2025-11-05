@@ -22,6 +22,29 @@ export const idlFactory = ({ IDL }) => {
     'expectedExecutionTime' : Time,
     'lastExecutionTime' : Time,
   });
+  const Result_1 = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
+  const ActionFilter = IDL.Variant({
+    'All' : IDL.Null,
+    'ByActionId' : IDL.Nat,
+    'ByType' : IDL.Text,
+    'ByTimeRange' : IDL.Tuple(Time, Time),
+    'ByRetryCount' : IDL.Nat,
+  });
+  const CancellationResult = IDL.Record({
+    'cancelled' : IDL.Vec(ActionId),
+    'errors' : IDL.Vec(IDL.Tuple(IDL.Nat, IDL.Text)),
+    'notFound' : IDL.Vec(IDL.Nat),
+  });
+  const CanisterCycleInfo = IDL.Record({
+    'needs_top_up' : IDL.Bool,
+    'canister_id' : IDL.Principal,
+    'cycles' : IDL.Nat,
+    'namespace' : IDL.Text,
+  });
+  const Result_7 = IDL.Variant({
+    'ok' : IDL.Vec(CanisterCycleInfo),
+    'err' : IDL.Text,
+  });
   const CanisterDeploymentType = IDL.Variant({
     'provisioned' : IDL.Null,
     'global' : IDL.Null,
@@ -84,12 +107,48 @@ export const idlFactory = ({ IDL }) => {
     'timeout' : IDL.Nat,
     'namespace' : IDL.Text,
   });
-  const Result_2 = IDL.Variant({ 'ok' : IDL.Principal, 'err' : IDL.Text });
+  const Result_3 = IDL.Variant({ 'ok' : IDL.Principal, 'err' : IDL.Text });
+  const Time__2 = IDL.Int;
+  const ActionDetail = IDL.Tuple(ActionId, Action);
+  const Result_6 = IDL.Variant({
+    'ok' : IDL.Vec(IDL.Principal),
+    'err' : IDL.Text,
+  });
+  const CycleJobStatus = IDL.Record({
+    'job_scheduled' : IDL.Bool,
+    'job_action_id' : IDL.Opt(IDL.Nat),
+    'enabled' : IDL.Bool,
+    'orchestrator_balance' : IDL.Nat,
+    'next_check' : IDL.Opt(IDL.Int),
+    'last_check' : IDL.Opt(IDL.Int),
+  });
+  const Result_5 = IDL.Variant({ 'ok' : CycleJobStatus, 'err' : IDL.Text });
   const CycleTopUpConfig = IDL.Record({
     'threshold' : IDL.Nat,
     'enabled' : IDL.Bool,
     'interval_seconds' : IDL.Nat,
     'amount' : IDL.Nat,
+  });
+  const ReconstitutionTrace = IDL.Record({
+    'errors' : IDL.Vec(IDL.Text),
+    'actionsRestored' : IDL.Nat,
+    'timestamp' : Time,
+    'migratedTo' : IDL.Text,
+    'migratedFrom' : IDL.Text,
+    'timersRestored' : IDL.Nat,
+    'validationPassed' : IDL.Bool,
+  });
+  const Result_4 = IDL.Variant({ 'ok' : IDL.Nat, 'err' : IDL.Text });
+  const TimerId = IDL.Nat;
+  const TimerDiagnostics = IDL.Record({
+    'pendingActions' : IDL.Nat,
+    'totalActions' : IDL.Nat,
+    'overdueActions' : IDL.Nat,
+    'lockStatus' : IDL.Opt(Time),
+    'currentTime' : Time,
+    'lastExecutionDelta' : IDL.Int,
+    'nextExecutionDelta' : IDL.Opt(IDL.Int),
+    'systemTimerStatus' : IDL.Opt(TimerId),
   });
   const Tip = IDL.Record({
     'last_block_index' : IDL.Vec(IDL.Nat8),
@@ -337,9 +396,26 @@ export const idlFactory = ({ IDL }) => {
     'frontend_host' : IDL.Opt(IDL.Text),
     'service_principals' : IDL.Vec(IDL.Principal),
   });
-  const Result_1 = IDL.Variant({ 'ok' : ResourceServer, 'err' : IDL.Text });
-  const Result = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
+  const Result_2 = IDL.Variant({ 'ok' : ResourceServer, 'err' : IDL.Text });
+  const Result = IDL.Variant({ 'ok' : IDL.Text, 'err' : IDL.Text });
   const ICRC120Canister = IDL.Service({
+    'add_controller_to_canister' : IDL.Func(
+        [IDL.Principal, IDL.Principal],
+        [Result_1],
+        [],
+      ),
+    'cancel_actions_by_filter' : IDL.Func(
+        [ActionFilter],
+        [CancellationResult],
+        [],
+      ),
+    'cancel_actions_by_ids' : IDL.Func(
+        [IDL.Vec(IDL.Nat)],
+        [CancellationResult],
+        [],
+      ),
+    'check_all_canister_cycles' : IDL.Func([], [Result_7], []),
+    'clear_reconstitution_traces' : IDL.Func([], [], []),
     'debug_canister_info' : IDL.Func(
         [IDL.Text],
         [
@@ -356,15 +432,38 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
-    'deploy_or_upgrade' : IDL.Func([DeployOrUpgradeRequest], [Result_2], []),
+    'deploy_or_upgrade' : IDL.Func([DeployOrUpgradeRequest], [Result_3], []),
+    'emergency_clear_all_timers' : IDL.Func([], [IDL.Nat], []),
+    'force_release_lock' : IDL.Func([], [IDL.Opt(Time__2)], []),
+    'force_system_timer_cancel' : IDL.Func([], [IDL.Bool], []),
+    'get_actions_by_filter' : IDL.Func(
+        [ActionFilter],
+        [IDL.Vec(ActionDetail)],
+        ['query'],
+      ),
+    'get_all_canister_cycles' : IDL.Func([], [Result_7], ['query']),
     'get_auth_server_id' : IDL.Func([], [IDL.Opt(IDL.Principal)], ['query']),
+    'get_canister_controllers' : IDL.Func([IDL.Principal], [Result_6], []),
     'get_canister_id' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Opt(IDL.Principal)],
         ['query'],
       ),
     'get_canisters' : IDL.Func([IDL.Text], [IDL.Vec(IDL.Principal)], ['query']),
+    'get_cycle_job_status' : IDL.Func([], [Result_5], ['query']),
     'get_cycle_top_up_config' : IDL.Func([], [CycleTopUpConfig], ['query']),
+    'get_latest_reconstitution_trace' : IDL.Func(
+        [],
+        [IDL.Opt(ReconstitutionTrace)],
+        ['query'],
+      ),
+    'get_orchestrator_cycles' : IDL.Func([], [Result_4], ['query']),
+    'get_reconstitution_traces' : IDL.Func(
+        [],
+        [IDL.Vec(ReconstitutionTrace)],
+        ['query'],
+      ),
+    'get_timer_diagnostics' : IDL.Func([], [TimerDiagnostics], ['query']),
     'get_tip' : IDL.Func([], [Tip], ['query']),
     'hello' : IDL.Func([], [IDL.Text], []),
     'icrc120_clean_snapshot' : IDL.Func(
@@ -436,26 +535,33 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'internal_deploy_or_upgrade' : IDL.Func([InternalDeployRequest], [], []),
-    'provision_instance' : IDL.Func([IDL.Text, IDL.Text], [Result_2], []),
+    'provision_instance' : IDL.Func([IDL.Text, IDL.Text], [Result_3], []),
     'register_oauth_resource' : IDL.Func(
         [IDL.Principal, RegisterResourceServerArgs],
+        [Result_2],
+        [],
+      ),
+    'remove_controller_from_canister' : IDL.Func(
+        [IDL.Principal, IDL.Principal],
         [Result_1],
         [],
       ),
-    'set_auth_server_id' : IDL.Func([IDL.Principal], [Result], []),
+    'set_auth_server_id' : IDL.Func([IDL.Principal], [Result_1], []),
     'set_canister_owner' : IDL.Func(
         [IDL.Principal, IDL.Principal],
-        [Result],
+        [Result_1],
         [],
       ),
-    'set_cycle_top_up_config' : IDL.Func([CycleTopUpConfig], [Result], []),
+    'set_cycle_top_up_config' : IDL.Func([CycleTopUpConfig], [Result_1], []),
     'set_deployment_type' : IDL.Func(
         [IDL.Text, IDL.Text, CanisterDeploymentType],
-        [Result],
+        [Result_1],
         [],
       ),
-    'set_mcp_registry_id' : IDL.Func([IDL.Principal], [Result], []),
-    'set_usage_tracker_id' : IDL.Func([IDL.Principal], [Result], []),
+    'set_mcp_registry_id' : IDL.Func([IDL.Principal], [Result_1], []),
+    'set_usage_tracker_id' : IDL.Func([IDL.Principal], [Result_1], []),
+    'trigger_manual_cycle_top_up' : IDL.Func([], [Result], []),
+    'validate_timer_state' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
   });
   return ICRC120Canister;
 };

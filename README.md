@@ -105,30 +105,55 @@ Finally, we built the most critical piece: the financial tools that make an agen
 - [pnpm](https://pnpm.io/installation) (for monorepo management)
 - [Mops](https://mops.one/) (Motoko Package Manager)
 
-### Installation Guide
+### Quick Start
 
-1.  **Clone the repository**
+1.  **Clone and install**
+
     ```bash
     git clone https://github.com/prometheus-protocol/prometheus-protocol.git
     cd prometheus-protocol
-    ```
-2.  **Install dependencies**
-    ```bash
     pnpm install
     mops install
     ```
-3.  **Start local ICP replica**
+
+2.  **Deploy locally**
+
     ```bash
     dfx start --clean --background
-    ```
-4.  **Deploy canisters locally**
-    ```bash
     dfx deploy
     ```
-5.  **Run the App Store frontend**
+
+3.  **Configure canisters**
+
+    ```bash
+    # Automatically link all canister dependencies
+    pnpm config:inject
+
+    # Set up local dev environment (test tokens, cycles, etc.)
+    pnpm setup:local
+    ```
+
+4.  **Run the frontend**
     ```bash
     pnpm --filter @prometheus-protocol/frontend dev
     ```
+
+📖 **See [QUICKSTART.md](./QUICKSTART.md) for detailed instructions and troubleshooting.**
+
+### Production Deployment
+
+```bash
+# Deploy to IC mainnet
+dfx deploy --network ic
+
+# Auto-configure all dependencies
+pnpm config:inject -- --network ic
+
+# Verify configuration
+pnpm config:check -- --network ic
+```
+
+📖 **See [docs/PRODUCTION_DEPLOYMENT.md](./docs/PRODUCTION_DEPLOYMENT.md) for the complete production guide.**
 
 ---
 

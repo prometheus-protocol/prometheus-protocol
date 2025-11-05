@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# Convenience wrapper for configure-canisters.ts
+
+case "$1" in
+  check|--check)
+    ./scripts/configure-canisters.ts --check "${@:2}"
+    ;;
+  inject|--inject|apply)
+    ./scripts/configure-canisters.ts --inject "${@:2}"
+    ;;
+  status|--status|"")
+    ./scripts/configure-canisters.ts --status "${@:2}"
+    ;;
+  *)
+    echo "Usage: $0 {check|inject|status} [--network ic]"
+    echo ""
+    echo "Commands:"
+    echo "  check   - Check configuration status without making changes"
+    echo "  inject  - Automatically inject missing configuration"
+    echo "  status  - Show detailed configuration status (default)"
+    echo ""
+    echo "Options:"
+    echo "  --network ic   - Target IC mainnet instead of local"
+    echo ""
+    echo "Examples:"
+    echo "  $0 check"
+    echo "  $0 inject"
+    echo "  $0 inject --network ic"
+    exit 1
+    ;;
+esac

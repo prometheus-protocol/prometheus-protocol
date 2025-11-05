@@ -41,7 +41,7 @@ type AuditHub =
    /// * Generate a new API key for the verifier to use in their bot.
    ///    * Called by the verifier principal (authenticated via Internet Identity in UI).
    generate_api_key: () -> (Result_2);
-   get_available_balance: (verifier: principal, _token_id: TokenId) ->
+   get_available_balance: (verifier: principal, token_id: TokenId) ->
     (Balance) query;
    get_bounty_lock: (bounty_id: BountyId) -> (opt BountyLock) query;
    get_owner: () -> (principal) query;
@@ -53,7 +53,7 @@ type AuditHub =
      }) query;
    get_registry_canister_id: () -> (opt principal) query;
    get_stake_requirement: (token_id: TokenId) -> (opt Balance) query;
-   get_staked_balance: (verifier: principal, _token_id: TokenId) ->
+   get_staked_balance: (verifier: principal, token_id: TokenId) ->
     (Balance) query;
    get_verifier_profile: (verifier: principal) -> (VerifierProfile) query;
    is_bounty_ready_for_collection: (bounty_id: BountyId, potential_claimant:

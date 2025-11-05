@@ -2192,4 +2192,68 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     "world!";
   };
 
+  public type EnvDependency = {
+    key : Text;
+    setter : Text;
+    canister_name : Text;
+    required : Bool;
+    current_value : ?Principal;
+  };
+
+  public type EnvConfig = {
+    key : Text;
+    setter : Text;
+    value_type : Text;
+    required : Bool;
+    current_value : ?Text;
+  };
+
+  public query func get_env_requirements() : async {
+    #v1 : {
+      dependencies : [EnvDependency];
+      configuration : [EnvConfig];
+    };
+  } {
+    #v1({
+      dependencies = [
+        {
+          key = "_credentials_canister_id";
+          setter = "set_auditor_credentials_canister_id";
+          canister_name = "audit_hub";
+          required = true;
+          current_value = _credentials_canister_id;
+        },
+        {
+          key = "_orchestrator_canister_id";
+          setter = "set_orchestrator_canister_id";
+          canister_name = "mcp_orchestrator";
+          required = true;
+          current_value = _orchestrator_canister_id;
+        },
+        {
+          key = "_usage_tracker_canister_id";
+          setter = "set_usage_tracker_canister_id";
+          canister_name = "usage_tracker";
+          required = true;
+          current_value = _usage_tracker_canister_id;
+        },
+        {
+          key = "_search_index_canister_id";
+          setter = "set_search_index_canister_id";
+          canister_name = "search_index";
+          required = true;
+          current_value = _search_index_canister_id;
+        },
+        {
+          key = "_bounty_reward_token_canister_id";
+          setter = "set_bounty_reward_token_canister_id";
+          canister_name = "usdc_ledger";
+          required = true;
+          current_value = _bounty_reward_token_canister_id;
+        },
+      ];
+      configuration = [];
+    });
+  };
+
 };

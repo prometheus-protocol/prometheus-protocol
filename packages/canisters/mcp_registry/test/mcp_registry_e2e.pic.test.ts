@@ -562,7 +562,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     });
     console.log('Update wasm result:', updateResult);
     console.log('WASM ID:', wasmId);
-    
+
     await registryActor.icrc118_upload_wasm_chunk({
       canister_type_namespace: appNamespace,
       expected_chunk_hash: wasmHash,

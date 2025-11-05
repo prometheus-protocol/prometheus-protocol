@@ -27,7 +27,10 @@
     "seed:app-bounties": "zx ./scripts/seed-app-bounties.ts",
     "seed:leaderboard": "zx ./scripts/seed-leaderboard.ts",
     "seed": "npm run seed:app-bounties && npm run seed:leaderboard",
-    "bootstrap": "zx ./scripts/bootstrap.ts",
+    "setup:local": "zx ./scripts/setup-local-dev.ts",
+    "config:check": "zx ./scripts/configure-canisters.ts --check",
+    "config:inject": "zx ./scripts/configure-canisters.ts --inject",
+    "config:status": "zx ./scripts/configure-canisters.ts --status",
     "sync:wasms": "tsx ./scripts/sync-historical-wasms.ts"
   },
   "devDependencies": {

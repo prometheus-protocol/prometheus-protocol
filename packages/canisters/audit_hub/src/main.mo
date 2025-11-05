@@ -81,13 +81,13 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   var dashboard_canister_id : ?Principal = null;
   var registry_canister_id : ?Principal = null;
 
-  // Tracks the available (unstaked) USDC balance for each verifier
-  // Map<Verifier Principal, Balance in USDC>
-  var available_balances = Map.new<Principal, Balance>();
+  // Tracks the available (unstaked) balances for each verifier and token type
+  // Map<Verifier Principal, Map<TokenId, Balance>>
+  var available_balances = Map.new<Principal, Map.Map<TokenId, Balance>>();
 
-  // Tracks the staked USDC balances for each verifier
-  // Map<Verifier Principal, Balance in USDC>
-  var staked_balances = Map.new<Principal, Balance>();
+  // Tracks the staked balances for each verifier and token type
+  // Map<Verifier Principal, Map<TokenId, Balance>>
+  var staked_balances = Map.new<Principal, Map.Map<TokenId, Balance>>();
 
   // Tracks active locks on bounties.
   var bounty_locks = Map.new<BountyId, BountyLock>();
@@ -127,14 +127,27 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     };
   };
 
-  // Helper to get a USDC balance from the map, returning 0 if not found.
-  private func _get_balance(balance_map : Map.Map<Principal, Balance>, verifier : Principal) : Balance {
-    return Option.get(Map.get(balance_map, phash, verifier), 0);
+  // Helper to get a balance from a given map, returning 0 if not found.
+  private func _get_balance(balance_map : Map.Map<Principal, Map.Map<TokenId, Balance>>, verifier : Principal, token_id : TokenId) : Balance {
+    switch (Map.get(balance_map, phash, verifier)) {
+      case (null) { return 0 };
+      case (?balances) {
+        return Option.get(Map.get(balances, thash, token_id), 0);
+      };
+    };
   };
 
-  // Helper to set a USDC balance in the map.
-  private func _set_balance(balance_map : Map.Map<Principal, Balance>, verifier : Principal, new_balance : Balance) {
-    Map.set(balance_map, phash, verifier, new_balance);
+  // Helper to set a balance in a given map.
+  private func _set_balance(balance_map : Map.Map<Principal, Map.Map<TokenId, Balance>>, verifier : Principal, token_id : TokenId, new_balance : Balance) {
+    let verifier_balances = switch (Map.get(balance_map, phash, verifier)) {
+      case (null) {
+        let new_map = Map.new<TokenId, Balance>();
+        Map.set(balance_map, phash, verifier, new_map);
+        new_map;
+      };
+      case (?existing) { existing };
+    };
+    Map.set(verifier_balances, thash, token_id, new_balance);
   };
 
   // Helper to get verifier stats
@@ -378,6 +391,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
    */
   public shared (msg) func deposit_stake(amount : Balance) : async Result.Result<(), Text> {
     let verifier = msg.caller;
+    let token_id = "usdc"; // Default token ID for USDC deposits
 
     // 1. Ensure USDC ledger is configured
     let ledger_id = switch (usdc_ledger_id) {
@@ -418,8 +432,8 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     switch (transfer_result) {
       case (#Ok(_)) {
         // 3. Update available balance
-        let current_balance = _get_balance(available_balances, verifier);
-        _set_balance(available_balances, verifier, current_balance + amount);
+        let current_balance = _get_balance(available_balances, verifier, token_id);
+        _set_balance(available_balances, verifier, token_id, current_balance + amount);
         return #ok(());
       };
       case (#Err(err)) {
@@ -433,9 +447,10 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
    */
   public shared (msg) func withdraw_stake(amount : Balance) : async Result.Result<(), Text> {
     let verifier = msg.caller;
+    let token_id = "usdc"; // Default token ID for USDC withdrawals
 
     // 1. Check available balance
-    let current_balance = _get_balance(available_balances, verifier);
+    let current_balance = _get_balance(available_balances, verifier, token_id);
     if (current_balance < amount) {
       return #err("Insufficient available balance.");
     };
@@ -463,7 +478,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     switch (transfer_result) {
       case (#Ok(_)) {
         // 4. Update available balance
-        _set_balance(available_balances, verifier, current_balance - amount);
+        _set_balance(available_balances, verifier, token_id, current_balance - amount);
         return #ok(());
       };
       case (#Err(err)) {
@@ -502,15 +517,15 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     };
 
     // 2. Check if verifier has enough available USDC to stake.
-    let available = _get_balance(available_balances, verifier);
+    let available = _get_balance(available_balances, verifier, token_id);
     if (available < stake_amount) {
       return #err("Insufficient available balance to stake. Deposit more USDC via the dashboard.");
     };
 
     // 3. Perform the internal stake transfer.
-    _set_balance(available_balances, verifier, available - stake_amount);
-    let current_staked = _get_balance(staked_balances, verifier);
-    _set_balance(staked_balances, verifier, current_staked + stake_amount);
+    _set_balance(available_balances, verifier, token_id, available - stake_amount);
+    let current_staked = _get_balance(staked_balances, verifier, token_id);
+    _set_balance(staked_balances, verifier, token_id, current_staked + stake_amount);
 
     // 4. Create and store the lock (1-hour expiration).
     let new_lock : BountyLock = {
@@ -563,15 +578,15 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     };
 
     // 3. Check if verifier has enough available USDC to stake
-    let available = _get_balance(available_balances, verifier);
+    let available = _get_balance(available_balances, verifier, token_id);
     if (available < stake_amount) {
       return #err("Insufficient available balance to stake. Deposit more USDC via the dashboard.");
     };
 
     // 4. Perform the internal stake transfer
-    _set_balance(available_balances, verifier, available - stake_amount);
-    let current_staked = _get_balance(staked_balances, verifier);
-    _set_balance(staked_balances, verifier, current_staked + stake_amount);
+    _set_balance(available_balances, verifier, token_id, available - stake_amount);
+    let current_staked = _get_balance(staked_balances, verifier, token_id);
+    _set_balance(staked_balances, verifier, token_id, current_staked + stake_amount);
 
     // 5. Create and store the lock (1-hour expiration)
     let new_lock : BountyLock = {
@@ -597,10 +612,10 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     };
 
     // Perform the internal unstake transfer.
-    let current_staked = _get_balance(staked_balances, lock.claimant);
-    _set_balance(staked_balances, lock.claimant, current_staked - lock.stake_amount);
-    let current_available = _get_balance(available_balances, lock.claimant);
-    _set_balance(available_balances, lock.claimant, current_available + lock.stake_amount);
+    let current_staked = _get_balance(staked_balances, lock.claimant, lock.stake_token_id);
+    _set_balance(staked_balances, lock.claimant, lock.stake_token_id, current_staked - lock.stake_amount);
+    let current_available = _get_balance(available_balances, lock.claimant, lock.stake_token_id);
+    _set_balance(available_balances, lock.claimant, lock.stake_token_id, current_available + lock.stake_amount);
 
     // Update verifier stats (successful verification)
     let stats = _get_verifier_stats(lock.claimant);
@@ -635,8 +650,8 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     };
 
     // Slash the stake (burn from the staked balance - lost to the protocol)
-    let current_staked = _get_balance(staked_balances, lock.claimant);
-    _set_balance(staked_balances, lock.claimant, current_staked - lock.stake_amount);
+    let current_staked = _get_balance(staked_balances, lock.claimant, lock.stake_token_id);
+    _set_balance(staked_balances, lock.claimant, lock.stake_token_id, current_staked - lock.stake_amount);
 
     // Penalize reputation for being on wrong side of consensus
     let stats = _get_verifier_stats(lock.claimant);
@@ -673,8 +688,8 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     };
 
     // Slash the stake (burn from the staked balance - lost to the protocol).
-    let current_staked = _get_balance(staked_balances, lock.claimant);
-    _set_balance(staked_balances, lock.claimant, current_staked - lock.stake_amount);
+    let current_staked = _get_balance(staked_balances, lock.claimant, lock.stake_token_id);
+    _set_balance(staked_balances, lock.claimant, lock.stake_token_id, current_staked - lock.stake_amount);
 
     // Penalize reputation for abandoning verification (saturating subtraction)
     let stats = _get_verifier_stats(lock.claimant);
@@ -721,14 +736,12 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     };
   };
 
-  public shared query func get_available_balance(verifier : Principal, _token_id : TokenId) : async Balance {
-    // For backward compatibility: token_id is ignored, we use unified USDC balance
-    return _get_balance(available_balances, verifier);
+  public shared query func get_available_balance(verifier : Principal, token_id : TokenId) : async Balance {
+    return _get_balance(available_balances, verifier, token_id);
   };
 
-  public shared query func get_staked_balance(verifier : Principal, _token_id : TokenId) : async Balance {
-    // For backward compatibility: token_id is ignored
-    return _get_balance(staked_balances, verifier);
+  public shared query func get_staked_balance(verifier : Principal, token_id : TokenId) : async Balance {
+    return _get_balance(staked_balances, verifier, token_id);
   };
 
   public shared query func get_bounty_lock(bounty_id : BountyId) : async ?BountyLock {
@@ -737,12 +750,63 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
 
   public shared query func get_verifier_profile(verifier : Principal) : async VerifierProfile {
     let stats = _get_verifier_stats(verifier);
+    let usdc_token_id = "usdc"; // Default token ID for backward compatibility
     return {
-      available_balance_usdc = _get_balance(available_balances, verifier);
-      staked_balance_usdc = _get_balance(staked_balances, verifier);
+      available_balance_usdc = _get_balance(available_balances, verifier, usdc_token_id);
+      staked_balance_usdc = _get_balance(staked_balances, verifier, usdc_token_id);
       total_verifications = stats.total_verifications;
       reputation_score = stats.reputation_score;
       total_earnings = stats.total_earnings;
     };
+  };
+
+  public type EnvDependency = {
+    key : Text;
+    setter : Text;
+    canister_name : Text;
+    required : Bool;
+    current_value : ?Principal;
+  };
+
+  public type EnvConfig = {
+    key : Text;
+    setter : Text;
+    value_type : Text;
+    required : Bool;
+    current_value : ?Text;
+  };
+
+  public query func get_env_requirements() : async {
+    #v1 : {
+      dependencies : [EnvDependency];
+      configuration : [EnvConfig];
+    };
+  } {
+    #v1({
+      dependencies = [
+        {
+          key = "payment_token_ledger_id";
+          setter = "set_usdc_ledger_id";
+          canister_name = "usdc_ledger";
+          required = true;
+          current_value = payment_token_ledger_id;
+        },
+        {
+          key = "registry_canister_id";
+          setter = "set_registry_canister_id";
+          canister_name = "mcp_registry";
+          required = true;
+          current_value = registry_canister_id;
+        },
+        {
+          key = "dashboard_canister_id";
+          setter = "set_dashboard_canister_id";
+          canister_name = "dashboard";
+          required = false;
+          current_value = dashboard_canister_id;
+        },
+      ];
+      configuration = [];
+    });
   };
 };

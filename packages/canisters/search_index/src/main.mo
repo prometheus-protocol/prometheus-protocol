@@ -170,4 +170,44 @@ shared ({ caller = deployer }) persistent actor class Indexer() {
     return #ok(());
   };
 
+  // --- ENVIRONMENT CONFIGURATION STANDARD ---
+
+  public type EnvDependency = {
+    key : Text;
+    setter : Text;
+    canister_name : Text;
+    required : Bool;
+    current_value : ?Principal;
+  };
+
+  public type EnvConfig = {
+    key : Text;
+    setter : Text;
+    value_type : Text;
+    required : Bool;
+    current_value : ?Text;
+  };
+
+  /**
+   * Returns the environment requirements for this canister.
+   * This enables automated configuration discovery and injection.
+   */
+  public query func get_env_requirements() : async {
+    #v1 : {
+      dependencies : [EnvDependency];
+      configuration : [EnvConfig];
+    };
+  } {
+    #v1({
+      dependencies = [{
+        key = "_registry_canister_id";
+        setter = "set_registry_canister_id";
+        canister_name = "mcp_registry";
+        required = true;
+        current_value = _registry_canister_id;
+      }];
+      configuration = [];
+    });
+  };
+
 };
