@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: verifier-config
+  namespace: prometheus-verifiers
+data:
+  IC_NETWORK: 'ic'
+  POLL_INTERVAL_MS: '60000'
+  BUILD_TIMEOUT_MS: '600000'
+  # Add production canister IDs here or bake them into the Docker image
+  # These will be available as environment variables in the pods

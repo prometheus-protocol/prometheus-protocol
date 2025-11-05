@@ -119,7 +119,10 @@ Finally, we built the most critical piece: the financial tools that make an agen
 2.  **Deploy locally**
 
     ```bash
-    dfx start --clean --background
+    # Start dfx with Docker networking enabled
+    dfx start --host 0.0.0.0:4943 --domain localhost --domain host.docker.internal --clean --background
+    
+    # Deploy all canisters
     dfx deploy
     ```
 
@@ -133,7 +136,24 @@ Finally, we built the most critical piece: the financial tools that make an agen
     pnpm setup:local
     ```
 
-4.  **Run the frontend**
+4.  **Start verifier bots (optional)**
+
+    ```bash
+    # Register 6 dev verifier accounts with API keys and stakes
+    pnpm exec tsx scripts/register-dev-verifiers.ts
+    
+    # Generate .env file for docker-compose
+    pnpm exec tsx scripts/generate-verifier-env.ts
+    
+    # Start verifier bots in Docker
+    cd packages/apps/verifier-bot/deployment
+    docker-compose up -d
+    
+    # View logs
+    docker-compose logs -f
+    ```
+
+5.  **Run the frontend**
     ```bash
     pnpm --filter @prometheus-protocol/frontend dev
     ```

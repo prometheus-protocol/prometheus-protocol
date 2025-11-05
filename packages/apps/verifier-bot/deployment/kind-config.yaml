@@ -1,0 +1,27 @@
+# kind (Kubernetes in Docker) cluster configuration
+# This creates a local Kubernetes cluster for testing the deployment
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: verifier-bots
+nodes:
+  # Single control plane node
+  - role: control-plane
+    # Mount Docker socket so pods can use Docker
+    extraMounts:
+      - hostPath: /var/run/docker.sock
+        containerPath: /var/run/docker.sock
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+  # Two worker nodes for running the bots
+  - role: worker
+    extraMounts:
+      - hostPath: /var/run/docker.sock
+        containerPath: /var/run/docker.sock
+  - role: worker
+    extraMounts:
+      - hostPath: /var/run/docker.sock
+        containerPath: /var/run/docker.sock

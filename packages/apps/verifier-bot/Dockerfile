@@ -12,13 +12,7 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-
-# Install Node.js dependencies
-RUN npm ci --production
-
-# Copy compiled TypeScript (assumes build happens before docker build)
+# Copy compiled and bundled TypeScript (everything is bundled into dist/index.js)
 COPY dist ./dist
 
 # Set environment variables

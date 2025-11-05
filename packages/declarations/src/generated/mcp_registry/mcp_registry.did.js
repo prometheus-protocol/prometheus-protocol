@@ -297,6 +297,20 @@ export const idlFactory = ({ IDL }) => {
     'chunks' : IDL.Vec(IDL.Vec(IDL.Nat8)),
   });
   const Result_2 = IDL.Variant({ 'ok' : Wasm, 'err' : IDL.Text });
+  const EnvDependency = IDL.Record({
+    'key' : IDL.Text,
+    'setter' : IDL.Text,
+    'required' : IDL.Bool,
+    'canister_name' : IDL.Text,
+    'current_value' : IDL.Opt(IDL.Principal),
+  });
+  const EnvConfig = IDL.Record({
+    'key' : IDL.Text,
+    'value_type' : IDL.Text,
+    'setter' : IDL.Text,
+    'required' : IDL.Bool,
+    'current_value' : IDL.Opt(IDL.Text),
+  });
   const Tip = IDL.Record({
     'last_block_index' : IDL.Vec(IDL.Nat8),
     'hash_tree' : IDL.Vec(IDL.Nat8),
@@ -684,6 +698,18 @@ export const idlFactory = ({ IDL }) => {
     'get_canister_type_version' : IDL.Func(
         [GetCanisterTypeVersionRequest],
         [Result_2],
+        ['query'],
+      ),
+    'get_env_requirements' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'v1' : IDL.Record({
+              'dependencies' : IDL.Vec(EnvDependency),
+              'configuration' : IDL.Vec(EnvConfig),
+            }),
+          }),
+        ],
         ['query'],
       ),
     'get_tip' : IDL.Func([], [Tip], ['query']),

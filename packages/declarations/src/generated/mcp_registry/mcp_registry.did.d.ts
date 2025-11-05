@@ -227,6 +227,20 @@ export interface DivergenceReportRequest {
 }
 export type DivergenceResult = { 'Ok' : bigint } |
   { 'Error' : { 'NotFound' : null } | { 'Generic' : string } };
+export interface EnvConfig {
+  'key' : string,
+  'value_type' : string,
+  'setter' : string,
+  'required' : boolean,
+  'current_value' : [] | [string],
+}
+export interface EnvDependency {
+  'key' : string,
+  'setter' : string,
+  'required' : boolean,
+  'canister_name' : string,
+  'current_value' : [] | [Principal],
+}
 export interface GetArchivesArgs { 'from' : [] | [Principal] }
 export type GetArchivesResult = Array<GetArchivesResultItem>;
 export interface GetArchivesResultItem {
@@ -303,6 +317,15 @@ export interface ICRC118WasmRegistryCanister {
   'get_canister_type_version' : ActorMethod<
     [GetCanisterTypeVersionRequest],
     Result_2
+  >,
+  'get_env_requirements' : ActorMethod<
+    [],
+    {
+        'v1' : {
+          'dependencies' : Array<EnvDependency>,
+          'configuration' : Array<EnvConfig>,
+        }
+      }
   >,
   'get_tip' : ActorMethod<[], Tip>,
   'get_verification_request' : ActorMethod<

@@ -44,7 +44,14 @@ export function StakeManagementTab() {
     }
     // Use the token's toAtomic method for conversion
     const amountInSmallestUnits = paymentToken.toAtomic(amount);
-    depositMutation.mutate({ amount: amountInSmallestUnits });
+    depositMutation.mutate(
+      { amount: amountInSmallestUnits },
+      {
+        onSuccess: () => {
+          setDepositAmount(''); // Clear input on success
+        },
+      },
+    );
   };
 
   const handleWithdraw = () => {
@@ -57,7 +64,14 @@ export function StakeManagementTab() {
     }
     // Use the token's toAtomic method for conversion
     const amountInSmallestUnits = paymentToken.toAtomic(amount);
-    withdrawMutation.mutate({ amount: amountInSmallestUnits });
+    withdrawMutation.mutate(
+      { amount: amountInSmallestUnits },
+      {
+        onSuccess: () => {
+          setWithdrawAmount(''); // Clear input on success
+        },
+      },
+    );
   };
 
   if (!identity) {
@@ -105,6 +119,13 @@ export function StakeManagementTab() {
     parseFloat(availableBalance) + parseFloat(stakedBalance)
   ).toString();
 
+  // Calculate maximum withdrawable amount (available balance minus fee)
+  const fee = paymentToken ? paymentToken.fromAtomic(BigInt(paymentToken.fee)) : '0';
+  const maxWithdrawable = Math.max(
+    0,
+    parseFloat(availableBalance) - parseFloat(fee),
+  ).toFixed(Math.min(paymentToken?.decimals ?? 6, 2));
+
   return (
     <div className="space-y-6">
       {/* Balance Overview */}
@@ -151,9 +172,8 @@ export function StakeManagementTab() {
         <CardHeader>
           <CardTitle>Deposit Stake</CardTitle>
           <CardDescription>
-            Deposit {paymentToken.symbol} to your verifier account. You must
-            first approve the Audit Hub canister to spend {paymentToken.symbol}{' '}
-            on your behalf via the {paymentToken.symbol} ledger.
+            Deposit {paymentToken.symbol} to your verifier account to reserve
+            bounties and earn rewards.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -208,7 +228,9 @@ export function StakeManagementTab() {
               disabled={withdrawMutation.isPending}
             />
             <p className="text-xs text-muted-foreground">
-              Available to withdraw: {availableBalance} {paymentToken.symbol}
+              Available: {availableBalance} {paymentToken.symbol} • Max
+              withdrawable: {maxWithdrawable} {paymentToken.symbol} (after{' '}
+              {fee} {paymentToken.symbol} fee)
             </p>
           </div>
           <Button

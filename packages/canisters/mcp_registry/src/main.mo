@@ -317,8 +317,8 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
                 // The ID is set, so we can proceed with the check.
                 let auditHub : AuditHub.Service = actor (Principal.toText(id));
 
-                // Call the new method to get the auditor's balance for the specific token type.
-                let balance : AuditHub.Balance = await auditHub.get_available_balance(auditor, audit_type);
+                // Call the new method that looks up the token_id from audit_type
+                let balance : AuditHub.Balance = await auditHub.get_available_balance_by_audit_type(auditor, audit_type);
 
                 // An auditor is qualified if their available balance of the required token is greater than zero.
                 return balance > 0;

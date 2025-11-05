@@ -66,7 +66,7 @@ describe('MCP Registry ICRC-126 Integration', () => {
     let wasmId: string;
     let bountyId: bigint;
     const wasmHash = new Uint8Array([1, 2, 3, 4]);
-    const reputationTokenId = 'data_safety_v1';
+    const reputationTokenId = 'data_safety_v1'; // Descriptive audit type
     const reputationStakeAmount = 100n;
 
     beforeEach(async () => {
@@ -134,8 +134,13 @@ describe('MCP Registry ICRC-126 Integration', () => {
       auditHubActor.setIdentity(daoIdentity);
       await auditHubActor.set_payment_token_config(ledgerCanisterId, 'USDC', 6);
       await auditHubActor.set_stake_requirement(
-        reputationTokenId,
+        ledgerCanisterId.toText(), // token_id is the ledger canister ID
         reputationStakeAmount,
+      );
+      // Register the audit_type → token_id mapping
+      await auditHubActor.register_audit_type(
+        reputationTokenId,
+        ledgerCanisterId.toText(),
       );
       await auditHubActor.set_registry_canister_id(registryCanisterId);
 
@@ -192,7 +197,10 @@ describe('MCP Registry ICRC-126 Integration', () => {
         expires_at: [],
       });
       auditHubActor.setIdentity(auditor1Identity);
-      const depositResult1 = await auditHubActor.deposit_stake(1_000_000n);
+      const depositResult1 = await auditHubActor.deposit_stake(
+        ledgerCanisterId.toText(),
+        1_000_000n,
+      );
       if ('err' in depositResult1) {
         throw new Error(`Deposit failed: ${depositResult1.err}`);
       }
@@ -210,7 +218,7 @@ describe('MCP Registry ICRC-126 Integration', () => {
         expires_at: [],
       });
       auditHubActor.setIdentity(auditor2Identity);
-      await auditHubActor.deposit_stake(1_000_000n);
+      await auditHubActor.deposit_stake(ledgerCanisterId.toText(), 1_000_000n);
       ledgerActor.setIdentity(bountyCreatorIdentity);
       await ledgerActor.icrc2_approve({
         spender: { owner: registryCanisterId, subaccount: [] },
@@ -229,7 +237,7 @@ describe('MCP Registry ICRC-126 Integration', () => {
         challenge_parameters: {
           Map: [
             ['wasm_hash', { Blob: wasmHash }],
-            ['audit_type', { Text: reputationTokenId }],
+            ['audit_type', { Text: reputationTokenId }], // metadata descriptive string
           ],
         },
         timeout_date: BigInt(Date.now() + 8.64e10) * 1000000n,
@@ -267,7 +275,7 @@ describe('MCP Registry ICRC-126 Integration', () => {
       auditHubActor.setIdentity(auditor1Identity);
       const reserveResult = await auditHubActor.reserve_bounty(
         bountyId,
-        reputationTokenId,
+        ledgerCanisterId.toText(), // token_id is the ledger canister ID
       );
       expect(reserveResult).toHaveProperty('ok');
 
@@ -275,7 +283,7 @@ describe('MCP Registry ICRC-126 Integration', () => {
       const result = await registryActor.icrc126_file_attestation({
         wasm_id: wasmId,
         metadata: [
-          ['126:audit_type', { Text: reputationTokenId }],
+          ['126:audit_type', { Text: reputationTokenId }], // metadata can be any descriptive string
           ['bounty_id', { Nat: bountyId }],
         ],
       });
@@ -289,9 +297,10 @@ describe('MCP Registry ICRC-126 Integration', () => {
   describe('Build Reproducibility Verification Lifecycle', () => {
     const wasmHash = new Uint8Array([10, 11, 12, 13]);
     const wasmId = Buffer.from(wasmHash).toString('hex');
-    const buildReproTokenId = 'build_reproducibility_v1';
+    const buildReproTokenId = 'build_reproducibility_v1'; // metadata descriptor
     const buildReproStakeAmount = 50n;
     let registryCanisterId: Principal;
+    let ledgerCanisterId: Principal; // ledger canister ID for token_id parameter
 
     beforeEach(async () => {
       pic = await PocketIc.create(inject('PIC_URL'));
@@ -360,8 +369,12 @@ describe('MCP Registry ICRC-126 Integration', () => {
       auditHubActor.setIdentity(daoIdentity);
       await auditHubActor.set_payment_token_config(ledgerCanisterId, 'USDC', 6);
       await auditHubActor.set_stake_requirement(
-        buildReproTokenId,
+        ledgerCanisterId.toText(), // token_id is ledger canister ID
         buildReproStakeAmount,
+      );
+      await auditHubActor.register_audit_type(
+        buildReproTokenId, // audit_type is descriptive string
+        ledgerCanisterId.toText(), // maps to ledger canister ID
       );
       await auditHubActor.set_registry_canister_id(registryCanisterId);
 
@@ -411,7 +424,10 @@ describe('MCP Registry ICRC-126 Integration', () => {
         });
 
         auditHubActor.setIdentity(auditor);
-        await auditHubActor.deposit_stake(1_000_000n);
+        await auditHubActor.deposit_stake(
+          ledgerCanisterId.toText(),
+          1_000_000n,
+        ); // use ledger canister ID
       }
     });
 
@@ -455,13 +471,16 @@ describe('MCP Registry ICRC-126 Integration', () => {
 
       for (let i = 0; i < 5; i++) {
         auditHubActor.setIdentity(auditors[i]);
-        await auditHubActor.reserve_bounty(bountyIds[i], buildReproTokenId);
+        await auditHubActor.reserve_bounty(
+          bountyIds[i],
+          ledgerCanisterId.toText(),
+        ); // use ledger canister ID
 
         registryActor.setIdentity(auditors[i]);
         await registryActor.icrc126_file_attestation({
           wasm_id: wasmId,
           metadata: [
-            ['126:audit_type', { Text: buildReproTokenId }],
+            ['126:audit_type', { Text: buildReproTokenId }], // metadata can be descriptive string
             ['bounty_id', { Nat: bountyIds[i] }],
           ],
         });
@@ -498,7 +517,10 @@ describe('MCP Registry ICRC-126 Integration', () => {
 
       for (let i = 0; i < 5; i++) {
         auditHubActor.setIdentity(auditors[i]);
-        await auditHubActor.reserve_bounty(bountyIds[i], buildReproTokenId);
+        await auditHubActor.reserve_bounty(
+          bountyIds[i],
+          ledgerCanisterId.toText(),
+        ); // use ledger canister ID
 
         registryActor.setIdentity(auditors[i]);
         await registryActor.icrc126_file_divergence({

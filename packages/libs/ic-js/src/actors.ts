@@ -28,7 +28,7 @@ const createActor = <T>(
   identity?: Identity,
 ): T => {
   const host = getHost();
-  const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
+  const isLocal = host.includes('localhost') || host.includes('127.0.0.1') || host.includes('host.docker.internal');
 
   // In v3, use HttpAgent.createSync with shouldFetchRootKey for local development
   // This will fetch the root key before the first request is made

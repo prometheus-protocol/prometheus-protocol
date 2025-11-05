@@ -13,6 +13,7 @@ import Text "mo:base/Text";
 import Random "mo:base/Random";
 import Nat8 "mo:base/Nat8";
 import Array "mo:base/Array";
+import Buffer "mo:base/Buffer";
 import Debug "mo:base/Debug";
 
 shared ({ caller = deployer }) persistent actor class AuditHub() = this {
@@ -94,6 +95,11 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
 
   // Configuration: Minimum stake requirements per token type (in USDC atomic units).
   var stake_requirements = Map.new<TokenId, Balance>();
+
+  // NEW: Mapping from audit_type (descriptive string) to token_id (ledger canister Principal)
+  // This allows the registry to query by audit_type (e.g., "build_reproducibility_v1")
+  // and get back the token_id needed to check balances
+  var audit_type_to_token_map = Map.new<Text, TokenId>();
 
   // Reputation tracking: verifications completed per verifier
   var verifier_stats = Map.new<Principal, { total_verifications : Nat; reputation_score : Nat; /* 0-100 based on performance */
@@ -259,6 +265,17 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     return #ok(());
   };
 
+  // NEW: Register audit_type → token_id mapping
+  // This allows descriptive audit types like "build_reproducibility_v1" to be mapped to
+  // the actual token/ledger canister used for staking
+  public shared (msg) func register_audit_type(audit_type : Text, token_id : TokenId) : async Result.Result<(), Text> {
+    if (not is_owner(msg.caller)) {
+      return #err("Unauthorized.");
+    };
+    Map.set(audit_type_to_token_map, thash, audit_type, token_id);
+    return #ok(());
+  };
+
   public shared (msg) func transfer_ownership(new_owner : Principal) : async Result.Result<(), Text> {
     if (not is_owner(msg.caller)) {
       return #err("Unauthorized: Only the owner can transfer ownership.");
@@ -386,25 +403,18 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   // ==================================================================================
 
   /**
-   * Deposit USDC into the verifier's stake pool.
-   * The caller must have already approved this canister to spend USDC on their behalf.
+   * Deposit tokens as stake to become an eligible auditor.
+   * The caller must have already approved this canister to spend tokens on their behalf.
+   * @param token_id - The ledger canister ID (as Principal text) of the token to deposit (e.g., USDC, ICP)
+   * @param amount - The amount to deposit (in token's smallest unit)
    */
-  public shared (msg) func deposit_stake(amount : Balance) : async Result.Result<(), Text> {
+  public shared (msg) func deposit_stake(token_id : TokenId, amount : Balance) : async Result.Result<(), Text> {
     let verifier = msg.caller;
-    let token_id = "usdc"; // Default token ID for USDC deposits
 
-    // 1. Ensure USDC ledger is configured
-    let ledger_id = switch (usdc_ledger_id) {
-      case (null) { return #err("USDC ledger not configured.") };
-      case (?id) { id };
-    };
+    Debug.print("Depositing stake: Ledger=" # token_id # " Verifier=" # Principal.toText(verifier) # " Amount=" # Nat.toText(amount));
 
-    Debug.print("Ledger ID for deposit: " # Principal.toText(ledger_id));
-
-    // 2. Transfer USDC from verifier to this canister using icrc2_transfer_from
-    let ledger : ICRC2.Service = actor (Principal.toText(ledger_id));
-
-    Debug.print("Depositing stake: Verifier=" # Principal.toText(verifier) # " Amount=" # Nat.toText(amount));
+    // Transfer tokens from verifier to this canister using icrc2_transfer_from
+    let ledger : ICRC2.Service = actor (token_id);
 
     // Check allowance:
     let allowance = await ledger.icrc2_allowance({
@@ -414,7 +424,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
 
     if (allowance.allowance < amount) {
       Debug.print("Insufficient allowance: Allowed=" # Nat.toText(allowance.allowance) # " Required=" # Nat.toText(amount));
-      return #err("Insufficient allowance for transfer. Please approve the canister to spend your USDC.");
+      return #err("Insufficient allowance for transfer. Please approve the canister to spend your tokens.");
     };
 
     let transfer_args : ICRC2.TransferFromArgs = {
@@ -443,27 +453,29 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   };
 
   /**
-   * Withdraw USDC from the verifier's available balance (not currently staked).
+   * Withdraw tokens from the verifier's available balance (not currently staked).
+   * The withdrawal amount will have the token's fee deducted from it during transfer.
+   * @param token_id - The ledger canister ID (as Principal text) of the token to withdraw
+   * @param amount - The amount to withdraw (in token's smallest unit) - this is what the user will receive
    */
-  public shared (msg) func withdraw_stake(amount : Balance) : async Result.Result<(), Text> {
+  public shared (msg) func withdraw_stake(token_id : TokenId, amount : Balance) : async Result.Result<(), Text> {
     let verifier = msg.caller;
-    let token_id = "usdc"; // Default token ID for USDC withdrawals
 
-    // 1. Check available balance
+    Debug.print("Withdrawing stake: Ledger=" # token_id # " Verifier=" # Principal.toText(verifier) # " Amount=" # Nat.toText(amount));
+
+    // Get the token's fee
+    let ledger : ICRC2.Service = actor (token_id);
+    let fee = await ledger.icrc1_fee();
+    
+    // Check available balance - must cover amount + fee
     let current_balance = _get_balance(available_balances, verifier, token_id);
-    if (current_balance < amount) {
-      return #err("Insufficient available balance.");
+    let total_required = amount + fee;
+    
+    if (current_balance < total_required) {
+      return #err("Insufficient available balance. You need " # Nat.toText(total_required) # " (amount + fee) but have " # Nat.toText(current_balance));
     };
 
-    // 2. Ensure USDC ledger is configured
-    let ledger_id = switch (usdc_ledger_id) {
-      case (null) { return #err("USDC ledger not configured.") };
-      case (?id) { id };
-    };
-
-    // 3. Transfer USDC from this canister to verifier
-    let ledger : ICRC2.Service = actor (Principal.toText(ledger_id));
-
+    // Transfer tokens from this canister to verifier
     let transfer_args : ICRC2.TransferArgs = {
       to = { owner = verifier; subaccount = null };
       amount = amount;
@@ -477,12 +489,12 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
 
     switch (transfer_result) {
       case (#Ok(_)) {
-        // 4. Update available balance
-        _set_balance(available_balances, verifier, token_id, current_balance - amount);
+        // Update available balance - deduct amount + fee
+        _set_balance(available_balances, verifier, token_id, current_balance - total_required);
         return #ok(());
       };
       case (#Err(err)) {
-        return #err("USDC transfer failed: " # debug_show (err));
+        return #err("Token transfer failed: " # debug_show (err));
       };
     };
   };
@@ -740,6 +752,17 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     return _get_balance(available_balances, verifier, token_id);
   };
 
+  // NEW: Get available balance by audit_type instead of token_id
+  // This looks up the token_id from the audit_type mapping
+  public shared query func get_available_balance_by_audit_type(verifier : Principal, audit_type : Text) : async Balance {
+    switch (Map.get(audit_type_to_token_map, thash, audit_type)) {
+      case (null) { return 0 }; // No token mapped to this audit type
+      case (?token_id) {
+        return _get_balance(available_balances, verifier, token_id);
+      };
+    };
+  };
+
   public shared query func get_staked_balance(verifier : Principal, token_id : TokenId) : async Balance {
     return _get_balance(staked_balances, verifier, token_id);
   };
@@ -748,12 +771,16 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     return Map.get(bounty_locks, Map.nhash, bounty_id);
   };
 
-  public shared query func get_verifier_profile(verifier : Principal) : async VerifierProfile {
+  /**
+   * Get verifier profile with balances for a specific token.
+   * @param verifier - The principal of the verifier
+   * @param token_id - The ledger canister ID (as Principal text) of the token to query
+   */
+  public shared query func get_verifier_profile(verifier : Principal, token_id : TokenId) : async VerifierProfile {
     let stats = _get_verifier_stats(verifier);
-    let usdc_token_id = "usdc"; // Default token ID for backward compatibility
     return {
-      available_balance_usdc = _get_balance(available_balances, verifier, usdc_token_id);
-      staked_balance_usdc = _get_balance(staked_balances, verifier, usdc_token_id);
+      available_balance_usdc = _get_balance(available_balances, verifier, token_id);
+      staked_balance_usdc = _get_balance(staked_balances, verifier, token_id);
       total_verifications = stats.total_verifications;
       reputation_score = stats.reputation_score;
       total_earnings = stats.total_earnings;
@@ -782,6 +809,18 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
       configuration : [EnvConfig];
     };
   } {
+    // Build audit_type mappings configuration
+    let audit_type_mappings = Buffer.Buffer<EnvConfig>(Map.size(audit_type_to_token_map));
+    for ((audit_type, token_id) in Map.entries(audit_type_to_token_map)) {
+      audit_type_mappings.add({
+        key = audit_type; // The audit_type itself is the key
+        setter = "register_audit_type";
+        value_type = "audit_type_mapping"; // Special type to indicate this needs 2 params
+        required = true;
+        current_value = ?token_id; // The token_id it maps to
+      });
+    };
+
     #v1({
       dependencies = [
         {
@@ -806,7 +845,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
           current_value = dashboard_canister_id;
         },
       ];
-      configuration = [];
+      configuration = Buffer.toArray(audit_type_mappings);
     });
   };
 };

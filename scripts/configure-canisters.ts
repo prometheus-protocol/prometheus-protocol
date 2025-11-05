@@ -17,6 +17,15 @@ const CHECK_ONLY = args.includes('--check');
 const INJECT = args.includes('--inject');
 const STATUS = args.includes('--status') || (!CHECK_ONLY && !INJECT);
 
+// Known audit_type to token mappings
+// These define which token should be used for each audit type
+const AUDIT_TYPE_MAPPINGS: Record<string, string> = {
+  build_reproducibility_v1: 'usdc_ledger',
+  app_info_v1: 'usdc_ledger',
+  quality: 'usdc_ledger',
+  data_safety_v1: 'usdc_ledger',
+};
+
 interface EnvDependency {
   key: string;
   setter: string;
@@ -240,6 +249,28 @@ async function injectConfiguration(
 
   let injectedCount = 0;
 
+  // Special case: Configure payment token for audit_hub
+  const auditHubId = canisterIds.get('audit_hub');
+  const usdcLedgerId = canisterIds.get('usdc_ledger');
+  if (auditHubId && usdcLedgerId) {
+    try {
+      console.log(
+        chalk.cyan('   Configuring payment token (USDC) for audit_hub...'),
+      );
+      if (NETWORK === 'local') {
+        await $`dfx canister call audit_hub set_payment_token_config '(principal "${usdcLedgerId}", "USDC", 6:nat8)'`;
+      } else {
+        await $`dfx canister call audit_hub set_payment_token_config '(principal "${usdcLedgerId}", "USDC", 6:nat8)' --network ${NETWORK}`;
+      }
+      injectedCount++;
+      console.log(chalk.green('   ✅ Payment token configured'));
+    } catch (error) {
+      console.log(
+        chalk.red(`   ❌ Failed to configure payment token: ${error}`),
+      );
+    }
+  }
+
   for (const status of statuses) {
     if (!status.hasStandard || !status.requirements) {
       continue;
@@ -280,12 +311,59 @@ async function injectConfiguration(
       }
     }
 
-    // Note: For configuration values, we'd need a config file or defaults
-    // For now, we skip these as they need explicit values
-    if (status.missingConfigs.length > 0) {
+    // Inject missing configurations
+    for (const cfg of status.missingConfigs) {
+      // Special handling for audit_type_mapping
+      if (cfg.value_type === 'audit_type_mapping') {
+        // Look up the token canister for this audit_type
+        const tokenCanisterName = AUDIT_TYPE_MAPPINGS[cfg.key];
+        if (!tokenCanisterName) {
+          console.log(
+            chalk.yellow(
+              `⚠️  ${status.name}: Unknown audit type '${cfg.key}' - not in AUDIT_TYPE_MAPPINGS`,
+            ),
+          );
+          continue;
+        }
+
+        const tokenId = canisterIds.get(tokenCanisterName);
+        if (!tokenId) {
+          console.log(
+            chalk.yellow(
+              `⚠️  ${status.name}: Cannot inject audit type mapping '${cfg.key}' - token canister '${tokenCanisterName}' not found`,
+            ),
+          );
+          continue;
+        }
+
+        try {
+          console.log(
+            chalk.cyan(
+              `   Registering audit type '${cfg.key}' → ${tokenCanisterName}...`,
+            ),
+          );
+
+          if (NETWORK === 'local') {
+            await $`dfx canister call ${status.name} ${cfg.setter} '("${cfg.key}", "${tokenId}")'`;
+          } else {
+            await $`dfx canister call ${status.name} ${cfg.setter} '("${cfg.key}", "${tokenId}")' --network ${NETWORK}`;
+          }
+
+          injectedCount++;
+          console.log(chalk.green(`   ✅ Registered successfully`));
+        } catch (error) {
+          console.log(
+            chalk.red(`   ❌ Failed to register ${cfg.key}: ${error}`),
+          );
+        }
+        continue;
+      }
+
+      // Note: For other configuration values, we'd need a config file or defaults
+      // For now, we skip these as they need explicit values
       console.log(
         chalk.yellow(
-          `⚠️  ${status.name}: Has ${status.missingConfigs.length} missing config values that need manual setting`,
+          `⚠️  ${status.name}: Config value '${cfg.key}' (${cfg.value_type}) needs manual setting via ${cfg.setter}`,
         ),
       );
     }

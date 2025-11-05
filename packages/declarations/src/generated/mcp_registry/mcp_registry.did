@@ -452,6 +452,13 @@ type ICRC118WasmRegistryCanister =
    get_bounties_for_wasm: (wasm_id: text) -> (vec Bounty) query;
    get_canister_type_version: (req: GetCanisterTypeVersionRequest) ->
     (Result_2) query;
+   get_env_requirements: () ->
+    (variant {
+       v1:
+        record {
+          configuration: vec EnvConfig;
+          dependencies: vec EnvDependency;
+        };}) query;
    get_tip: () -> (Tip) query;
    /// * @notice Fetches the original verification request metadata for a given WASM ID.
    ///    * @param wasm_id The hex-encoded SHA-256 hash of the WASM.
@@ -628,6 +635,22 @@ type GetArchivesResultItem =
  };
 type GetArchivesResult = vec GetArchivesResultItem;
 type GetArchivesArgs = record {from: opt principal;};
+type EnvDependency = 
+ record {
+   canister_name: text;
+   current_value: opt principal;
+   key: text;
+   required: bool;
+   setter: text;
+ };
+type EnvConfig = 
+ record {
+   current_value: opt text;
+   key: text;
+   required: bool;
+   setter: text;
+   value_type: text;
+ };
 type DivergenceResult = 
  variant {
    Error: variant {

@@ -11,10 +11,23 @@ export interface ApiCredential {
 }
 export interface AuditHub {
   'cleanup_expired_lock' : ActorMethod<[BountyId], Result>,
-  'deposit_stake' : ActorMethod<[Balance], Result>,
+  'deposit_stake' : ActorMethod<[TokenId, Balance], Result>,
   'generate_api_key' : ActorMethod<[], Result_2>,
   'get_available_balance' : ActorMethod<[Principal, TokenId], Balance>,
+  'get_available_balance_by_audit_type' : ActorMethod<
+    [Principal, string],
+    Balance
+  >,
   'get_bounty_lock' : ActorMethod<[BountyId], [] | [BountyLock]>,
+  'get_env_requirements' : ActorMethod<
+    [],
+    {
+        'v1' : {
+          'dependencies' : Array<EnvDependency>,
+          'configuration' : Array<EnvConfig>,
+        }
+      }
+  >,
   'get_owner' : ActorMethod<[], Principal>,
   'get_payment_token_config' : ActorMethod<
     [],
@@ -23,12 +36,13 @@ export interface AuditHub {
   'get_registry_canister_id' : ActorMethod<[], [] | [Principal]>,
   'get_stake_requirement' : ActorMethod<[TokenId], [] | [Balance]>,
   'get_staked_balance' : ActorMethod<[Principal, TokenId], Balance>,
-  'get_verifier_profile' : ActorMethod<[Principal], VerifierProfile>,
+  'get_verifier_profile' : ActorMethod<[Principal, TokenId], VerifierProfile>,
   'is_bounty_ready_for_collection' : ActorMethod<
     [BountyId, Principal],
     boolean
   >,
   'list_api_keys' : ActorMethod<[], Array<ApiCredential>>,
+  'register_audit_type' : ActorMethod<[string, TokenId], Result>,
   'release_stake' : ActorMethod<[BountyId], Result>,
   'reserve_bounty' : ActorMethod<[BountyId, TokenId], Result>,
   'reserve_bounty_with_api_key' : ActorMethod<
@@ -44,7 +58,7 @@ export interface AuditHub {
   'slash_stake_for_incorrect_consensus' : ActorMethod<[BountyId], Result>,
   'transfer_ownership' : ActorMethod<[Principal], Result>,
   'validate_api_key' : ActorMethod<[string], Result_1>,
-  'withdraw_stake' : ActorMethod<[Balance], Result>,
+  'withdraw_stake' : ActorMethod<[TokenId, Balance], Result>,
 }
 export type Balance = bigint;
 export type BountyId = bigint;
@@ -53,6 +67,20 @@ export interface BountyLock {
   'claimant' : Principal,
   'stake_amount' : Balance,
   'expires_at' : Timestamp,
+}
+export interface EnvConfig {
+  'key' : string,
+  'value_type' : string,
+  'setter' : string,
+  'required' : boolean,
+  'current_value' : [] | [string],
+}
+export interface EnvDependency {
+  'key' : string,
+  'setter' : string,
+  'required' : boolean,
+  'canister_name' : string,
+  'current_value' : [] | [Principal],
 }
 export type Result = { 'ok' : null } |
   { 'err' : string };

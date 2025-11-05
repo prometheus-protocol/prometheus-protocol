@@ -166,6 +166,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
   let ledgerActor: Actor<LedgerService>;
   let targetCanisterId: Principal;
   let registryCanisterId: Principal;
+  let ledgerCanisterId: Principal;
   let unverifiedWasmHash: Uint8Array;
   let verifiedWasmHash: Uint8Array;
   const secureNamespace = 'com.prometheus.secure-server';
@@ -180,6 +181,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
     auditHubActor = env.auditHubActor;
     ledgerActor = env.ledgerActor;
     registryCanisterId = env.registryCanisterId;
+    ledgerCanisterId = env.ledgerCanisterId;
     targetCanisterId = env.managedCanisterId;
 
     // --- Configure inter-canister dependencies ---
@@ -199,7 +201,12 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       'USDC',
       6,
     );
-    await auditHubActor.set_stake_requirement(buildReproTokenId, 50n);
+    await auditHubActor.set_stake_requirement(ledgerCanisterId.toText(), 50n);
+    // Register audit_type → token_id mapping
+    await auditHubActor.register_audit_type(
+      buildReproTokenId,
+      ledgerCanisterId.toText(),
+    );
     await auditHubActor.set_registry_canister_id(env.registryCanisterId);
 
     // Fund registry with USDC for bounty rewards (9 bounties × ~260k = ~2.34M + buffer)
@@ -245,7 +252,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       });
 
       auditHubActor.setIdentity(auditor);
-      await auditHubActor.deposit_stake(1_000_000n);
+      await auditHubActor.deposit_stake(ledgerCanisterId.toText(), 1_000_000n);
 
       ledgerActor.setIdentity(daoIdentity);
     }
@@ -393,7 +400,10 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
     ];
     for (let i = 0; i < 5; i++) {
       auditHubActor.setIdentity(auditors[i]);
-      await auditHubActor.reserve_bounty(bountyIds[i], buildReproTokenId);
+      await auditHubActor.reserve_bounty(
+        bountyIds[i],
+        ledgerCanisterId.toText(),
+      );
 
       registryActor.setIdentity(auditors[i]);
       const res = await registryActor.icrc126_file_attestation({
@@ -439,7 +449,10 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       ];
       for (let i = 0; i < 5; i++) {
         auditHubActor.setIdentity(auditors[i]);
-        await auditHubActor.reserve_bounty(bountyIds[i], buildReproTokenId);
+        await auditHubActor.reserve_bounty(
+          bountyIds[i],
+          ledgerCanisterId.toText(),
+        );
 
         registryActor.setIdentity(auditors[i]);
         await registryActor.icrc126_file_attestation({
@@ -497,9 +510,14 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
     let orchestratorCanisterId: Principal;
     let registryActor: Actor<RegistryService>;
     let auditHubActor: Actor<AuditHubService>;
+    let ledgerActor: Actor<LedgerService>;
+    let ledgerCanisterId: Principal;
+    let registryCanisterId: Principal;
+    let targetCanisterId: Principal;
     let verifiedWasmHash: Uint8Array;
     const managedNamespace = 'com.test.cycles-topup';
     let managedCanisterId: Principal;
+    const buildReproTokenId = 'build_reproducibility_v1';
 
     // Test constants
     const TOP_UP_AMOUNT = 1_000_000_000_000n; // 1T cycles
@@ -515,7 +533,9 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       registryActor = env.registryActor;
       auditHubActor = env.auditHubActor;
       ledgerActor = env.ledgerActor;
+      ledgerCanisterId = env.ledgerCanisterId;
       registryCanisterId = env.registryCanisterId;
+      targetCanisterId = env.managedCanisterId;
       targetCanisterId = env.managedCanisterId;
 
       // --- Configure inter-canister dependencies ---
@@ -535,7 +555,11 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
         'USDC',
         6,
       );
-      await auditHubActor.set_stake_requirement(buildReproTokenId, 50n);
+      await auditHubActor.set_stake_requirement(ledgerCanisterId.toText(), 50n);
+      await auditHubActor.register_audit_type(
+        buildReproTokenId,
+        ledgerCanisterId.toText(),
+      );
       await auditHubActor.set_registry_canister_id(env.registryCanisterId);
 
       // Fund registry with USDC for bounty rewards (9 bounties × ~260k = ~2.34M + buffer)
@@ -581,7 +605,10 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
         });
 
         auditHubActor.setIdentity(auditor);
-        await auditHubActor.deposit_stake(1_000_000n);
+        await auditHubActor.deposit_stake(
+          ledgerCanisterId.toText(),
+          1_000_000n,
+        );
 
         ledgerActor.setIdentity(daoIdentity);
       }
@@ -700,7 +727,10 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
           auditor5Identity,
         ];
         auditHubActor.setIdentity(auditorIdentities[i]);
-        await auditHubActor.reserve_bounty(bountyIds[i], buildReproTokenId);
+        await auditHubActor.reserve_bounty(
+          bountyIds[i],
+          ledgerCanisterId.toText(),
+        );
 
         registryActor.setIdentity(auditorIdentities[i]);
         await registryActor.icrc126_file_attestation({
@@ -876,6 +906,8 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
     let registryActor: Actor<RegistryService>;
     let auditHubActor: Actor<AuditHubService>;
     let ledgerActor: Actor<LedgerService>;
+    let ledgerCanisterId: Principal;
+    let registryCanisterId: Principal;
     let wasmId: string;
 
     const globalNamespace = 'com.test.global-server';
@@ -890,6 +922,8 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       registryActor = env.registryActor;
       auditHubActor = env.auditHubActor;
       ledgerActor = env.ledgerActor;
+      ledgerCanisterId = env.ledgerCanisterId;
+      registryCanisterId = env.registryCanisterId;
 
       // --- Configure inter-canister dependencies ---
       registryActor.setIdentity(daoIdentity);
@@ -908,7 +942,11 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
         'USDC',
         6,
       );
-      await auditHubActor.set_stake_requirement(buildReproTokenId, 50n);
+      await auditHubActor.set_stake_requirement(ledgerCanisterId.toText(), 50n);
+      await auditHubActor.register_audit_type(
+        buildReproTokenId,
+        ledgerCanisterId.toText(),
+      );
       await auditHubActor.set_registry_canister_id(env.registryCanisterId);
 
       // Fund registry with USDC for auto-bounty creation (9 bounties × ~260k = ~2.34M + buffer)
@@ -953,7 +991,10 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
           expires_at: [],
         });
         auditHubActor.setIdentity(auditor);
-        await auditHubActor.deposit_stake(1_000_000n);
+        await auditHubActor.deposit_stake(
+          ledgerCanisterId.toText(),
+          1_000_000n,
+        );
 
         // Reset ledger identity to DAO for next iteration
         ledgerActor.setIdentity(daoIdentity);
@@ -1189,7 +1230,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       auditHubActor.setIdentity(auditors[i]);
       await auditHubActor.reserve_bounty(
         bountyIds[i],
-        'build_reproducibility_v1',
+        ledgerCanisterId.toText(),
       );
 
       registryActor.setIdentity(auditors[i]);

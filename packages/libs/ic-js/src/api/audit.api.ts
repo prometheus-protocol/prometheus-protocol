@@ -27,6 +27,8 @@ import { fromNullable, toNullable } from '@dfinity/utils';
 import { deserializeFromIcrc16Map, serializeToIcrc16Map } from '../icrc16.js';
 import { Token } from '../tokens.js';
 import { AppVersionSummary } from './registry.api.js';
+import { approveAllowance } from './payment.api.js';
+import { getCanisterId } from '../config.js';
 
 // --- TYPES ---
 
@@ -812,15 +814,17 @@ export const getPaymentTokenConfig = async (): Promise<PaymentTokenConfig> => {
  * Fetches the complete profile for the current user's principal from the Audit Hub.
  *
  * @param identity The user's identity.
+ * @param tokenId The token ID (ledger canister principal) to query balances for.
  * @returns The user's complete verifier profile.
  */
 export const getVerifierProfile = async (
   identity: Identity,
+  tokenId: string,
 ): Promise<VerifierProfile> => {
   const auditHubActor = getAuditHubActor(identity);
   const principal = identity.getPrincipal();
 
-  const profile = await auditHubActor.get_verifier_profile(principal);
+  const profile = await auditHubActor.get_verifier_profile(principal, tokenId);
 
   return profile;
 };
@@ -965,22 +969,71 @@ export const hasVerifierParticipatedWithApiKey = async (
 };
 
 /**
- * Deposits USDC stake to the verifier's account in the Audit Hub.
- * Note: User must first approve the Audit Hub to spend USDC on their behalf.
+ * Deposits USDC stake into the verifier's account.
+ * This function performs a two-step process:
+ * 1. Approves the Audit Hub canister to spend USDC on behalf of the user (ICRC-2 approve)
+ * 2. Calls deposit_stake on the Audit Hub to transfer and credit the stake
+ *
+ * The deposited amount goes into the verifier's available balance pool and can be used
+ * to reserve bounties or generate API keys.
  *
  * @param identity The verifier's identity
  * @param amount The amount to deposit in smallest units (e.g., 1 USDC = 1_000_000 units)
+ * @param token The payment token object with canister ID and conversion methods
  */
 export const depositStake = async (
   identity: Identity,
   amount: bigint,
+  token: Token,
 ): Promise<void> => {
+  const auditHubCanisterId = Principal.fromText(getCanisterId('AUDIT_HUB'));
+
+  console.log('[depositStake] Input values:', {
+    amount: amount.toString(),
+    tokenFee: token.fee,
+    tokenDecimals: token.decimals,
+  });
+
+  // Step 1: Approve the Audit Hub to spend USDC on behalf of the user
+  // We need to approve amount + fee so the transfer has enough allowance
+  const feeBigInt = BigInt(token.fee);
+  const approvalAmount = amount + feeBigInt;
+
+  console.log('[depositStake] Approval calculation:', {
+    feeBigInt: feeBigInt.toString(),
+    approvalAmount: approvalAmount.toString(),
+  });
+
+  // approveAllowance expects a number but just does BigInt(amount) without conversion
+  // So we pass the atomic amount as a number directly
+  const approvalAmountNumber = Number(approvalAmount);
+
+  console.log('[depositStake] Calling approveAllowance with:', {
+    approvalAmountNumber,
+    spender: auditHubCanisterId.toText(),
+  });
+
+  await approveAllowance(
+    identity,
+    token,
+    auditHubCanisterId,
+    approvalAmountNumber,
+  );
+
+  console.log('[depositStake] Approval successful, calling deposit_stake');
+
+  // Step 2: Call deposit_stake which will transfer from user to audit hub
   const auditHubActor = getAuditHubActor(identity);
-  const result = await auditHubActor.deposit_stake(amount);
+  const result = await auditHubActor.deposit_stake(
+    token.canisterId.toText(),
+    amount,
+  );
 
   if ('err' in result) {
     throw new Error(result.err);
   }
+
+  console.log('[depositStake] Deposit successful');
 };
 
 /**
@@ -989,13 +1042,15 @@ export const depositStake = async (
  *
  * @param identity The verifier's identity
  * @param amount The amount to withdraw in smallest units (e.g., 1 USDC = 1_000_000 units)
+ * @param tokenId The token ID (ledger canister principal as text)
  */
 export const withdrawStake = async (
   identity: Identity,
   amount: bigint,
+  tokenId: string,
 ): Promise<void> => {
   const auditHubActor = getAuditHubActor(identity);
-  const result = await auditHubActor.withdraw_stake(amount);
+  const result = await auditHubActor.withdraw_stake(tokenId, amount);
 
   if ('err' in result) {
     throw new Error(result.err);

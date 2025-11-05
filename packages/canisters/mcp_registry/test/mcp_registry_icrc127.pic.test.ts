@@ -64,6 +64,7 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
   let ledgerActor: Actor<LedgerService>;
   let auditHubActor: Actor<AuditHubService>;
   let bountyId: bigint;
+  let ledgerCanisterId: Principal; // store ledger canister ID for token_id
   let fee: bigint = 10_000n;
   const wasmHashToVerify = new Uint8Array([10, 11, 12]);
   const wasmIdToVerify = Buffer.from(wasmHashToVerify).toString('hex');
@@ -116,6 +117,7 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
       ]).buffer,
     });
     ledgerActor = ledgerFixture.actor;
+    ledgerCanisterId = ledgerFixture.canisterId; // save for token_id parameter
 
     // 2. Deploy the NEW Audit Hub Canister
     const auditHubFixture = await pic.setupCanister<AuditHubService>({
@@ -170,8 +172,13 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
       6,
     );
     await auditHubActor.set_stake_requirement(
-      reputationTokenId,
+      ledgerFixture.canisterId.toText(), // token_id is the ledger canister ID
       reputationStakeAmount,
+    );
+    // Register the audit_type → token_id mapping
+    await auditHubActor.register_audit_type(
+      reputationTokenId,
+      ledgerFixture.canisterId.toText(),
     );
 
     // 6. Transfer USDC to auditors and have them deposit stake
@@ -208,7 +215,10 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
       expires_at: [],
     });
     auditHubActor.setIdentity(auditorIdentity);
-    await auditHubActor.deposit_stake(1_000_000n);
+    await auditHubActor.deposit_stake(
+      ledgerFixture.canisterId.toText(),
+      1_000_000n,
+    );
 
     // Auditor 2: Approve and deposit stake
     ledgerActor.setIdentity(maliciousAuditorIdentity);
@@ -223,7 +233,10 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
       expires_at: [],
     });
     auditHubActor.setIdentity(maliciousAuditorIdentity);
-    await auditHubActor.deposit_stake(1_000_000n);
+    await auditHubActor.deposit_stake(
+      ledgerFixture.canisterId.toText(),
+      1_000_000n,
+    );
 
     // 7. Create the auditable entity and the bounty
     registryActor.setIdentity(developerIdentity);
@@ -241,7 +254,7 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
       challenge_parameters: {
         Map: [
           ['wasm_hash', { Blob: wasmHashToVerify }],
-          ['audit_type', { Text: reputationTokenId }],
+          ['audit_type', { Text: reputationTokenId }], // metadata descriptive string
         ],
       },
       bounty_metadata: [
@@ -263,7 +276,7 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
     const attestResult = await registryActor.icrc126_file_attestation({
       wasm_id: wasmIdToVerify,
       metadata: [
-        ['126:audit_type', { Text: reputationTokenId }],
+        ['126:audit_type', { Text: reputationTokenId }], // metadata descriptive string
         ['bounty_id', { Nat: bountyId }],
       ], // Correctly includes bounty_id
     });
@@ -277,14 +290,14 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
   it('should REJECT attestation from an auditor who did not reserve the bounty', async () => {
     // The legitimate auditor reserves the bounty
     auditHubActor.setIdentity(auditorIdentity);
-    await auditHubActor.reserve_bounty(bountyId, reputationTokenId);
+    await auditHubActor.reserve_bounty(bountyId, ledgerCanisterId.toText());
 
     // The malicious auditor tries to file the attestation
     registryActor.setIdentity(maliciousAuditorIdentity);
     const attestResult = await registryActor.icrc126_file_attestation({
       wasm_id: wasmIdToVerify,
       metadata: [
-        ['126:audit_type', { Text: reputationTokenId }],
+        ['126:audit_type', { Text: reputationTokenId }], // metadata descriptive string
         ['bounty_id', { Nat: bountyId }],
       ],
     });
@@ -301,7 +314,7 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
     await registryActor.icrc126_file_attestation({
       wasm_id: wasmIdToVerify,
       metadata: [
-        ['126:audit_type', { Text: reputationTokenId }],
+        ['126:audit_type', { Text: reputationTokenId }], // metadata descriptive string
         ['bounty_id', { Nat: bountyId }],
       ],
     });
@@ -325,17 +338,17 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
     auditHubActor.setIdentity(auditorIdentity);
     const reserveResult = await auditHubActor.reserve_bounty(
       bountyId,
-      reputationTokenId,
+      ledgerCanisterId.toText(), // use ledger canister ID
     );
     expect(reserveResult).toHaveProperty('ok');
 
-    // --- 2. File the Attestation (as the claimant) ---
+    // --- 2. File the Attestation ---
     registryActor.setIdentity(auditorIdentity);
     const attestResult = await registryActor.icrc126_file_attestation({
       wasm_id: wasmIdToVerify,
       metadata: [
-        ['126:audit_type', { Text: reputationTokenId }], // Additional metadata
-        ['bounty_id', { Nat: bountyId }], // Pass bounty_id
+        ['126:audit_type', { Text: reputationTokenId }], // metadata descriptive string
+        ['bounty_id', { Nat: bountyId }],
       ],
     });
     expect(attestResult).toHaveProperty('Ok');

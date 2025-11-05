@@ -14,6 +14,7 @@ import {
   claimBounty,
   createBounty,
   Token,
+  Tokens,
   getCanisterId,
   getAllowance,
   approveAllowance,
@@ -344,7 +345,9 @@ export const useAuditorProfile = () => {
       if (!identity) {
         throw new Error('User is not authenticated.');
       }
-      return getVerifierProfile(identity);
+      // Use USDC token ID for profile queries
+      const tokenId = Tokens.USDC.canisterId.toText();
+      return getVerifierProfile(identity, tokenId);
     },
     enabled: !!principal,
   });

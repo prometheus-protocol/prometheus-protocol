@@ -108,7 +108,10 @@ describe('Audit Hub Canister - USDC Staking System', () => {
     );
 
     // Set stake requirement for build verification
-    await auditHubActor.set_stake_requirement('', toUSDC(1)); // $1 USDC stake
+    await auditHubActor.set_stake_requirement(
+      usdcLedgerCanisterId.toText(),
+      toUSDC(1),
+    ); // $1 USDC stake
   });
 
   // --- Suite 1: Payment Token Configuration ---
@@ -215,12 +218,16 @@ describe('Audit Hub Canister - USDC Staking System', () => {
 
       // Step 2: Deposit USDC
       auditHubActor.setIdentity(verifier1Identity);
-      const result = await auditHubActor.deposit_stake(toUSDC(5));
+      const result = await auditHubActor.deposit_stake(
+        usdcLedgerCanisterId.toText(),
+        toUSDC(5),
+      );
       expect(result).toHaveProperty('ok');
 
       // Step 3: Verify balance
       const profile = await auditHubActor.get_verifier_profile(
         verifier1Identity.getPrincipal(),
+        usdcLedgerCanisterId.toText(),
       );
       expect(profile.available_balance_usdc).toBe(toUSDC(5));
     });
@@ -240,22 +247,32 @@ describe('Audit Hub Canister - USDC Staking System', () => {
       });
 
       auditHubActor.setIdentity(verifier1Identity);
-      await auditHubActor.deposit_stake(toUSDC(5));
+      await auditHubActor.deposit_stake(
+        usdcLedgerCanisterId.toText(),
+        toUSDC(5),
+      );
 
       // Withdraw 2 USDC
-      const withdrawResult = await auditHubActor.withdraw_stake(toUSDC(2));
+      const withdrawResult = await auditHubActor.withdraw_stake(
+        usdcLedgerCanisterId.toText(),
+        toUSDC(2),
+      );
       expect(withdrawResult).toHaveProperty('ok');
 
       // Verify balances
       const profile = await auditHubActor.get_verifier_profile(
         verifier1Identity.getPrincipal(),
+        usdcLedgerCanisterId.toText(),
       );
       expect(profile.available_balance_usdc).toBe(toUSDC(3));
     });
 
     it('should reject withdrawal of more than available balance', async () => {
       auditHubActor.setIdentity(verifier1Identity);
-      const result = await auditHubActor.withdraw_stake(toUSDC(100));
+      const result = await auditHubActor.withdraw_stake(
+        usdcLedgerCanisterId.toText(),
+        toUSDC(100),
+      );
       expect(result).toHaveProperty('err');
       // @ts-ignore
       expect(result.err).toMatch(/Insufficient available balance/);
@@ -265,9 +282,11 @@ describe('Audit Hub Canister - USDC Staking System', () => {
   // --- Suite 4: Bounty Reservation with USDC Staking ---
   describe('Bounty Reservation & Staking', () => {
     const BOUNTY_ID = 1n;
-    const TOKEN_ID = ''; // Empty string for build verification
+    let TOKEN_ID: string; // Ledger canister ID
 
     beforeEach(async () => {
+      TOKEN_ID = usdcLedgerCanisterId.toText();
+
       // Fund verifier1 with USDC
       usdcLedgerActor.setIdentity(ownerIdentity);
       await usdcLedgerActor.icrc1_transfer({
@@ -293,7 +312,10 @@ describe('Audit Hub Canister - USDC Staking System', () => {
       });
 
       auditHubActor.setIdentity(verifier1Identity);
-      await auditHubActor.deposit_stake(toUSDC(5));
+      await auditHubActor.deposit_stake(
+        usdcLedgerCanisterId.toText(),
+        toUSDC(5),
+      );
     });
 
     it('should allow verifier to reserve bounty with sufficient balance', async () => {
@@ -304,6 +326,7 @@ describe('Audit Hub Canister - USDC Staking System', () => {
       // Verify balances updated
       const profile = await auditHubActor.get_verifier_profile(
         verifier1Identity.getPrincipal(),
+        usdcLedgerCanisterId.toText(),
       );
       expect(profile.available_balance_usdc).toBe(toUSDC(4)); // 5 - 1 stake
       expect(profile.staked_balance_usdc).toBe(toUSDC(1));
@@ -356,9 +379,11 @@ describe('Audit Hub Canister - USDC Staking System', () => {
   // --- Suite 5: Stake Release & Earnings Tracking ---
   describe('Stake Release & Earnings', () => {
     const BOUNTY_ID = 1n;
-    const TOKEN_ID = '';
+    let TOKEN_ID: string;
 
     beforeEach(async () => {
+      TOKEN_ID = usdcLedgerCanisterId.toText();
+
       // Setup: Fund and deposit for verifier1
       usdcLedgerActor.setIdentity(ownerIdentity);
       await usdcLedgerActor.icrc1_transfer({
@@ -383,7 +408,10 @@ describe('Audit Hub Canister - USDC Staking System', () => {
       });
 
       auditHubActor.setIdentity(verifier1Identity);
-      await auditHubActor.deposit_stake(toUSDC(5));
+      await auditHubActor.deposit_stake(
+        usdcLedgerCanisterId.toText(),
+        toUSDC(5),
+      );
       await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID);
     });
 
@@ -395,6 +423,7 @@ describe('Audit Hub Canister - USDC Staking System', () => {
       // Verify balance returned
       const profile = await auditHubActor.get_verifier_profile(
         verifier1Identity.getPrincipal(),
+        usdcLedgerCanisterId.toText(),
       );
       expect(profile.available_balance_usdc).toBe(toUSDC(5));
       expect(profile.staked_balance_usdc).toBe(0n);
@@ -411,6 +440,7 @@ describe('Audit Hub Canister - USDC Staking System', () => {
       // Verify stake was slashed (burned)
       const profile = await auditHubActor.get_verifier_profile(
         verifier1Identity.getPrincipal(),
+        usdcLedgerCanisterId.toText(),
       );
       expect(profile.available_balance_usdc).toBe(toUSDC(4)); // Original 5 - 1 staked
       expect(profile.staked_balance_usdc).toBe(0n); // Slashed
@@ -431,6 +461,7 @@ describe('Audit Hub Canister - USDC Staking System', () => {
       // Verify stake was slashed
       const profile = await auditHubActor.get_verifier_profile(
         verifier1Identity.getPrincipal(),
+        usdcLedgerCanisterId.toText(),
       );
       expect(profile.staked_balance_usdc).toBe(0n);
       expect(profile.reputation_score).toBeLessThan(100);
@@ -442,6 +473,7 @@ describe('Audit Hub Canister - USDC Staking System', () => {
     it('should return profile with zero balances for new verifier', async () => {
       const profile = await auditHubActor.get_verifier_profile(
         randomUserIdentity.getPrincipal(),
+        usdcLedgerCanisterId.toText(),
       );
       expect(profile.available_balance_usdc).toBe(0n);
       expect(profile.staked_balance_usdc).toBe(0n);
@@ -475,8 +507,11 @@ describe('Audit Hub Canister - USDC Staking System', () => {
       });
 
       auditHubActor.setIdentity(verifier1Identity);
-      await auditHubActor.deposit_stake(toUSDC(5));
-      await auditHubActor.reserve_bounty(1n, '');
+      await auditHubActor.deposit_stake(
+        usdcLedgerCanisterId.toText(),
+        toUSDC(5),
+      );
+      await auditHubActor.reserve_bounty(1n, usdcLedgerCanisterId.toText());
 
       // Release stake
       auditHubActor.setIdentity(ownerIdentity);
@@ -485,6 +520,7 @@ describe('Audit Hub Canister - USDC Staking System', () => {
       // Check complete profile
       const profile = await auditHubActor.get_verifier_profile(
         verifier1Identity.getPrincipal(),
+        usdcLedgerCanisterId.toText(),
       );
       expect(profile.available_balance_usdc).toBe(toUSDC(5));
       expect(profile.staked_balance_usdc).toBe(0n);
@@ -498,10 +534,15 @@ describe('Audit Hub Canister - USDC Staking System', () => {
   describe('Admin Functions', () => {
     it('should allow owner to set stake requirement', async () => {
       auditHubActor.setIdentity(ownerIdentity);
-      const result = await auditHubActor.set_stake_requirement('', toUSDC(5));
+      const result = await auditHubActor.set_stake_requirement(
+        usdcLedgerCanisterId.toText(),
+        toUSDC(5),
+      );
       expect(result).toHaveProperty('ok');
 
-      const requirement = await auditHubActor.get_stake_requirement('');
+      const requirement = await auditHubActor.get_stake_requirement(
+        usdcLedgerCanisterId.toText(),
+      );
       expect(requirement).toEqual([toUSDC(5)]);
     });
 
@@ -518,7 +559,10 @@ describe('Audit Hub Canister - USDC Staking System', () => {
 
     it('should reject admin functions from non-owner', async () => {
       auditHubActor.setIdentity(randomUserIdentity);
-      const result = await auditHubActor.set_stake_requirement('', toUSDC(10));
+      const result = await auditHubActor.set_stake_requirement(
+        usdcLedgerCanisterId.toText(),
+        toUSDC(10),
+      );
       expect(result).toHaveProperty('err');
     });
   });

@@ -5,19 +5,6 @@ import { getIcrcActor } from '../actors.js';
 import { Token } from '../tokens.js';
 
 /**
- * This module provides generic, reusable functions for interacting with any ICRC-1 or
- * ICRC-2 compliant token canister.
- *
- * PHILOSOPHY:
- * - It consumes the `Token` objects defined in the central `tokens.ts` module.
- * - It works with atomic units (bigint) for all on-chain amounts to ensure precision.
- * - The UI layer is responsible for converting these atomic bigints into human-readable
- *   strings using the methods provided by the `Token` object (e.g., `token.fromAtomic()`).
- */
-
-// --- ICRC-2 (Allowance) Functions ---
-
-/**
  * Calls the `icrc2_approve` method on the specified ledger canister.
  * @param amount The human-readable amount to approve (e.g., 10.5).
  * @returns The approval transaction ID as a bigint.

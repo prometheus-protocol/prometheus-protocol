@@ -9,7 +9,10 @@ import {
   configure as configureIcJs,
 } from '@prometheus-protocol/ic-js';
 import { verifyBuild } from './builder.js';
-import 'dotenv/config';
+// Load dotenv only in development (Docker containers have env vars set)
+if (process.env.NODE_ENV !== 'production') {
+  await import('dotenv/config');
+}
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -93,7 +96,9 @@ if (IC_NETWORK === 'ic') {
 
 // Configure the shared library with the chosen set of IDs
 const host =
-  IC_NETWORK === 'ic' ? 'https://icp-api.io' : 'http://127.0.0.1:4943';
+  IC_NETWORK === 'ic' 
+    ? 'https://icp-api.io' 
+    : (process.env.IC_HOST || 'http://host.docker.internal:4943');
 
 console.log(`[Bot] Host: ${host}`);
 configureIcJs({ canisterIds, host });
@@ -278,6 +283,12 @@ async function main() {
   setupShutdownHandlers();
 
   console.log('🚀 Verifier Bot is starting...\n');
+
+  // Wait a moment for replica to be fully ready (avoid noisy startup errors)
+  if (IC_NETWORK === 'local') {
+    console.log('⏳ Waiting for local replica to be ready...');
+    await new Promise(resolve => setTimeout(resolve, 3000));
+  }
 
   // Run immediately on startup
   await pollAndVerify();

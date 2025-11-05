@@ -194,9 +194,20 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     auditHub.actor.setIdentity(daoIdentity);
     // Configure the required stake for the reputation token
     await auditHub.actor.set_payment_token_config(ledgerCanisterId, 'USDC', 6);
-    await auditHubActor.set_stake_requirement('build_reproducibility_v1', 100n);
-    await auditHubActor.set_stake_requirement('app_info_v1', 100n);
-    await auditHubActor.set_stake_requirement('quality', 100n);
+    await auditHubActor.set_stake_requirement(ledgerCanisterId.toText(), 100n);
+    // Register audit_type → token_id mappings
+    await auditHubActor.register_audit_type(
+      'build_reproducibility_v1',
+      ledgerCanisterId.toText(),
+    );
+    await auditHubActor.register_audit_type(
+      'app_info_v1',
+      ledgerCanisterId.toText(),
+    );
+    await auditHubActor.register_audit_type(
+      'quality',
+      ledgerCanisterId.toText(),
+    );
 
     // Fund registry with USDC for auto-bounty creation (no approval needed - uses direct transfer)
     ledgerActor.setIdentity(daoIdentity);
@@ -242,7 +253,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       });
 
       auditHub.actor.setIdentity(auditor);
-      await auditHub.actor.deposit_stake(1_000_000n);
+      await auditHub.actor.deposit_stake(ledgerCanisterId.toText(), 1_000_000n);
       ledgerActor.setIdentity(daoIdentity);
     }
 
@@ -278,7 +289,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       expires_at: [],
     });
     auditHub.actor.setIdentity(appInfoAuditor);
-    await auditHub.actor.deposit_stake(1_000_000n);
+    await auditHub.actor.deposit_stake(ledgerCanisterId.toText(), 1_000_000n);
 
     // qualityAuditor: Approve and deposit stake
     ledgerActor.setIdentity(qualityAuditorIdentity);
@@ -293,7 +304,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       expires_at: [],
     });
     auditHub.actor.setIdentity(qualityAuditorIdentity);
-    await auditHub.actor.deposit_stake(1_000_000n);
+    await auditHub.actor.deposit_stake(ledgerCanisterId.toText(), 1_000_000n);
 
     // Transfer USDC to bounty creator
     ledgerActor.setIdentity(daoIdentity);
@@ -434,7 +445,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       auditHubActor.setIdentity(reproAuditors[i]);
       await auditHubActor.reserve_bounty(
         buildBountyIds[i],
-        'build_reproducibility_v1',
+        ledgerCanisterId.toText(),
       );
 
       registryActor.setIdentity(reproAuditors[i]);
@@ -452,7 +463,10 @@ describe('MCP Registry Full E2E Lifecycle', () => {
 
     // === PHASE 4: Other declarative audits (e.g., Security) can now proceed ===
     auditHubActor.setIdentity(qualityAuditorIdentity);
-    await auditHubActor.reserve_bounty(qualityBountyResultId, 'quality');
+    await auditHubActor.reserve_bounty(
+      qualityBountyResultId,
+      ledgerCanisterId.toText(),
+    );
     registryActor.setIdentity(qualityAuditorIdentity);
     await registryActor.icrc126_file_attestation({
       wasm_id: wasmId,
@@ -597,7 +611,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       auditHubActor.setIdentity(reproAuditors[i]);
       await auditHubActor.reserve_bounty(
         buildBountyIds[i],
-        'build_reproducibility_v1',
+        ledgerCanisterId.toText(),
       );
 
       registryActor.setIdentity(reproAuditors[i]);
@@ -694,7 +708,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     auditHubActor.setIdentity(appInfoAuditor);
     const resRes = await auditHubActor.reserve_bounty(
       appInfoBountyId,
-      'app_info_v1',
+      ledgerCanisterId.toText(),
     );
     console.log('App Info Reserve Result:', resRes);
 

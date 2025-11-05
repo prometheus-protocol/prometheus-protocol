@@ -1,0 +1,141 @@
+# Docker Compose setup for running 6 verifier bots locally
+# This is the simplest way to run multiple bots during development
+# For production, use the Kubernetes manifests in k8s/
+#
+# IMPORTANT: For local development with Docker, dfx must be started with:
+#   dfx start --host 0.0.0.0:4943 --domain localhost --domain host.docker.internal
+#
+# This allows Docker containers to access the replica via host.docker.internal
+# and ensures proper certificate verification.
+#
+# Full setup process:
+#   1. Start dfx with the command above
+#   2. Deploy canisters: dfx deploy
+#   3. Register verifiers: pnpm exec tsx scripts/register-dev-verifiers.ts
+#   4. Generate .env file: pnpm exec tsx scripts/generate-verifier-env.ts
+#   5. Start bots: docker-compose up -d
+
+services:
+  verifier-bot-1:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: verifier-bot-1
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - VERIFIER_API_KEY=${VERIFIER_1_API_KEY}
+      - IC_NETWORK=${IC_NETWORK:-local}
+      - IC_HOST=http://host.docker.internal:4943
+      - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
+      - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../../../../.dfx:/.dfx:ro
+    networks:
+      - verifier-network
+
+  verifier-bot-2:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: verifier-bot-2
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - VERIFIER_API_KEY=${VERIFIER_2_API_KEY}
+      - IC_NETWORK=${IC_NETWORK:-local}
+      - IC_HOST=http://host.docker.internal:4943
+      - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
+      - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../../../../.dfx:/.dfx:ro
+    networks:
+      - verifier-network
+
+  verifier-bot-3:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: verifier-bot-3
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - VERIFIER_API_KEY=${VERIFIER_3_API_KEY}
+      - IC_NETWORK=${IC_NETWORK:-local}
+      - IC_HOST=http://host.docker.internal:4943
+      - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
+      - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../../../../.dfx:/.dfx:ro
+    networks:
+      - verifier-network
+
+  verifier-bot-4:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: verifier-bot-4
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - VERIFIER_API_KEY=${VERIFIER_4_API_KEY}
+      - IC_NETWORK=${IC_NETWORK:-local}
+      - IC_HOST=http://host.docker.internal:4943
+      - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
+      - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../../../../.dfx:/.dfx:ro
+    networks:
+      - verifier-network
+
+  verifier-bot-5:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: verifier-bot-5
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - VERIFIER_API_KEY=${VERIFIER_5_API_KEY}
+      - IC_NETWORK=${IC_NETWORK:-local}
+      - IC_HOST=http://host.docker.internal:4943
+      - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
+      - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../../../../.dfx:/.dfx:ro
+    networks:
+      - verifier-network
+
+  verifier-bot-6:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: verifier-bot-6
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - VERIFIER_API_KEY=${VERIFIER_6_API_KEY}
+      - IC_NETWORK=${IC_NETWORK:-local}
+      - IC_HOST=http://host.docker.internal:4943
+      - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
+      - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../../../../.dfx:/.dfx:ro
+    networks:
+      - verifier-network
+
+networks:
+  verifier-network:
+    driver: bridge
