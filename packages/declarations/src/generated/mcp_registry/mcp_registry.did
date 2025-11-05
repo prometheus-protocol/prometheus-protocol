@@ -515,6 +515,8 @@ type ICRC118WasmRegistryCanister =
    ///    * @returns An empty Ok(()) on success, or a Text error on failure.
    retrigger_deployment: (wasm_id: text) -> (Result);
    set_auditor_credentials_canister_id: (canister_id: principal) -> (Result);
+   set_bounty_reward_amount: (amount: nat) -> (Result);
+   set_bounty_reward_token_canister_id: (canister_id: principal) -> (Result);
    set_orchestrator_canister_id: (canister_id: principal) -> (Result);
    set_search_index_canister_id: (canister_id: principal) -> (Result);
    set_usage_tracker_canister_id: (canister_id: principal) -> (Result);

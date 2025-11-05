@@ -7,6 +7,7 @@ export async function setup(ctx: GlobalSetupContext) {
   console.log('Starting global PocketIC server...');
 
   picServer = await PocketIcServer.start({ showCanisterLogs: true });
+  // picServer = await PocketIcServer.start({});
   const url = picServer.getUrl();
   ctx.provide('PIC_URL', url);
 

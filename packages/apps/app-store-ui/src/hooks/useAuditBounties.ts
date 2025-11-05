@@ -17,7 +17,7 @@ import {
   getCanisterId,
   getAllowance,
   approveAllowance,
-  getAuditorProfile,
+  getVerifierProfile,
   listPendingVerifications,
   submitDivergence,
 } from '@prometheus-protocol/ic-js';
@@ -344,7 +344,7 @@ export const useAuditorProfile = () => {
       if (!identity) {
         throw new Error('User is not authenticated.');
       }
-      return getAuditorProfile(identity);
+      return getVerifierProfile(identity);
     },
     enabled: !!principal,
   });

@@ -53,6 +53,7 @@ module AuditHub {
     // == STAKING & LOCKING METHODS ==
     reserve_bounty : (bounty_id : BountyId, token_id : TokenId, stake_amount : Balance) -> async CallResult;
     release_stake : (bounty_id : BountyId) -> async CallResult;
+    slash_stake_for_incorrect_consensus : (bounty_id : BountyId) -> async CallResult;
     cleanup_expired_lock : (bounty_id : BountyId) -> async CallResult;
 
     // == PUBLIC QUERY & VERIFICATION METHODS ==

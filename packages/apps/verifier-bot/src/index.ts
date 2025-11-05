@@ -1,15 +1,14 @@
 import {
   listPendingVerifications,
   getBountiesForWasm,
-  reserveBounty,
+  reserveBountyWithApiKey,
   fileAttestation,
   submitDivergence,
-  claimBounty,
+  hasVerifierParticipatedWithApiKey,
   AttestationData,
   configure as configureIcJs,
 } from '@prometheus-protocol/ic-js';
 import { verifyBuild } from './builder.js';
-import { identityFromPemContent } from './identity.js';
 import 'dotenv/config';
 import path from 'path';
 import fs from 'fs';
@@ -21,11 +20,14 @@ const __dirname = path.dirname(__filename);
 // --- CONFIGURE THE SHARED PACKAGE ---
 // Configuration from environment variables
 const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '60000', 10);
-const VERIFIER_PEM = process.env.VERIFIER_PEM;
+const VERIFIER_API_KEY = process.env.VERIFIER_API_KEY;
 const IC_NETWORK = process.env.IC_NETWORK || 'ic';
 
-if (!VERIFIER_PEM) {
-  console.error('❌ VERIFIER_PEM environment variable is required');
+if (!VERIFIER_API_KEY) {
+  console.error('❌ VERIFIER_API_KEY environment variable is required');
+  console.error(
+    '   Generate an API key from the verifier dashboard after depositing stake',
+  );
   process.exit(1);
 }
 
@@ -97,13 +99,9 @@ console.log(`[Bot] Host: ${host}`);
 configureIcJs({ canisterIds, host });
 // ------------------------------------
 
-// Initialize verifier identity
-const VERIFIER_IDENTITY = identityFromPemContent(VERIFIER_PEM);
-const VERIFIER_PRINCIPAL = VERIFIER_IDENTITY.getPrincipal().toText();
-
 console.log('🤖 Prometheus Protocol Verifier Bot');
 console.log('====================================');
-console.log(`🆔 Verifier Principal: ${VERIFIER_PRINCIPAL}`);
+console.log(`🔑 API Key: ${VERIFIER_API_KEY.slice(0, 12)}...`);
 console.log(`🌐 Network: ${IC_NETWORK}`);
 console.log(`⏱️  Poll Interval: ${POLL_INTERVAL_MS}ms`);
 console.log('====================================\n');
@@ -134,9 +132,25 @@ async function pollAndVerify(): Promise<void> {
         const bounties = await getBountiesForWasm(job.wasm_hash);
         console.log(`   📋 Found ${bounties.length} bounties for this WASM`);
 
+        // Check if we've already participated in this WASM verification
+        const alreadyParticipated = await hasVerifierParticipatedWithApiKey(
+          job.wasm_hash,
+          VERIFIER_API_KEY,
+        );
+
+        if (alreadyParticipated) {
+          console.log(
+            `   ⏭️  Skipping ${jobSummary}: Already participated in this verification`,
+          );
+          continue;
+        }
+
+        // Find an available bounty that isn't already claimed
         const buildBounty = bounties.find((b: any) => {
           const auditType = b.challengeParameters?.audit_type;
-          return auditType === 'build_reproducibility_v1';
+          const isBuildBounty = auditType === 'build_reproducibility_v1';
+          // Note: claimed bounties won't be returned by getBountiesForWasm as they're filtered
+          return isBuildBounty;
         });
 
         if (!buildBounty) {
@@ -151,13 +165,14 @@ async function pollAndVerify(): Promise<void> {
         console.log(`   Bounty ID: ${buildBounty.id}`);
         console.log(`   Reward: ${buildBounty.tokenAmount} tokens`);
 
-        // Reserve the bounty (stake reputation)
-        console.log(`\n🔒 Reserving bounty...`);
-        await reserveBounty(VERIFIER_IDENTITY, {
+        // Reserve the bounty using API key (stakes USDC automatically)
+        console.log(`\n🔒 Reserving bounty with API key...`);
+        await reserveBountyWithApiKey({
+          api_key: VERIFIER_API_KEY,
           bounty_id: buildBounty.id,
           token_id: 'build_reproducibility_v1',
         });
-        console.log(`   ✅ Bounty reserved, stake locked for 3 days`);
+        console.log(`   ✅ Bounty reserved, stake locked for 1 hour`);
 
         // Run the reproducible build (auto-detects canister name from dfx.json)
         console.log(`\n🔨 Starting reproducible build...`);
@@ -176,8 +191,7 @@ async function pollAndVerify(): Promise<void> {
           const attestationData: AttestationData = {
             '126:audit_type': 'build_reproducibility_v1',
             build_duration_seconds: result.duration,
-            verifier_version: '1.0.0',
-            verifier_principal: VERIFIER_PRINCIPAL,
+            verifier_version: '2.0.0', // Updated for API key auth
             build_timestamp: Date.now() * 1_000_000, // Convert to nanoseconds (IC standard)
             git_commit: job.commit_hash,
             repo_url: job.repo,
@@ -191,26 +205,22 @@ async function pollAndVerify(): Promise<void> {
             );
           }
 
-          await fileAttestation(VERIFIER_IDENTITY, {
+          // Note: fileAttestation needs to be updated to not require identity
+          // For now, we'll need to add an API-key variant
+          await fileAttestation(undefined as any, {
             bounty_id: buildBounty.id,
             wasm_id: job.wasm_hash,
             attestationData,
           });
 
           console.log(`   ✅ Attestation filed successfully`);
-
-          // Claim the bounty to trigger payout
-          console.log(`   💰 Claiming bounty...`);
-          const claimId = await claimBounty(VERIFIER_IDENTITY, {
-            bounty_id: buildBounty.id,
-            wasm_id: job.wasm_hash,
-          });
-
-          console.log(`   ✅ Bounty claimed! Claim ID: ${claimId}`);
+          console.log(`   ⏳ Waiting for 5-of-9 consensus...`);
           console.log(
-            `   ✅ WASM ${job.wasm_hash.slice(0, 12)}... is now VERIFIED`,
+            `   ✅ WASM ${job.wasm_hash.slice(0, 12)}... attestation recorded`,
           );
-          console.log(`   💰 Reward transferred to verifier\n`);
+          console.log(
+            `   💰 Payout will be automatic after consensus is reached\n`,
+          );
         } else {
           // Failure: File divergence
           console.log(
@@ -218,35 +228,30 @@ async function pollAndVerify(): Promise<void> {
           );
           console.log(`   Reason: ${result.error}`);
 
-          await submitDivergence(VERIFIER_IDENTITY, {
+          // Note: submitDivergence needs to be updated to not require identity
+          await submitDivergence(undefined as any, {
             bountyId: buildBounty.id,
             wasmId: job.wasm_hash,
             reason: result.error || 'Build failed or hash mismatch',
           });
 
           console.log(`   ✅ Divergence report filed`);
-
-          // Claim the bounty for reporting divergence
-          console.log(`   💰 Claiming bounty for divergence report...`);
-          const claimId = await claimBounty(VERIFIER_IDENTITY, {
-            bounty_id: buildBounty.id,
-            wasm_id: job.wasm_hash,
-          });
-
-          console.log(`   ✅ Bounty claimed! Claim ID: ${claimId}`);
+          console.log(`   ⏳ Waiting for 5-of-9 consensus...`);
           console.log(
-            `   ❌ WASM ${job.wasm_hash.slice(0, 12)}... is now REJECTED`,
+            `   ❌ WASM ${job.wasm_hash.slice(0, 12)}... divergence reported`,
           );
-          console.log(`   💰 Reward transferred for reporting divergence\n`);
+          console.log(
+            `   💰 Payout will be automatic after consensus is reached\n`,
+          );
         }
       } catch (error: any) {
         console.error(`\n❌ Error processing ${jobSummary}:`);
         console.error(`   ${error.message}`);
 
         // If we reserved the bounty but failed to submit results,
-        // the lock will expire in 3 days and our stake will be slashed.
+        // the lock will expire in 1 hour and our stake will be slashed.
         // This is intentional to prevent griefing attacks.
-        console.error(`   ⚠️  Lock will expire in 3 days if not resolved`);
+        console.error(`   ⚠️  Lock will expire in 1 hour if not resolved`);
       }
     }
   } catch (error: any) {

@@ -3,7 +3,6 @@ type VerifierProfile =
    available_balance_usdc: Balance;
    reputation_score: nat;
    staked_balance_usdc: Balance;
-   total_earnings: Balance;
    total_verifications: nat;
  };
 type TokenId = text;
@@ -45,13 +44,6 @@ type AuditHub =
     (Balance) query;
    get_bounty_lock: (bounty_id: BountyId) -> (opt BountyLock) query;
    get_owner: () -> (principal) query;
-   get_payment_token_config: () ->
-    (record {
-       decimals: nat8;
-       ledger_id: opt principal;
-       symbol: text;
-     }) query;
-   get_registry_canister_id: () -> (opt principal) query;
    get_stake_requirement: (token_id: TokenId) -> (opt Balance) query;
    get_staked_balance: (verifier: principal, _token_id: TokenId) ->
     (Balance) query;
@@ -71,9 +63,6 @@ type AuditHub =
    /// * Revoke an API key (makes it inactive).
    revoke_api_key: (api_key: text) -> (Result);
    set_dashboard_canister_id: (dashboard_id: principal) -> (Result);
-   set_payment_token_config: (ledger_id: principal, symbol: text, decimals:
-    nat8) -> (Result);
-   set_registry_canister_id: (registry_id: principal) -> (Result);
    set_stake_requirement: (token_id: TokenId, amount: Balance) -> (Result);
    set_usdc_ledger_id: (ledger_id: principal) -> (Result);
    /// * Called by the registry when a verifier was on the losing side of consensus.

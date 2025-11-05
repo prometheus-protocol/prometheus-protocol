@@ -825,6 +825,12 @@ export const idlFactory = ({ IDL }) => {
         [Result],
         [],
       ),
+    'set_bounty_reward_amount' : IDL.Func([IDL.Nat], [Result], []),
+    'set_bounty_reward_token_canister_id' : IDL.Func(
+        [IDL.Principal],
+        [Result],
+        [],
+      ),
     'set_orchestrator_canister_id' : IDL.Func([IDL.Principal], [Result], []),
     'set_search_index_canister_id' : IDL.Func([IDL.Principal], [Result], []),
     'set_usage_tracker_canister_id' : IDL.Func([IDL.Principal], [Result], []),

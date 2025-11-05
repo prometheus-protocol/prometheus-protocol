@@ -1,6 +1,6 @@
-import type { Principal } from '@icp-sdk/core/principal';
-import type { ActorMethod } from '@icp-sdk/core/agent';
-import type { IDL } from '@icp-sdk/core/candid';
+import type { Principal } from '@dfinity/principal';
+import type { ActorMethod } from '@dfinity/agent';
+import type { IDL } from '@dfinity/candid';
 
 export interface Account {
   'owner' : Principal,
@@ -383,6 +383,8 @@ export interface ICRC118WasmRegistryCanister {
   'list_pending_verifications' : ActorMethod<[], Array<VerificationRecord>>,
   'retrigger_deployment' : ActorMethod<[string], Result>,
   'set_auditor_credentials_canister_id' : ActorMethod<[Principal], Result>,
+  'set_bounty_reward_amount' : ActorMethod<[bigint], Result>,
+  'set_bounty_reward_token_canister_id' : ActorMethod<[Principal], Result>,
   'set_orchestrator_canister_id' : ActorMethod<[Principal], Result>,
   'set_search_index_canister_id' : ActorMethod<[Principal], Result>,
   'set_usage_tracker_canister_id' : ActorMethod<[Principal], Result>,

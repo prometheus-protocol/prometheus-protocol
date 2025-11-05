@@ -69,7 +69,11 @@ const MCP_SERVER_DUMMY_WASM_PATH = path.resolve(
 // --- Identities ---
 const daoIdentity: Identity = createIdentity('dao-principal');
 const developerIdentity: Identity = createIdentity('developer-principal');
-const auditorIdentity: Identity = createIdentity('auditor-principal');
+const auditor1Identity: Identity = createIdentity('auditor1-principal');
+const auditor2Identity: Identity = createIdentity('auditor2-principal');
+const auditor3Identity: Identity = createIdentity('auditor3-principal');
+const auditor4Identity: Identity = createIdentity('auditor4-principal');
+const auditor5Identity: Identity = createIdentity('auditor5-principal');
 const unauthorizedUser: Identity = createIdentity('unauthorized-user');
 // --- NEW: An identity for a regular user provisioning an instance ---
 const endUserIdentity: Identity = createIdentity('end-user-principal');
@@ -118,26 +122,26 @@ async function setupEnvironment(pic: PocketIc) {
           feature_flags: [],
         },
       },
-    ]),
+    ]).buffer,
   });
   const registryFixture = await pic.setupCanister<RegistryService>({
     idlFactory: registryIdlFactory,
     wasm: REGISTRY_WASM_PATH,
     sender: daoIdentity.getPrincipal(),
-    arg: IDL.encode(registryInit({ IDL }), [[]]),
+    arg: IDL.encode(registryInit({ IDL }), [[]]).buffer,
   });
   const orchestratorFixture = await pic.setupCanister<OrchestratorService>({
     idlFactory: orchestratorIdlFactory,
     wasm: ORCHESTRATOR_WASM_PATH,
     sender: daoIdentity.getPrincipal(),
-    arg: IDL.encode(orchestratorInit({ IDL }), [[]]),
+    arg: IDL.encode(orchestratorInit({ IDL }), [[]]).buffer,
   });
   const managedCanisterFixture = await pic.setupCanister({
     idlFactory: orchestratorIdlFactory,
     wasm: ORCHESTRATOR_WASM_PATH,
     sender: daoIdentity.getPrincipal(),
     controllers: [orchestratorFixture.canisterId, daoIdentity.getPrincipal()],
-    arg: IDL.encode(orchestratorInit({ IDL }), [[]]),
+    arg: IDL.encode(orchestratorInit({ IDL }), [[]]).buffer,
   });
 
   return {
@@ -159,6 +163,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
   let orchestratorActor: Actor<OrchestratorService>;
   let registryActor: Actor<RegistryService>;
   let auditHubActor: Actor<AuditHubService>;
+  let ledgerActor: Actor<LedgerService>;
   let targetCanisterId: Principal;
   let registryCanisterId: Principal;
   let unverifiedWasmHash: Uint8Array;
@@ -173,6 +178,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
     orchestratorActor = env.orchestratorActor;
     registryActor = env.registryActor;
     auditHubActor = env.auditHubActor;
+    ledgerActor = env.ledgerActor;
     registryCanisterId = env.registryCanisterId;
     targetCanisterId = env.managedCanisterId;
 
@@ -181,16 +187,68 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
     await registryActor.set_auditor_credentials_canister_id(
       env.auditHubCanisterId,
     );
+    await registryActor.set_bounty_reward_token_canister_id(
+      env.ledgerCanisterId,
+    );
     orchestratorActor.setIdentity(daoIdentity);
     await orchestratorActor.set_mcp_registry_id(env.registryCanisterId);
 
     auditHubActor.setIdentity(daoIdentity);
-    await auditHubActor.set_stake_requirement(buildReproTokenId, 50n);
-    await auditHubActor.mint_tokens(
-      auditorIdentity.getPrincipal(),
-      buildReproTokenId,
-      100n,
+    await auditHubActor.set_payment_token_config(
+      env.ledgerCanisterId,
+      'USDC',
+      6,
     );
+    await auditHubActor.set_stake_requirement(buildReproTokenId, 50n);
+    await auditHubActor.set_registry_canister_id(env.registryCanisterId);
+
+    // Fund registry with USDC for bounty rewards (9 bounties × ~260k = ~2.34M + buffer)
+    ledgerActor.setIdentity(daoIdentity);
+    await ledgerActor.icrc1_transfer({
+      to: { owner: registryCanisterId, subaccount: [] },
+      amount: 3_000_000n,
+      fee: [],
+      memo: [],
+      created_at_time: [],
+      from_subaccount: [],
+    });
+
+    // Transfer USDC to all 5 auditors and have them deposit stake
+    const auditors = [
+      auditor1Identity,
+      auditor2Identity,
+      auditor3Identity,
+      auditor4Identity,
+      auditor5Identity,
+    ];
+    for (const auditor of auditors) {
+      await ledgerActor.icrc1_transfer({
+        to: { owner: auditor.getPrincipal(), subaccount: [] },
+        amount: 1_020_000n, // 1 USDC + approve fee + transfer fee
+        fee: [],
+        memo: [],
+        created_at_time: [],
+        from_subaccount: [],
+      });
+
+      // Each auditor approves and deposits stake
+      ledgerActor.setIdentity(auditor);
+      await ledgerActor.icrc2_approve({
+        spender: { owner: env.auditHubCanisterId, subaccount: [] },
+        amount: 1_010_000n, // 1M USDC + 10k fee
+        fee: [],
+        memo: [],
+        created_at_time: [],
+        from_subaccount: [],
+        expected_allowance: [],
+        expires_at: [],
+      });
+
+      auditHubActor.setIdentity(auditor);
+      await auditHubActor.deposit_stake(1_000_000n);
+
+      ledgerActor.setIdentity(daoIdentity);
+    }
 
     // --- Create canister type and register a managed canister ---
     registryActor.setIdentity(developerIdentity);
@@ -309,7 +367,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
     const wasmId = Buffer.from(verifiedWasmHash).toString('hex');
     expect(await registryActor.is_wasm_verified(wasmId)).toBe(false);
 
-    // 1. Developer submits claim
+    // 1. Developer submits verification request - this auto-creates 9 bounties
     registryActor.setIdentity(developerIdentity);
     await registryActor.icrc126_verification_request({
       wasm_hash: verifiedWasmHash,
@@ -318,37 +376,39 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       metadata: [],
     });
 
-    // 2. DAO creates bounty
-    registryActor.setIdentity(daoIdentity);
-    const createResult = await registryActor.icrc127_create_bounty({
-      challenge_parameters: {
-        Map: [
-          ['wasm_hash', { Blob: verifiedWasmHash }],
-          ['audit_type', { Text: buildReproTokenId }],
+    // 2. Fetch the auto-created bounties for this WASM
+    const wasmBounties = await registryActor.get_bounties_for_wasm(wasmId);
+    expect(wasmBounties.length).toBeGreaterThanOrEqual(5);
+
+    // 3. Take first 5 bounties for 5-of-9 consensus
+    const bountyIds = wasmBounties.slice(0, 5).map((b: any) => b.bounty_id);
+
+    // 4. All 5 auditors reserve and attest
+    const auditors = [
+      auditor1Identity,
+      auditor2Identity,
+      auditor3Identity,
+      auditor4Identity,
+      auditor5Identity,
+    ];
+    for (let i = 0; i < 5; i++) {
+      auditHubActor.setIdentity(auditors[i]);
+      await auditHubActor.reserve_bounty(bountyIds[i], buildReproTokenId);
+
+      registryActor.setIdentity(auditors[i]);
+      const res = await registryActor.icrc126_file_attestation({
+        wasm_id: wasmId,
+        metadata: [
+          ['126:audit_type', { Text: buildReproTokenId }],
+          ['bounty_id', { Nat: bountyIds[i] }],
         ],
-      },
-      timeout_date: BigInt(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      start_date: [],
-      bounty_id: [],
-      validation_canister_id: registryCanisterId,
-      bounty_metadata: [],
-    });
-    const bountyId = ('Ok' in createResult && createResult.Ok.bounty_id) || 0n;
+      });
+      if (i === 0) {
+        console.log('First Attestation Result:', res);
+      }
+    }
 
-    // 3. Auditor reserves bounty and submits attestation
-    auditHubActor.setIdentity(auditorIdentity);
-    await auditHubActor.reserve_bounty(bountyId, buildReproTokenId);
-    registryActor.setIdentity(auditorIdentity);
-    const res = await registryActor.icrc126_file_attestation({
-      wasm_id: wasmId,
-      metadata: [
-        ['126:audit_type', { Text: buildReproTokenId }],
-        ['bounty_id', { Nat: bountyId }],
-      ],
-    });
-    console.log('Attestation Result:', res);
-
-    // 4. Assert: Wasm is now automatically verified
+    // 5. Assert: Wasm is now automatically verified after 5-of-9 consensus
     expect(await registryActor.is_wasm_verified(wasmId)).toBe(true);
   });
 
@@ -356,7 +416,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
     // This test now runs the verification lifecycle as part of its setup
     const wasmId = Buffer.from(verifiedWasmHash).toString('hex');
     if (!(await registryActor.is_wasm_verified(wasmId))) {
-      // (This is the same setup as the previous test)
+      // Run the full verification flow with 5 auditors
       registryActor.setIdentity(developerIdentity);
       await registryActor.icrc126_verification_request({
         wasm_hash: verifiedWasmHash,
@@ -364,32 +424,32 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
         commit_hash: new Uint8Array([1]),
         metadata: [],
       });
-      registryActor.setIdentity(daoIdentity);
-      const createResult = await registryActor.icrc127_create_bounty({
-        challenge_parameters: {
-          Map: [
-            ['wasm_hash', { Blob: verifiedWasmHash }],
-            ['audit_type', { Text: buildReproTokenId }],
+
+      // Fetch the auto-created bounties for this WASM
+      const wasmBounties = await registryActor.get_bounties_for_wasm(wasmId);
+      const bountyIds = wasmBounties.slice(0, 5).map((b: any) => b.bounty_id);
+
+      // All 5 auditors reserve and attest
+      const auditors = [
+        auditor1Identity,
+        auditor2Identity,
+        auditor3Identity,
+        auditor4Identity,
+        auditor5Identity,
+      ];
+      for (let i = 0; i < 5; i++) {
+        auditHubActor.setIdentity(auditors[i]);
+        await auditHubActor.reserve_bounty(bountyIds[i], buildReproTokenId);
+
+        registryActor.setIdentity(auditors[i]);
+        await registryActor.icrc126_file_attestation({
+          wasm_id: wasmId,
+          metadata: [
+            ['126:audit_type', { Text: buildReproTokenId }],
+            ['bounty_id', { Nat: bountyIds[i] }],
           ],
-        },
-        timeout_date: BigInt(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        start_date: [],
-        bounty_id: [],
-        validation_canister_id: registryCanisterId,
-        bounty_metadata: [],
-      });
-      const bountyId =
-        ('Ok' in createResult && createResult.Ok.bounty_id) || 0n;
-      auditHubActor.setIdentity(auditorIdentity);
-      await auditHubActor.reserve_bounty(bountyId, buildReproTokenId);
-      registryActor.setIdentity(auditorIdentity);
-      await registryActor.icrc126_file_attestation({
-        wasm_id: wasmId,
-        metadata: [
-          ['126:audit_type', { Text: buildReproTokenId }],
-          ['bounty_id', { Nat: bountyId }],
-        ],
-      });
+        });
+      }
     }
 
     // Now, perform the upgrade
@@ -449,41 +509,88 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
     beforeAll(async () => {
       pic = await PocketIc.create(inject('PIC_URL'));
 
-      await pic.setTime(new Date());
-    });
-
-    afterAll(async () => {
-      await pic.tearDown();
-    });
-
-    beforeEach(async () => {
       const env = await setupEnvironment(pic);
       orchestratorActor = env.orchestratorActor;
       orchestratorCanisterId = env.orchestratorCanisterId;
       registryActor = env.registryActor;
       auditHubActor = env.auditHubActor;
+      ledgerActor = env.ledgerActor;
+      registryCanisterId = env.registryCanisterId;
+      targetCanisterId = env.managedCanisterId;
 
       // --- Configure inter-canister dependencies ---
       registryActor.setIdentity(daoIdentity);
       await registryActor.set_auditor_credentials_canister_id(
         env.auditHubCanisterId,
       );
+      await registryActor.set_bounty_reward_token_canister_id(
+        env.ledgerCanisterId,
+      );
       orchestratorActor.setIdentity(daoIdentity);
       await orchestratorActor.set_mcp_registry_id(env.registryCanisterId);
 
       auditHubActor.setIdentity(daoIdentity);
-      await auditHubActor.set_stake_requirement(buildReproTokenId, 50n);
-      await auditHubActor.mint_tokens(
-        auditorIdentity.getPrincipal(),
-        buildReproTokenId,
-        100n,
+      await auditHubActor.set_payment_token_config(
+        env.ledgerCanisterId,
+        'USDC',
+        6,
       );
+      await auditHubActor.set_stake_requirement(buildReproTokenId, 50n);
+      await auditHubActor.set_registry_canister_id(env.registryCanisterId);
 
-      // Create a canister type for our managed canister
+      // Fund registry with USDC for bounty rewards (9 bounties × ~260k = ~2.34M + buffer)
+      ledgerActor.setIdentity(daoIdentity);
+      await ledgerActor.icrc1_transfer({
+        to: { owner: registryCanisterId, subaccount: [] },
+        amount: 3_000_000n,
+        fee: [],
+        memo: [],
+        created_at_time: [],
+        from_subaccount: [],
+      });
+
+      // Transfer USDC to all 5 auditors and have them deposit stake
+      const auditors = [
+        auditor1Identity,
+        auditor2Identity,
+        auditor3Identity,
+        auditor4Identity,
+        auditor5Identity,
+      ];
+      for (const auditor of auditors) {
+        await ledgerActor.icrc1_transfer({
+          to: { owner: auditor.getPrincipal(), subaccount: [] },
+          amount: 1_020_000n, // 1 USDC + approve fee + transfer fee
+          fee: [],
+          memo: [],
+          created_at_time: [],
+          from_subaccount: [],
+        });
+
+        // Each auditor approves and deposits stake
+        ledgerActor.setIdentity(auditor);
+        await ledgerActor.icrc2_approve({
+          spender: { owner: env.auditHubCanisterId, subaccount: [] },
+          amount: 1_010_000n, // 1M USDC + 10k fee
+          fee: [],
+          memo: [],
+          created_at_time: [],
+          from_subaccount: [],
+          expected_allowance: [],
+          expires_at: [],
+        });
+
+        auditHubActor.setIdentity(auditor);
+        await auditHubActor.deposit_stake(1_000_000n);
+
+        ledgerActor.setIdentity(daoIdentity);
+      }
+
+      // --- Create canister type and register a managed canister ---
       registryActor.setIdentity(developerIdentity);
       await registryActor.icrc118_create_canister_type([
         {
-          canister_type_namespace: managedNamespace,
+          canister_type_namespace: secureNamespace,
           controllers: [[developerIdentity.getPrincipal()]],
           canister_type_name: '',
           description: '',
@@ -492,109 +599,139 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
           forked_from: [],
         },
       ]);
+      orchestratorActor.setIdentity(developerIdentity);
 
-      // Upload a dummy wasm for deployment
+      // --- Upload two WASM versions to the registry ---
       const wasmBytes = fs.readFileSync(MCP_SERVER_DUMMY_WASM_PATH);
+      unverifiedWasmHash = createHash('sha256').update(wasmBytes).digest();
       verifiedWasmHash = createHash('sha256').update(wasmBytes).digest();
+
+      // --- UPLOAD UNVERIFIED WASM (v0.0.1) ---
+      // Step 1: Register metadata
       await registryActor.icrc118_update_wasm({
-        canister_type_namespace: managedNamespace,
+        canister_type_namespace: secureNamespace,
         previous: [],
-        expected_chunks: [verifiedWasmHash],
+        expected_chunks: [unverifiedWasmHash],
         metadata: [],
         repo: '',
         description: '',
-        version_number: [0n, 0n, 1n],
-        expected_hash: verifiedWasmHash,
+        version_number: [0n, 1n, 0n],
+        expected_hash: unverifiedWasmHash,
       });
+      // Step 2: Upload the actual binary chunk
       await registryActor.icrc118_upload_wasm_chunk({
-        canister_type_namespace: managedNamespace,
+        canister_type_namespace: secureNamespace,
         wasm_chunk: wasmBytes,
-        expected_chunk_hash: verifiedWasmHash,
-        version_number: [0n, 0n, 1n],
+        expected_chunk_hash: unverifiedWasmHash,
+        version_number: [0n, 1n, 0n],
         chunk_id: 0n,
       });
 
-      // This test now runs the verification lifecycle as part of its setup
+      // --- UPLOAD VERIFIED WASM (v0.0.2) ---
+      // Step 1: Register metadata
+      await registryActor.icrc118_update_wasm({
+        canister_type_namespace: secureNamespace,
+        previous: [],
+        expected_chunks: [
+          createHash('sha256')
+            .update(Buffer.concat([wasmBytes, Buffer.from('v2')]))
+            .digest(),
+        ],
+        metadata: [],
+        repo: '',
+        description: '',
+        version_number: [0n, 0n, 2n],
+        expected_hash: createHash('sha256')
+          .update(Buffer.concat([wasmBytes, Buffer.from('v2')]))
+          .digest(),
+      });
+      // Step 2: Upload the actual binary chunk
+      await registryActor.icrc118_upload_wasm_chunk({
+        canister_type_namespace: secureNamespace,
+        wasm_chunk: Buffer.concat([wasmBytes, Buffer.from('v2')]),
+        expected_chunk_hash: createHash('sha256')
+          .update(Buffer.concat([wasmBytes, Buffer.from('v2')]))
+          .digest(),
+        version_number: [0n, 0n, 2n],
+        chunk_id: 0n,
+      });
+
+      const initArgType = IDL.Opt(
+        IDL.Record({
+          owner: IDL.Opt(IDL.Principal),
+        }),
+      );
+
+      // 2. Create the corresponding JavaScript value.
+      // Note the nested arrays to represent the nested optional types.
+      const initArgValue = [
+        // Outer Opt for the record
+        {
+          owner: [developerIdentity.getPrincipal()], // Inner Opt for the Principal
+        },
+      ];
+
+      // 3. Encode the value using the type.
+      // IDL.encode returns an ArrayBuffer, which we convert to Uint8Array.
+      const encodedArgs = new Uint8Array(
+        IDL.encode([initArgType], [initArgValue]),
+      );
+
+      // Verify the WASM before deploying
       const wasmId = Buffer.from(verifiedWasmHash).toString('hex');
-      if (!(await registryActor.is_wasm_verified(wasmId))) {
-        // (This is the same setup as the previous test)
-        registryActor.setIdentity(developerIdentity);
-        await registryActor.icrc126_verification_request({
-          wasm_hash: verifiedWasmHash,
-          repo: 'https://github.com/test/repo',
-          commit_hash: new Uint8Array([1]),
-          metadata: [],
-        });
-        registryActor.setIdentity(daoIdentity);
-        const createResult = await registryActor.icrc127_create_bounty({
-          challenge_parameters: {
-            Map: [
-              ['wasm_hash', { Blob: verifiedWasmHash }],
-              ['audit_type', { Text: buildReproTokenId }],
-            ],
-          },
-          timeout_date: BigInt(Date.now() + 7 * 24 * 60 * 60 * 1000),
-          start_date: [],
-          bounty_id: [],
-          validation_canister_id: registryCanisterId,
-          bounty_metadata: [],
-        });
-        const bountyId =
-          ('Ok' in createResult && createResult.Ok.bounty_id) || 0n;
-        auditHubActor.setIdentity(auditorIdentity);
-        const res2 = await auditHubActor.reserve_bounty(
-          bountyId,
-          buildReproTokenId,
-        );
-        console.log('Reserve Bounty Result:', res2);
-        registryActor.setIdentity(auditorIdentity);
-        const res = await registryActor.icrc126_file_attestation({
+      registryActor.setIdentity(developerIdentity);
+      await registryActor.icrc126_verification_request({
+        wasm_hash: verifiedWasmHash,
+        repo: 'https://github.com/test/repo',
+        commit_hash: new Uint8Array([1]),
+        metadata: [],
+      });
+
+      // Get auto-created bounties and have 5 auditors attest
+      const wasmBounties = await registryActor.get_bounties_for_wasm(wasmId);
+      const bountyIds = wasmBounties.slice(0, 5).map((b: any) => b.bounty_id);
+
+      for (let i = 0; i < 5; i++) {
+        const auditorIdentities = [
+          auditor1Identity,
+          auditor2Identity,
+          auditor3Identity,
+          auditor4Identity,
+          auditor5Identity,
+        ];
+        auditHubActor.setIdentity(auditorIdentities[i]);
+        await auditHubActor.reserve_bounty(bountyIds[i], buildReproTokenId);
+
+        registryActor.setIdentity(auditorIdentities[i]);
+        await registryActor.icrc126_file_attestation({
           wasm_id: wasmId,
           metadata: [
             ['126:audit_type', { Text: buildReproTokenId }],
-            ['bounty_id', { Nat: bountyId }],
+            ['bounty_id', { Nat: bountyIds[i] }],
           ],
         });
-        expect(res).toHaveProperty('Ok');
-
-        const initArgType = IDL.Opt(
-          IDL.Record({
-            owner: IDL.Opt(IDL.Principal),
-          }),
-        );
-
-        // 2. Create the corresponding JavaScript value.
-        // Note the nested arrays to represent the nested optional types.
-        const initArgValue = [
-          // Outer Opt for the record
-          {
-            owner: [developerIdentity.getPrincipal()], // Inner Opt for the Principal
-          },
-        ];
-
-        // 3. Encode the value using the type.
-        // IDL.encode returns an ArrayBuffer, which we convert to Uint8Array.
-        const encodedArgs = new Uint8Array(
-          IDL.encode([initArgType], [initArgValue]),
-        );
-
-        orchestratorActor.setIdentity(daoIdentity);
-        const deployResult = await orchestratorActor.deploy_or_upgrade({
-          namespace: managedNamespace,
-          hash: verifiedWasmHash,
-          mode: { install: null },
-          args: encodedArgs,
-          stop: false,
-          snapshot: false,
-          restart: false,
-          timeout: 0n,
-          parameters: [],
-          deployment_type: { global: null },
-        });
-        expect(deployResult).toHaveProperty('ok');
-        // @ts-ignore
-        managedCanisterId = deployResult.ok;
       }
+
+      orchestratorActor.setIdentity(daoIdentity);
+      const deployResult = await orchestratorActor.deploy_or_upgrade({
+        namespace: managedNamespace,
+        hash: verifiedWasmHash,
+        mode: { install: null },
+        args: encodedArgs,
+        stop: false,
+        snapshot: false,
+        restart: false,
+        timeout: 0n,
+        parameters: [],
+        deployment_type: { global: null },
+      });
+      expect(deployResult).toHaveProperty('ok');
+      // @ts-ignore
+      managedCanisterId = deployResult.ok;
+    });
+
+    afterAll(async () => {
+      await pic.tearDown();
     });
 
     it('should top up a managed canister when its cycle balance falls below the threshold', async () => {
@@ -672,18 +809,23 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
 
     it('should NOT top up a canister when the feature is disabled', async () => {
       // Arrange
-      const balanceBefore = await pic.getCyclesBalance(managedCanisterId);
       // Set the threshold HIGHER to create a top-up condition
-      const threshold = balanceBefore + 1_000_000_000;
-
+      const threshold = 999_999_999_999_999n; // Very high threshold
+      
       // But disable the feature
       orchestratorActor.setIdentity(daoIdentity);
       await orchestratorActor.set_cycle_top_up_config({
         enabled: false,
-        threshold: BigInt(threshold),
+        threshold: threshold,
         amount: TOP_UP_AMOUNT,
         interval_seconds: TEST_INTERVAL_SECONDS,
       });
+
+      // Allow the config change to take effect and any pending timers to be cancelled/complete
+      await pic.tick(10);
+      
+      // Record balance AFTER cleanup
+      const balanceBefore = await pic.getCyclesBalance(managedCanisterId);
 
       // Act
       await pic.advanceTime(Number(TEST_INTERVAL_SECONDS) * 1000 + 5000);
@@ -733,6 +875,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
     let orchestratorCanisterId: Principal;
     let registryActor: Actor<RegistryService>;
     let auditHubActor: Actor<AuditHubService>;
+    let ledgerActor: Actor<LedgerService>;
     let wasmId: string;
 
     const globalNamespace = 'com.test.global-server';
@@ -746,22 +889,75 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       orchestratorCanisterId = env.orchestratorCanisterId;
       registryActor = env.registryActor;
       auditHubActor = env.auditHubActor;
+      ledgerActor = env.ledgerActor;
 
       // --- Configure inter-canister dependencies ---
       registryActor.setIdentity(daoIdentity);
       await registryActor.set_auditor_credentials_canister_id(
         env.auditHubCanisterId,
       );
+      await registryActor.set_bounty_reward_token_canister_id(
+        env.ledgerCanisterId,
+      );
       orchestratorActor.setIdentity(daoIdentity);
       await orchestratorActor.set_mcp_registry_id(env.registryCanisterId);
 
       auditHubActor.setIdentity(daoIdentity);
-      await auditHubActor.set_stake_requirement(buildReproTokenId, 50n);
-      await auditHubActor.mint_tokens(
-        auditorIdentity.getPrincipal(),
-        buildReproTokenId,
-        100n,
+      await auditHubActor.set_payment_token_config(
+        env.ledgerCanisterId,
+        'USDC',
+        6,
       );
+      await auditHubActor.set_stake_requirement(buildReproTokenId, 50n);
+      await auditHubActor.set_registry_canister_id(env.registryCanisterId);
+
+      // Fund registry with USDC for auto-bounty creation (9 bounties × ~260k = ~2.34M + buffer)
+      ledgerActor.setIdentity(daoIdentity);
+      await ledgerActor.icrc1_transfer({
+        to: { owner: env.registryCanisterId, subaccount: [] },
+        amount: 3_000_000n,
+        fee: [],
+        memo: [],
+        created_at_time: [],
+        from_subaccount: [],
+      });
+
+      // Transfer USDC to all 5 auditors and have them deposit stake
+      const auditors = [
+        auditor1Identity,
+        auditor2Identity,
+        auditor3Identity,
+        auditor4Identity,
+        auditor5Identity,
+      ];
+      for (const auditor of auditors) {
+        await ledgerActor.icrc1_transfer({
+          to: { owner: auditor.getPrincipal(), subaccount: [] },
+          amount: 1_020_000n, // 1 USDC + approve fee + transfer fee
+          fee: [],
+          memo: [],
+          created_at_time: [],
+          from_subaccount: [],
+        });
+
+        // Auditor: Approve and deposit stake
+        ledgerActor.setIdentity(auditor);
+        await ledgerActor.icrc2_approve({
+          spender: { owner: env.auditHubCanisterId, subaccount: [] },
+          amount: 1_010_000n, // 1M USDC + 10k fee
+          fee: [],
+          memo: [],
+          created_at_time: [],
+          from_subaccount: [],
+          expected_allowance: [],
+          expires_at: [],
+        });
+        auditHubActor.setIdentity(auditor);
+        await auditHubActor.deposit_stake(1_000_000n);
+
+        // Reset ledger identity to DAO for next iteration
+        ledgerActor.setIdentity(daoIdentity);
+      }
 
       // --- Setup a verified WASM to be used by both app types ---
       const wasmBytes = fs.readFileSync(MCP_SERVER_DUMMY_WASM_PATH);
@@ -800,9 +996,15 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
         expected_chunk_hash: wasmHash,
       });
       // Verify it, marking it as 'global'
-      await verifyWasm(registryActor, auditHubActor, wasmHash, {
-        Text: 'global',
-      });
+      await verifyWasm(
+        registryActor,
+        auditHubActor,
+        env.ledgerCanisterId,
+        wasmHash,
+        {
+          Text: 'global',
+        },
+      );
 
       // --- 2. SETUP PROVISIONED (PRIVATE) APP ---
       registryActor.setIdentity(developerIdentity);
@@ -836,9 +1038,15 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
         expected_chunk_hash: wasmHash,
       });
       // Verify it, marking it as 'provisioned'
-      await verifyWasm(registryActor, auditHubActor, wasmHash, {
-        Text: 'provisioned',
-      });
+      await verifyWasm(
+        registryActor,
+        auditHubActor,
+        env.ledgerCanisterId,
+        wasmHash,
+        {
+          Text: 'provisioned',
+        },
+      );
     });
 
     afterAll(async () => {
@@ -942,6 +1150,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
   async function verifyWasm(
     registryActor: Actor<RegistryService>,
     auditHubActor: Actor<AuditHubService>,
+    ledgerCanisterId: Principal,
     wasmHash: Uint8Array,
     deploymentType: { Text: 'global' } | { Text: 'provisioned' },
   ) {
@@ -950,6 +1159,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       return;
     }
 
+    // Call verification request - this will auto-create 9 bounties
     registryActor.setIdentity(developerIdentity);
     await registryActor.icrc126_verification_request({
       wasm_hash: wasmHash,
@@ -961,31 +1171,37 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       ],
     });
 
-    registryActor.setIdentity(daoIdentity);
-    const createResult = await registryActor.icrc127_create_bounty({
-      challenge_parameters: {
-        Map: [['wasm_hash', { Blob: wasmHash }]],
-      },
-      timeout_date: BigInt(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      start_date: [],
-      bounty_id: [],
-      validation_canister_id: registryCanisterId,
-      bounty_metadata: [],
-    });
-    const bountyId = ('Ok' in createResult && createResult.Ok.bounty_id) || 0n;
+    // Fetch the auto-created bounties for this WASM
+    const wasmBounties = await registryActor.get_bounties_for_wasm(wasmId);
 
-    auditHubActor.setIdentity(auditorIdentity);
-    await auditHubActor.reserve_bounty(bountyId, 'build_reproducibility_v1');
+    // Take first 5 bounties for 5-of-9 consensus
+    const bountyIds = wasmBounties.slice(0, 5).map((b: any) => b.bounty_id);
 
-    registryActor.setIdentity(auditorIdentity);
-    const attestRes = await registryActor.icrc126_file_attestation({
-      wasm_id: wasmId,
-      metadata: [
-        ['126:audit_type', { Text: 'build_reproducibility_v1' }],
-        ['bounty_id', { Nat: bountyId }],
-      ],
-    });
-    expect(attestRes).toHaveProperty('Ok');
+    // All 5 auditors reserve and attest
+    const auditors = [
+      auditor1Identity,
+      auditor2Identity,
+      auditor3Identity,
+      auditor4Identity,
+      auditor5Identity,
+    ];
+    for (let i = 0; i < 5; i++) {
+      auditHubActor.setIdentity(auditors[i]);
+      await auditHubActor.reserve_bounty(
+        bountyIds[i],
+        'build_reproducibility_v1',
+      );
+
+      registryActor.setIdentity(auditors[i]);
+      const attestRes = await registryActor.icrc126_file_attestation({
+        wasm_id: wasmId,
+        metadata: [
+          ['126:audit_type', { Text: 'build_reproducibility_v1' }],
+          ['bounty_id', { Nat: bountyIds[i] }],
+        ],
+      });
+      expect(attestRes).toHaveProperty('Ok');
+    }
 
     expect(await registryActor.is_wasm_verified(wasmId)).toBe(true);
   }

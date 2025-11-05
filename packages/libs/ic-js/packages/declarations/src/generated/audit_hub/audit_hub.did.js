@@ -16,7 +16,6 @@ export const idlFactory = ({ IDL }) => {
     'available_balance_usdc' : Balance,
     'reputation_score' : IDL.Nat,
     'total_verifications' : IDL.Nat,
-    'total_earnings' : Balance,
   });
   const ApiCredential = IDL.Record({
     'api_key' : IDL.Text,
@@ -37,22 +36,6 @@ export const idlFactory = ({ IDL }) => {
       ),
     'get_bounty_lock' : IDL.Func([BountyId], [IDL.Opt(BountyLock)], ['query']),
     'get_owner' : IDL.Func([], [IDL.Principal], ['query']),
-    'get_payment_token_config' : IDL.Func(
-        [],
-        [
-          IDL.Record({
-            'decimals' : IDL.Nat8,
-            'ledger_id' : IDL.Opt(IDL.Principal),
-            'symbol' : IDL.Text,
-          }),
-        ],
-        ['query'],
-      ),
-    'get_registry_canister_id' : IDL.Func(
-        [],
-        [IDL.Opt(IDL.Principal)],
-        ['query'],
-      ),
     'get_stake_requirement' : IDL.Func(
         [TokenId],
         [IDL.Opt(Balance)],
@@ -83,12 +66,6 @@ export const idlFactory = ({ IDL }) => {
       ),
     'revoke_api_key' : IDL.Func([IDL.Text], [Result], []),
     'set_dashboard_canister_id' : IDL.Func([IDL.Principal], [Result], []),
-    'set_payment_token_config' : IDL.Func(
-        [IDL.Principal, IDL.Text, IDL.Nat8],
-        [Result],
-        [],
-      ),
-    'set_registry_canister_id' : IDL.Func([IDL.Principal], [Result], []),
     'set_stake_requirement' : IDL.Func([TokenId, Balance], [Result], []),
     'set_usdc_ledger_id' : IDL.Func([IDL.Principal], [Result], []),
     'slash_stake_for_incorrect_consensus' : IDL.Func([BountyId], [Result], []),

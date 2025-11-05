@@ -70,7 +70,14 @@ async function main() {
   console.log('');
 
   // 2. Configure the Auditor Credentials canister
-  console.log(chalk.bold('🔧 Configuring Auditor Credentials Canister...'));
+  console.log(chalk.bold('🔧 Configuring Audit Hub Canister...'));
+
+  console.log('  - Setting USDC Ledger canister...');
+  await $`dfx canister call ${canisterIds.audit_hub} set_usdc_ledger_id '(principal "${canisterIds.usdc_ledger}")'`;
+
+  console.log('  - Configuring payment token (USDC with 6 decimals)...');
+  await $`dfx canister call ${canisterIds.audit_hub} set_payment_token_config '(principal "${canisterIds.usdc_ledger}", "USDC", 6:nat8)'`;
+
   const AUDIT_TYPES = [
     'build_reproducibility_v1',
     'app_info_v1',
@@ -99,7 +106,7 @@ async function main() {
   await $`dfx canister call ${canisterIds.usdc_ledger} icrc1_transfer ${transferArgs}`;
   console.log(chalk.green('    - Transfer complete.'));
 
-  console.log(chalk.green('✅ Auditor Credentials configured.'));
+  console.log(chalk.green('✅ Audit Hub configured.'));
   console.log('');
 
   // 3. Initialize the Leaderboard canister
@@ -144,6 +151,15 @@ async function main() {
 
   console.log('  - Setting Usage Tracker canister...');
   await $`dfx canister call ${canisterIds.mcp_registry} set_usage_tracker_canister_id '(principal "${canisterIds.usage_tracker}")'`;
+
+  console.log('  - Setting Bounty Reward Token canister (USDC)...');
+  await $`dfx canister call ${canisterIds.mcp_registry} set_bounty_reward_token_canister_id '(principal "${canisterIds.usdc_ledger}")'`;
+
+  console.log(
+    '  - Setting Bounty Reward Amount ($0.25 USDC = 250,000 units)...',
+  );
+  await $`dfx canister call ${canisterIds.mcp_registry} set_bounty_reward_amount '(250_000:nat)'`;
+
   console.log(chalk.green('✅ Registry configured.'));
   console.log('');
 

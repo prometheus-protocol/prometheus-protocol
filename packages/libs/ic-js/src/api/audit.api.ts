@@ -504,6 +504,35 @@ export const reserveBounty = async (
   }
 };
 
+export interface ReserveBountyWithApiKeyArgs {
+  api_key: string; // The verifier's API key
+  bounty_id: bigint; // The ID of the bounty to reserve
+  token_id: string; // e.g., "build_reproducibility_v1"
+}
+
+/**
+ * Reserves a bounty using an API key instead of wallet authentication.
+ * This is the preferred method for automated verifier bots.
+ *
+ * @throws If the reservation fails (e.g., insufficient stake, invalid API key, already reserved).
+ */
+export const reserveBountyWithApiKey = async (
+  args: ReserveBountyWithApiKeyArgs,
+): Promise<void> => {
+  const { api_key, bounty_id, token_id } = args;
+  const auditHubActor = getAuditHubActor(); // Anonymous actor - no identity needed
+
+  const result = await auditHubActor.reserve_bounty_with_api_key(
+    api_key,
+    bounty_id,
+    token_id,
+  );
+
+  if ('err' in result) {
+    throw new Error(`Failed to reserve bounty: ${JSON.stringify(result.err)}`);
+  }
+};
+
 export interface ClaimBountyArgs {
   bounty_id: bigint;
   wasm_id: string; // The lowercase hex string ID of the WASM
@@ -756,39 +785,44 @@ export const getReputationBalance = async (
 
 // 1. Define the new, complete, and ergonomic interface.
 //    We use Maps for easy lookups in the frontend.
-export interface AuditorProfile {
-  reputation: Map<string, bigint>;
-  available_balances: Map<string, bigint>;
-  staked_balances: Map<string, bigint>;
+export interface VerifierProfile {
+  available_balance_usdc: bigint;
+  staked_balance_usdc: bigint;
+  total_verifications: bigint;
+  reputation_score: bigint;
+  total_earnings: bigint;
 }
+
+export interface PaymentTokenConfig {
+  ledger_id: [] | [Principal];
+  symbol: string;
+  decimals: number;
+}
+
+/**
+ * Fetches the payment token configuration from the Audit Hub.
+ * Returns the token symbol, decimals, and ledger canister ID.
+ */
+export const getPaymentTokenConfig = async (): Promise<PaymentTokenConfig> => {
+  const auditHubActor = getAuditHubActor();
+  return await auditHubActor.get_payment_token_config();
+};
+
 /**
  * Fetches the complete profile for the current user's principal from the Audit Hub.
- * It transforms the canister's array-based response into a more ergonomic
- * object with Maps for easy data access.
  *
  * @param identity The user's identity.
- * @returns The user's complete auditor profile.
+ * @returns The user's complete verifier profile.
  */
-export const getAuditorProfile = async (
+export const getVerifierProfile = async (
   identity: Identity,
-): Promise<AuditorProfile> => {
+): Promise<VerifierProfile> => {
   const auditHubActor = getAuditHubActor(identity);
   const principal = identity.getPrincipal();
 
-  // 2. Call the canister. The result is an optional record, which the agent
-  //    represents as a single-element array `[record]` or an empty array `[]`.
-  const profileResult = await auditHubActor.get_auditor_profile(principal);
+  const profile = await auditHubActor.get_verifier_profile(principal);
 
-  // 4. Destructure the record from the array.
-  const rawProfile = profileResult;
-
-  // 5. Transform the arrays of tuples into Maps and return the clean object.
-  //    The Map constructor elegantly handles this conversion.
-  return {
-    reputation: new Map(rawProfile.reputation),
-    available_balances: new Map(rawProfile.available_balances),
-    staked_balances: new Map(rawProfile.staked_balances),
-  };
+  return profile;
 };
 
 /** Fetches a list of all pending verification requests from the registry.
@@ -886,4 +920,133 @@ export const getBountiesForWasm = async (
   const registryActor = getRegistryActor();
   const bounties = await registryActor.get_bounties_for_wasm(wasmId);
   return bounties.map(processBounty);
+};
+
+/**
+ * Helper function to check if a specific principal has already participated
+ * in the verification of a WASM by checking all recorded bounty locks.
+ * Used by the verifier bot to avoid attempting duplicate participation.
+ *
+ * @param wasmId The WASM ID to check
+ * @param apiKey The verifier's API key (will be used to determine the principal)
+ */
+export const hasVerifierParticipatedWithApiKey = async (
+  wasmId: string,
+  apiKey: string,
+): Promise<boolean> => {
+  const registryActor = getRegistryActor();
+  const auditHubActor = getAuditHubActor();
+
+  // First, validate the API key and get the verifier's principal
+  const validateResult = await auditHubActor.validate_api_key(apiKey);
+  if ('err' in validateResult) {
+    throw new Error(`Invalid API key: ${validateResult.err}`);
+  }
+  const verifierPrincipal = validateResult.ok;
+
+  // Get all bounties for this WASM
+  const rawBounties = await registryActor.get_bounties_for_wasm(wasmId);
+  const bounties = rawBounties.map(processBounty);
+
+  // Check each bounty to see if our verifier has claimed it
+  for (const bounty of bounties) {
+    const lock = await auditHubActor.get_bounty_lock(bounty.id);
+    const bountyLock: AuditHub.BountyLock | undefined = fromNullable(lock);
+
+    if (
+      bountyLock &&
+      bountyLock.claimant.compareTo(verifierPrincipal) === 'eq'
+    ) {
+      return true; // This verifier has already claimed a bounty for this WASM
+    }
+  }
+
+  return false; // Verifier has not participated yet
+};
+
+/**
+ * Deposits USDC stake to the verifier's account in the Audit Hub.
+ * Note: User must first approve the Audit Hub to spend USDC on their behalf.
+ *
+ * @param identity The verifier's identity
+ * @param amount The amount to deposit in smallest units (e.g., 1 USDC = 1_000_000 units)
+ */
+export const depositStake = async (
+  identity: Identity,
+  amount: bigint,
+): Promise<void> => {
+  const auditHubActor = getAuditHubActor(identity);
+  const result = await auditHubActor.deposit_stake(amount);
+
+  if ('err' in result) {
+    throw new Error(result.err);
+  }
+};
+
+/**
+ * Withdraws USDC stake from the verifier's account back to their wallet.
+ * Only available balance (not staked in active bounties) can be withdrawn.
+ *
+ * @param identity The verifier's identity
+ * @param amount The amount to withdraw in smallest units (e.g., 1 USDC = 1_000_000 units)
+ */
+export const withdrawStake = async (
+  identity: Identity,
+  amount: bigint,
+): Promise<void> => {
+  const auditHubActor = getAuditHubActor(identity);
+  const result = await auditHubActor.withdraw_stake(amount);
+
+  if ('err' in result) {
+    throw new Error(result.err);
+  }
+};
+
+/**
+ * Generates a new API key for the verifier.
+ * Returns the newly created API key string.
+ *
+ * @param identity The verifier's identity
+ * @returns The generated API key (starts with "vr_")
+ */
+export const generateApiKey = async (identity: Identity): Promise<string> => {
+  const auditHubActor = getAuditHubActor(identity);
+  const result = await auditHubActor.generate_api_key();
+
+  if ('err' in result) {
+    throw new Error(result.err);
+  }
+
+  return result.ok;
+};
+
+/**
+ * Revokes an existing API key.
+ *
+ * @param identity The verifier's identity
+ * @param apiKey The API key to revoke
+ */
+export const revokeApiKey = async (
+  identity: Identity,
+  apiKey: string,
+): Promise<void> => {
+  const auditHubActor = getAuditHubActor(identity);
+  const result = await auditHubActor.revoke_api_key(apiKey);
+
+  if ('err' in result) {
+    throw new Error(result.err);
+  }
+};
+
+/**
+ * Lists all API keys for the authenticated verifier.
+ *
+ * @param identity The verifier's identity
+ * @returns Array of API credentials with creation date, last used, and active status
+ */
+export const listApiKeys = async (
+  identity: Identity,
+): Promise<AuditHub.ApiCredential[]> => {
+  const auditHubActor = getAuditHubActor(identity);
+  return await auditHubActor.list_api_keys();
 };

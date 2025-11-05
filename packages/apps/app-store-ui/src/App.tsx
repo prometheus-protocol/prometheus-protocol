@@ -34,6 +34,7 @@ import LoginPage from './pages/LoginPage';
 import SetupPage from './pages/SetupPage';
 import ConsentPage from './pages/ConsentPage';
 import ConnectionsPage from './pages/ConnectionsPage';
+import VerifierDashboardPage from './pages/VerifierDashboardPage';
 import { OAuthLayout } from './components/layout/OAuthLayout';
 
 // --- CONFIGURE THE SHARED PACKAGE ---
@@ -119,6 +120,7 @@ function App() {
               <Route path="bounties" element={<AppBountiesPage />} />
               <Route path="leaderboard" element={<LeaderboardPage />} />
               <Route path="wallet" element={<WalletPage />} />
+              <Route path="verifier" element={<VerifierDashboardPage />} />
 
               {/* Static informational pages */}
               <Route path="about" element={<AboutPage />} />

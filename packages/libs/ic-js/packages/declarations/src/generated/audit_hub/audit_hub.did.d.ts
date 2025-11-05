@@ -16,11 +16,6 @@ export interface AuditHub {
   'get_available_balance' : ActorMethod<[Principal, TokenId], Balance>,
   'get_bounty_lock' : ActorMethod<[BountyId], [] | [BountyLock]>,
   'get_owner' : ActorMethod<[], Principal>,
-  'get_payment_token_config' : ActorMethod<
-    [],
-    { 'decimals' : number, 'ledger_id' : [] | [Principal], 'symbol' : string }
-  >,
-  'get_registry_canister_id' : ActorMethod<[], [] | [Principal]>,
   'get_stake_requirement' : ActorMethod<[TokenId], [] | [Balance]>,
   'get_staked_balance' : ActorMethod<[Principal, TokenId], Balance>,
   'get_verifier_profile' : ActorMethod<[Principal], VerifierProfile>,
@@ -37,8 +32,6 @@ export interface AuditHub {
   >,
   'revoke_api_key' : ActorMethod<[string], Result>,
   'set_dashboard_canister_id' : ActorMethod<[Principal], Result>,
-  'set_payment_token_config' : ActorMethod<[Principal, string, number], Result>,
-  'set_registry_canister_id' : ActorMethod<[Principal], Result>,
   'set_stake_requirement' : ActorMethod<[TokenId, Balance], Result>,
   'set_usdc_ledger_id' : ActorMethod<[Principal], Result>,
   'slash_stake_for_incorrect_consensus' : ActorMethod<[BountyId], Result>,
@@ -67,7 +60,6 @@ export interface VerifierProfile {
   'available_balance_usdc' : Balance,
   'reputation_score' : bigint,
   'total_verifications' : bigint,
-  'total_earnings' : Balance,
 }
 export interface _SERVICE extends AuditHub {}
 export declare const idlFactory: IDL.InterfaceFactory;
