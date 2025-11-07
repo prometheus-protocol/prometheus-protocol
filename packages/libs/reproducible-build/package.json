@@ -5,15 +5,18 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
   "exports": {
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     }
-  },
-  "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch"
   },
   "dependencies": {
     "toml": "^3.0.0"
