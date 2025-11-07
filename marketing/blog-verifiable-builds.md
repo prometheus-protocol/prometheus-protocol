@@ -745,9 +745,9 @@ RUN curl -L https://github.com/research-ag/ic-wasm/releases/download/${IC_WASM_V
     && tar xzf ic-wasm.tgz \
     && install ic-wasm /install/bin
 
-# Download and install mops-cli (Rust version from jneums/mops-cli)
+# Download and install mops-cli (Rust version from prometheus-protocol/mops-cli)
 ARG MOPS_CLI_VERSION=0.2.1
-RUN curl -L https://github.com/jneums/mops-cli/releases/download/v${MOPS_CLI_VERSION}/mops-cli-linux64 -o mops-cli \
+RUN curl -L https://github.com/prometheus-protocol/mops-cli/releases/download/v${MOPS_CLI_VERSION}/mops-cli-linux64 -o mops-cli \
     && install mops-cli /install/bin
 
 # Final runtime image

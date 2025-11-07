@@ -84,7 +84,7 @@ RUN curl -L https://github.com/research-ag/ic-wasm/releases/download/\${IC_WASM_
 
 # Install mops-cli 
 ARG MOPS_CLI_VERSION
-RUN curl -L https://github.com/jneums/mops-cli/releases/download/v\${MOPS_CLI_VERSION}/mops-cli-linux64 -o mops-cli \\
+RUN curl -L https://github.com/prometheus-protocol/mops-cli/releases/download/v\${MOPS_CLI_VERSION}/mops-cli-linux64 -o mops-cli \\
     && install mops-cli /install/bin
 
 # Install moc
