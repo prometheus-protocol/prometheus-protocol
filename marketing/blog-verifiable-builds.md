@@ -777,7 +777,7 @@ CMD ["bash", "build.sh"]
 - **Locked dependencies**: `mops install --locked` uses exact versions from `mops.toml`
 - **Isolated environment**: No network access during build, no host system dependencies
 - **Clean builds**: `--no-cache` flag ensures fresh container every time
-- **Base image registry**: Pre-built images at `ghcr.io/jneums/motoko-build-template` (~76MB)
+- **Base image registry**: Pre-built images at `ghcr.io/prometheus-protocol/motoko-build-template` (~76MB)
 - **Fast verification**: Complete verification in <10 seconds from cached base image
 
 ### Attestation Data Structure
@@ -955,7 +955,7 @@ The system's integrity fundamentally depends on the deterministic Docker build e
 - All toolchain binaries (moc, ic-wasm, mops-cli) are fetched by **version number AND hash verification**
 - Base images use `alpine:latest@sha256:...` pinning to specific digest
 - The [research-ag/motoko-build-template](https://github.com/research-ag/motoko-build-template) repo uses **GitHub's dependabot and security scanning**
-- Pre-built base images at `ghcr.io/jneums/motoko-build-template` are **content-addressed** and immutable
+- Pre-built base images at `ghcr.io/prometheus-protocol/motoko-build-template` are **content-addressed** and immutable
 
 **Mitigation Strategy:**
 If an upstream dependency is compromised (e.g., a malicious Alpine image or GitHub release binary), the attack would need to:

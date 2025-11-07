@@ -61,7 +61,7 @@ This ensures the 5-of-9 majority consensus requires **5 unique verifiers**, not 
 
    ```bash
    docker-compose run --rm wasm
-   # Uses: ghcr.io/jneums/motoko-build-template:moc-0.16.0
+   # Uses: ghcr.io/prometheus-protocol/motoko-build-template:moc-0.16.0
    # Output: 79b15176dc613860f35867828f40e7d6db...
    ```
 
@@ -71,7 +71,7 @@ This ensures the 5-of-9 majority consensus requires **5 unique verifiers**, not 
 
    ```typescript
    // Verifier automatically detects: moc = "0.16.0"
-   // Uses same Docker image: ghcr.io/jneums/motoko-build-template:moc-0.16.0
+   // Uses same Docker image: ghcr.io/prometheus-protocol/motoko-build-template:moc-0.16.0
    ```
 
 5. **Verifier rebuilds** from source:
@@ -114,7 +114,7 @@ Developers only need to:
 ### Requirements
 
 - Project must have `mops.toml` with `[toolchain]` section
-- Docker base image must exist: `ghcr.io/jneums/motoko-build-template:moc-<version>`
+- Docker base image must exist: `ghcr.io/prometheus-protocol/motoko-build-template:moc-<version>`
 - Both developer and verifier use the Docker build process
 
 If developers use native builds (`dfx build` or `./build.sh`), hashes **will not match** and verification will fail.

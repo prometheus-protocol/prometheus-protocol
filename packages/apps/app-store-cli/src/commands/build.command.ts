@@ -189,7 +189,7 @@ function updateDockerComposeVersion(mocVersion: string) {
     // Also update the base image name
     dockerCompose = dockerCompose.replace(
       /name:\s*&base_name\s+'ghcr\.io\/research-ag\/motoko-build:moc-[^']+'/,
-      `name: &base_name 'ghcr.io/jneums/motoko-build-template:moc-${mocVersion}'`,
+      `name: &base_name 'ghcr.io/prometheus-protocol/motoko-build-template:moc-${mocVersion}'`,
     );
     fs.writeFileSync('docker-compose.yml', dockerCompose);
     console.log(

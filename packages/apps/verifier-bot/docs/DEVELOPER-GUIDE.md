@@ -74,7 +74,7 @@ docker-compose run --rm wasm
 This command:
 
 - Reads your `moc` version from `mops.toml` (e.g., `0.16.0`)
-- Pulls the matching base image: `ghcr.io/jneums/motoko-build-template:moc-0.16.0`
+- Pulls the matching base image: `ghcr.io/prometheus-protocol/motoko-build-template:moc-0.16.0`
 - Builds your canister in an isolated Linux environment
 - Outputs the WASM to `out/out_Linux_x86_64.wasm`
 - Prints the SHA-256 hash
@@ -222,7 +222,7 @@ x-base-image:
     moc: &moc 0.14.9 # Change this
     ic-wasm: &ic_wasm 0.9.3
     mops-cli: &mops-cli 0.2.0
-  name: &base_name 'ghcr.io/jneums/motoko-build-template:moc-0.14.9' # And this
+  name: &base_name 'ghcr.io/prometheus-protocol/motoko-build-template:moc-0.14.9' # And this
 ```
 
 **⚠️ Warning**: Custom versions require the verifier bot to support them. Stick with the default unless you have a specific reason.
@@ -266,12 +266,12 @@ docker-compose run --rm wasm
 
 ### Docker Image Pull Fails
 
-**Symptoms**: `failed to pull image ghcr.io/jneums/motoko-build-template:moc-0.14.9`
+**Symptoms**: `failed to pull image ghcr.io/prometheus-protocol/motoko-build-template:moc-0.14.9`
 
 **Fix**: GitHub Container Registry may have rate limits. Try:
 
 ```bash
-docker pull ghcr.io/jneums/motoko-build-template:moc-0.14.9
+docker pull ghcr.io/prometheus-protocol/motoko-build-template:moc-0.14.9
 
 # If it persists, build the base image locally
 docker-compose build base
