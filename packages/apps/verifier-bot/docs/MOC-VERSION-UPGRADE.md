@@ -15,10 +15,10 @@ The verifier bot and developers **must use the exact same `moc` version** to pro
 
 ### Step 1: Check if Base Image Exists
 
-Check if `ghcr.io/research-ag/motoko-build:moc-0.16.0` exists:
+Check if `ghcr.io/jneums/motoko-build-template:moc-0.16.0` exists:
 
 ```bash
-docker pull ghcr.io/research-ag/motoko-build:moc-0.16.0
+docker pull ghcr.io/jneums/motoko-build-template:moc-0.16.0
 ```
 
 **If it exists**: Great! Proceed to Step 2.
@@ -40,7 +40,7 @@ x-base-image:
     moc: &moc 0.16.0  # ← UPDATE THIS
     ic-wasm: &ic_wasm 0.9.3  # Check if newer version needed
     mops-cli: &mops-cli 0.2.0
-  name: &base_name 'ghcr.io/research-ag/motoko-build:moc-0.16.0'  # ← UPDATE THIS
+  name: &base_name 'ghcr.io/jneums/motoko-build-template:moc-0.16.0'  # ← UPDATE THIS
 ```
 
 ### Step 3: Update Verifier Bot Source Code
@@ -80,7 +80,7 @@ moc = "0.16.0"  # ← UPDATE THIS
 Search for "0.14.9" and update all references:
 
 ```markdown
-- Uses the base Docker image: `ghcr.io/research-ag/motoko-build:moc-0.16.0`
+- Uses the base Docker image: `ghcr.io/jneums/motoko-build-template:moc-0.16.0`
 - Runs with pinned toolchain versions: `moc 0.16.0`, `ic-wasm 0.9.3`, `mops-cli 0.2.0`
 ```
 
@@ -156,7 +156,7 @@ docker run -d \
 
 ## Custom Base Image (If upstream doesn't have moc 0.16.0)
 
-If `ghcr.io/research-ag/motoko-build:moc-0.16.0` doesn't exist, you need to build and host your own.
+If `ghcr.io/jneums/motoko-build-template:moc-0.16.0` doesn't exist, you need to build and host your own.
 
 ### Option A: Build Locally and Use docker-compose build
 
@@ -247,16 +247,16 @@ docker build -f Dockerfile.base \
   --build-arg DFX_VERSION=0.16.0 \
   --build-arg IC_WASM_VERSION=0.9.3 \
   --build-arg MOPS_CLI_VERSION=0.2.0 \
-  -t ghcr.io/research-ag/motoko-build:moc-0.16.0 .
+  -t ghcr.io/jneums/motoko-build-template:moc-0.16.0 .
 
 # Push to GitHub Container Registry
-docker push ghcr.io/research-ag/motoko-build:moc-0.16.0
+docker push ghcr.io/jneums/motoko-build-template:moc-0.16.0
 ```
 
 Update docker-compose.yml to use your registry:
 
 ```yaml
-name: &base_name 'ghcr.io/research-ag/motoko-build:moc-0.16.0'
+name: &base_name 'ghcr.io/jneums/motoko-build-template:moc-0.16.0'
 ```
 
 ### Option C: Wait for Upstream
@@ -338,7 +338,7 @@ To prevent version drift, create a single source of truth:
   "dfx": "0.16.0",
   "ic_wasm": "0.9.3",
   "mops_cli": "0.2.0",
-  "base_image": "ghcr.io/research-ag/motoko-build:moc-0.16.0"
+  "base_image": "ghcr.io/jneums/motoko-build-template:moc-0.16.0"
 }
 ```
 
@@ -412,7 +412,7 @@ docker run -d \
 
 **Immediate Action Required**:
 
-1. Verify if `ghcr.io/research-ag/motoko-build:moc-0.16.0` exists
+1. Verify if `ghcr.io/jneums/motoko-build-template:moc-0.16.0` exists
 2. If yes: Update all references from `0.14.9` → `0.16.0`
 3. If no: Build custom base image or wait for upstream
 4. Coordinate with developers for synchronized migration

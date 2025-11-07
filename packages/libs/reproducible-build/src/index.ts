@@ -11,7 +11,7 @@ export const TEMPLATES = {
     moc: &moc {{MOC_VERSION}}
     ic-wasm: &ic_wasm {{IC_WASM_VERSION}}
     mops-cli: &mops-cli {{MOPS_CLI_VERSION}}
-  name: &base_name 'ghcr.io/research-ag/motoko-build:moc-{{MOC_VERSION}}'
+  name: &base_name 'ghcr.io/jneums/motoko-build-template:moc-{{MOC_VERSION}}'
 
 networks:
   default:
