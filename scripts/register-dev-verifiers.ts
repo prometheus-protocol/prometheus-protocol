@@ -30,15 +30,10 @@ const DEV_IDENTITIES = [
   'node-9',
 ];
 
-const USDC_TRANSFER_AMOUNT = 100_000_000; // 100 USDC (assuming 6 decimals)
-const STAKE_AMOUNT_PER_TYPE = 10_000_000; // 10 USDC per audit type
+const USDC_TRANSFER_AMOUNT = 3_000_000; // 3 USDC (assuming 6 decimals)
+const STAKE_AMOUNT_PER_TYPE = 2_000_000; // 2 USDC per audit type
 
-const AUDIT_TYPES = [
-  'build_reproducibility_v1',
-  'app_info_v1',
-  'tools_v1',
-  'data_security_v1',
-];
+const AUDIT_TYPES = ['build_reproducibility_v1'];
 
 // --- MAIN SCRIPT ---
 

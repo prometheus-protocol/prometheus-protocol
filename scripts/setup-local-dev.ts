@@ -22,7 +22,7 @@ import { $, chalk } from 'zx';
 const AUDITOR_PRINCIPAL =
   'zxuwv-zt33i-dtske-3tzt5-iw3b4-mjuif-jc4vr-hz2vk-ky2v4-kyrkv-pqe';
 
-const STAKE_AMOUNT = 1; // 1 USDC (adjust based on your token decimals)
+const STAKE_AMOUNT = 300_000; // 0.30 USDC (USDC has 6 decimals, so 300,000 = 0.30 USDC)
 const USDC_TRANSFER_AMOUNT = 100_000_000; // Enough for multiple stakes
 const REGISTRY_USDC_AMOUNT = 1_000_000_000; // 1,000 USDC for sponsoring build bounties
 const ORCHESTRATOR_CYCLES_IN_TRILLIONS = 100; // 100T cycles

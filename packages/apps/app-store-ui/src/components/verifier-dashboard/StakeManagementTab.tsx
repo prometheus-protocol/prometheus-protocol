@@ -18,6 +18,7 @@ import {
   useWithdrawStake,
   usePaymentToken,
 } from '@/hooks/useVerifierDashboard';
+import { useGetTokenBalance } from '@/hooks/usePayment';
 
 export function StakeManagementTab() {
   const { identity } = useInternetIdentity();
@@ -27,8 +28,10 @@ export function StakeManagementTab() {
   // Fetch payment token (includes conversion utilities) and verifier profile
   const { data: paymentToken, isLoading: tokenLoading } = usePaymentToken();
   const { data: profile, isLoading: profileLoading } = useVerifierProfile();
+  const { data: walletBalance, isLoading: balanceLoading } =
+    useGetTokenBalance(paymentToken);
 
-  const isLoading = tokenLoading || profileLoading;
+  const isLoading = tokenLoading || profileLoading || balanceLoading;
 
   // Mutations
   const depositMutation = useDepositStake();
@@ -115,9 +118,12 @@ export function StakeManagementTab() {
   const stakedBalance = profile
     ? paymentToken.fromAtomic(profile.staked_balance_usdc)
     : '0';
-  const totalBalance = (
+  const accountTotal = (
     parseFloat(availableBalance) + parseFloat(stakedBalance)
   ).toString();
+  const totalBalance = walletBalance
+    ? paymentToken.fromAtomic(walletBalance)
+    : '0';
 
   // Calculate maximum withdrawable amount (available balance minus fee)
   const fee = paymentToken
@@ -139,7 +145,7 @@ export function StakeManagementTab() {
           <CardContent>
             <div className="text-2xl font-bold">{totalBalance}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              {paymentToken.symbol}
+              Your wallet balance
             </p>
           </CardContent>
         </Card>
@@ -151,7 +157,7 @@ export function StakeManagementTab() {
           <CardContent>
             <div className="text-2xl font-bold">{availableBalance}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Ready to withdraw
+              {availableBalance} / {accountTotal} in verifier account
             </p>
           </CardContent>
         </Card>
@@ -163,7 +169,7 @@ export function StakeManagementTab() {
           <CardContent>
             <div className="text-2xl font-bold">{stakedBalance}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Locked in bounties
+              Locked in active bounties
             </p>
           </CardContent>
         </Card>
