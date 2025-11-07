@@ -29,6 +29,8 @@ services:
         MOPS_CLI_VERSION: *mops-cli
     image: *base_name
   wasm:
+    depends_on:
+      - base
     build:
       context: .
       args:
