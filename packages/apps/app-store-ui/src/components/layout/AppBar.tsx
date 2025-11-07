@@ -3,7 +3,16 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import { LoginButton } from '../LoginButton';
 import { Logo } from '../Logo';
-import { Search, X, Menu, Home, Shield, Trophy, Wallet } from 'lucide-react';
+import {
+  Search,
+  X,
+  Menu,
+  Home,
+  Shield,
+  Trophy,
+  Wallet,
+  ShieldCheck,
+} from 'lucide-react';
 import { Button } from '../ui/button';
 import {
   NavigationMenu,
@@ -196,18 +205,36 @@ export function AppBar() {
 
                 {/* Wallet link - only show for logged-in users */}
                 {identity && (
-                  <NavigationMenuItem>
-                    <NavigationMenuLink asChild active={pathname === '/wallet'}>
-                      <Link
-                        to="/wallet"
-                        className={cn(
-                          navigationMenuTriggerStyle(),
-                          'text-base',
-                        )}>
-                        Wallet
-                      </Link>
-                    </NavigationMenuLink>
-                  </NavigationMenuItem>
+                  <>
+                    <NavigationMenuItem>
+                      <NavigationMenuLink
+                        asChild
+                        active={pathname === '/verifier'}>
+                        <Link
+                          to="/verifier"
+                          className={cn(
+                            navigationMenuTriggerStyle(),
+                            'text-base',
+                          )}>
+                          Verifier
+                        </Link>
+                      </NavigationMenuLink>
+                    </NavigationMenuItem>
+                    <NavigationMenuItem>
+                      <NavigationMenuLink
+                        asChild
+                        active={pathname === '/wallet'}>
+                        <Link
+                          to="/wallet"
+                          className={cn(
+                            navigationMenuTriggerStyle(),
+                            'text-base',
+                          )}>
+                          Wallet
+                        </Link>
+                      </NavigationMenuLink>
+                    </NavigationMenuItem>
+                  </>
                 )}
               </NavigationMenuList>
             </NavigationMenu>
@@ -363,18 +390,32 @@ export function AppBar() {
                     Leaderboard
                   </Link>
                   {identity && (
-                    <Link
-                      to="/wallet"
-                      className={cn(
-                        'flex items-center gap-3 px-3 py-3 rounded-lg text-base font-medium transition-colors',
-                        pathname === '/wallet'
-                          ? 'bg-primary/10 text-primary'
-                          : 'text-foreground hover:bg-accent hover:text-accent-foreground',
-                      )}
-                      onClick={() => setIsMobileMenuOpen(false)}>
-                      <Wallet className="h-5 w-5" />
-                      Wallet
-                    </Link>
+                    <>
+                      <Link
+                        to="/verifier"
+                        className={cn(
+                          'flex items-center gap-3 px-3 py-3 rounded-lg text-base font-medium transition-colors',
+                          pathname === '/verifier'
+                            ? 'bg-primary/10 text-primary'
+                            : 'text-foreground hover:bg-accent hover:text-accent-foreground',
+                        )}
+                        onClick={() => setIsMobileMenuOpen(false)}>
+                        <ShieldCheck className="h-5 w-5" />
+                        Verifier
+                      </Link>
+                      <Link
+                        to="/wallet"
+                        className={cn(
+                          'flex items-center gap-3 px-3 py-3 rounded-lg text-base font-medium transition-colors',
+                          pathname === '/wallet'
+                            ? 'bg-primary/10 text-primary'
+                            : 'text-foreground hover:bg-accent hover:text-accent-foreground',
+                        )}
+                        onClick={() => setIsMobileMenuOpen(false)}>
+                        <Wallet className="h-5 w-5" />
+                        Wallet
+                      </Link>
+                    </>
                   )}
                 </div>
               </nav>

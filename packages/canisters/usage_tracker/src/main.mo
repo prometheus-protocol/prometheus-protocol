@@ -682,4 +682,54 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
 
     return #ok(());
   };
+
+  public type EnvDependency = {
+    key : Text;
+    setter : Text;
+    canister_name : Text;
+    required : Bool;
+    current_value : ?Principal;
+  };
+
+  public type EnvConfig = {
+    key : Text;
+    setter : Text;
+    value_type : Text;
+    required : Bool;
+    current_value : ?Text;
+  };
+
+  public query func get_env_requirements() : async {
+    #v1 : {
+      dependencies : [EnvDependency];
+      configuration : [EnvConfig];
+    };
+  } {
+    #v1({
+      dependencies = [
+        {
+          key = "payout_canister";
+          setter = "set_payout_canister";
+          canister_name = "payout";
+          required = false;
+          current_value = payout_canister;
+        },
+        {
+          key = "registry_canister_id";
+          setter = "set_registry_canister";
+          canister_name = "mcp_registry";
+          required = true;
+          current_value = registry_canister_id;
+        },
+        {
+          key = "orchestrator_canister_id";
+          setter = "set_orchestrator_canister";
+          canister_name = "mcp_orchestrator";
+          required = true;
+          current_value = orchestrator_canister_id;
+        },
+      ];
+      configuration = [];
+    });
+  };
 };

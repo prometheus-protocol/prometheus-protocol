@@ -29,11 +29,13 @@ import AppBountiesPage from './pages/AppBountiesPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import AuditHubPage from './pages/AuditHubPage';
 import AuditDetailsPage from './pages/AuditDetailsPage';
+import VerificationDetailsPage from './pages/VerificationDetailsPage';
 import WalletPage from './pages/WalletPage';
 import LoginPage from './pages/LoginPage';
 import SetupPage from './pages/SetupPage';
 import ConsentPage from './pages/ConsentPage';
 import ConnectionsPage from './pages/ConnectionsPage';
+import VerifierDashboardPage from './pages/VerifierDashboardPage';
 import { OAuthLayout } from './components/layout/OAuthLayout';
 
 // --- CONFIGURE THE SHARED PACKAGE ---
@@ -112,13 +114,17 @@ function App() {
               {/* Audit Hub Routes */}
               <Route path="audit-hub">
                 <Route index element={<AuditHubPage />} />
-                <Route path=":auditId" element={<AuditDetailsPage />} />
+                {/* New: WASM-based verification route */}
+                <Route path=":wasmId" element={<VerificationDetailsPage />} />
+                {/* Legacy: Keep bounty-based route for backward compatibility */}
+                <Route path="bounty/:auditId" element={<AuditDetailsPage />} />
               </Route>
 
               {/* Main pages */}
               <Route path="bounties" element={<AppBountiesPage />} />
               <Route path="leaderboard" element={<LeaderboardPage />} />
               <Route path="wallet" element={<WalletPage />} />
+              <Route path="verifier" element={<VerifierDashboardPage />} />
 
               {/* Static informational pages */}
               <Route path="about" element={<AboutPage />} />

@@ -11,7 +11,12 @@ export const TEMPLATES = {
     moc: &moc {{MOC_VERSION}}
     ic-wasm: &ic_wasm {{IC_WASM_VERSION}}
     mops-cli: &mops-cli {{MOPS_CLI_VERSION}}
-  name: &base_name 'ghcr.io/research-ag/motoko-build:moc-{{MOC_VERSION}}'
+  name: &base_name 'motoko-build-base:moc-{{MOC_VERSION}}'
+
+networks:
+  default:
+    external: true
+    name: verifier-shared-network
 
 services:
   base:
@@ -24,6 +29,8 @@ services:
         MOPS_CLI_VERSION: *mops-cli
     image: *base_name
   wasm:
+    depends_on:
+      - base
     build:
       context: .
       args:
@@ -46,9 +53,12 @@ COPY mops.toml ./
 # mops.lock.
 # Note: We trick mops-cli into not downloading binaries and not compiling
 # anything. We also make it use the moc version from the base image.
+# Accept GITHUB_TOKEN as build arg to authenticate API requests (optional)
+ARG GITHUB_TOKEN
 RUN mkdir -p ~/.mops/bin \\
     && ln -s /usr/local/bin/moc ~/.mops/bin/moc \\
     && touch ~/.mops/bin/mo-fmt \\
+    && if [ -n "\${GITHUB_TOKEN}" ]; then export GITHUB_TOKEN="\${GITHUB_TOKEN}"; fi \\
     && echo "persistent actor {}" >tmp.mo \\
     && mops-cli build tmp.mo -- --check \\
     && rm -r tmp.mo target/tmp
@@ -76,7 +86,7 @@ RUN curl -L https://github.com/research-ag/ic-wasm/releases/download/\${IC_WASM_
 
 # Install mops-cli 
 ARG MOPS_CLI_VERSION
-RUN curl -L https://github.com/jneums/mops-cli/releases/download/v\${MOPS_CLI_VERSION}/mops-cli-linux64 -o mops-cli \\
+RUN curl -L https://github.com/prometheus-protocol/mops-cli/releases/download/v\${MOPS_CLI_VERSION}/mops-cli-linux64 -o mops-cli \\
     && install mops-cli /install/bin
 
 # Install moc

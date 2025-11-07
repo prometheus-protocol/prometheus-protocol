@@ -72,6 +72,19 @@ type Tip =
    last_block_hash: blob;
    last_block_index: blob;
  };
+type TimerId = nat;
+type TimerDiagnostics = 
+ record {
+   currentTime: Time;
+   lastExecutionDelta: int;
+   lockStatus: opt Time;
+   nextExecutionDelta: opt int;
+   overdueActions: nat;
+   pendingActions: nat;
+   systemTimerStatus: opt TimerId;
+   totalActions: nat;
+ };
+type Time__2 = int;
 type Time = nat;
 type StopCanisterResult = 
  variant {
@@ -123,20 +136,45 @@ type RevertSnapshotError =
    TooManyRequests;
    Unauthorized;
  };
-type Result_2 = 
+type Result_7 = 
+ variant {
+   err: text;
+   ok: vec CanisterCycleInfo;
+ };
+type Result_6 = 
+ variant {
+   err: text;
+   ok: vec principal;
+ };
+type Result_5 = 
+ variant {
+   err: text;
+   ok: CycleJobStatus;
+ };
+type Result_4 = 
+ variant {
+   err: text;
+   ok: nat;
+ };
+type Result_3 = 
  variant {
    err: text;
    ok: principal;
  };
-type Result_1 = 
+type Result_2 = 
  variant {
    err: text;
    ok: ResourceServer;
  };
-type Result = 
+type Result_1 = 
  variant {
    err: text;
    ok;
+ };
+type Result = 
+ variant {
+   err: text;
+   ok: text;
  };
 type ResourceServer = 
  record {
@@ -169,6 +207,16 @@ type RegisterResourceServerArgs =
                  text;
                };
    uris: vec text;
+ };
+type ReconstitutionTrace = 
+ record {
+   actionsRestored: nat;
+   errors: vec text;
+   migratedFrom: text;
+   migratedTo: text;
+   timersRestored: nat;
+   timestamp: Time;
+   validationPassed: bool;
  };
 type OrchestrationEventType = 
  variant {
@@ -299,6 +347,17 @@ type ICRC16 =
  };
 type ICRC120Canister = 
  service {
+   /// * [OWNER ONLY] Add a principal as a controller to a managed canister.
+   ///    * This is useful for manually fixing controller issues or adding the orchestrator
+   ///    * itself as a controller for direct management.
+   add_controller_to_canister: (canister_id: principal, new_controller:
+    principal) -> (Result_1);
+   cancel_actions_by_filter: (filter: ActionFilter) -> (CancellationResult);
+   cancel_actions_by_ids: (ids: vec nat) -> (CancellationResult);
+   /// * [NEW] Get detailed cycle information for all managed canisters.
+   ///    * This is an UPDATE call that actually queries each canister's status.
+   check_all_canister_cycles: () -> (Result_7);
+   clear_reconstitution_traces: () -> ();
    /// * Debug function to help troubleshoot canister tracking issues
    debug_canister_info: (namespace: text) ->
     (record {
@@ -314,14 +373,27 @@ type ICRC120Canister =
        canisters: vec principal;
      }) query;
    /// * The primary entry point for the owner to debug/fix bad installs.
-   deploy_or_upgrade: (request: DeployOrUpgradeRequest) -> (Result_2);
+   deploy_or_upgrade: (request: DeployOrUpgradeRequest) -> (Result_3);
+   emergency_clear_all_timers: () -> (nat);
+   force_release_lock: () -> (opt Time__2);
+   force_system_timer_cancel: () -> (bool);
+   get_actions_by_filter: (filter: ActionFilter) -> (vec ActionDetail) query;
+   get_all_canister_cycles: () -> (Result_7) query;
    /// * [PUBLIC] Get the current auth server configuration.
    ///    * This helps with debugging and verification of the setup.
    get_auth_server_id: () -> (opt principal) query;
+   /// * [OWNER ONLY] Get the list of controllers for a managed canister.
+   get_canister_controllers: (canister_id: principal) -> (Result_6);
    get_canister_id: (namespace: text, wasm_id: text) -> (opt principal) query;
    get_canisters: (namespace: text) -> (vec principal) query;
+   get_cycle_job_status: () -> (Result_5) query;
    /// * Returns the current configuration for the automated cycle top-up feature.
    get_cycle_top_up_config: () -> (CycleTopUpConfig) query;
+   get_latest_reconstitution_trace: () -> (opt ReconstitutionTrace) query;
+   /// * [NEW] Get the current orchestrator's cycle balance.
+   get_orchestrator_cycles: () -> (Result_4) query;
+   get_reconstitution_traces: () -> (vec ReconstitutionTrace) query;
+   get_timer_diagnostics: () -> (TimerDiagnostics) query;
    get_tip: () -> (Tip) query;
    hello: () -> (text);
    icrc120_clean_snapshot: (requests: vec CleanSnapshotRequest) ->
@@ -352,22 +424,30 @@ type ICRC120Canister =
    icrc3_supported_block_types: () -> (vec BlockType) query;
    /// * [INTERNAL] A privileged endpoint for the MCP Registry, used for automated global deployments.
    internal_deploy_or_upgrade: (request: InternalDeployRequest) -> ();
-   provision_instance: (namespace: text, wasmId: text) -> (Result_2);
+   provision_instance: (namespace: text, wasmId: text) -> (Result_3);
    /// * [PUBLIC] Manually register a canister as an OAuth resource server.
    ///    * This can be used if automatic registration fails or for manual configuration.
    register_oauth_resource: (canister_id: principal, args:
-    RegisterResourceServerArgs) -> (Result_1);
-   set_auth_server_id: (authServerId: principal) -> (Result);
+    RegisterResourceServerArgs) -> (Result_2);
+   /// * [OWNER ONLY] Remove a principal from a canister's controller list.
+   ///    * Use with caution - removing all controllers will make the canister unmanageable.
+   remove_controller_from_canister: (canister_id: principal,
+    controller_to_remove: principal) -> (Result_1);
+   set_auth_server_id: (authServerId: principal) -> (Result_1);
    set_canister_owner: (canister_id: principal, new_owner: principal) ->
-    (Result);
+    (Result_1);
    /// * Sets the configuration for the automated cycle top-up feature.
    ///    * This function is restricted to the owner of the orchestrator canister.
    ///    * It will reschedule or remove the timer job based on the new settings.
-   set_cycle_top_up_config: (config: CycleTopUpConfig) -> (Result);
+   set_cycle_top_up_config: (config: CycleTopUpConfig) -> (Result_1);
    set_deployment_type: (namespace: text, wasm_id: text, deployment_type:
-    CanisterDeploymentType) -> (Result);
-   set_mcp_registry_id: (registryId: principal) -> (Result);
-   set_usage_tracker_id: (usageTrackerId: principal) -> (Result);
+    CanisterDeploymentType) -> (Result_1);
+   set_mcp_registry_id: (registryId: principal) -> (Result_1);
+   set_usage_tracker_id: (usageTrackerId: principal) -> (Result_1);
+   /// * [NEW] Manually trigger a cycle check and top-up for all managed canisters.
+   ///    * This is useful for testing and debugging the automated cycle management system.
+   trigger_manual_cycle_top_up: () -> (Result);
+   validate_timer_state: () -> (vec text) query;
  };
 type GetTransactionsResult = 
  record {
@@ -433,6 +513,15 @@ type CycleTopUpConfig =
    interval_seconds: nat;
    threshold: nat;
  };
+type CycleJobStatus = 
+ record {
+   enabled: bool;
+   job_action_id: opt nat;
+   job_scheduled: bool;
+   last_check: opt int;
+   next_check: opt int;
+   orchestrator_balance: nat;
+ };
 type CreateSnapshotResult = 
  variant {
    Err: CreateSnapshotError;
@@ -490,6 +579,22 @@ type CanisterDeploymentType =
    global;
    provisioned;
  };
+type CanisterCycleInfo = 
+ record {
+   canister_id: principal;
+   cycles: nat;
+   namespace: text;
+   needs_top_up: bool;
+ };
+type CancellationResult = 
+ record {
+   cancelled: vec ActionId;
+   errors: vec record {
+                 nat;
+                 text;
+               };
+   notFound: vec nat;
+ };
 type BlockType = 
  record {
    block_type: text;
@@ -504,6 +609,22 @@ type ActionId =
  record {
    id: nat;
    time: Time;
+ };
+type ActionFilter = 
+ variant {
+   All;
+   ByActionId: nat;
+   ByRetryCount: nat;
+   ByTimeRange: record {
+                  Time;
+                  Time;
+                };
+   ByType: text;
+ };
+type ActionDetail = 
+ record {
+   ActionId;
+   Action;
  };
 type Action = 
  record {

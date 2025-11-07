@@ -53,12 +53,18 @@ module AuditHub {
     // == STAKING & LOCKING METHODS ==
     reserve_bounty : (bounty_id : BountyId, token_id : TokenId, stake_amount : Balance) -> async CallResult;
     release_stake : (bounty_id : BountyId) -> async CallResult;
+    slash_stake_for_incorrect_consensus : (bounty_id : BountyId) -> async CallResult;
     cleanup_expired_lock : (bounty_id : BountyId) -> async CallResult;
 
     // == PUBLIC QUERY & VERIFICATION METHODS ==
     is_bounty_ready_for_collection : query (bounty_id : BountyId, potential_claimant : Principal) -> async Bool;
     get_available_balance : query (auditor : Principal, token_id : TokenId) -> async Balance;
+    get_available_balance_by_audit_type : query (auditor : Principal, audit_type : Text) -> async Balance;
     get_staked_balance : query (auditor : Principal, token_id : TokenId) -> async Balance;
     get_bounty_lock : query (bounty_id : BountyId) -> async ?BountyLock;
+    has_active_bounty_lock : query (verifier : Principal) -> async Bool;
+
+    // == API KEY AUTHENTICATION ==
+    validate_api_key : query (api_key : Text) -> async Result.Result<Principal, Text>;
   };
 };

@@ -75,6 +75,22 @@ export function calculateSecurityTier(
 export function processBounty(bounty: Bounty): AuditBounty {
   const claimedDateNs = fromNullable(bounty.claimed_date);
   const timeoutDateNs = fromNullable(bounty.timeout_date);
+  const challengeParameters = deserializeIcrc16Value(
+    bounty.challenge_parameters,
+  );
+
+  // Extract WASM hash from challenge parameters if available
+  let wasmHashHex: string | undefined;
+  if (
+    challengeParameters &&
+    typeof challengeParameters === 'object' &&
+    'wasm_hash' in challengeParameters
+  ) {
+    const wasmHash = challengeParameters.wasm_hash;
+    if (wasmHash instanceof Uint8Array) {
+      wasmHashHex = uint8ArrayToHex(wasmHash);
+    }
+  }
 
   return {
     id: bounty.bounty_id,
@@ -87,10 +103,11 @@ export function processBounty(bounty: Bounty): AuditBounty {
     payoutFee: bounty.payout_fee,
     claims: bounty.claims,
     metadata: deserializeFromIcrc16Map(bounty.bounty_metadata),
-    challengeParameters: deserializeIcrc16Value(bounty.challenge_parameters),
+    challengeParameters,
     claimedTimestamp: fromNullable(bounty.claimed),
     claimedDate: claimedDateNs ? nsToDate(claimedDateNs) : undefined,
     timeoutDate: timeoutDateNs ? nsToDate(timeoutDateNs) : undefined,
+    wasmHashHex,
   };
 }
 

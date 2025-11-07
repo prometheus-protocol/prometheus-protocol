@@ -6,12 +6,43 @@ Automated build verification bot for the Prometheus Protocol MCP Server App Stor
 
 1. **Polls** the `mcp_registry` canister for pending verification requests
 2. **Checks** if each request has a sponsored `build_reproducibility_v1` bounty
-3. **Reserves** the bounty by staking reputation tokens
-4. **Clones** the developer's repository and checks out the specific commit
-5. **Builds** the WASM in a reproducible Docker environment
-6. **Compares** the SHA-256 hash of the built WASM against the submitted hash
-7. **Submits** an attestation (success) or divergence report (failure)
-8. **Claims** the bounty reward automatically
+3. **Verifies eligibility** - Skips WASMs where this verifier has already participated
+4. **Reserves** the bounty using API key authentication (stakes USDC automatically)
+5. **Clones** the developer's repository and checks out the specific commit
+6. **Builds** the WASM in a reproducible Docker environment
+7. **Compares** the SHA-256 hash of the built WASM against the submitted hash
+8. **Submits** an attestation (success) or divergence report (failure)
+9. **Waits** for 5-of-9 majority consensus - **payouts are automatic** after consensus
+
+## 🛡️ One Vote Per Verifier
+
+The bot automatically checks if you've already participated in a WASM verification:
+
+- **Before reserving a bounty**, checks all bounties for the WASM
+- **Identifies prior participation** by checking bounty locks
+- **Skips the job** if you've already submitted an attestation or divergence
+- **Prevents duplicate votes** - Each verifier can only vote once per WASM
+
+This ensures the 5-of-9 majority consensus requires **5 unique verifiers**, not the same verifier claiming multiple bounties.
+
+## 🔑 API Key Authentication (New in v2.0)
+
+**No wallet management needed!** The bot uses API keys for authentication:
+
+### Setup Process
+
+1. **Visit the verifier dashboard** at `https://your-app-store.com/verifier`
+2. **Deposit USDC stake** (e.g., 50-100 USDC) into your verifier account
+3. **Generate an API key** - This creates a credential like `vr_0123456789abcdef...`
+4. **Configure the bot** with your API key in the `.env` file
+
+### Benefits
+
+✅ **No private keys** - API keys are safer than exposing wallet credentials
+✅ **Easy revocation** - Disable a compromised key instantly from the dashboard
+✅ **Multiple bots** - Run several verifier instances with separate API keys
+✅ **Automatic staking** - Stakes are managed by the audit hub, not individual bounties
+✅ **Simplified deployment** - No identity management or PEM file complexity
 
 ## 🔐 Build Reproducibility
 
@@ -30,7 +61,7 @@ Automated build verification bot for the Prometheus Protocol MCP Server App Stor
 
    ```bash
    docker-compose run --rm wasm
-   # Uses: ghcr.io/research-ag/motoko-build:moc-0.16.0
+   # Uses: ghcr.io/prometheus-protocol/motoko-build-template:moc-0.16.0
    # Output: 79b15176dc613860f35867828f40e7d6db...
    ```
 
@@ -40,7 +71,7 @@ Automated build verification bot for the Prometheus Protocol MCP Server App Stor
 
    ```typescript
    // Verifier automatically detects: moc = "0.16.0"
-   // Uses same Docker image: ghcr.io/research-ag/motoko-build:moc-0.16.0
+   // Uses same Docker image: ghcr.io/prometheus-protocol/motoko-build-template:moc-0.16.0
    ```
 
 5. **Verifier rebuilds** from source:
@@ -83,7 +114,7 @@ Developers only need to:
 ### Requirements
 
 - Project must have `mops.toml` with `[toolchain]` section
-- Docker base image must exist: `ghcr.io/research-ag/motoko-build:moc-<version>`
+- Docker base image must exist: `ghcr.io/prometheus-protocol/motoko-build-template:moc-<version>`
 - Both developer and verifier use the Docker build process
 
 If developers use native builds (`dfx build` or `./build.sh`), hashes **will not match** and verification will fail.

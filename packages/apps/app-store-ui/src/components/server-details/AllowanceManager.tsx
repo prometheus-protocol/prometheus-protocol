@@ -27,8 +27,8 @@ export const AllowanceManager = ({
     // Use a Set to find all unique ledger canister IDs from the tools list.
     const acceptedTokens = new Set<Token>();
     for (const tool of latestVersion.tools) {
-      if (tool.tokenSymbol && Tokens[tool.tokenSymbol]) {
-        acceptedTokens.add(Tokens[tool.tokenSymbol]);
+      if (tool.tokenSymbol && Tokens[tool.tokenSymbol as keyof typeof Tokens]) {
+        acceptedTokens.add(Tokens[tool.tokenSymbol as keyof typeof Tokens]);
       }
     }
 

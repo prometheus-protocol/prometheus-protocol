@@ -64,6 +64,7 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
   let ledgerActor: Actor<LedgerService>;
   let auditHubActor: Actor<AuditHubService>;
   let bountyId: bigint;
+  let ledgerCanisterId: Principal; // store ledger canister ID for token_id
   let fee: bigint = 10_000n;
   const wasmHashToVerify = new Uint8Array([10, 11, 12]);
   const wasmIdToVerify = Buffer.from(wasmHashToVerify).toString('hex');
@@ -113,9 +114,10 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
             feature_flags: [],
           },
         },
-      ]),
+      ]).buffer,
     });
     ledgerActor = ledgerFixture.actor;
+    ledgerCanisterId = ledgerFixture.canisterId; // save for token_id parameter
 
     // 2. Deploy the NEW Audit Hub Canister
     const auditHubFixture = await pic.setupCanister<AuditHubService>({
@@ -130,7 +132,7 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
       idlFactory: registryIdlFactory,
       wasm: REGISTRY_WASM_PATH,
       sender: daoIdentity.getPrincipal(),
-      arg: IDL.encode(registryInit({ IDL }), [[]]),
+      arg: IDL.encode(registryInit({ IDL }), [[]]).buffer,
     });
     registryActor = registryFixture.actor;
 
@@ -164,21 +166,76 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
 
     auditHubActor.setIdentity(daoIdentity);
     // Configure the required stake for the reputation token
+    await auditHubActor.set_payment_token_config(
+      ledgerFixture.canisterId,
+      'USDC',
+      6,
+    );
     await auditHubActor.set_stake_requirement(
-      reputationTokenId,
+      ledgerFixture.canisterId.toText(), // token_id is the ledger canister ID
       reputationStakeAmount,
     );
-
-    // 6. Mint Reputation Tokens to our auditors
-    await auditHubActor.mint_tokens(
-      auditorIdentity.getPrincipal(),
+    // Register the audit_type → token_id mapping
+    await auditHubActor.register_audit_type(
       reputationTokenId,
-      1000n,
+      ledgerFixture.canisterId.toText(),
     );
-    await auditHubActor.mint_tokens(
-      maliciousAuditorIdentity.getPrincipal(),
-      reputationTokenId,
-      1000n,
+
+    // 6. Transfer USDC to auditors and have them deposit stake
+    ledgerActor.setIdentity(daoIdentity);
+    // Transfer to auditor 1
+    await ledgerActor.icrc1_transfer({
+      to: { owner: auditorIdentity.getPrincipal(), subaccount: [] },
+      amount: 1_020_000n, // 1 USDC + approve fee + transfer fee
+      fee: [],
+      memo: [],
+      created_at_time: [],
+      from_subaccount: [],
+    });
+    // Transfer to auditor 2
+    await ledgerActor.icrc1_transfer({
+      to: { owner: maliciousAuditorIdentity.getPrincipal(), subaccount: [] },
+      amount: 1_020_000n, // 1 USDC + approve fee + transfer fee
+      fee: [],
+      memo: [],
+      created_at_time: [],
+      from_subaccount: [],
+    });
+
+    // Auditor 1: Approve and deposit stake
+    ledgerActor.setIdentity(auditorIdentity);
+    await ledgerActor.icrc2_approve({
+      spender: { owner: auditHubFixture.canisterId, subaccount: [] },
+      amount: 1_010_000n, // 1M USDC + 10k fee
+      fee: [],
+      memo: [],
+      created_at_time: [],
+      from_subaccount: [],
+      expected_allowance: [],
+      expires_at: [],
+    });
+    auditHubActor.setIdentity(auditorIdentity);
+    await auditHubActor.deposit_stake(
+      ledgerFixture.canisterId.toText(),
+      1_000_000n,
+    );
+
+    // Auditor 2: Approve and deposit stake
+    ledgerActor.setIdentity(maliciousAuditorIdentity);
+    await ledgerActor.icrc2_approve({
+      spender: { owner: auditHubFixture.canisterId, subaccount: [] },
+      amount: 1_010_000n, // 1M USDC + 10k fee
+      fee: [],
+      memo: [],
+      created_at_time: [],
+      from_subaccount: [],
+      expected_allowance: [],
+      expires_at: [],
+    });
+    auditHubActor.setIdentity(maliciousAuditorIdentity);
+    await auditHubActor.deposit_stake(
+      ledgerFixture.canisterId.toText(),
+      1_000_000n,
     );
 
     // 7. Create the auditable entity and the bounty
@@ -197,7 +254,7 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
       challenge_parameters: {
         Map: [
           ['wasm_hash', { Blob: wasmHashToVerify }],
-          ['audit_type', { Text: reputationTokenId }],
+          ['audit_type', { Text: reputationTokenId }], // metadata descriptive string
         ],
       },
       bounty_metadata: [
@@ -219,7 +276,7 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
     const attestResult = await registryActor.icrc126_file_attestation({
       wasm_id: wasmIdToVerify,
       metadata: [
-        ['126:audit_type', { Text: reputationTokenId }],
+        ['126:audit_type', { Text: reputationTokenId }], // metadata descriptive string
         ['bounty_id', { Nat: bountyId }],
       ], // Correctly includes bounty_id
     });
@@ -233,14 +290,14 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
   it('should REJECT attestation from an auditor who did not reserve the bounty', async () => {
     // The legitimate auditor reserves the bounty
     auditHubActor.setIdentity(auditorIdentity);
-    await auditHubActor.reserve_bounty(bountyId, reputationTokenId);
+    await auditHubActor.reserve_bounty(bountyId, ledgerCanisterId.toText());
 
     // The malicious auditor tries to file the attestation
     registryActor.setIdentity(maliciousAuditorIdentity);
     const attestResult = await registryActor.icrc126_file_attestation({
       wasm_id: wasmIdToVerify,
       metadata: [
-        ['126:audit_type', { Text: reputationTokenId }],
+        ['126:audit_type', { Text: reputationTokenId }], // metadata descriptive string
         ['bounty_id', { Nat: bountyId }],
       ],
     });
@@ -251,18 +308,18 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
     expect(attestResult.Error).toHaveProperty('Unauthorized');
   });
 
-  it('should REJECT bounty submission if the claimant has not reserved the bounty', async () => {
+  it('should REJECT bounty submission because manual claims are disabled', async () => {
     // The auditor files the attestation WITHOUT reserving first (which will fail)
     registryActor.setIdentity(auditorIdentity);
     await registryActor.icrc126_file_attestation({
       wasm_id: wasmIdToVerify,
       metadata: [
-        ['126:audit_type', { Text: reputationTokenId }],
+        ['126:audit_type', { Text: reputationTokenId }], // metadata descriptive string
         ['bounty_id', { Nat: bountyId }],
       ],
     });
 
-    // Now they try to claim the bounty. The facade should reject this.
+    // Now they try to claim the bounty. The system rejects all manual claims.
     const submitResult = await registryActor.icrc127_submit_bounty({
       bounty_id: bountyId,
       submission: { Text: 'I claim this bounty' },
@@ -272,56 +329,42 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
     expect(submitResult).toHaveProperty('Error');
     // @ts-ignore
     expect(submitResult.Error.Generic).toMatch(
-      /Caller is not the authorized claimant/,
+      /Manual bounty claims are disabled/,
     );
   });
 
-  it('should successfully process a claim through the full, correct lifecycle', async () => {
+  it('should REJECT manual bounty claims even with valid reservation and attestation', async () => {
     // --- 1. Reserve the Bounty ---
     auditHubActor.setIdentity(auditorIdentity);
     const reserveResult = await auditHubActor.reserve_bounty(
       bountyId,
-      reputationTokenId,
+      ledgerCanisterId.toText(), // use ledger canister ID
     );
     expect(reserveResult).toHaveProperty('ok');
 
-    // --- 2. File the Attestation (as the claimant) ---
+    // --- 2. File the Attestation ---
     registryActor.setIdentity(auditorIdentity);
     const attestResult = await registryActor.icrc126_file_attestation({
       wasm_id: wasmIdToVerify,
       metadata: [
-        ['126:audit_type', { Text: reputationTokenId }], // Additional metadata
-        ['bounty_id', { Nat: bountyId }], // Pass bounty_id
+        ['126:audit_type', { Text: reputationTokenId }], // metadata descriptive string
+        ['bounty_id', { Nat: bountyId }],
       ],
     });
     expect(attestResult).toHaveProperty('Ok');
 
-    // --- 3. Submit the Bounty (as the claimant) ---
+    // --- 3. Attempt to manually submit the bounty (should be rejected) ---
     const submitResult = await registryActor.icrc127_submit_bounty({
       bounty_id: bountyId,
       submission: { Text: 'I claim this bounty now' },
       account: [], // Payout to self
     });
 
-    // The facade check passes, and the hook check passes.
-    expect(submitResult).toHaveProperty('Ok');
+    // Manual claims are disabled - all bounties are auto-distributed after consensus
+    expect(submitResult).toHaveProperty('Error');
     // @ts-ignore
-    expect(submitResult.Ok.result[0].result).toHaveProperty('Valid');
-
-    // --- 4. Verify Payout ---
-    const claimantBalance = await ledgerActor.icrc1_balance_of({
-      owner: auditorIdentity.getPrincipal(),
-      subaccount: [],
-    });
-    expect(claimantBalance).toBe(bountyAmount);
-
-    // --- 5. Verify Stake was Returned (by DAO releasing it) ---
-    auditHubActor.setIdentity(daoIdentity);
-    await auditHubActor.release_stake(bountyId);
-    const finalReputation = await auditHubActor.get_available_balance(
-      auditorIdentity.getPrincipal(),
-      reputationTokenId,
+    expect(submitResult.Error.Generic).toMatch(
+      /Manual bounty claims are disabled/,
     );
-    expect(finalReputation).toBe(1000n); // Back to the original amount
   });
 });

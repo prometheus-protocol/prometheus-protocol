@@ -1571,4 +1571,54 @@ shared (deployer) actor class ICRC120Canister<system>(
   public shared func hello() : async Text {
     return "world!";
   };
+
+  public type EnvDependency = {
+    key : Text;
+    setter : Text;
+    canister_name : Text;
+    required : Bool;
+    current_value : ?Principal;
+  };
+
+  public type EnvConfig = {
+    key : Text;
+    setter : Text;
+    value_type : Text;
+    required : Bool;
+    current_value : ?Text;
+  };
+
+  public query func get_env_requirements() : async {
+    #v1 : {
+      dependencies : [EnvDependency];
+      configuration : [EnvConfig];
+    };
+  } {
+    #v1({
+      dependencies = [
+        {
+          key = "_mcp_registry_id";
+          setter = "set_mcp_registry_id";
+          canister_name = "mcp_registry";
+          required = true;
+          current_value = _mcp_registry_id;
+        },
+        {
+          key = "_auth_server_id";
+          setter = "set_auth_server_id";
+          canister_name = "auth_server";
+          required = true;
+          current_value = _auth_server_id;
+        },
+        {
+          key = "_usage_tracker_id";
+          setter = "set_usage_tracker_id";
+          canister_name = "usage_tracker";
+          required = true;
+          current_value = _usage_tracker_id;
+        },
+      ];
+      configuration = [];
+    });
+  };
 };

@@ -452,7 +452,16 @@ type ICRC118WasmRegistryCanister =
    get_bounties_for_wasm: (wasm_id: text) -> (vec Bounty) query;
    get_canister_type_version: (req: GetCanisterTypeVersionRequest) ->
     (Result_2) query;
+   get_divergence_progress: (wasm_id: text) -> (vec nat) query;
+   get_env_requirements: () ->
+    (variant {
+       v1:
+        record {
+          configuration: vec EnvConfig;
+          dependencies: vec EnvDependency;
+        };}) query;
    get_tip: () -> (Tip) query;
+   get_verification_progress: (wasm_id: text) -> (vec nat) query;
    /// * @notice Fetches the original verification request metadata for a given WASM ID.
    ///    * @param wasm_id The hex-encoded SHA-256 hash of the WASM.
    ///    * @return The optional `VerificationRequest` record, which contains the repo URL and commit hash.
@@ -481,8 +490,16 @@ type ICRC118WasmRegistryCanister =
    icrc118_update_wasm: (req: UpdateWasmRequest) -> (UpdateWasmResult);
    icrc118_upload_wasm_chunk: (req: UploadRequest) -> (UploadResponse);
    icrc126_file_attestation: (req: AttestationRequest) -> (AttestationResult);
+   /// * File an attestation using an API key instead of caller identity.
+   ///    * This allows verifier bots to authenticate without managing identities.
+   icrc126_file_attestation_with_api_key: (api_key: text, req:
+    AttestationRequest) -> (AttestationResult);
    icrc126_file_divergence: (req: DivergenceReportRequest) ->
     (DivergenceResult);
+   /// * File a divergence report using an API key instead of caller identity.
+   ///    * This allows verifier bots to authenticate without managing identities.
+   icrc126_file_divergence_with_api_key: (api_key: text, req:
+    DivergenceReportRequest) -> (DivergenceResult);
    icrc126_verification_request: (req: VerificationRequest) -> (nat);
    icrc127_create_bounty: (req: CreateBountyRequest) -> (CreateBountyResult);
    icrc127_get_bounty: (bounty_id: nat) -> (opt Bounty) query;
@@ -515,6 +532,8 @@ type ICRC118WasmRegistryCanister =
    ///    * @returns An empty Ok(()) on success, or a Text error on failure.
    retrigger_deployment: (wasm_id: text) -> (Result);
    set_auditor_credentials_canister_id: (canister_id: principal) -> (Result);
+   set_bounty_reward_amount: (amount: nat) -> (Result);
+   set_bounty_reward_token_canister_id: (canister_id: principal) -> (Result);
    set_orchestrator_canister_id: (canister_id: principal) -> (Result);
    set_search_index_canister_id: (canister_id: principal) -> (Result);
    set_usage_tracker_canister_id: (canister_id: principal) -> (Result);
@@ -626,6 +645,22 @@ type GetArchivesResultItem =
  };
 type GetArchivesResult = vec GetArchivesResultItem;
 type GetArchivesArgs = record {from: opt principal;};
+type EnvDependency = 
+ record {
+   canister_name: text;
+   current_value: opt principal;
+   key: text;
+   required: bool;
+   setter: text;
+ };
+type EnvConfig = 
+ record {
+   current_value: opt text;
+   key: text;
+   required: bool;
+   setter: text;
+   value_type: text;
+ };
 type DivergenceResult = 
  variant {
    Error: variant {

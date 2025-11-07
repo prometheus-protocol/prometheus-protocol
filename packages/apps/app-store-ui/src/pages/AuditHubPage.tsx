@@ -1,7 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { OpenBountiesTab } from '@/components/audit-hub/OpenBountiesTab';
-import { PendingVerificationsTab } from '@/components/audit-hub/PendingVerificationsTab';
 
 export default function AuditHubPage() {
   return (
@@ -19,25 +17,13 @@ export default function AuditHubPage() {
           Audit Hub
         </h1>
         <p className="mt-4 text-lg text-gray-400 max-w-3xl">
-          Explore open audits, claim bounties, and earn rewards for securing the
-          trust layer of the AI agent ecosystem.
+          Track build verifications and consensus progress. Bounties are
+          automatically created for all published apps and distributed when
+          9-of-9 verifiers participate.
         </p>
       </header>
 
-      <Tabs defaultValue="bounties" className="w-full">
-        <TabsList className="mb-6">
-          <TabsTrigger value="bounties">Open Bounties</TabsTrigger>
-          <TabsTrigger value="verifications">Pending Verifications</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="bounties">
-          <OpenBountiesTab />
-        </TabsContent>
-
-        <TabsContent value="verifications">
-          <PendingVerificationsTab />
-        </TabsContent>
-      </Tabs>
+      <OpenBountiesTab />
     </div>
   );
 }

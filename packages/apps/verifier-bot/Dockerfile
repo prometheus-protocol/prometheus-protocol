@@ -4,21 +4,16 @@
 FROM node:20-alpine
 
 # Install git for cloning repositories
-# Docker CLI for running reproducible builds (uses host Docker daemon)
+# Docker CLI + Compose for running reproducible builds (uses host Docker daemon)
 RUN apk add --no-cache \
     git \
     docker-cli \
+    docker-cli-compose \
     bash
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-
-# Install Node.js dependencies
-RUN npm ci --production
-
-# Copy compiled TypeScript (assumes build happens before docker build)
+# Copy compiled and bundled TypeScript (everything is bundled into dist/index.js)
 COPY dist ./dist
 
 # Set environment variables

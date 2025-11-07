@@ -1,23 +1,26 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Search, Frown, Loader2 } from 'lucide-react';
 import { useGetAuditBountiesInfinite } from '@/hooks/useAuditBounties';
-import { AuditBounty } from '@prometheus-protocol/ic-js';
-import { uint8ArrayToHex } from '@prometheus-protocol/ic-js/utils';
+import { useGetWasmVerifications } from '@/hooks/useWasmVerifications';
 import { AuditHubSkeleton } from '@/components/audits/AuditHubSkeleton';
 import { AuditHubError } from '@/components/audits/AuditHubError';
-import { AuditHubListItem } from './AuditHubListItem';
+import { VerificationListItem } from './VerificationListItem';
 
-const PAGE_SIZE = 20;
+// Larger page size since we're grouping - fetch enough bounties to get a good number of unique WASMs
+// Typically 9 bounties per WASM, so 90 bounties = ~10 WASMs shown
+const PAGE_SIZE = 90;
 
 export function OpenBountiesTab() {
   const [searchQuery, setSearchQuery] = useState('');
   const observerTarget = useRef<HTMLDivElement>(null);
+  const previousVerificationsRef = useRef<typeof verifications>(null);
 
   const {
     data,
-    isLoading,
-    isError,
+    isLoading: isBountiesLoading, // True only on initial load with no data
+    isError: isBountiesError,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -25,56 +28,52 @@ export function OpenBountiesTab() {
   } = useGetAuditBountiesInfinite(PAGE_SIZE);
 
   // Flatten all pages into a single array
-  const allAudits = useMemo(() => {
+  const allBounties = useMemo(() => {
     if (!data?.pages) return [];
-    return data.pages.flatMap((page: AuditBounty[]) => page);
+    return data.pages.flatMap((page) => page);
   }, [data]);
 
-  // Filter audits based on search query
-  const filteredAudits = useMemo(() => {
+  // Get grouped verifications with progress data
+  const {
+    data: verifications,
+    isLoading: isVerificationsLoading,
+    isError: isVerificationsError,
+    isFetching: isVerificationsFetching,
+  } = useGetWasmVerifications(allBounties);
+
+  // Keep previous verifications visible while loading new ones
+  const displayVerifications =
+    verifications ?? previousVerificationsRef.current;
+
+  // Update ref when we have new data
+  useEffect(() => {
+    if (verifications) {
+      previousVerificationsRef.current = verifications;
+    }
+  }, [verifications]);
+
+  // Filter verifications based on search query
+  const filteredVerifications = useMemo(() => {
+    if (!displayVerifications) return [];
     const lowercasedQuery = searchQuery.toLowerCase().trim();
-    if (!lowercasedQuery) return allAudits;
-    return allAudits.filter((audit: AuditBounty) => {
-      const auditType =
-        audit.challengeParameters?.audit_type?.toLowerCase() || '';
-      const wasmHashHex = uint8ArrayToHex(
-        audit.challengeParameters?.wasm_hash,
-      ).toLowerCase();
+    if (!lowercasedQuery) return displayVerifications;
+
+    return displayVerifications.filter((verification) => {
+      const auditType = verification.auditType.toLowerCase();
+      const wasmId = verification.wasmId.toLowerCase();
       return (
-        auditType.includes(lowercasedQuery) ||
-        wasmHashHex.includes(lowercasedQuery)
+        auditType.includes(lowercasedQuery) || wasmId.includes(lowercasedQuery)
       );
     });
-  }, [allAudits, searchQuery]);
+  }, [displayVerifications, searchQuery]);
 
-  // Set up intersection observer to load more when scrolling
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
-          fetchNextPage();
-        }
-      },
-      { 
-        threshold: 0.1,
-        rootMargin: '100px'
-      }
-    );
+  // Show skeleton only on true initial load (no cached data)
+  const isInitialLoading =
+    (isBountiesLoading || isVerificationsLoading) && !displayVerifications;
 
-    const currentTarget = observerTarget.current;
-    if (currentTarget) {
-      observer.observe(currentTarget);
-    }
-
-    return () => {
-      if (currentTarget) {
-        observer.unobserve(currentTarget);
-      }
-    };
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
-
-  if (isLoading) return <AuditHubSkeleton />;
-  if (isError) return <AuditHubError onRetry={refetch} />;
+  if (isInitialLoading) return <AuditHubSkeleton />;
+  if (isBountiesError || isVerificationsError)
+    return <AuditHubError onRetry={refetch} />;
 
   return (
     <div className="space-y-6">
@@ -89,39 +88,60 @@ export function OpenBountiesTab() {
         />
       </div>
       <div className="space-y-3">
-        <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-2 text-gray-500 font-semibold uppercase text-sm">
-          <div className="col-span-2">Audit ID</div>
-          <div className="col-span-3">Audit Type</div>
-          <div className="col-span-3">WASM</div>
-          <div className="col-span-2 text-right">Reward</div>
-          <div className="col-span-2 text-center">Status</div>
-        </div>
-        {filteredAudits.length > 0 ? (
+        {filteredVerifications.length > 0 ? (
           <>
-            {filteredAudits.map((audit: AuditBounty) => (
-              <AuditHubListItem key={audit.id.toString()} audit={audit} />
+            {filteredVerifications.map((verification) => (
+              <VerificationListItem
+                key={verification.wasmId}
+                verification={verification}
+              />
             ))}
-            {(hasNextPage || isFetchingNextPage) && (
-              <div
-                ref={observerTarget}
-                className="flex flex-col items-center justify-center py-8 gap-2">
+            {/* Show loading indicator when fetching bounties or recalculating verifications */}
+            {(isFetchingNextPage ||
+              (isVerificationsFetching && allBounties.length > 0)) && (
+              <div className="flex flex-col items-center justify-center py-8 gap-2">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <p className="text-sm text-muted-foreground">
-                  Loading more bounties... ({allAudits.length} loaded)
+                  {isFetchingNextPage
+                    ? 'Loading more bounties...'
+                    : 'Recalculating verifications...'}
                 </p>
               </div>
             )}
-            {!hasNextPage && allAudits.length > PAGE_SIZE && (
+            {!hasNextPage && (
               <div className="text-center py-8 text-muted-foreground">
-                <p>All {allAudits.length} bounties loaded</p>
+                <p>
+                  All verifications loaded ({filteredVerifications.length}{' '}
+                  verifications, {allBounties.length} bounties)
+                </p>
               </div>
+            )}
+            {/* Manual load more button + invisible observer target */}
+            {hasNextPage && !isFetchingNextPage && !isVerificationsFetching && (
+              <>
+                <div className="text-center py-8">
+                  <Button
+                    onClick={() => {
+                      console.log('Manual load more clicked');
+                      fetchNextPage();
+                    }}
+                    variant="outline"
+                    className="mx-auto">
+                    Load More Verifications
+                  </Button>
+                  <p className="text-sm text-gray-500 mt-2">
+                    Showing {filteredVerifications.length} verifications (
+                    {allBounties.length} bounties)
+                  </p>
+                </div>
+              </>
             )}
           </>
         ) : (
           <div className="text-center py-16 text-gray-500 flex flex-col items-center gap-4">
             <Frown className="h-12 w-12" />
-            <p className="font-semibold">No Bounties Found</p>
-            <p>There are no open bounties matching your search.</p>
+            <p className="font-semibold">No Verifications Found</p>
+            <p>There are no verifications matching your search.</p>
           </div>
         )}
       </div>

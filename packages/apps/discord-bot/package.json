@@ -10,7 +10,7 @@
     "start": "node ./dist/index.js",
     "dev": "tsx src/index.ts",
     "watch": "tsc --watch",
-    "test": "vitest",
+    "test": "vitest run",
     "test:run": "vitest run",
     "test:watch": "vitest --watch",
     "deploy:commands": "tsx src/deploy-commands.ts"

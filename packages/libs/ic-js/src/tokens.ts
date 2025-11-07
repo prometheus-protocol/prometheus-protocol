@@ -1,4 +1,5 @@
 import { Principal } from '@icp-sdk/core/principal';
+import { getCanisterId } from './config.js';
 
 // --- TYPE DEFINITIONS ---
 
@@ -75,20 +76,27 @@ const createToken = (info: TokenInfo): Token => {
 
 // --- TOKEN DEFINITIONS ---
 
-// NOTE: Replace these with your actual mainnet/local canister IDs.
-const USDC_CANISTER_ID =
-  process.env.CANISTER_ID_USDC_LEDGER || '53nhb-haaaa-aaaar-qbn5q-cai';
+/**
+ * Gets the USDC token configuration with the correct canister ID from the config system.
+ * This ensures we use the right ledger for the current environment (local/mainnet).
+ */
+const getUSDCToken = (): Token => {
+  return createToken({
+    canisterId: Principal.fromText(getCanisterId('USDC_LEDGER')),
+    name: 'USD Coin',
+    symbol: 'USDC',
+    decimals: 6,
+    fee: 10_000, // Standard fee for ckUSDC is 10 e6s (0.01 USDC)
+  });
+};
 
 /**
  * The centralized, exported registry of all supported tokens.
  * Each token object is enhanced with its own `toAtomic` and `fromAtomic` methods.
+ * Tokens are created lazily to ensure the config system is initialized first.
  */
-export const Tokens: Record<string, Token> = {
-  USDC: createToken({
-    canisterId: Principal.fromText(USDC_CANISTER_ID),
-    name: 'USD Coin',
-    symbol: 'USDC',
-    decimals: 6,
-    fee: 10_000, // Standard fee for ckUSDC is 10 e6s (0.001 USDC)
-  }),
+export const Tokens = {
+  get USDC(): Token {
+    return getUSDCToken();
+  },
 };

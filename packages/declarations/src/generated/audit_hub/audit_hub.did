@@ -1,9 +1,43 @@
+type VerifierProfile = 
+ record {
+   available_balance_usdc: Balance;
+   reputation_score: nat;
+   staked_balance_usdc: Balance;
+   total_earnings: Balance;
+   total_verifications: nat;
+ };
 type TokenId = text;
 type Timestamp = int;
+type Result_2 = 
+ variant {
+   err: text;
+   ok: text;
+ };
+type Result_1 = 
+ variant {
+   err: text;
+   ok: principal;
+ };
 type Result = 
  variant {
    err: text;
    ok;
+ };
+type EnvDependency = 
+ record {
+   canister_name: text;
+   current_value: opt principal;
+   key: text;
+   required: bool;
+   setter: text;
+ };
+type EnvConfig = 
+ record {
+   current_value: opt text;
+   key: text;
+   required: bool;
+   setter: text;
+   value_type: text;
  };
 type BountyLock = 
  record {
@@ -14,41 +48,84 @@ type BountyLock =
  };
 type BountyId = nat;
 type Balance = nat;
-type AuditorProfile = 
- record {
-   available_balances: vec record {
-                             TokenId;
-                             Balance;
-                           };
-   reputation: vec record {
-                     TokenId;
-                     Balance;
-                   };
-   staked_balances: vec record {
-                          TokenId;
-                          Balance;
-                        };
- };
 type AuditHub = 
  service {
-   burn_tokens: (auditor: principal, token_id: TokenId, amount: Balance) ->
-    (Result);
    cleanup_expired_lock: (bounty_id: BountyId) -> (Result);
-   get_auditor_profile: (auditor: principal) -> (AuditorProfile) query;
-   get_available_balance: (auditor: principal, token_id: TokenId) ->
+   /// * Deposit tokens as stake to become an eligible auditor.
+   ///    * The caller must have already approved this canister to spend tokens on their behalf.
+   ///    * @param token_id - The ledger canister ID (as Principal text) of the token to deposit (e.g., USDC, ICP)
+   ///    * @param amount - The amount to deposit (in token's smallest unit)
+   deposit_stake: (token_id: TokenId, amount: Balance) -> (Result);
+   /// * Generate a new API key for the verifier to use in their bot.
+   ///    * Called by the verifier principal (authenticated via Internet Identity in UI).
+   generate_api_key: () -> (Result_2);
+   get_available_balance: (verifier: principal, token_id: TokenId) ->
     (Balance) query;
+   get_available_balance_by_audit_type: (verifier: principal, audit_type:
+    text) -> (Balance) query;
    get_bounty_lock: (bounty_id: BountyId) -> (opt BountyLock) query;
+   get_env_requirements: () ->
+    (variant {
+       v1:
+        record {
+          configuration: vec EnvConfig;
+          dependencies: vec EnvDependency;
+        };}) query;
    get_owner: () -> (principal) query;
+   get_payment_token_config: () ->
+    (record {
+       decimals: nat8;
+       ledger_id: opt principal;
+       symbol: text;
+     }) query;
+   get_registry_canister_id: () -> (opt principal) query;
    get_stake_requirement: (token_id: TokenId) -> (opt Balance) query;
-   get_staked_balance: (auditor: principal, token_id: TokenId) ->
+   get_staked_balance: (verifier: principal, token_id: TokenId) ->
     (Balance) query;
+   /// * Get verifier profile with balances for a specific token.
+   ///    * @param verifier - The principal of the verifier
+   ///    * @param token_id - The ledger canister ID (as Principal text) of the token to query
+   get_verifier_profile: (verifier: principal, token_id: TokenId) ->
+    (VerifierProfile) query;
    is_bounty_ready_for_collection: (bounty_id: BountyId, potential_claimant:
     principal) -> (bool) query;
-   mint_tokens: (auditor: principal, token_id: TokenId, amount: Balance) ->
-    (Result);
+   /// * List all API keys for the authenticated verifier.
+   list_api_keys: () -> (vec ApiCredential);
+   register_audit_type: (audit_type: text, token_id: TokenId) -> (Result);
    release_stake: (bounty_id: BountyId) -> (Result);
+   /// * Allows a verifier to stake USDC to reserve a bounty (1-hour lock).
+   ///    * Can be called directly by the verifier principal OR via API key from a bot.
    reserve_bounty: (bounty_id: BountyId, token_id: TokenId) -> (Result);
+   /// * Reserve a bounty using an API key (for bot authentication).
+   ///    * The bot passes its API key, and we resolve it to the verifier principal.
+   reserve_bounty_with_api_key: (api_key: text, bounty_id: BountyId,
+    token_id: TokenId) -> (Result);
+   /// * Revoke an API key (makes it inactive).
+   revoke_api_key: (api_key: text) -> (Result);
+   set_dashboard_canister_id: (dashboard_id: principal) -> (Result);
+   set_payment_token_config: (ledger_id: principal, symbol: text, decimals:
+    nat8) -> (Result);
+   set_registry_canister_id: (registry_id: principal) -> (Result);
    set_stake_requirement: (token_id: TokenId, amount: Balance) -> (Result);
+   set_usdc_ledger_id: (ledger_id: principal) -> (Result);
+   /// * Called by the registry when a verifier was on the losing side of consensus.
+   ///    * Slashes their stake and penalizes reputation (they provided incorrect verification).
+   slash_stake_for_incorrect_consensus: (bounty_id: BountyId) -> (Result);
    transfer_ownership: (new_owner: principal) -> (Result);
+   /// * Validate an API key and return the associated verifier principal.
+   ///    * Used by the verifier bot to authenticate reserve_bounty requests.
+   validate_api_key: (api_key: text) -> (Result_1) query;
+   /// * Withdraw tokens from the verifier's available balance (not currently staked).
+   ///    * @param token_id - The ledger canister ID (as Principal text) of the token to withdraw
+   ///    * @param amount - The amount to withdraw (in token's smallest unit)
+   withdraw_stake: (token_id: TokenId, amount: Balance) -> (Result);
+ };
+type ApiCredential = 
+ record {
+   api_key: text;
+   created_at: Timestamp;
+   is_active: bool;
+   last_used: opt Timestamp;
+   verifier_principal: principal;
  };
 service : () -> AuditHub

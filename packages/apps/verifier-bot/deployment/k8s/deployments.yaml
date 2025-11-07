@@ -1,0 +1,845 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: verifier-bot-1
+  namespace: prometheus-verifiers
+  labels:
+    app: verifier-bot
+    instance: verifier-1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: verifier-bot
+      instance: verifier-1
+  template:
+    metadata:
+      labels:
+        app: verifier-bot
+        instance: verifier-1
+    spec:
+      containers:
+        - name: verifier-bot
+          image: verifier-bot:latest
+          imagePullPolicy: Never
+          env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
+            - name: VERIFIER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: verifier-1-api-key
+            - name: IC_NETWORK
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: IC_NETWORK
+            - name: POLL_INTERVAL_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: POLL_INTERVAL_MS
+            - name: BUILD_TIMEOUT_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: BUILD_TIMEOUT_MS
+          resources:
+            requests:
+              memory: '2Gi'
+              cpu: '500m'
+            limits:
+              memory: '4Gi'
+              cpu: '2000m'
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+            - name: canister-ids
+              mountPath: /.dfx/local
+              readOnly: true
+          livenessProbe:
+            exec:
+              command:
+                - pgrep
+                - -f
+                - 'node.*index.js'
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - pgrep
+                - -f
+                - 'node.*index.js'
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+        - name: canister-ids
+          configMap:
+            name: canister-ids
+            items:
+              - key: canister_ids.json
+                path: canister_ids.json
+      restartPolicy: Always
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: verifier-bot-2
+  namespace: prometheus-verifiers
+  labels:
+    app: verifier-bot
+    instance: verifier-2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: verifier-bot
+      instance: verifier-2
+  template:
+    metadata:
+      labels:
+        app: verifier-bot
+        instance: verifier-2
+    spec:
+      containers:
+        - name: verifier-bot
+          image: verifier-bot:latest
+          imagePullPolicy: Never
+          env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
+            - name: VERIFIER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: verifier-2-api-key
+            - name: IC_NETWORK
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: IC_NETWORK
+            - name: POLL_INTERVAL_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: POLL_INTERVAL_MS
+            - name: BUILD_TIMEOUT_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: BUILD_TIMEOUT_MS
+          resources:
+            requests:
+              memory: '2Gi'
+              cpu: '500m'
+            limits:
+              memory: '4Gi'
+              cpu: '2000m'
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+            - name: canister-ids
+              mountPath: /.dfx/local
+              readOnly: true
+          livenessProbe:
+            exec:
+              command:
+                - pgrep
+                - -f
+                - 'node.*index.js'
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - pgrep
+                - -f
+                - 'node.*index.js'
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+        - name: canister-ids
+          configMap:
+            name: canister-ids
+            items:
+              - key: canister_ids.json
+                path: canister_ids.json
+      restartPolicy: Always
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: verifier-bot-3
+  namespace: prometheus-verifiers
+  labels:
+    app: verifier-bot
+    instance: verifier-3
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: verifier-bot
+      instance: verifier-3
+  template:
+    metadata:
+      labels:
+        app: verifier-bot
+        instance: verifier-3
+    spec:
+      containers:
+        - name: verifier-bot
+          image: verifier-bot:latest
+          imagePullPolicy: Never
+          env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
+            - name: VERIFIER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: verifier-3-api-key
+            - name: IC_NETWORK
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: IC_NETWORK
+            - name: POLL_INTERVAL_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: POLL_INTERVAL_MS
+            - name: BUILD_TIMEOUT_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: BUILD_TIMEOUT_MS
+          resources:
+            requests:
+              memory: '2Gi'
+              cpu: '500m'
+            limits:
+              memory: '4Gi'
+              cpu: '2000m'
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+            - name: canister-ids
+              mountPath: /.dfx/local
+              readOnly: true
+          livenessProbe:
+            exec:
+              command:
+                - pgrep
+                - -f
+                - 'node.*index.js'
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - pgrep
+                - -f
+                - 'node.*index.js'
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+        - name: canister-ids
+          configMap:
+            name: canister-ids
+            items:
+              - key: canister_ids.json
+                path: canister_ids.json
+      restartPolicy: Always
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: verifier-bot-4
+  namespace: prometheus-verifiers
+  labels:
+    app: verifier-bot
+    instance: verifier-4
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: verifier-bot
+      instance: verifier-4
+  template:
+    metadata:
+      labels:
+        app: verifier-bot
+        instance: verifier-4
+    spec:
+      containers:
+        - name: verifier-bot
+          image: verifier-bot:latest
+          imagePullPolicy: Never
+          env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
+            - name: VERIFIER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: verifier-4-api-key
+            - name: IC_NETWORK
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: IC_NETWORK
+            - name: POLL_INTERVAL_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: POLL_INTERVAL_MS
+            - name: BUILD_TIMEOUT_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: BUILD_TIMEOUT_MS
+          resources:
+            requests:
+              memory: '2Gi'
+              cpu: '500m'
+            limits:
+              memory: '4Gi'
+              cpu: '2000m'
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+            - name: canister-ids
+              mountPath: /.dfx/local
+              readOnly: true
+          livenessProbe:
+            exec:
+              command:
+                - pgrep
+                - -f
+                - 'node.*index.js'
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - pgrep
+                - -f
+                - 'node.*index.js'
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+        - name: canister-ids
+          configMap:
+            name: canister-ids
+            items:
+              - key: canister_ids.json
+                path: canister_ids.json
+      restartPolicy: Always
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: verifier-bot-5
+  namespace: prometheus-verifiers
+  labels:
+    app: verifier-bot
+    instance: verifier-5
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: verifier-bot
+      instance: verifier-5
+  template:
+    metadata:
+      labels:
+        app: verifier-bot
+        instance: verifier-5
+    spec:
+      containers:
+        - name: verifier-bot
+          image: verifier-bot:latest
+          imagePullPolicy: Never
+          env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
+            - name: VERIFIER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: verifier-5-api-key
+            - name: IC_NETWORK
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: IC_NETWORK
+            - name: POLL_INTERVAL_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: POLL_INTERVAL_MS
+            - name: BUILD_TIMEOUT_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: BUILD_TIMEOUT_MS
+          resources:
+            requests:
+              memory: '2Gi'
+              cpu: '500m'
+            limits:
+              memory: '4Gi'
+              cpu: '2000m'
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+            - name: canister-ids
+              mountPath: /.dfx/local
+              readOnly: true
+          livenessProbe:
+            exec:
+              command:
+                - pgrep
+                - -f
+                - 'node.*index.js'
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - pgrep
+                - -f
+                - 'node.*index.js'
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+        - name: canister-ids
+          configMap:
+            name: canister-ids
+            items:
+              - key: canister_ids.json
+                path: canister_ids.json
+      restartPolicy: Always
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: verifier-bot-6
+  namespace: prometheus-verifiers
+  labels:
+    app: verifier-bot
+    instance: verifier-6
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: verifier-bot
+      instance: verifier-6
+  template:
+    metadata:
+      labels:
+        app: verifier-bot
+        instance: verifier-6
+    spec:
+      containers:
+        - name: verifier-bot
+          image: verifier-bot:latest
+          imagePullPolicy: Never
+          env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
+            - name: VERIFIER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: verifier-6-api-key
+            - name: IC_NETWORK
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: IC_NETWORK
+            - name: POLL_INTERVAL_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: POLL_INTERVAL_MS
+            - name: BUILD_TIMEOUT_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: BUILD_TIMEOUT_MS
+          resources:
+            requests:
+              memory: '2Gi'
+              cpu: '500m'
+            limits:
+              memory: '4Gi'
+              cpu: '2000m'
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+            - name: canister-ids
+              mountPath: /.dfx/local
+              readOnly: true
+          livenessProbe:
+            exec:
+              command:
+                - pgrep
+                - -f
+                - 'node.*index.js'
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - pgrep
+                - -f
+                - 'node.*index.js'
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+        - name: canister-ids
+          configMap:
+            name: canister-ids
+            items:
+              - key: canister_ids.json
+                path: canister_ids.json
+      restartPolicy: Always
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: verifier-bot-7
+  namespace: prometheus-verifiers
+  labels:
+    app: verifier-bot
+    instance: verifier-7
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: verifier-bot
+      instance: verifier-7
+  template:
+    metadata:
+      labels:
+        app: verifier-bot
+        instance: verifier-7
+    spec:
+      containers:
+        - name: verifier-bot
+          image: verifier-bot:latest
+          imagePullPolicy: Never
+          env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
+            - name: VERIFIER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: verifier-7-api-key
+            - name: IC_NETWORK
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: IC_NETWORK
+            - name: POLL_INTERVAL_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: POLL_INTERVAL_MS
+            - name: BUILD_TIMEOUT_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: BUILD_TIMEOUT_MS
+          resources:
+            requests:
+              memory: '2Gi'
+              cpu: '500m'
+            limits:
+              memory: '4Gi'
+              cpu: '2000m'
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+            - name: canister-ids
+              mountPath: /.dfx/local
+              readOnly: true
+          livenessProbe:
+            exec:
+              command:
+                - pgrep
+                - -f
+                - 'node.*index.js'
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - pgrep
+                - -f
+                - 'node.*index.js'
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+        - name: canister-ids
+          configMap:
+            name: canister-ids
+            items:
+              - key: canister_ids.json
+                path: canister_ids.json
+      restartPolicy: Always
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: verifier-bot-8
+  namespace: prometheus-verifiers
+  labels:
+    app: verifier-bot
+    instance: verifier-8
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: verifier-bot
+      instance: verifier-8
+  template:
+    metadata:
+      labels:
+        app: verifier-bot
+        instance: verifier-8
+    spec:
+      containers:
+        - name: verifier-bot
+          image: verifier-bot:latest
+          imagePullPolicy: Never
+          env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
+            - name: VERIFIER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: verifier-8-api-key
+            - name: IC_NETWORK
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: IC_NETWORK
+            - name: POLL_INTERVAL_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: POLL_INTERVAL_MS
+            - name: BUILD_TIMEOUT_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: BUILD_TIMEOUT_MS
+          resources:
+            requests:
+              memory: '2Gi'
+              cpu: '500m'
+            limits:
+              memory: '4Gi'
+              cpu: '2000m'
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+            - name: canister-ids
+              mountPath: /.dfx/local
+              readOnly: true
+          livenessProbe:
+            exec:
+              command:
+                - pgrep
+                - -f
+                - 'node.*index.js'
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - pgrep
+                - -f
+                - 'node.*index.js'
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+        - name: canister-ids
+          configMap:
+            name: canister-ids
+            items:
+              - key: canister_ids.json
+                path: canister_ids.json
+      restartPolicy: Always
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: verifier-bot-9
+  namespace: prometheus-verifiers
+  labels:
+    app: verifier-bot
+    instance: verifier-9
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: verifier-bot
+      instance: verifier-9
+  template:
+    metadata:
+      labels:
+        app: verifier-bot
+        instance: verifier-9
+    spec:
+      containers:
+        - name: verifier-bot
+          image: verifier-bot:latest
+          imagePullPolicy: Never
+          env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
+            - name: VERIFIER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: verifier-9-api-key
+            - name: IC_NETWORK
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: IC_NETWORK
+            - name: POLL_INTERVAL_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: POLL_INTERVAL_MS
+            - name: BUILD_TIMEOUT_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: verifier-config
+                  key: BUILD_TIMEOUT_MS
+          resources:
+            requests:
+              memory: '2Gi'
+              cpu: '500m'
+            limits:
+              memory: '4Gi'
+              cpu: '2000m'
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+            - name: canister-ids
+              mountPath: /.dfx/local
+              readOnly: true
+          livenessProbe:
+            exec:
+              command:
+                - pgrep
+                - -f
+                - 'node.*index.js'
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - pgrep
+                - -f
+                - 'node.*index.js'
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+        - name: canister-ids
+          configMap:
+            name: canister-ids
+            items:
+              - key: canister_ids.json
+                path: canister_ids.json
+      restartPolicy: Always

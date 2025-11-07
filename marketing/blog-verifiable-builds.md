@@ -210,7 +210,7 @@ async function pollAndVerify(): Promise<void> {
     // Reserve the bounty (stake USDC as collateral)
     await reserveBounty(identity, {
       bounty_id: buildBounty.id,
-      stake_amount: 10_000_000n, // 10 USDC collateral
+      stake_amount: 300_000n, // 0.30 USDC collateral
     });
 
     // Perform AUTOMATED reproducible build in Docker
@@ -268,7 +268,7 @@ No human intervention required!
 
 #### 3. **Automated Docker-Based Reproducible Builds**
 
-Every build runs in a deterministic Docker environment with **zero human intervention**, using the reproducible build setup from [research-ag/motoko-build-template](https://github.com/research-ag/motoko-build-template):
+Every build runs in a deterministic Docker environment with **zero human intervention**, using the reproducible build templates from Prometheus Protocol:
 
 ```typescript
 // From packages/apps/verifier-bot/src/builder.ts
@@ -288,14 +288,14 @@ export async function verifyBuild(
   const mocVersion = getMocVersionFromMopsToml(canisterPath);
 
   // 3. Bootstrap reproducible build environment
-  // Uses research-ag's docker-compose.yml + Dockerfile setup
+  // Uses motoko-build-base:moc-X.X.X naming (local images)
   bootstrapBuildFiles({
     projectPath: canisterPath,
     mocVersion: mocVersion,
   });
 
   // 4. Build in isolated Docker container (no cache = clean build)
-  // This uses the docker-compose setup from motoko-build-template
+  // This uses the docker-compose setup with depends_on for proper build order
   execSync(`docker-compose build --no-cache`, { cwd: canisterPath });
   execSync(`docker-compose run wasm`, { cwd: canisterPath });
 
@@ -318,13 +318,14 @@ export async function verifyBuild(
 }
 ```
 
-**Key components of the reproducible build setup** (from [research-ag](https://github.com/research-ag)):
+**Key components of the reproducible build setup**:
 
-- **Base Docker image**: Pre-built image with pinned versions of `moc` (Motoko compiler), `ic-wasm`, and `mops-cli`
+- **Base Docker image**: Pre-built locally with pinned versions of `moc` (Motoko compiler), `ic-wasm`, and `mops-cli`
 - **Isolated environment**: Each build runs in a fresh container with no cache
 - **Deterministic output**: Same source code + same toolchain = byte-for-byte identical WASM
-- **Fast verification**: Base images are ~76MB and verification completes in <10 seconds
+- **Fast verification**: Base images are built locally and verification completes in <10 seconds
 - **Cross-platform consistency**: Linux and Mac M1 produce identical hashes (since moc 0.13.4)
+- **Build dependencies**: `depends_on` in docker-compose.yml ensures base image builds before WASM
 
 #### 4. **Filing Attestations with ICRC-126**
 
@@ -546,11 +547,12 @@ Instead of forum posts with screenshots, the system records:
 
 No single entity acts as the authority:
 
-- **Verifiers must stake USDC** to reserve bounties (e.g., 10 USDC collateral per bounty)
+- **Verifiers must stake USDC** to reserve bounties (0.30 USDC collateral per bounty)
 - **1-hour lock period**: Stakes are locked while verification is in progress (automated builds complete in minutes)
 - **Slashing for abandonment**: If verifiers don't submit results within 1 hour, their USDC stake is burned
 - **Anyone can run a bot**: Permissionless participation - just stake USDC to get started
 - **Market-driven rewards**: Bounty amounts set by developers based on urgency/complexity
+- **Game theory optimal**: Stake requirement calculated as `Stake > Bounty / (Consensus_Required - 1)` to make attacks unprofitable
 
 ### 4. **Strong Majority Consensus**
 
@@ -654,7 +656,7 @@ Want to earn tokens by verifying builds? Here's how:
 
 1. **Visit the Verifier Dashboard** at [prometheusprotocol.org/verifiers](https://prometheusprotocol.org/verifiers)
 2. **Connect your wallet** - Log in with Internet Identity
-3. **Deposit USDC stake** - Start with 50-100 USDC to handle multiple concurrent verifications
+3. **Deposit USDC stake** - Start with 10-20 USDC to handle multiple concurrent verifications
    - View your available balance and active stakes in real-time
    - Withdraw unused stake anytime (instant, no lock-up)
 4. **Generate API credentials** - Dashboard provides a secure API key for your bot
@@ -701,7 +703,7 @@ pnpm start
 
 - VPS or cloud instance (2 CPU, 4GB RAM minimum) - $5-10/month
 - Docker installed for isolated builds
-- Initial stake pool: 50-100 USDC recommended (handles 5-10 concurrent verifications)
+- Initial stake pool: 10-20 USDC recommended (handles 30-60 concurrent verifications at 0.30 USDC each)
 - Verifier dashboard account at prometheusprotocol.org/verifiers
 
 ### Expected Earnings
@@ -712,15 +714,15 @@ pnpm start
 
 _Earnings vary based on bounty availability and competition. Actual compute costs are <$0.05 per verification. Profitability comes from volume automation._
 
-**Beginner-Friendly**: Start with 50 USDC stake and run one bot. Monitor the dashboard to see how it works. Scale up as you gain confidence.
+**Beginner-Friendly**: Start with 10 USDC stake and run one bot. Monitor the dashboard to see how it works. Scale up as you gain confidence.
 
-**Professional Setup**: Deposit 500+ USDC, run bots across multiple regions, monitor everything from one dashboard.
+**Professional Setup**: Deposit 100+ USDC, run bots across multiple regions, monitor everything from one dashboard.
 
 ## Technical Deep Dive
 
 ### Reproducible Build Environment
 
-Every build uses the same deterministic Docker configuration based on [research-ag/motoko-build-template](https://github.com/research-ag/motoko-build-template):
+Every build uses the same deterministic Docker configuration based on templates in the Prometheus Protocol reproducible-build library:
 
 ```dockerfile
 # Dockerfile.base - Pre-built base image with pinned toolchain versions
@@ -745,9 +747,9 @@ RUN curl -L https://github.com/research-ag/ic-wasm/releases/download/${IC_WASM_V
     && tar xzf ic-wasm.tgz \
     && install ic-wasm /install/bin
 
-# Download and install mops-cli (Rust version from jneums/mops-cli)
+# Download and install mops-cli (Rust version from prometheus-protocol/mops-cli)
 ARG MOPS_CLI_VERSION=0.2.1
-RUN curl -L https://github.com/jneums/mops-cli/releases/download/v${MOPS_CLI_VERSION}/mops-cli-linux64 -o mops-cli \
+RUN curl -L https://github.com/prometheus-protocol/mops-cli/releases/download/v${MOPS_CLI_VERSION}/mops-cli-linux64 -o mops-cli \
     && install mops-cli /install/bin
 
 # Final runtime image
@@ -771,13 +773,13 @@ COPY build.sh /project/
 CMD ["bash", "build.sh"]
 ```
 
-**Key features ensuring reproducibility** (from research-ag's template):
+**Key features ensuring reproducibility**:
 
 - **Pinned tool versions**: Motoko compiler version specified in `docker-compose.yml`
 - **Locked dependencies**: `mops install --locked` uses exact versions from `mops.toml`
 - **Isolated environment**: No network access during build, no host system dependencies
 - **Clean builds**: `--no-cache` flag ensures fresh container every time
-- **Base image registry**: Pre-built images at `ghcr.io/research-ag/motoko-build` (~76MB)
+- **Local base images**: Built locally as `motoko-build-base:moc-X.X.X` for reproducibility
 - **Fast verification**: Complete verification in <10 seconds from cached base image
 
 ### Attestation Data Structure
@@ -844,11 +846,11 @@ public shared(msg) func reserve_bounty(
   bounty_id: Nat,
   stake_amount: Nat
 ) : async Result {
-  let stake_required = 10_000_000; // 10 USDC (in e8s)
+  let stake_required = 300_000; // 0.30 USDC (6 decimals)
 
   // Verify stake amount is sufficient
   if (stake_amount < stake_required) {
-    return #err("Insufficient stake. Minimum: 10 USDC");
+    return #err("Insufficient stake. Minimum: 0.30 USDC");
   };
 
   // Transfer USDC from verifier to Audit Hub (held as collateral)
@@ -955,7 +957,7 @@ The system's integrity fundamentally depends on the deterministic Docker build e
 - All toolchain binaries (moc, ic-wasm, mops-cli) are fetched by **version number AND hash verification**
 - Base images use `alpine:latest@sha256:...` pinning to specific digest
 - The [research-ag/motoko-build-template](https://github.com/research-ag/motoko-build-template) repo uses **GitHub's dependabot and security scanning**
-- Pre-built base images at `ghcr.io/research-ag/motoko-build` are **content-addressed** and immutable
+- Pre-built base images at `ghcr.io/prometheus-protocol/motoko-build-template` are **content-addressed** and immutable
 
 **Mitigation Strategy:**
 If an upstream dependency is compromised (e.g., a malicious Alpine image or GitHub release binary), the attack would need to:
@@ -1076,6 +1078,7 @@ Currently, yes - majority consensus is absolute within the protocol. This is a *
 - The $0.25 is a suggested default for typical Motoko canisters
 - Complex builds (Rust, multi-canister projects) typically use $1-5 bounties
 - Verifiers can **filter by minimum bounty** in their bot configuration
+- Stake requirement scales with bounty: Currently 0.30 USDC for 0.25 USDC bounties (based on formula: Stake > Bounty / (Consensus - 1))
 
 **Future Enhancement:**
 We're exploring **automated dynamic pricing** based on:

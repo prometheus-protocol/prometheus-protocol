@@ -1,6 +1,6 @@
-import type { Principal } from '@icp-sdk/core/principal';
-import type { ActorMethod } from '@icp-sdk/core/agent';
-import type { IDL } from '@icp-sdk/core/candid';
+import type { Principal } from '@dfinity/principal';
+import type { ActorMethod } from '@dfinity/agent';
+import type { IDL } from '@dfinity/candid';
 
 export interface Action {
   'aSync' : [] | [bigint],
@@ -8,12 +8,29 @@ export interface Action {
   'params' : Uint8Array | number[],
   'retries' : bigint,
 }
+export type ActionDetail = [ActionId, Action];
+export type ActionFilter = { 'All' : null } |
+  { 'ByActionId' : bigint } |
+  { 'ByType' : string } |
+  { 'ByTimeRange' : [Time, Time] } |
+  { 'ByRetryCount' : bigint };
 export interface ActionId { 'id' : bigint, 'time' : Time }
 export interface ArchivedTransactionResponse {
   'args' : Array<TransactionRange>,
   'callback' : GetTransactionsFn,
 }
 export interface BlockType { 'url' : string, 'block_type' : string }
+export interface CancellationResult {
+  'cancelled' : Array<ActionId>,
+  'errors' : Array<[bigint, string]>,
+  'notFound' : Array<bigint>,
+}
+export interface CanisterCycleInfo {
+  'needs_top_up' : boolean,
+  'canister_id' : Principal,
+  'cycles' : bigint,
+  'namespace' : string,
+}
 export type CanisterDeploymentType = { 'provisioned' : null } |
   { 'global' : null };
 export type CleanSnapshotError = { 'TooManyRequests' : null } |
@@ -44,6 +61,14 @@ export interface CreateSnapshotRequest {
 }
 export type CreateSnapshotResult = { 'Ok' : bigint } |
   { 'Err' : CreateSnapshotError };
+export interface CycleJobStatus {
+  'job_scheduled' : boolean,
+  'job_action_id' : [] | [bigint],
+  'enabled' : boolean,
+  'orchestrator_balance' : bigint,
+  'next_check' : [] | [bigint],
+  'last_check' : [] | [bigint],
+}
 export interface CycleTopUpConfig {
   'threshold' : bigint,
   'enabled' : boolean,
@@ -95,6 +120,11 @@ export interface GetTransactionsResult {
   'archived_blocks' : Array<ArchivedTransactionResponse>,
 }
 export interface ICRC120Canister {
+  'add_controller_to_canister' : ActorMethod<[Principal, Principal], Result_1>,
+  'cancel_actions_by_filter' : ActorMethod<[ActionFilter], CancellationResult>,
+  'cancel_actions_by_ids' : ActorMethod<[Array<bigint>], CancellationResult>,
+  'check_all_canister_cycles' : ActorMethod<[], Result_7>,
+  'clear_reconstitution_traces' : ActorMethod<[], undefined>,
   'debug_canister_info' : ActorMethod<
     [string],
     {
@@ -104,11 +134,25 @@ export interface ICRC120Canister {
       'caller_principal' : Principal,
     }
   >,
-  'deploy_or_upgrade' : ActorMethod<[DeployOrUpgradeRequest], Result_2>,
+  'deploy_or_upgrade' : ActorMethod<[DeployOrUpgradeRequest], Result_3>,
+  'emergency_clear_all_timers' : ActorMethod<[], bigint>,
+  'force_release_lock' : ActorMethod<[], [] | [Time__2]>,
+  'force_system_timer_cancel' : ActorMethod<[], boolean>,
+  'get_actions_by_filter' : ActorMethod<[ActionFilter], Array<ActionDetail>>,
+  'get_all_canister_cycles' : ActorMethod<[], Result_7>,
   'get_auth_server_id' : ActorMethod<[], [] | [Principal]>,
+  'get_canister_controllers' : ActorMethod<[Principal], Result_6>,
   'get_canister_id' : ActorMethod<[string, string], [] | [Principal]>,
   'get_canisters' : ActorMethod<[string], Array<Principal>>,
+  'get_cycle_job_status' : ActorMethod<[], Result_5>,
   'get_cycle_top_up_config' : ActorMethod<[], CycleTopUpConfig>,
+  'get_latest_reconstitution_trace' : ActorMethod<
+    [],
+    [] | [ReconstitutionTrace]
+  >,
+  'get_orchestrator_cycles' : ActorMethod<[], Result_4>,
+  'get_reconstitution_traces' : ActorMethod<[], Array<ReconstitutionTrace>>,
+  'get_timer_diagnostics' : ActorMethod<[], TimerDiagnostics>,
   'get_tip' : ActorMethod<[], Tip>,
   'hello' : ActorMethod<[], string>,
   'icrc120_clean_snapshot' : ActorMethod<
@@ -159,20 +203,26 @@ export interface ICRC120Canister {
     [InternalDeployRequest],
     undefined
   >,
-  'provision_instance' : ActorMethod<[string, string], Result_2>,
+  'provision_instance' : ActorMethod<[string, string], Result_3>,
   'register_oauth_resource' : ActorMethod<
     [Principal, RegisterResourceServerArgs],
+    Result_2
+  >,
+  'remove_controller_from_canister' : ActorMethod<
+    [Principal, Principal],
     Result_1
   >,
-  'set_auth_server_id' : ActorMethod<[Principal], Result>,
-  'set_canister_owner' : ActorMethod<[Principal, Principal], Result>,
-  'set_cycle_top_up_config' : ActorMethod<[CycleTopUpConfig], Result>,
+  'set_auth_server_id' : ActorMethod<[Principal], Result_1>,
+  'set_canister_owner' : ActorMethod<[Principal, Principal], Result_1>,
+  'set_cycle_top_up_config' : ActorMethod<[CycleTopUpConfig], Result_1>,
   'set_deployment_type' : ActorMethod<
     [string, string, CanisterDeploymentType],
-    Result
+    Result_1
   >,
-  'set_mcp_registry_id' : ActorMethod<[Principal], Result>,
-  'set_usage_tracker_id' : ActorMethod<[Principal], Result>,
+  'set_mcp_registry_id' : ActorMethod<[Principal], Result_1>,
+  'set_usage_tracker_id' : ActorMethod<[Principal], Result_1>,
+  'trigger_manual_cycle_top_up' : ActorMethod<[], Result>,
+  'validate_timer_state' : ActorMethod<[], Array<string>>,
 }
 export type ICRC16 = { 'Int' : bigint } |
   { 'Map' : Array<[string, ICRC16]> } |
@@ -267,6 +317,15 @@ export type OrchestrationEventType = { 'upgrade_initiated' : null } |
   { 'canister_started' : null } |
   { 'snapshot_created' : null } |
   { 'canister_stopped' : null };
+export interface ReconstitutionTrace {
+  'errors' : Array<string>,
+  'actionsRestored' : bigint,
+  'timestamp' : Time,
+  'migratedTo' : string,
+  'migratedFrom' : string,
+  'timersRestored' : bigint,
+  'validationPassed' : boolean,
+}
 export interface RegisterResourceServerArgs {
   'initial_service_principal' : Principal,
   'scopes' : Array<[string, string]>,
@@ -289,11 +348,21 @@ export interface ResourceServer {
   'frontend_host' : [] | [string],
   'service_principals' : Array<Principal>,
 }
-export type Result = { 'ok' : null } |
+export type Result = { 'ok' : string } |
   { 'err' : string };
-export type Result_1 = { 'ok' : ResourceServer } |
+export type Result_1 = { 'ok' : null } |
   { 'err' : string };
-export type Result_2 = { 'ok' : Principal } |
+export type Result_2 = { 'ok' : ResourceServer } |
+  { 'err' : string };
+export type Result_3 = { 'ok' : Principal } |
+  { 'err' : string };
+export type Result_4 = { 'ok' : bigint } |
+  { 'err' : string };
+export type Result_5 = { 'ok' : CycleJobStatus } |
+  { 'err' : string };
+export type Result_6 = { 'ok' : Array<Principal> } |
+  { 'err' : string };
+export type Result_7 = { 'ok' : Array<CanisterCycleInfo> } |
   { 'err' : string };
 export type RevertSnapshotError = { 'TooManyRequests' : null } |
   { 'NotFound' : null } |
@@ -325,6 +394,18 @@ export interface StopCanisterRequest {
 export type StopCanisterResult = { 'Ok' : bigint } |
   { 'Err' : StopCanisterError };
 export type Time = bigint;
+export type Time__2 = bigint;
+export interface TimerDiagnostics {
+  'pendingActions' : bigint,
+  'totalActions' : bigint,
+  'overdueActions' : bigint,
+  'lockStatus' : [] | [Time],
+  'currentTime' : Time,
+  'lastExecutionDelta' : bigint,
+  'nextExecutionDelta' : [] | [bigint],
+  'systemTimerStatus' : [] | [TimerId],
+}
+export type TimerId = bigint;
 export interface Tip {
   'last_block_index' : Uint8Array | number[],
   'hash_tree' : Uint8Array | number[],

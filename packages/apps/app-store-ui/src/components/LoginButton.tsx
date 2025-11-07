@@ -28,7 +28,6 @@ import { TransferDialog } from './TransferDialog';
 import { useGetTokenBalance } from '@/hooks/usePayment';
 import { Tokens } from '@prometheus-protocol/ic-js';
 import { useAuditorProfile } from '@/hooks/useAuditBounties';
-import { ReputationBar } from './ReputationBar';
 
 export const getReputationDisplayInfo = (auditType: string) => {
   // 'app_info_v1',
@@ -81,22 +80,18 @@ export function LoginButton() {
   const aggregatedReputation = useMemo(() => {
     if (!profile) return [];
 
-    // Get a unique set of all reputation types the user has (available or staked)
-    const allReputationTypes = new Set([
-      ...profile.available_balances.keys(),
-      ...profile.staked_balances.keys(),
-    ]);
+    // Simplified: We only track USDC now
+    const available = profile.available_balance_usdc;
+    const staked = profile.staked_balance_usdc;
+    const total = available + staked;
 
-    return Array.from(allReputationTypes).map((auditType) => {
-      const available = profile.available_balances.get(auditType) ?? 0n;
-      const staked = profile.staked_balances.get(auditType) ?? 0n;
-      const total = available + staked;
-      return {
-        auditType,
+    return [
+      {
+        auditType: 'USDC',
         available: Number(available),
         total: Number(total),
-      };
-    });
+      },
+    ];
   }, [profile]);
 
   // --- 3. Create a handler function for clarity ---
@@ -190,39 +185,6 @@ export function LoginButton() {
                 <span>Open Wallet</span>
               </Link>
             </DropdownMenuItem>
-            {/* --- Reputation Section --- */}
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel>Reputation</DropdownMenuLabel>
-            {isProfileLoading ? (
-              <DropdownMenuItem disabled>
-                <div className="h-10 w-full bg-muted/50 rounded-sm animate-pulse" />
-              </DropdownMenuItem>
-            ) : aggregatedReputation.length > 0 ? (
-              aggregatedReputation.map(({ auditType, available, total }) => {
-                const displayInfo = getReputationDisplayInfo(auditType);
-                return (
-                  <DropdownMenuItem
-                    key={auditType}
-                    className="opacity-100 focus:bg-transparent cursor-default flex flex-col items-start gap-1 my-1">
-                    {/* Row 1: Icon and Name */}
-                    <div className="flex items-center gap-1">
-                      {displayInfo.icon}
-                      <span className="text-xs text-foreground">
-                        {displayInfo.name}
-                      </span>
-                    </div>
-                    {/* Row 2: Reputation Bar */}
-                    <ReputationBar available={available} total={total} />
-                  </DropdownMenuItem>
-                );
-              })
-            ) : (
-              <DropdownMenuItem disabled className="opacity-100">
-                <span className="text-xs text-muted-foreground">
-                  No reputation earned yet.
-                </span>
-              </DropdownMenuItem>
-            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={clear}

@@ -10,8 +10,8 @@ const __dirname = path.dirname(__filename);
 
 // --- 1. Read package.json to get dependencies ---
 const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf-8'));
-// We want to keep all production dependencies external
-const externalDependencies = Object.keys(packageJson.dependencies || {});
+// Bundle everything - no external dependencies
+const externalDependencies = [];
 
 // --- 2. Load Production Canister IDs ---
 // This part runs in Node.js AT BUILD TIME.
@@ -54,6 +54,7 @@ esbuild
     format: 'esm', // Use ESM format for modern Node.js
     external: externalDependencies,
     sourcemap: true, // Include source maps for debugging
+    mainFields: ['module', 'main'], // Prefer ES modules
     define: {
       // This is the magic. We replace a global placeholder with the JSON string of our IDs.
       // The double JSON.stringify is intentional and correct.

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: verifier-config
+  namespace: prometheus-verifiers
+data:
+  IC_NETWORK: 'ic'
+  IC_HOST: 'https://ic0.app'
+  POLL_INTERVAL_MS: '60000'
+  BUILD_TIMEOUT_MS: '600000'
+  MCP_REGISTRY_CANISTER_ID: 'grhdx-gqaaa-aaaai-q32va-cai'
+  AUDIT_HUB_CANISTER_ID: 'eq6xo-cyaaa-aaaai-q32yq-cai'
+  USDC_LEDGER_CANISTER_ID: '53nhb-haaaa-aaaar-qbn5q-cai'

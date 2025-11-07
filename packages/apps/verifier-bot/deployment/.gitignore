@@ -1,0 +1,10 @@
+# Never commit secrets!
+.env
+secrets-backup.yaml
+full-backup.yaml
+
+# Kubernetes temporary files
+k8s/deployments-local.yaml
+
+# Logs
+*.log

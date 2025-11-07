@@ -1,6 +1,6 @@
-import type { Principal } from '@icp-sdk/core/principal';
-import type { ActorMethod } from '@icp-sdk/core/agent';
-import type { IDL } from '@icp-sdk/core/candid';
+import type { Principal } from '@dfinity/principal';
+import type { ActorMethod } from '@dfinity/agent';
+import type { IDL } from '@dfinity/candid';
 
 export interface Account {
   'owner' : Principal,
@@ -227,6 +227,20 @@ export interface DivergenceReportRequest {
 }
 export type DivergenceResult = { 'Ok' : bigint } |
   { 'Error' : { 'NotFound' : null } | { 'Generic' : string } };
+export interface EnvConfig {
+  'key' : string,
+  'value_type' : string,
+  'setter' : string,
+  'required' : boolean,
+  'current_value' : [] | [string],
+}
+export interface EnvDependency {
+  'key' : string,
+  'setter' : string,
+  'required' : boolean,
+  'canister_name' : string,
+  'current_value' : [] | [Principal],
+}
 export interface GetArchivesArgs { 'from' : [] | [Principal] }
 export type GetArchivesResult = Array<GetArchivesResultItem>;
 export interface GetArchivesResultItem {
@@ -304,7 +318,18 @@ export interface ICRC118WasmRegistryCanister {
     [GetCanisterTypeVersionRequest],
     Result_2
   >,
+  'get_divergence_progress' : ActorMethod<[string], Array<bigint>>,
+  'get_env_requirements' : ActorMethod<
+    [],
+    {
+        'v1' : {
+          'dependencies' : Array<EnvDependency>,
+          'configuration' : Array<EnvConfig>,
+        }
+      }
+  >,
   'get_tip' : ActorMethod<[], Tip>,
+  'get_verification_progress' : ActorMethod<[string], Array<bigint>>,
   'get_verification_request' : ActorMethod<
     [string],
     [] | [VerificationRequest]
@@ -348,8 +373,16 @@ export interface ICRC118WasmRegistryCanister {
     [AttestationRequest],
     AttestationResult
   >,
+  'icrc126_file_attestation_with_api_key' : ActorMethod<
+    [string, AttestationRequest],
+    AttestationResult
+  >,
   'icrc126_file_divergence' : ActorMethod<
     [DivergenceReportRequest],
+    DivergenceResult
+  >,
+  'icrc126_file_divergence_with_api_key' : ActorMethod<
+    [string, DivergenceReportRequest],
     DivergenceResult
   >,
   'icrc126_verification_request' : ActorMethod<[VerificationRequest], bigint>,
@@ -383,6 +416,8 @@ export interface ICRC118WasmRegistryCanister {
   'list_pending_verifications' : ActorMethod<[], Array<VerificationRecord>>,
   'retrigger_deployment' : ActorMethod<[string], Result>,
   'set_auditor_credentials_canister_id' : ActorMethod<[Principal], Result>,
+  'set_bounty_reward_amount' : ActorMethod<[bigint], Result>,
+  'set_bounty_reward_token_canister_id' : ActorMethod<[Principal], Result>,
   'set_orchestrator_canister_id' : ActorMethod<[Principal], Result>,
   'set_search_index_canister_id' : ActorMethod<[Principal], Result>,
   'set_usage_tracker_canister_id' : ActorMethod<[Principal], Result>,

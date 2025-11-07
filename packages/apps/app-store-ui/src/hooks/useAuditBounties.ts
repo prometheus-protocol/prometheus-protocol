@@ -14,10 +14,11 @@ import {
   claimBounty,
   createBounty,
   Token,
+  Tokens,
   getCanisterId,
   getAllowance,
   approveAllowance,
-  getAuditorProfile,
+  getVerifierProfile,
   listPendingVerifications,
   submitDivergence,
 } from '@prometheus-protocol/ic-js';
@@ -44,10 +45,14 @@ export const useGetAllAuditBounties = () => {
  * React Query infinite hook to fetch paginated bounties.
  * This enables efficient infinite scrolling without fetching all bounties at once.
  */
-export const useGetAuditBountiesInfinite = (pageSize: number = 20) => {
+export const useGetAuditBountiesInfinite = (
+  pageSize: number = 20,
+  options?: { refetchInterval?: number },
+) => {
   return useInfiniteQuery({
     queryKey: ['auditBounties', 'infinite', pageSize],
     queryFn: async ({ pageParam }: { pageParam?: number }) => {
+      console.log('Fetching bounties page...');
       return listBounties({
         take: BigInt(pageSize),
         prev: pageParam ? BigInt(pageParam) : undefined,
@@ -63,6 +68,7 @@ export const useGetAuditBountiesInfinite = (pageSize: number = 20) => {
       return undefined; // No more pages
     },
     initialPageParam: undefined as number | undefined,
+    refetchInterval: options?.refetchInterval,
   });
 };
 
@@ -83,9 +89,7 @@ export const useGetAuditBounty = (bountyId: number | undefined) => {
       return getAuditBounty(identity, BigInt(bountyId));
     },
     // The query should only execute when we have a valid bountyId.
-    enabled: bountyId !== undefined && !!identity,
-    // Provide placeholder to prevent undefined issues
-    placeholderData: null,
+    enabled: !!bountyId && !!identity,
   });
 };
 
@@ -344,7 +348,9 @@ export const useAuditorProfile = () => {
       if (!identity) {
         throw new Error('User is not authenticated.');
       }
-      return getAuditorProfile(identity);
+      // Use USDC token ID for profile queries
+      const tokenId = Tokens.USDC.canisterId.toText();
+      return getVerifierProfile(identity, tokenId);
     },
     enabled: !!principal,
   });

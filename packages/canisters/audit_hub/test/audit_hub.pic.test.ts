@@ -7,455 +7,563 @@ import { describe, beforeAll, it, expect, inject, beforeEach } from 'vitest';
 import { IDL } from '@icp-sdk/core/candid';
 import { Identity } from '@icp-sdk/core/agent';
 
-// Update these imports to match your new canister's declarations
+// Import audit_hub declarations
 import { idlFactory } from '@declarations/audit_hub';
 import { type _SERVICE as AuditHubService } from '@declarations/audit_hub/audit_hub.did.js';
 
-// Update the Wasm path
+// Import ICRC-2 ledger IDL
+import { idlFactory as ledgerIdlFactory } from '@declarations/icrc1_ledger';
+import {
+  init as ledgerInit,
+  type _SERVICE as LedgerService,
+} from '@declarations/icrc1_ledger/icrc1_ledger.did.js';
+
 const AUDIT_HUB_WASM_PATH = path.resolve(
   __dirname,
   '../../../../',
   '.dfx/local/canisters/audit_hub/audit_hub.wasm',
 );
 
-describe('Audit Hub Canister', () => {
+const USDC_LEDGER_WASM_PATH = path.resolve(
+  __dirname,
+  '../../../../',
+  '.dfx/local/canisters/icrc1_ledger/icrc1_ledger.wasm.gz',
+);
+
+describe('Audit Hub Canister - USDC Staking System', () => {
   let pic: PocketIc;
   let auditHubActor: Actor<AuditHubService>;
+  let usdcLedgerActor: Actor<LedgerService>;
+  let auditHubCanisterId: Principal;
+  let usdcLedgerCanisterId: Principal;
 
-  // Define our actors for the tests
-  const daoIdentity: Identity = createIdentity('dao-principal');
-  const auditor1Identity: Identity = createIdentity('auditor-1-principal');
-  const auditor2Identity: Identity = createIdentity('auditor-2-principal');
+  // Test identities
+  const ownerIdentity: Identity = createIdentity('owner-principal');
+  const verifier1Identity: Identity = createIdentity('verifier-1-principal');
+  const verifier2Identity: Identity = createIdentity('verifier-2-principal');
   const randomUserIdentity: Identity = createIdentity('random-user-principal');
 
-  // Use beforeEach to ensure a clean state for each test
+  const USDC_DECIMALS = 6;
+  const USDC_FEE = 10_000n; // 0.01 USDC
+  const toUSDC = (amount: number) => BigInt(amount * 10 ** USDC_DECIMALS);
+
   beforeEach(async () => {
     const url = inject('PIC_URL');
     pic = await PocketIc.create(url);
 
-    const fixture = await pic.setupCanister<AuditHubService>({
+    // Deploy USDC ledger first
+    const ledgerFixture = await pic.setupCanister<LedgerService>({
+      idlFactory: ledgerIdlFactory,
+      wasm: USDC_LEDGER_WASM_PATH,
+      sender: ownerIdentity.getPrincipal(),
+      arg: IDL.encode(ledgerInit({ IDL }), [
+        {
+          Init: {
+            minting_account: {
+              owner: ownerIdentity.getPrincipal(),
+              subaccount: [],
+            },
+            initial_balances: [],
+            transfer_fee: USDC_FEE,
+            token_name: 'USDC',
+            token_symbol: 'USDC',
+            metadata: [],
+            archive_options: {
+              num_blocks_to_archive: 1000n,
+              trigger_threshold: 2000n,
+              controller_id: ownerIdentity.getPrincipal(),
+              max_message_size_bytes: [],
+              cycles_for_archive_creation: [],
+              node_max_memory_size_bytes: [],
+              more_controller_ids: [],
+              max_transactions_per_response: [],
+            },
+            decimals: [],
+            fee_collector_account: [],
+            max_memo_length: [],
+            index_principal: [],
+            feature_flags: [],
+          },
+        },
+      ]),
+    });
+    usdcLedgerActor = ledgerFixture.actor;
+    usdcLedgerCanisterId = ledgerFixture.canisterId;
+
+    // Deploy audit_hub
+    const auditFixture = await pic.setupCanister<AuditHubService>({
       idlFactory,
       wasm: AUDIT_HUB_WASM_PATH,
-      sender: daoIdentity.getPrincipal(),
+      sender: ownerIdentity.getPrincipal(),
     });
-    auditHubActor = fixture.actor;
+    auditHubActor = auditFixture.actor;
+    auditHubCanisterId = auditFixture.canisterId;
+
+    // Configure audit_hub with USDC ledger
+    auditHubActor.setIdentity(ownerIdentity);
+    await auditHubActor.set_payment_token_config(
+      ledgerFixture.canisterId,
+      'USDC',
+      USDC_DECIMALS,
+    );
+
+    // Set stake requirement for build verification
+    await auditHubActor.set_stake_requirement(
+      usdcLedgerCanisterId.toText(),
+      toUSDC(1),
+    ); // $1 USDC stake
   });
 
-  // --- Suite 1: Core Token & Admin Functionality ---
-  describe('Core Token & Admin Functionality', () => {
-    it('should initially report zero balances for an auditor', async () => {
-      const available = await auditHubActor.get_available_balance(
-        auditor1Identity.getPrincipal(),
-        'data_safety_v1',
+  // --- Suite 1: Payment Token Configuration ---
+  describe('Payment Token Configuration', () => {
+    it('should allow owner to set payment token config', async () => {
+      auditHubActor.setIdentity(ownerIdentity);
+      const result = await auditHubActor.set_payment_token_config(
+        Principal.fromText('aaaaa-aa'),
+        'TEST',
+        8,
       );
-      const staked = await auditHubActor.get_staked_balance(
-        auditor1Identity.getPrincipal(),
-        'data_safety_v1',
-      );
-      expect(available).toBe(0n);
-      expect(staked).toBe(0n);
+      expect(result).toHaveProperty('ok');
+
+      const config = await auditHubActor.get_payment_token_config();
+      expect(config.symbol).toBe('TEST');
+      expect(config.decimals).toBe(8);
     });
 
-    it('should REJECT minting tokens from a non-DAO principal', async () => {
+    it('should reject payment token config from non-owner', async () => {
       auditHubActor.setIdentity(randomUserIdentity);
-      const res = await auditHubActor.mint_tokens(
-        auditor1Identity.getPrincipal(),
-        'data_safety_v1',
-        100n,
+      const result = await auditHubActor.set_payment_token_config(
+        Principal.fromText('aaaaa-aa'),
+        'HACK',
+        6,
       );
-      expect(res).toHaveProperty('err');
+      expect(result).toHaveProperty('err');
+    });
+  });
+
+  // --- Suite 2: API Key Management ---
+  describe('API Key Management', () => {
+    it('should allow verifier to generate API key', async () => {
+      auditHubActor.setIdentity(verifier1Identity);
+      const result = await auditHubActor.generate_api_key();
+      expect(result).toHaveProperty('ok');
       // @ts-ignore
-      expect(res.err).toMatch(/Unauthorized: Only the owner can mint tokens./);
+      expect(result.ok).toMatch(/^vr_/); // Should start with vr_ prefix
     });
 
-    it('should allow the DAO to mint tokens and verify balances', async () => {
-      auditHubActor.setIdentity(daoIdentity);
-      await auditHubActor.mint_tokens(
-        auditor1Identity.getPrincipal(),
-        'data_safety_v1',
-        100n,
-      );
+    it('should allow verifier to list their API keys', async () => {
+      auditHubActor.setIdentity(verifier1Identity);
+      await auditHubActor.generate_api_key();
+      await auditHubActor.generate_api_key();
 
-      const available = await auditHubActor.get_available_balance(
-        auditor1Identity.getPrincipal(),
-        'data_safety_v1',
-      );
-      expect(available).toBe(100n);
-
-      // Verify another token type for the same auditor is still zero
-      const quality_balance = await auditHubActor.get_available_balance(
-        auditor1Identity.getPrincipal(),
-        'quality_v1',
-      );
-      expect(quality_balance).toBe(0n);
+      const keys = await auditHubActor.list_api_keys();
+      expect(keys.length).toBe(2);
+      expect(keys[0].is_active).toBe(true);
     });
 
-    it('should allow the DAO to burn tokens', async () => {
-      auditHubActor.setIdentity(daoIdentity);
-      await auditHubActor.mint_tokens(
-        auditor1Identity.getPrincipal(),
-        'data_safety_v1',
-        100n,
-      );
-      expect(
-        await auditHubActor.get_available_balance(
-          auditor1Identity.getPrincipal(),
-          'data_safety_v1',
-        ),
-      ).toBe(100n);
+    it('should allow verifier to revoke API key', async () => {
+      auditHubActor.setIdentity(verifier1Identity);
+      const result = await auditHubActor.generate_api_key();
+      // @ts-ignore
+      const apiKey = result.ok;
 
-      await auditHubActor.burn_tokens(
-        auditor1Identity.getPrincipal(),
-        'data_safety_v1',
-        40n,
-      );
-      expect(
-        await auditHubActor.get_available_balance(
-          auditor1Identity.getPrincipal(),
-          'data_safety_v1',
-        ),
-      ).toBe(60n);
+      const revokeResult = await auditHubActor.revoke_api_key(apiKey);
+      expect(revokeResult).toHaveProperty('ok');
+
+      // Validation should fail for revoked key
+      const validateResult = await auditHubActor.validate_api_key(apiKey);
+      expect(validateResult).toHaveProperty('err');
     });
 
-    it('should allow the owner to transfer ownership and verify new permissions', async () => {
-      const newOwnerPrincipal = auditor1Identity.getPrincipal();
+    it('should reject revoking another verifiers API key', async () => {
+      auditHubActor.setIdentity(verifier1Identity);
+      const result = await auditHubActor.generate_api_key();
+      // @ts-ignore
+      const apiKey = result.ok;
 
-      // 1. Transfer Ownership as DAO
-      auditHubActor.setIdentity(daoIdentity);
-      await auditHubActor.transfer_ownership(newOwnerPrincipal);
-      const ownerAfterTransfer = await auditHubActor.get_owner();
-      expect(ownerAfterTransfer.toText()).toEqual(newOwnerPrincipal.toText());
-
-      // 2. OLD owner is now UNAUTHORIZED
-      auditHubActor.setIdentity(daoIdentity);
-      const resOldOwner = await auditHubActor.mint_tokens(
-        randomUserIdentity.getPrincipal(),
-        'test',
-        1n,
-      );
-      expect(resOldOwner).toHaveProperty('err');
-
-      // 3. NEW owner is now AUTHORIZED
-      auditHubActor.setIdentity(auditor1Identity);
-      const resNewOwner = await auditHubActor.mint_tokens(
-        randomUserIdentity.getPrincipal(),
-        'test',
-        1n,
-      );
-      expect(resNewOwner).toHaveProperty('ok');
-    });
-
-    it('should allow the DAO to set and get stake requirements', async () => {
-      auditHubActor.setIdentity(daoIdentity);
-      const tokenId = 'data_safety_v1';
-      const stakeAmount = 100n;
-
-      // Initially, it should be null
-      const initialReq = await auditHubActor.get_stake_requirement(tokenId);
-      expect(initialReq).toEqual([]); // PocketIC returns [] for empty opt
-
-      // Set the requirement
-      const setResult = await auditHubActor.set_stake_requirement(
-        tokenId,
-        stakeAmount,
-      );
-      expect(setResult).toHaveProperty('ok');
-
-      // Verify it was set correctly
-      const finalReq = await auditHubActor.get_stake_requirement(tokenId);
-      expect(finalReq).toEqual([stakeAmount]);
-
-      // Verify a non-owner cannot set it
-      auditHubActor.setIdentity(randomUserIdentity);
-      const unauthorizedResult = await auditHubActor.set_stake_requirement(
-        tokenId,
-        200n,
-      );
-      expect(unauthorizedResult).toHaveProperty('err');
+      auditHubActor.setIdentity(verifier2Identity);
+      const revokeResult = await auditHubActor.revoke_api_key(apiKey);
+      expect(revokeResult).toHaveProperty('err');
     });
   });
 
-  // --- Suite 2: Bounty Locking & Staking Lifecycle ---
-  describe('Bounty Locking & Staking Lifecycle', () => {
-    const BOUNTY_ID = 1n; // Using a fixed bounty ID for simplicity
-    const TOKEN_ID = 'data_safety_v1';
-    const STAKE_AMOUNT = 50n; // This is now the configured requirement
-
+  // --- Suite 3: USDC Deposit & Withdrawal (ICRC-2) ---
+  describe('USDC Deposit & Withdrawal', () => {
     beforeEach(async () => {
-      auditHubActor.setIdentity(daoIdentity);
-      // CHANGE 1: The DAO must now configure the stake requirement
-      await auditHubActor.set_stake_requirement(TOKEN_ID, STAKE_AMOUNT);
-
-      // Pre-fund the auditor for these tests
-      await auditHubActor.mint_tokens(
-        auditor1Identity.getPrincipal(),
-        TOKEN_ID,
-        100n, // Give them more than enough
-      );
-    });
-
-    it('should allow an auditor to reserve a bounty, and update balances correctly', async () => {
-      auditHubActor.setIdentity(auditor1Identity);
-      // CHANGE 2: Call reserve_bounty without the stake amount
-      const res = await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID);
-      expect(res).toHaveProperty('ok');
-
-      // Assertions remain the same, using the STAKE_AMOUNT constant
-      const available = await auditHubActor.get_available_balance(
-        auditor1Identity.getPrincipal(),
-        TOKEN_ID,
-      );
-      const staked = await auditHubActor.get_staked_balance(
-        auditor1Identity.getPrincipal(),
-        TOKEN_ID,
-      );
-      expect(available).toBe(50n); // 100n - 50n
-      expect(staked).toBe(50n);
-
-      const lock = await auditHubActor.get_bounty_lock(BOUNTY_ID);
-      expect(lock).not.toEqual([]);
-      // @ts-ignore
-      expect(lock[0].stake_amount).toBe(STAKE_AMOUNT);
-    });
-
-    it('should REJECT reserving a bounty with insufficient available balance', async () => {
-      // CHANGE 3: To test this, we now mint the auditor with LESS than the required stake
-      const poorAuditor = createIdentity('poor-auditor');
-      auditHubActor.setIdentity(daoIdentity);
-      await auditHubActor.mint_tokens(
-        poorAuditor.getPrincipal(),
-        TOKEN_ID,
-        STAKE_AMOUNT - 1n, // Mint 49 tokens
-      );
-
-      auditHubActor.setIdentity(poorAuditor);
-      const res = await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID);
-      expect(res).toHaveProperty('err');
-      // @ts-ignore
-      expect(res.err).toMatch(/Insufficient available balance to stake./);
-    });
-
-    it('should REJECT reserving a bounty that is already locked', async () => {
-      // Auditor 1 locks the bounty
-      auditHubActor.setIdentity(auditor1Identity);
-      await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID);
-
-      // Auditor 2 (also funded) tries to lock it
-      auditHubActor.setIdentity(daoIdentity);
-      await auditHubActor.mint_tokens(
-        auditor2Identity.getPrincipal(),
-        TOKEN_ID,
-        100n,
-      );
-      auditHubActor.setIdentity(auditor2Identity);
-      const res = await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID);
-      expect(res).toHaveProperty('err');
-      // @ts-ignore
-      expect(res.err).toMatch(/Bounty is already locked./);
-    });
-
-    it('should correctly verify that a bounty is ready for collection by the claimant', async () => {
-      auditHubActor.setIdentity(auditor1Identity);
-      await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID);
-
-      // Check for the correct claimant
-      const isReadyForClaimant =
-        await auditHubActor.is_bounty_ready_for_collection(
-          BOUNTY_ID,
-          auditor1Identity.getPrincipal(),
-        );
-      expect(isReadyForClaimant).toBe(true);
-
-      // Check for a different, unauthorized user
-      const isReadyForOther =
-        await auditHubActor.is_bounty_ready_for_collection(
-          BOUNTY_ID,
-          auditor2Identity.getPrincipal(),
-        );
-      expect(isReadyForOther).toBe(false);
-    });
-
-    it('should allow the DAO to release a stake, returning funds to available balance', async () => {
-      auditHubActor.setIdentity(auditor1Identity);
-      await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID);
-
-      // Verify initial state
-      expect(
-        await auditHubActor.get_staked_balance(
-          auditor1Identity.getPrincipal(),
-          TOKEN_ID,
-        ),
-      ).toBe(50n);
-
-      // Release the stake
-      auditHubActor.setIdentity(daoIdentity);
-      await auditHubActor.release_stake(BOUNTY_ID);
-
-      // Verify final state
-      const available = await auditHubActor.get_available_balance(
-        auditor1Identity.getPrincipal(),
-        TOKEN_ID,
-      );
-      const staked = await auditHubActor.get_staked_balance(
-        auditor1Identity.getPrincipal(),
-        TOKEN_ID,
-      );
-      const lock = await auditHubActor.get_bounty_lock(BOUNTY_ID);
-
-      expect(available).toBe(100n);
-      expect(staked).toBe(0n);
-      expect(lock).toStrictEqual([]);
-    });
-
-    it('should slash an expired lock and burn the staked tokens', async () => {
-      auditHubActor.setIdentity(auditor1Identity);
-      await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID);
-
-      // Advance time past the expiration (e.g., 4 days)
-      await pic.advanceTime(4 * 24 * 60 * 60 * 1000); // 4 days in ms
-      await pic.tick();
-
-      // Verify the bounty is no longer ready for collection
-      const isReady = await auditHubActor.is_bounty_ready_for_collection(
-        BOUNTY_ID,
-        auditor1Identity.getPrincipal(),
-      );
-      expect(isReady).toBe(false);
-
-      // Anyone can clean up the expired lock
-      auditHubActor.setIdentity(randomUserIdentity);
-      const cleanupRes = await auditHubActor.cleanup_expired_lock(BOUNTY_ID);
-      expect(cleanupRes).toHaveProperty('ok');
-
-      // Verify the stake was slashed (burned)
-      const available = await auditHubActor.get_available_balance(
-        auditor1Identity.getPrincipal(),
-        TOKEN_ID,
-      );
-      const staked = await auditHubActor.get_staked_balance(
-        auditor1Identity.getPrincipal(),
-        TOKEN_ID,
-      );
-      const lock = await auditHubActor.get_bounty_lock(BOUNTY_ID);
-
-      expect(available).toBe(50n); // Unstaked portion is untouched
-      expect(staked).toBe(0n); // Staked portion is gone
-      expect(lock).toStrictEqual([]); // Lock is removed
-    });
-  });
-
-  // --- Suite 3: Auditor Profile Query ---
-  describe('get_auditor_profile', () => {
-    it('should return null for an auditor with no balances', async () => {
-      const profile = await auditHubActor.get_auditor_profile(
-        randomUserIdentity.getPrincipal(),
-      );
-      // For an empty `opt`, PocketIC returns an empty array
-      expect(profile).toEqual({
-        available_balances: [],
-        staked_balances: [],
-        reputation: [],
+      // Mint USDC to verifier1 for testing
+      usdcLedgerActor.setIdentity(ownerIdentity);
+      await usdcLedgerActor.icrc1_transfer({
+        to: { owner: verifier1Identity.getPrincipal(), subaccount: [] },
+        amount: toUSDC(10) + 20_000n, // Amount + approve fee + transfer fee
+        fee: [],
+        memo: [],
+        from_subaccount: [],
+        created_at_time: [],
       });
     });
 
-    it('should return a profile with only available balances and reputation', async () => {
-      // Setup: Mint two different token types to the auditor
-      auditHubActor.setIdentity(daoIdentity);
-      await auditHubActor.mint_tokens(
-        auditor1Identity.getPrincipal(),
-        'data_safety_v1',
-        10n,
+    it('should allow verifier to deposit USDC after approval', async () => {
+      // Step 1: Approve audit_hub to spend USDC
+      usdcLedgerActor.setIdentity(verifier1Identity);
+      await usdcLedgerActor.icrc2_approve({
+        spender: { owner: auditHubCanisterId, subaccount: [] },
+        amount: toUSDC(5) + 10_000n, // Amount + transfer fee
+        fee: [],
+        memo: [],
+        from_subaccount: [],
+        created_at_time: [],
+        expected_allowance: [],
+        expires_at: [],
+      });
+
+      // Step 2: Deposit USDC
+      auditHubActor.setIdentity(verifier1Identity);
+      const result = await auditHubActor.deposit_stake(
+        usdcLedgerCanisterId.toText(),
+        toUSDC(5),
       );
-      await auditHubActor.mint_tokens(
-        auditor1Identity.getPrincipal(),
-        'tools_v1',
-        5n,
+      expect(result).toHaveProperty('ok');
+
+      // Step 3: Verify balance
+      const profile = await auditHubActor.get_verifier_profile(
+        verifier1Identity.getPrincipal(),
+        usdcLedgerCanisterId.toText(),
       );
-
-      // Action: Fetch the profile
-      const profileResult = await auditHubActor.get_auditor_profile(
-        auditor1Identity.getPrincipal(),
-      );
-
-      // Assertions
-      expect(profileResult).not.toEqual([]); // Should not be null
-      const profile = profileResult; // Unwrap the opt record
-
-      // Helper to sort arrays for consistent comparison, as map order is not guaranteed
-      const sortByName = (a: (string | bigint)[], b: (string | bigint)[]) => {
-        if (
-          a.length === 2 &&
-          b.length === 2 &&
-          typeof a[0] === 'string' &&
-          typeof b[0] === 'string'
-        ) {
-          return (a[0] as string).localeCompare(b[0] as string);
-        }
-        return 0;
-      };
-
-      const expectedBalances = [
-        ['data_safety_v1', 10n],
-        ['tools_v1', 5n],
-      ].sort(sortByName);
-
-      expect(profile?.available_balances.sort(sortByName)).toEqual(
-        expectedBalances,
-      );
-      expect(profile?.reputation.sort(sortByName)).toEqual(expectedBalances);
-      expect(profile?.staked_balances).toEqual([]); // Should be an empty array
+      expect(profile.available_balance_usdc).toBe(toUSDC(5));
     });
 
-    it('should return a complete profile with available, staked, and reputation balances', async () => {
-      // Setup: Configure stake requirements and mint various tokens
-      auditHubActor.setIdentity(daoIdentity);
-      await auditHubActor.set_stake_requirement('data_safety_v1', 10n);
-      await auditHubActor.mint_tokens(
-        auditor1Identity.getPrincipal(),
-        'data_safety_v1',
-        25n, // Will have 15n left after staking
+    it('should allow verifier to withdraw available USDC', async () => {
+      // Setup: Deposit USDC first
+      usdcLedgerActor.setIdentity(verifier1Identity);
+      await usdcLedgerActor.icrc2_approve({
+        spender: { owner: auditHubCanisterId, subaccount: [] },
+        amount: toUSDC(5) + 10_000n, // Amount + transfer fee
+        fee: [],
+        memo: [],
+        from_subaccount: [],
+        created_at_time: [],
+        expected_allowance: [],
+        expires_at: [],
+      });
+
+      auditHubActor.setIdentity(verifier1Identity);
+      await auditHubActor.deposit_stake(
+        usdcLedgerCanisterId.toText(),
+        toUSDC(5),
       );
-      await auditHubActor.mint_tokens(
-        auditor1Identity.getPrincipal(),
-        'tools_v1',
-        5n, // Will remain fully available
+
+      // Withdraw 2 USDC
+      const withdrawResult = await auditHubActor.withdraw_stake(
+        usdcLedgerCanisterId.toText(),
+        toUSDC(2),
       );
+      expect(withdrawResult).toHaveProperty('ok');
 
-      // Action 1: Auditor stakes some tokens
-      auditHubActor.setIdentity(auditor1Identity);
-      await auditHubActor.reserve_bounty(1n, 'data_safety_v1');
-
-      // Action 2: Fetch the profile
-      const profileResult = await auditHubActor.get_auditor_profile(
-        auditor1Identity.getPrincipal(),
+      // Verify balances (3 USDC minus the transfer fee for withdrawal)
+      const profile = await auditHubActor.get_verifier_profile(
+        verifier1Identity.getPrincipal(),
+        usdcLedgerCanisterId.toText(),
       );
-      const profile = profileResult;
+      expect(profile.available_balance_usdc).toBe(toUSDC(3) - USDC_FEE);
+    });
 
-      // Assertions
-      const sortByName = (a: (string | bigint)[], b: (string | bigint)[]) => {
-        if (
-          a.length === 2 &&
-          b.length === 2 &&
-          typeof a[0] === 'string' &&
-          typeof b[0] === 'string'
-        ) {
-          return (a[0] as string).localeCompare(b[0] as string);
-        }
-        return 0;
-      };
-
-      const expectedAvailable = [
-        ['data_safety_v1', 15n],
-        ['tools_v1', 5n],
-      ].sort(sortByName);
-
-      const expectedStaked = [['data_safety_v1', 10n]].sort(sortByName);
-
-      expect(profile?.available_balances.sort(sortByName)).toEqual(
-        expectedAvailable,
+    it('should reject withdrawal of more than available balance', async () => {
+      auditHubActor.setIdentity(verifier1Identity);
+      const result = await auditHubActor.withdraw_stake(
+        usdcLedgerCanisterId.toText(),
+        toUSDC(100),
       );
-      expect(profile?.reputation.sort(sortByName)).toEqual(expectedAvailable);
-      expect(profile?.staked_balances.sort(sortByName)).toEqual(expectedStaked);
+      expect(result).toHaveProperty('err');
+      // @ts-ignore
+      expect(result.err).toMatch(/Insufficient available balance/);
+    });
+  });
+
+  // --- Suite 4: Bounty Reservation with USDC Staking ---
+  describe('Bounty Reservation & Staking', () => {
+    const BOUNTY_ID = 1n;
+    let TOKEN_ID: string; // Ledger canister ID
+
+    beforeEach(async () => {
+      TOKEN_ID = usdcLedgerCanisterId.toText();
+
+      // Fund verifier1 with USDC
+      usdcLedgerActor.setIdentity(ownerIdentity);
+      await usdcLedgerActor.icrc1_transfer({
+        to: { owner: verifier1Identity.getPrincipal(), subaccount: [] },
+        amount: toUSDC(10) + 20_000n, // Amount + approve fee + transfer fee
+        fee: [],
+        memo: [],
+        from_subaccount: [],
+        created_at_time: [],
+      });
+
+      // Deposit into audit_hub
+      usdcLedgerActor.setIdentity(verifier1Identity);
+      await usdcLedgerActor.icrc2_approve({
+        spender: { owner: auditHubCanisterId, subaccount: [] },
+        amount: toUSDC(5) + 10_000n, // Amount + transfer fee
+        fee: [],
+        memo: [],
+        from_subaccount: [],
+        created_at_time: [],
+        expected_allowance: [],
+        expires_at: [],
+      });
+
+      auditHubActor.setIdentity(verifier1Identity);
+      await auditHubActor.deposit_stake(
+        usdcLedgerCanisterId.toText(),
+        toUSDC(5),
+      );
+    });
+
+    it('should allow verifier to reserve bounty with sufficient balance', async () => {
+      auditHubActor.setIdentity(verifier1Identity);
+      const result = await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID);
+      expect(result).toHaveProperty('ok');
+
+      // Verify balances updated
+      const profile = await auditHubActor.get_verifier_profile(
+        verifier1Identity.getPrincipal(),
+        usdcLedgerCanisterId.toText(),
+      );
+      expect(profile.available_balance_usdc).toBe(toUSDC(4)); // 5 - 1 stake
+      expect(profile.staked_balance_usdc).toBe(toUSDC(1));
+    });
+
+    it('should allow verifier to reserve bounty with API key', async () => {
+      // Generate API key
+      auditHubActor.setIdentity(verifier1Identity);
+      const keyResult = await auditHubActor.generate_api_key();
+      // @ts-ignore
+      const apiKey = keyResult.ok;
+
+      // Reserve with API key
+      const result = await auditHubActor.reserve_bounty_with_api_key(
+        apiKey,
+        BOUNTY_ID,
+        TOKEN_ID,
+      );
+      expect(result).toHaveProperty('ok');
+
+      // Verify lock
+      const lock = await auditHubActor.get_bounty_lock(BOUNTY_ID);
+      expect(lock).not.toEqual([]);
+      // @ts-ignore
+      expect(lock[0].claimant.toText()).toBe(
+        verifier1Identity.getPrincipal().toText(),
+      );
+    });
+
+    it('should reject reserving bounty with insufficient balance', async () => {
+      auditHubActor.setIdentity(verifier2Identity); // Has no balance
+      const result = await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID);
+      expect(result).toHaveProperty('err');
+      // @ts-ignore
+      expect(result.err).toMatch(/Insufficient available balance/);
+    });
+
+    it('should reject reserving already locked bounty', async () => {
+      auditHubActor.setIdentity(verifier1Identity);
+      await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID);
+
+      // Try to reserve same bounty again
+      const result = await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID);
+      expect(result).toHaveProperty('err');
+      // @ts-ignore
+      expect(result.err).toMatch(/already locked/);
+    });
+  });
+
+  // --- Suite 5: Stake Release & Earnings Tracking ---
+  describe('Stake Release & Earnings', () => {
+    const BOUNTY_ID = 1n;
+    let TOKEN_ID: string;
+
+    beforeEach(async () => {
+      TOKEN_ID = usdcLedgerCanisterId.toText();
+
+      // Setup: Fund and deposit for verifier1
+      usdcLedgerActor.setIdentity(ownerIdentity);
+      await usdcLedgerActor.icrc1_transfer({
+        to: { owner: verifier1Identity.getPrincipal(), subaccount: [] },
+        amount: toUSDC(10) + 20_000n, // Amount + approve fee + transfer fee
+        fee: [],
+        memo: [],
+        from_subaccount: [],
+        created_at_time: [],
+      });
+
+      usdcLedgerActor.setIdentity(verifier1Identity);
+      await usdcLedgerActor.icrc2_approve({
+        spender: { owner: auditHubCanisterId, subaccount: [] },
+        amount: toUSDC(5) + 10_000n, // Amount + transfer fee
+        fee: [],
+        memo: [],
+        from_subaccount: [],
+        created_at_time: [],
+        expected_allowance: [],
+        expires_at: [],
+      });
+
+      auditHubActor.setIdentity(verifier1Identity);
+      await auditHubActor.deposit_stake(
+        usdcLedgerCanisterId.toText(),
+        toUSDC(5),
+      );
+      await auditHubActor.reserve_bounty(BOUNTY_ID, TOKEN_ID);
+    });
+
+    it('should release stake and track earnings after successful verification', async () => {
+      auditHubActor.setIdentity(ownerIdentity);
+      const result = await auditHubActor.release_stake(BOUNTY_ID);
+      expect(result).toHaveProperty('ok');
+
+      // Verify balance returned
+      const profile = await auditHubActor.get_verifier_profile(
+        verifier1Identity.getPrincipal(),
+        usdcLedgerCanisterId.toText(),
+      );
+      expect(profile.available_balance_usdc).toBe(toUSDC(5));
+      expect(profile.staked_balance_usdc).toBe(0n);
+      expect(profile.total_earnings).toBe(toUSDC(1)); // Earned the stake amount
+      expect(profile.total_verifications).toBe(1n);
+    });
+
+    it('should slash stake for incorrect consensus', async () => {
+      auditHubActor.setIdentity(ownerIdentity);
+      const result =
+        await auditHubActor.slash_stake_for_incorrect_consensus(BOUNTY_ID);
+      expect(result).toHaveProperty('ok');
+
+      // Verify stake was slashed (burned)
+      const profile = await auditHubActor.get_verifier_profile(
+        verifier1Identity.getPrincipal(),
+        usdcLedgerCanisterId.toText(),
+      );
+      expect(profile.available_balance_usdc).toBe(toUSDC(4)); // Original 5 - 1 staked
+      expect(profile.staked_balance_usdc).toBe(0n); // Slashed
+      expect(profile.total_earnings).toBe(0n); // No earnings
+      expect(profile.reputation_score).toBeLessThan(100); // Penalized
+    });
+
+    it('should slash stake for expired lock', async () => {
+      // Advance time past expiration (1 hour)
+      await pic.advanceTime(2 * 60 * 60 * 1000); // 2 hours in ms
+      await pic.tick();
+
+      // Anyone can cleanup expired lock
+      auditHubActor.setIdentity(randomUserIdentity);
+      const result = await auditHubActor.cleanup_expired_lock(BOUNTY_ID);
+      expect(result).toHaveProperty('ok');
+
+      // Verify stake was slashed
+      const profile = await auditHubActor.get_verifier_profile(
+        verifier1Identity.getPrincipal(),
+        usdcLedgerCanisterId.toText(),
+      );
+      expect(profile.staked_balance_usdc).toBe(0n);
+      expect(profile.reputation_score).toBeLessThan(100);
+    });
+  });
+
+  // --- Suite 6: Verifier Profile Query ---
+  describe('Verifier Profile', () => {
+    it('should return profile with zero balances for new verifier', async () => {
+      const profile = await auditHubActor.get_verifier_profile(
+        randomUserIdentity.getPrincipal(),
+        usdcLedgerCanisterId.toText(),
+      );
+      expect(profile.available_balance_usdc).toBe(0n);
+      expect(profile.staked_balance_usdc).toBe(0n);
+      expect(profile.total_verifications).toBe(0n);
+      expect(profile.reputation_score).toBe(100n); // Default perfect score
+      expect(profile.total_earnings).toBe(0n);
+    });
+
+    it('should return complete profile with all statistics', async () => {
+      // Setup: Fund, deposit, and complete a verification
+      usdcLedgerActor.setIdentity(ownerIdentity);
+      await usdcLedgerActor.icrc1_transfer({
+        to: { owner: verifier1Identity.getPrincipal(), subaccount: [] },
+        amount: toUSDC(10) + 20_000n, // Amount + approve fee + transfer fee
+        fee: [],
+        memo: [],
+        from_subaccount: [],
+        created_at_time: [],
+      });
+
+      usdcLedgerActor.setIdentity(verifier1Identity);
+      await usdcLedgerActor.icrc2_approve({
+        spender: { owner: auditHubCanisterId, subaccount: [] },
+        amount: toUSDC(5) + 10_000n, // Amount + transfer fee
+        fee: [],
+        memo: [],
+        from_subaccount: [],
+        created_at_time: [],
+        expected_allowance: [],
+        expires_at: [],
+      });
+
+      auditHubActor.setIdentity(verifier1Identity);
+      await auditHubActor.deposit_stake(
+        usdcLedgerCanisterId.toText(),
+        toUSDC(5),
+      );
+      await auditHubActor.reserve_bounty(1n, usdcLedgerCanisterId.toText());
+
+      // Release stake
+      auditHubActor.setIdentity(ownerIdentity);
+      await auditHubActor.release_stake(1n);
+
+      // Check complete profile
+      const profile = await auditHubActor.get_verifier_profile(
+        verifier1Identity.getPrincipal(),
+        usdcLedgerCanisterId.toText(),
+      );
+      expect(profile.available_balance_usdc).toBe(toUSDC(5));
+      expect(profile.staked_balance_usdc).toBe(0n);
+      expect(profile.total_verifications).toBe(1n);
+      expect(profile.total_earnings).toBe(toUSDC(1));
+      expect(profile.reputation_score).toBe(100n); // Reputation system maintains score at 100
+    });
+  });
+
+  // --- Suite 7: Admin Functions ---
+  describe('Admin Functions', () => {
+    it('should allow owner to set stake requirement', async () => {
+      auditHubActor.setIdentity(ownerIdentity);
+      const result = await auditHubActor.set_stake_requirement(
+        usdcLedgerCanisterId.toText(),
+        toUSDC(5),
+      );
+      expect(result).toHaveProperty('ok');
+
+      const requirement = await auditHubActor.get_stake_requirement(
+        usdcLedgerCanisterId.toText(),
+      );
+      expect(requirement).toEqual([toUSDC(5)]);
+    });
+
+    it('should allow owner to transfer ownership', async () => {
+      auditHubActor.setIdentity(ownerIdentity);
+      const result = await auditHubActor.transfer_ownership(
+        verifier1Identity.getPrincipal(),
+      );
+      expect(result).toHaveProperty('ok');
+
+      const newOwner = await auditHubActor.get_owner();
+      expect(newOwner.toText()).toBe(verifier1Identity.getPrincipal().toText());
+    });
+
+    it('should reject admin functions from non-owner', async () => {
+      auditHubActor.setIdentity(randomUserIdentity);
+      const result = await auditHubActor.set_stake_requirement(
+        usdcLedgerCanisterId.toText(),
+        toUSDC(10),
+      );
+      expect(result).toHaveProperty('err');
     });
   });
 });

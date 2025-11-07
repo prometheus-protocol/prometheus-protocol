@@ -5,6 +5,7 @@ import { AuditDetailsSkeleton } from '@/components/audits/AuditDetailsSkeleton';
 import { AuditHubError } from '@/components/audits/AuditHubError';
 import { BountyPanel } from '@/components/audits/details/BountyPanel';
 import { AuditContent } from '@/components/audits/details/AuditContent';
+import { Card, CardContent } from '@/components/ui/card';
 
 export default function AuditDetailsPage() {
   const { auditId } = useParams<{ auditId: string }>();
@@ -14,13 +15,14 @@ export default function AuditDetailsPage() {
     data: audit,
     error,
     isLoading,
+    isFetched,
     isError,
     refetch,
   } = useGetAuditBounty(bountyId);
 
-  if (isLoading) return <AuditDetailsSkeleton />;
+  if (!isFetched || isLoading) return <AuditDetailsSkeleton />;
   if (isError) return <AuditHubError onRetry={refetch} />;
-  if (!audit) {
+  if (!isLoading && !audit) {
     return (
       <div className="w-full max-w-6xl mx-auto pt-12 pb-24 text-center text-gray-400">
         <h1 className="text-2xl font-bold text-white">Audit Not Found</h1>
@@ -31,6 +33,18 @@ export default function AuditDetailsPage() {
           <Link to="/audit-hub">Return to Audit Hub</Link>
         </Button>
       </div>
+    );
+  }
+
+  if (!audit) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <p className="text-center text-muted-foreground">
+            Audit details not available.
+          </p>
+        </CardContent>
+      </Card>
     );
   }
 

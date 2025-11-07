@@ -17,7 +17,7 @@ moc = "0.16.0"  # You choose the version!
 ```bash
 # Build with Docker
 docker-compose run --rm wasm
-# → Uses ghcr.io/research-ag/motoko-build:moc-0.16.0
+# → Uses ghcr.io/prometheus-protocol/motoko-build-template:moc-0.16.0
 ```
 
 ### 2. Verifier Workflow
@@ -59,7 +59,7 @@ async function setupReproducibleBuild(canisterPath, canisterName, repoRoot) {
   // Update docker-compose.yml with detected version
   content = content.replace(
     /ghcr\.io\/[^:]+:moc-[0-9.]+/,
-    `ghcr.io/research-ag/motoko-build:moc-${mocVersion}`,
+    `ghcr.io/prometheus-protocol/motoko-build-template:moc-${mocVersion}`,
   );
 }
 ```
@@ -138,10 +138,10 @@ Developer workflow:
 Each `moc` version needs a corresponding Docker base image:
 
 ```
-ghcr.io/research-ag/motoko-build:moc-0.14.3
-ghcr.io/research-ag/motoko-build:moc-0.15.0
-ghcr.io/research-ag/motoko-build:moc-0.16.0
-ghcr.io/research-ag/motoko-build:moc-0.17.0
+ghcr.io/prometheus-protocol/motoko-build-template:moc-0.14.3
+ghcr.io/prometheus-protocol/motoko-build-template:moc-0.15.0
+ghcr.io/prometheus-protocol/motoko-build-template:moc-0.16.0
+ghcr.io/prometheus-protocol/motoko-build-template:moc-0.17.0
 ```
 
 **When a new moc version releases:**
@@ -152,13 +152,13 @@ ghcr.io/research-ag/motoko-build:moc-0.17.0
    docker build -f Dockerfile.base \
      --build-arg MOC_VERSION=0.17.0 \
      --build-arg IC_WASM_VERSION=0.9.3 \
-     -t ghcr.io/research-ag/motoko-build:moc-0.17.0 .
+     -t ghcr.io/prometheus-protocol/motoko-build-template:moc-0.17.0 .
    ```
 
 2. Push to registry:
 
    ```bash
-   docker push ghcr.io/research-ag/motoko-build:moc-0.17.0
+   docker push ghcr.io/prometheus-protocol/motoko-build-template:moc-0.17.0
    ```
 
 3. Done! Projects can now use `moc = "0.17.0"` in their `mops.toml`
@@ -296,7 +296,7 @@ docker-compose run --rm wasm
 📂 Canister path: /tmp/verify-xyz/src
 📖 Reading toolchain version from mops.toml...
 🔧 Detected moc version: 0.16.0
-🐳 Using Docker image: ghcr.io/research-ag/motoko-build:moc-0.16.0
+🐳 Using Docker image: ghcr.io/prometheus-protocol/motoko-build-template:moc-0.16.0
 🔨 Building with Docker...
 ✅ Hash match! Build verified.
 ```
@@ -306,7 +306,7 @@ docker-compose run --rm wasm
 **Missing Docker image:**
 
 ```
-❌ Error: Failed to pull image ghcr.io/research-ag/motoko-build:moc-0.99.0
+❌ Error: Failed to pull image ghcr.io/prometheus-protocol/motoko-build-template:moc-0.99.0
 ```
 
 **Solution**: Build and push the missing base image, or developer uses supported version.
