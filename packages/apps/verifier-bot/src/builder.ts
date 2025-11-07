@@ -10,6 +10,49 @@ import {
 } from '@prometheus-protocol/reproducible-build';
 
 /**
+ * Retry a function with exponential backoff
+ */
+async function retryWithBackoff<T>(
+  fn: () => T,
+  maxRetries: number = 3,
+  initialDelay: number = 5000,
+): Promise<T> {
+  let lastError: any;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return fn();
+    } catch (error: any) {
+      lastError = error;
+      const errorMsg = error.message || String(error);
+
+      // Check if it's a rate limit error
+      const isRateLimit =
+        errorMsg.includes('API rate limit exceeded') ||
+        errorMsg.includes('rate limit') ||
+        errorMsg.includes('429');
+
+      if (isRateLimit && attempt < maxRetries - 1) {
+        const delay = initialDelay * Math.pow(2, attempt);
+        console.log(
+          `⏳ Rate limit detected. Retrying in ${delay / 1000}s (attempt ${attempt + 1}/${maxRetries})...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      } else if (attempt < maxRetries - 1) {
+        // For other errors, retry with shorter delay
+        const delay = 2000 * Math.pow(2, attempt);
+        console.log(
+          `⚠️  Build failed. Retrying in ${delay / 1000}s (attempt ${attempt + 1}/${maxRetries})...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+/**
  * Verifies that a git repository at a specific commit produces the expected WASM hash.
  * Uses Docker-based reproducible builds to ensure deterministic compilation.
  * Automatically detects the canister name from dfx.json.
@@ -30,7 +73,7 @@ export async function verifyBuild(
     });
 
     console.log(`🔀 Fetching commit ${commitHash.slice(0, 8)}...`);
-    execSync(`git -C ${workDir} fetch --depth 1 origin ${commitHash}`, {
+    execSync(`git -C ${workDir} fetch origin ${commitHash}`, {
       timeout: 60_000,
       stdio: 'pipe',
     });
@@ -61,7 +104,8 @@ export async function verifyBuild(
 
     console.log(`🧹 Cleaning Docker compose resources...`);
     try {
-      execSync(`docker-compose down -v`, {
+      // Use a shared network to avoid exhausting Docker's subnet pool
+      execSync(`docker-compose down`, {
         cwd: canisterPath,
         timeout: 60_000,
         stdio: 'pipe',
@@ -70,42 +114,93 @@ export async function verifyBuild(
       // Ignore errors if compose isn't running
     }
 
+    // Ensure shared network exists for all builds
+    try {
+      execSync(`docker network inspect verifier-shared-network`, {
+        timeout: 5_000,
+        stdio: 'pipe',
+      });
+    } catch (e) {
+      // Network doesn't exist, create it
+      console.log(`🌐 Creating shared network for reproducible builds...`);
+      execSync(`docker network create verifier-shared-network`, {
+        timeout: 10_000,
+        stdio: 'pipe',
+      });
+    }
+
     console.log(`🔨 Building Docker image (no cache)...`);
-    execSync(`docker-compose build --no-cache`, {
-      cwd: canisterPath,
-      timeout: 600_000, // 10 minutes max
-      stdio: 'pipe',
-    });
+    await retryWithBackoff(
+      () => {
+        const buildCmd = process.env.GITHUB_TOKEN
+          ? `docker-compose build --no-cache --build-arg GITHUB_TOKEN=${process.env.GITHUB_TOKEN}`
+          : `docker-compose build --no-cache`;
+        console.log(
+          `🐛 DEBUG: Executing command: ${buildCmd.replace(process.env.GITHUB_TOKEN || '', '[TOKEN]')}`,
+        );
+        console.log(`🐛 DEBUG: CWD: ${canisterPath}`);
+        console.log(
+          `🐛 DEBUG: GITHUB_TOKEN present: ${!!process.env.GITHUB_TOKEN}`,
+        );
+        try {
+          const result = execSync(buildCmd, {
+            cwd: canisterPath,
+            timeout: 600_000, // 10 minutes max
+            stdio: 'inherit', // Changed to inherit to see actual Docker output
+            env: { ...process.env },
+            shell: '/bin/sh',
+          });
+          console.log(`🐛 DEBUG: Build command succeeded`);
+          return result;
+        } catch (error: any) {
+          console.log(
+            `🐛 DEBUG: Build command failed with exit code: ${error.status}`,
+          );
+          console.log(
+            `🐛 DEBUG: Error output: ${error.stderr?.toString().substring(0, 500)}`,
+          );
+          throw error;
+        }
+      },
+      3,
+      5000,
+    );
 
     console.log(`🔨 Running build in Docker...`);
-    // Remove --rm flag so we can exec into container for cleanup
-    const buildLog = execSync(
-      `docker-compose run --name verify-container-${Date.now()} wasm`,
-      {
-        cwd: canisterPath,
-        timeout: 600_000, // 10 minutes max
-        stdio: 'pipe',
-        env: {
-          ...process.env,
-          DOCKER_BUILDKIT: '1',
-        },
+    // Use --rm to auto-remove container after build completes
+    // Use a unique container name combining timestamp, random string, and process ID
+    // Network is configured in docker-compose.yml to use shared network
+    const containerName = `verify-container-${Date.now()}-${Math.random().toString(36).slice(2, 9)}-${process.pid}`;
+    const buildLog = await retryWithBackoff(
+      () => {
+        return execSync(
+          `docker-compose run --rm --name ${containerName} wasm`,
+          {
+            cwd: canisterPath,
+            timeout: 600_000, // 10 minutes max
+            stdio: 'pipe',
+            env: {
+              ...process.env,
+              DOCKER_BUILDKIT: '1',
+            },
+          },
+        ).toString();
       },
-    ).toString();
+      3,
+      5000,
+    );
 
     console.log(`📋 Build output:\n${buildLog.slice(-500)}`); // Last 500 chars
 
-    // Read the output WASM
-    const wasmPath = path.join(canisterPath, 'out', 'out_Linux_x86_64.wasm');
-    if (!fs.existsSync(wasmPath)) {
-      throw new Error(`Built WASM not found at ${wasmPath}`);
+    // Extract hash from build output (format: "HASH  out/out_Linux_x86_64.wasm")
+    const hashMatch = buildLog.match(
+      /([a-f0-9]{64})\s+out\/out_Linux_x86_64\.wasm/,
+    );
+    if (!hashMatch) {
+      throw new Error('Could not extract WASM hash from build output');
     }
 
-    const wasmBytes = fs.readFileSync(wasmPath);
-    const actualHash = crypto
-      .createHash('sha256')
-      .update(wasmBytes)
-      .digest('hex');
-
+    const actualHash = hashMatch[1];
     const duration = Math.floor((Date.now() - startTime) / 1000);
 
     console.log(`📊 Expected hash: ${expectedWasmHash}`);
@@ -130,11 +225,21 @@ export async function verifyBuild(
     }
   } catch (error: any) {
     const duration = Math.floor((Date.now() - startTime) / 1000);
-    console.error(`❌ Build error:`, error.message);
+
+    // Redact GITHUB_TOKEN from error messages to prevent leaking credentials
+    let errorMessage = error.message;
+    if (process.env.GITHUB_TOKEN) {
+      errorMessage = errorMessage.replace(
+        new RegExp(process.env.GITHUB_TOKEN, 'g'),
+        '[REDACTED]',
+      );
+    }
+
+    console.error(`❌ Build error:`, errorMessage);
 
     return {
       success: false,
-      error: `Build failed: ${error.message}`,
+      error: `Build failed: ${errorMessage}`,
       duration,
     };
   } finally {
@@ -179,6 +284,21 @@ export async function verifyBuild(
             });
           }
         }
+      } catch (dockerErr) {
+        // Ignore errors
+      }
+
+      // Clean up Docker networks created for this build
+      try {
+        const canisterPath = findCanisterPath(
+          workDir,
+          extractCanisterNameFromDfx(workDir),
+        );
+        execSync(`docker-compose down`, {
+          cwd: canisterPath,
+          timeout: 30_000,
+          stdio: 'pipe',
+        });
       } catch (dockerErr) {
         // Ignore errors
       }

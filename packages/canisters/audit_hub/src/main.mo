@@ -466,11 +466,11 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     // Get the token's fee
     let ledger : ICRC2.Service = actor (token_id);
     let fee = await ledger.icrc1_fee();
-    
+
     // Check available balance - must cover amount + fee
     let current_balance = _get_balance(available_balances, verifier, token_id);
     let total_required = amount + fee;
-    
+
     if (current_balance < total_required) {
       return #err("Insufficient available balance. You need " # Nat.toText(total_required) # " (amount + fee) but have " # Nat.toText(current_balance));
     };
@@ -614,7 +614,15 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
 
   // Called by the registry after successful verification to return the stake and update reputation.
   public shared (msg) func release_stake(bounty_id : BountyId) : async Result.Result<(), Text> {
-    if (not is_owner(msg.caller)) {
+    // Allow both owner and registry to release stakes
+    let is_authorized = is_owner(msg.caller) or (
+      switch (registry_canister_id) {
+        case (?id) { Principal.equal(msg.caller, id) };
+        case (null) { false };
+      }
+    );
+
+    if (not is_authorized) {
       return #err("Unauthorized.");
     };
 
@@ -736,14 +744,31 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
 
   // The critical function called by the ICRC-127 canister before payout.
   public shared query func is_bounty_ready_for_collection(bounty_id : BountyId, potential_claimant : Principal) : async Bool {
+    Debug.print("🔍 [audit_hub] is_bounty_ready_for_collection called:");
+    Debug.print("   bounty_id: " # debug_show (bounty_id));
+    Debug.print("   potential_claimant: " # debug_show (potential_claimant));
+
     switch (Map.get(bounty_locks, Map.nhash, bounty_id)) {
       case (null) {
         // No lock exists, so no one can claim it.
+        Debug.print("   ❌ No lock found for this bounty_id");
         return false;
       };
       case (?lock) {
+        Debug.print("   ✅ Lock found:");
+        Debug.print("      claimant: " # debug_show (lock.claimant));
+        Debug.print("      expires_at: " # debug_show (lock.expires_at));
+        Debug.print("      current_time: " # debug_show (Time.now()));
+
+        let claimant_matches = Principal.equal(lock.claimant, potential_claimant);
+        let not_expired = Time.now() <= lock.expires_at;
+
+        Debug.print("      claimant_matches: " # debug_show (claimant_matches));
+        Debug.print("      not_expired: " # debug_show (not_expired));
+        Debug.print("      result: " # debug_show (claimant_matches and not_expired));
+
         // Check if the caller is the assigned claimant AND the lock is not expired.
-        return Principal.equal(lock.claimant, potential_claimant) and (Time.now() <= lock.expires_at);
+        return claimant_matches and not_expired;
       };
     };
   };
@@ -769,6 +794,28 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
 
   public shared query func get_bounty_lock(bounty_id : BountyId) : async ?BountyLock {
     return Map.get(bounty_locks, Map.nhash, bounty_id);
+  };
+
+  /**
+   * Check if a verifier has any active (non-expired) bounty locks.
+   * This is used by the registry to authorize API-key-based attestations.
+   * @param verifier - The principal of the verifier to check
+   * @returns true if the verifier has at least one active lock, false otherwise
+   */
+  public shared query func has_active_bounty_lock(verifier : Principal) : async Bool {
+    let current_time = Time.now();
+
+    // Iterate through all bounty locks to find one owned by this verifier that hasn't expired
+    for ((bounty_id, lock) in Map.entries(bounty_locks)) {
+      if (Principal.equal(lock.claimant, verifier)) {
+        // Check if lock is still valid (not expired)
+        if (current_time <= lock.expires_at) {
+          return true; // Found an active lock
+        };
+      };
+    };
+
+    return false; // No active locks found
   };
 
   /**

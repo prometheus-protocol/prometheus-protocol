@@ -318,6 +318,7 @@ export interface ICRC118WasmRegistryCanister {
     [GetCanisterTypeVersionRequest],
     Result_2
   >,
+  'get_divergence_progress' : ActorMethod<[string], Array<bigint>>,
   'get_env_requirements' : ActorMethod<
     [],
     {
@@ -328,6 +329,7 @@ export interface ICRC118WasmRegistryCanister {
       }
   >,
   'get_tip' : ActorMethod<[], Tip>,
+  'get_verification_progress' : ActorMethod<[string], Array<bigint>>,
   'get_verification_request' : ActorMethod<
     [string],
     [] | [VerificationRequest]
@@ -371,8 +373,16 @@ export interface ICRC118WasmRegistryCanister {
     [AttestationRequest],
     AttestationResult
   >,
+  'icrc126_file_attestation_with_api_key' : ActorMethod<
+    [string, AttestationRequest],
+    AttestationResult
+  >,
   'icrc126_file_divergence' : ActorMethod<
     [DivergenceReportRequest],
+    DivergenceResult
+  >,
+  'icrc126_file_divergence_with_api_key' : ActorMethod<
+    [string, DivergenceReportRequest],
     DivergenceResult
   >,
   'icrc126_verification_request' : ActorMethod<[VerificationRequest], bigint>,

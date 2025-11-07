@@ -1,16 +1,17 @@
 import { Section } from '@/components/Section';
 import { BuildReproducibilityAttestationData } from '@prometheus-protocol/ic-js';
+import { Principal } from '@icp-sdk/core/principal';
 import { AlertTriangle, CheckCircle2, Github, Clock, User } from 'lucide-react';
 
 export const BuildReproducibilityAttestation = ({
   data,
+  auditor,
 }: {
   data: BuildReproducibilityAttestationData;
+  auditor?: Principal;
 }) => {
-  console.log('BuildReproducibilityAttestation data:', data);
-
   // Check if this is the new format (v2) or legacy format (v1)
-  const isV2 = data.verifier_principal !== undefined;
+  const isV2 = auditor !== undefined;
   const isSuccess = isV2 ? true : data.status === 'success';
 
   // Convert timestamp from nanoseconds to milliseconds
@@ -48,9 +49,7 @@ export const BuildReproducibilityAttestation = ({
                 <User className="h-4 w-4 text-gray-400" />
                 <p>
                   <strong>Verifier:</strong>{' '}
-                  <span className="font-mono text-sm">
-                    {data.verifier_principal}
-                  </span>
+                  <span className="font-mono text-sm">{auditor?.toText()}</span>
                 </p>
               </div>
               {buildDate && (

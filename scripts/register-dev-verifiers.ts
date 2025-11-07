@@ -25,6 +25,9 @@ const DEV_IDENTITIES = [
   'node-4',
   'node-5',
   'node-6',
+  'node-7',
+  'node-8',
+  'node-9',
 ];
 
 const USDC_TRANSFER_AMOUNT = 100_000_000; // 100 USDC (assuming 6 decimals)
@@ -40,7 +43,8 @@ const AUDIT_TYPES = [
 // --- MAIN SCRIPT ---
 
 async function getPrincipal(identity: string): Promise<string> {
-  const result = await $`dfx identity use ${identity} 2>/dev/null && dfx identity get-principal`;
+  const result =
+    await $`dfx identity use ${identity} 2>/dev/null && dfx identity get-principal`;
   return result.stdout.trim();
 }
 
@@ -52,9 +56,7 @@ async function getCurrentIdentity(): Promise<string> {
 async function main() {
   $.verbose = false;
 
-  console.log(
-    chalk.bold.cyan('🔑 Registering dev verifier accounts...'),
-  );
+  console.log(chalk.bold.cyan('🔑 Registering dev verifier accounts...'));
   console.log(chalk.dim(`Network: ${NETWORK}`));
   console.log('');
 
@@ -65,8 +67,12 @@ async function main() {
 
   // Get canister IDs
   console.log(chalk.bold('🔍 Fetching canister IDs...'));
-  const audit_hub = (await $`dfx canister id audit_hub --network ${NETWORK}`).stdout.trim();
-  const usdc_ledger = (await $`dfx canister id usdc_ledger --network ${NETWORK}`).stdout.trim();
+  const audit_hub = (
+    await $`dfx canister id audit_hub --network ${NETWORK}`
+  ).stdout.trim();
+  const usdc_ledger = (
+    await $`dfx canister id usdc_ledger --network ${NETWORK}`
+  ).stdout.trim();
   console.log(chalk.green(`✅ audit_hub: ${audit_hub}`));
   console.log(chalk.green(`✅ usdc_ledger: ${usdc_ledger}`));
   console.log('');
@@ -84,13 +90,20 @@ async function main() {
 
       // 1. Generate API key
       console.log(chalk.cyan('   1️⃣  Generating API key...'));
-      const apiKeyResult = await $`dfx canister call audit_hub generate_api_key --network ${NETWORK}`;
+      const apiKeyResult =
+        await $`dfx canister call audit_hub generate_api_key --network ${NETWORK}`;
       const apiKeyMatch = apiKeyResult.stdout.match(/"([^"]+)"/);
       const apiKey = apiKeyMatch ? apiKeyMatch[1] : 'unknown';
-      console.log(chalk.green(`   ✅ API key generated: `) + chalk.cyan(apiKey));
+      console.log(
+        chalk.green(`   ✅ API key generated: `) + chalk.cyan(apiKey),
+      );
 
       // 2. Transfer USDC (from default/owner identity)
-      console.log(chalk.cyan(`   2️⃣  Transferring ${USDC_TRANSFER_AMOUNT / 1_000_000} USDC...`));
+      console.log(
+        chalk.cyan(
+          `   2️⃣  Transferring ${USDC_TRANSFER_AMOUNT / 1_000_000} USDC...`,
+        ),
+      );
       await $`dfx identity use ${originalIdentity} 2>/dev/null`;
       const transferArgs = `(record { to = record { owner = principal \"${principal}\"; subaccount = null }; amount = ${USDC_TRANSFER_AMOUNT}:nat })`;
       await $`dfx canister call ${usdc_ledger} icrc1_transfer ${transferArgs} --network ${NETWORK}`;
@@ -108,7 +121,11 @@ async function main() {
       // 4. Deposit stakes for each audit type
       console.log(chalk.cyan('   4️⃣  Depositing stakes...'));
       for (const auditType of AUDIT_TYPES) {
-        console.log(chalk.dim(`      - Staking ${STAKE_AMOUNT_PER_TYPE / 1_000_000} USDC for '${auditType}'...`));
+        console.log(
+          chalk.dim(
+            `      - Staking ${STAKE_AMOUNT_PER_TYPE / 1_000_000} USDC for '${auditType}'...`,
+          ),
+        );
         const stakeArgs = `(\"${usdc_ledger}\", ${STAKE_AMOUNT_PER_TYPE}:nat)`;
         await $`dfx canister call ${audit_hub} deposit_stake ${stakeArgs} --network ${NETWORK}`;
       }
@@ -117,15 +134,28 @@ async function main() {
       // 5. Verify profile
       console.log(chalk.cyan('   5️⃣  Verifying profile...'));
       const profileArgs = `(principal \"${principal}\", \"${usdc_ledger}\")`;
-      const profile = await $`dfx canister call ${audit_hub} get_verifier_profile ${profileArgs} --network ${NETWORK}`;
-      const availableMatch = profile.stdout.match(/available_balance_usdc = ([\d_]+)/);
-      const available = availableMatch ? availableMatch[1].replace(/_/g, '') : '0';
-      console.log(chalk.green(`   ✅ Available balance: ${Number(available) / 1_000_000} USDC`));
+      const profile =
+        await $`dfx canister call ${audit_hub} get_verifier_profile ${profileArgs} --network ${NETWORK}`;
+      const availableMatch = profile.stdout.match(
+        /available_balance_usdc = ([\d_]+)/,
+      );
+      const available = availableMatch
+        ? availableMatch[1].replace(/_/g, '')
+        : '0';
+      console.log(
+        chalk.green(
+          `   ✅ Available balance: ${Number(available) / 1_000_000} USDC`,
+        ),
+      );
 
-      console.log(chalk.bold.green(`\n✅ ${identity} registered successfully!`));
-
+      console.log(
+        chalk.bold.green(`\n✅ ${identity} registered successfully!`),
+      );
     } catch (error) {
-      console.error(chalk.red.bold(`\n❌ Error processing ${identity}:`), error);
+      console.error(
+        chalk.red.bold(`\n❌ Error processing ${identity}:`),
+        error,
+      );
       console.log(chalk.yellow('Continuing with next identity...'));
     }
   }
@@ -148,8 +178,14 @@ async function main() {
   await $`dfx identity use ${originalIdentity} 2>/dev/null`;
   console.log('');
   console.log(chalk.cyan('Next steps:'));
-  console.log(chalk.cyan('  1. List API keys: dfx canister call audit_hub list_api_keys'));
-  console.log(chalk.cyan('  2. Check balances: dfx canister call audit_hub get_verifier_profile'));
+  console.log(
+    chalk.cyan('  1. List API keys: dfx canister call audit_hub list_api_keys'),
+  );
+  console.log(
+    chalk.cyan(
+      '  2. Check balances: dfx canister call audit_hub get_verifier_profile',
+    ),
+  );
   console.log(chalk.cyan('  3. Create bounties: pnpm seed:bounties'));
 }
 

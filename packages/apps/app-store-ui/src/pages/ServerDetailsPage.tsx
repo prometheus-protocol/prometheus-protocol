@@ -41,12 +41,12 @@ import { AppTokenSection } from '@/components/server-details/AppTokenSection';
 import {
   useGetCanisterId,
   useProvisionInstance,
+  useGetAllVersionCanisterIds,
 } from '@/hooks/useOrchestrator';
 import { useGetAppMetrics } from '@/hooks/useUsageTracker';
 import { useAggregatedAppMetrics } from '@/hooks/useAggregatedAppMetrics';
 import { useNamespaceMetrics } from '@/hooks/useNamespaceMetrics';
 import { getServerCanisterId } from '@prometheus-protocol/ic-js';
-import { useQueries } from '@tanstack/react-query';
 import { Principal } from '@icp-sdk/core/principal';
 
 // --- NEW High-Fidelity Skeleton Component ---
@@ -147,37 +147,10 @@ export default function ServerDetailsPage() {
   } = useGetCanisterId(server?.namespace, server?.latestVersion.wasmId);
 
   // Fetch canister IDs for all WASM versions to aggregate metrics
-  const allVersionCanisterQueries = useQueries({
-    queries: (server?.allVersions ?? []).map((version) => ({
-      queryKey: ['serverCanisterId', server?.namespace, version.wasmId],
-      queryFn: async (): Promise<Principal | null> => {
-        if (!server?.namespace || !version.wasmId || !identity) {
-          return null;
-        }
-        try {
-          const id = await getServerCanisterId(
-            identity,
-            server.namespace,
-            version.wasmId,
-          );
-          // Explicitly return null if id is undefined
-          return id ?? null;
-        } catch {
-          return null;
-        }
-      },
-      enabled: !!server?.namespace && !!version.wasmId && !!identity,
-      // Add a placeholder data to prevent undefined issues
-      placeholderData: null,
-    })),
-  });
-
-  // Extract all valid canister IDs
-  const allCanisterIds = useMemo(() => {
-    return allVersionCanisterQueries
-      .map((q) => q.data)
-      .filter((id): id is Principal => id !== null);
-  }, [allVersionCanisterQueries]);
+  const { canisterIds: allCanisterIds } = useGetAllVersionCanisterIds(
+    server?.namespace,
+    server?.allVersions,
+  );
 
   // Use aggregated metrics across all versions
   const { data: aggregatedMetrics, isLoading: isLoadingMetrics } =

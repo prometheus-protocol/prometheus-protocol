@@ -38,7 +38,11 @@ export const useVerifierProfile = () => {
   const { data: paymentToken } = usePaymentToken();
 
   return useQuery({
-    queryKey: ['verifierProfile', principal?.toString(), paymentToken?.canisterId.toText()],
+    queryKey: [
+      'verifierProfile',
+      principal?.toString(),
+      paymentToken?.canisterId.toText(),
+    ],
     queryFn: async () => {
       if (!identity) {
         throw new Error('User is not authenticated.');
@@ -46,7 +50,10 @@ export const useVerifierProfile = () => {
       if (!paymentToken) {
         throw new Error('Payment token configuration not available.');
       }
-      return await getVerifierProfile(identity, paymentToken.canisterId.toText());
+      return await getVerifierProfile(
+        identity,
+        paymentToken.canisterId.toText(),
+      );
     },
     enabled: !!principal && !!paymentToken,
   });

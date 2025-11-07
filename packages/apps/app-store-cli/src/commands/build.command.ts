@@ -135,7 +135,11 @@ export function registerBuildCommand(program: Command) {
 
         try {
           // Build the Docker image without cache to ensure fresh build
-          execSync('docker-compose build --no-cache', { stdio: 'inherit' });
+          // Pass GITHUB_TOKEN if available to avoid rate limiting
+          const buildCmd = process.env.GITHUB_TOKEN
+            ? `docker-compose build --no-cache --build-arg GITHUB_TOKEN=${process.env.GITHUB_TOKEN}`
+            : 'docker-compose build --no-cache';
+          execSync(buildCmd, { stdio: 'inherit' });
 
           // Run the build
           execSync('docker-compose run --rm wasm', { stdio: 'inherit' });

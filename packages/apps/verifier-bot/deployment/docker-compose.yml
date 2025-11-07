@@ -23,13 +23,14 @@ services:
     container_name: verifier-bot-1
     restart: unless-stopped
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - 'host.docker.internal:host-gateway'
     environment:
       - VERIFIER_API_KEY=${VERIFIER_1_API_KEY}
       - IC_NETWORK=${IC_NETWORK:-local}
       - IC_HOST=http://host.docker.internal:4943
       - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
       - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ../../../../.dfx:/.dfx:ro
@@ -43,13 +44,14 @@ services:
     container_name: verifier-bot-2
     restart: unless-stopped
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - 'host.docker.internal:host-gateway'
     environment:
       - VERIFIER_API_KEY=${VERIFIER_2_API_KEY}
       - IC_NETWORK=${IC_NETWORK:-local}
       - IC_HOST=http://host.docker.internal:4943
       - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
       - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ../../../../.dfx:/.dfx:ro
@@ -63,13 +65,14 @@ services:
     container_name: verifier-bot-3
     restart: unless-stopped
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - 'host.docker.internal:host-gateway'
     environment:
       - VERIFIER_API_KEY=${VERIFIER_3_API_KEY}
       - IC_NETWORK=${IC_NETWORK:-local}
       - IC_HOST=http://host.docker.internal:4943
       - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
       - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ../../../../.dfx:/.dfx:ro
@@ -83,13 +86,14 @@ services:
     container_name: verifier-bot-4
     restart: unless-stopped
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - 'host.docker.internal:host-gateway'
     environment:
       - VERIFIER_API_KEY=${VERIFIER_4_API_KEY}
       - IC_NETWORK=${IC_NETWORK:-local}
       - IC_HOST=http://host.docker.internal:4943
       - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
       - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ../../../../.dfx:/.dfx:ro
@@ -103,13 +107,14 @@ services:
     container_name: verifier-bot-5
     restart: unless-stopped
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - 'host.docker.internal:host-gateway'
     environment:
       - VERIFIER_API_KEY=${VERIFIER_5_API_KEY}
       - IC_NETWORK=${IC_NETWORK:-local}
       - IC_HOST=http://host.docker.internal:4943
       - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
       - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ../../../../.dfx:/.dfx:ro
@@ -123,13 +128,77 @@ services:
     container_name: verifier-bot-6
     restart: unless-stopped
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - 'host.docker.internal:host-gateway'
     environment:
       - VERIFIER_API_KEY=${VERIFIER_6_API_KEY}
       - IC_NETWORK=${IC_NETWORK:-local}
       - IC_HOST=http://host.docker.internal:4943
       - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
       - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../../../../.dfx:/.dfx:ro
+    networks:
+      - verifier-network
+
+  verifier-bot-7:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: verifier-bot-7
+    restart: unless-stopped
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    environment:
+      - VERIFIER_API_KEY=${VERIFIER_7_API_KEY}
+      - IC_NETWORK=${IC_NETWORK:-local}
+      - IC_HOST=http://host.docker.internal:4943
+      - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
+      - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../../../../.dfx:/.dfx:ro
+    networks:
+      - verifier-network
+
+  verifier-bot-8:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: verifier-bot-8
+    restart: unless-stopped
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    environment:
+      - VERIFIER_API_KEY=${VERIFIER_8_API_KEY}
+      - IC_NETWORK=${IC_NETWORK:-local}
+      - IC_HOST=http://host.docker.internal:4943
+      - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
+      - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../../../../.dfx:/.dfx:ro
+    networks:
+      - verifier-network
+
+  verifier-bot-9:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: verifier-bot-9
+    restart: unless-stopped
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    environment:
+      - VERIFIER_API_KEY=${VERIFIER_9_API_KEY}
+      - IC_NETWORK=${IC_NETWORK:-local}
+      - IC_HOST=http://host.docker.internal:4943
+      - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
+      - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ../../../../.dfx:/.dfx:ro

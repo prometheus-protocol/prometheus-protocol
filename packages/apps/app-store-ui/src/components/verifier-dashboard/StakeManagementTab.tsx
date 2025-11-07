@@ -120,7 +120,9 @@ export function StakeManagementTab() {
   ).toString();
 
   // Calculate maximum withdrawable amount (available balance minus fee)
-  const fee = paymentToken ? paymentToken.fromAtomic(BigInt(paymentToken.fee)) : '0';
+  const fee = paymentToken
+    ? paymentToken.fromAtomic(BigInt(paymentToken.fee))
+    : '0';
   const maxWithdrawable = Math.max(
     0,
     parseFloat(availableBalance) - parseFloat(fee),
@@ -229,8 +231,8 @@ export function StakeManagementTab() {
             />
             <p className="text-xs text-muted-foreground">
               Available: {availableBalance} {paymentToken.symbol} • Max
-              withdrawable: {maxWithdrawable} {paymentToken.symbol} (after{' '}
-              {fee} {paymentToken.symbol} fee)
+              withdrawable: {maxWithdrawable} {paymentToken.symbol} (after {fee}{' '}
+              {paymentToken.symbol} fee)
             </p>
           </div>
           <Button

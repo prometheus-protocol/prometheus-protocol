@@ -700,6 +700,11 @@ export const idlFactory = ({ IDL }) => {
         [Result_2],
         ['query'],
       ),
+    'get_divergence_progress' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(IDL.Nat)],
+        ['query'],
+      ),
     'get_env_requirements' : IDL.Func(
         [],
         [
@@ -713,6 +718,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'get_tip' : IDL.Func([], [Tip], ['query']),
+    'get_verification_progress' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(IDL.Nat)],
+        ['query'],
+      ),
     'get_verification_request' : IDL.Func(
         [IDL.Text],
         [IDL.Opt(VerificationRequest)],
@@ -776,8 +786,18 @@ export const idlFactory = ({ IDL }) => {
         [AttestationResult],
         [],
       ),
+    'icrc126_file_attestation_with_api_key' : IDL.Func(
+        [IDL.Text, AttestationRequest],
+        [AttestationResult],
+        [],
+      ),
     'icrc126_file_divergence' : IDL.Func(
         [DivergenceReportRequest],
+        [DivergenceResult],
+        [],
+      ),
+    'icrc126_file_divergence_with_api_key' : IDL.Func(
+        [IDL.Text, DivergenceReportRequest],
         [DivergenceResult],
         [],
       ),

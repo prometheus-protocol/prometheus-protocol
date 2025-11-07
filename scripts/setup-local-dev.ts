@@ -5,11 +5,13 @@ import { $, chalk } from 'zx';
 // Local Development Setup Script
 //
 // This script performs LOCAL DEVELOPMENT ONLY operations after deploying canisters:
-// - Mints initial auditor reputation tokens
+// - Sets stake requirements for audit types
 // - Transfers test USDC to test auditor
+// - Funds MCP Registry for sponsoring build bounties
 // - Fabricates cycles for the orchestrator
 //
 // For canister linking/configuration, use: pnpm config:inject
+// For verifier registration, use: pnpm exec tsx scripts/register-dev-verifiers.ts
 //
 // Usage:
 //   pnpm setup:local
@@ -21,8 +23,8 @@ const AUDITOR_PRINCIPAL =
   'zxuwv-zt33i-dtske-3tzt5-iw3b4-mjuif-jc4vr-hz2vk-ky2v4-kyrkv-pqe';
 
 const STAKE_AMOUNT = 1; // 1 USDC (adjust based on your token decimals)
-const MINT_AMOUNT = 100; // Initial reputation tokens per category
 const USDC_TRANSFER_AMOUNT = 100_000_000; // Enough for multiple stakes
+const REGISTRY_USDC_AMOUNT = 1_000_000_000; // 1,000 USDC for sponsoring build bounties
 const ORCHESTRATOR_CYCLES_IN_TRILLIONS = 100; // 100T cycles
 
 const AUDIT_TYPES = [
@@ -46,30 +48,22 @@ async function main() {
   console.log(chalk.bold('🔍 Fetching canister IDs...'));
   const audit_hub = (await $`dfx canister id audit_hub`).stdout.trim();
   const usdc_ledger = (await $`dfx canister id usdc_ledger`).stdout.trim();
+  const mcp_registry = (await $`dfx canister id mcp_registry`).stdout.trim();
   const mcp_orchestrator = (
     await $`dfx canister id mcp_orchestrator`
   ).stdout.trim();
   console.log(chalk.green('✅ Canister IDs fetched.'));
   console.log('');
 
-  // Configure stake requirements
+  // Configure stake requirements (using USDC ledger as token_id, must use pp_owner identity)
   console.log(chalk.bold('💰 Setting stake requirements...'));
-  for (const type of AUDIT_TYPES) {
-    console.log(
-      `  - Setting stake requirement for '${type}' to ${STAKE_AMOUNT}...`,
-    );
-    await $`dfx canister call ${audit_hub} set_stake_requirement '("${type}", ${STAKE_AMOUNT}:nat)'`;
-  }
+  console.log(
+    `  - Setting stake requirement for USDC ledger to ${STAKE_AMOUNT}...`,
+  );
+  await $`dfx identity use pp_owner 2>/dev/null`;
+  await $`dfx canister call ${audit_hub} set_stake_requirement '("${usdc_ledger}", ${STAKE_AMOUNT}:nat)'`;
+  await $`dfx identity use pp_owner 2>/dev/null`;
   console.log(chalk.green('✅ Stake requirements set.'));
-  console.log('');
-
-  // Mint initial auditor tokens
-  console.log(chalk.bold('🎫 Minting initial auditor tokens...'));
-  for (const type of AUDIT_TYPES) {
-    console.log(`  - Minting ${MINT_AMOUNT} '${type}' tokens...`);
-    await $`dfx canister call ${audit_hub} mint_tokens '(principal "${AUDITOR_PRINCIPAL}", "${type}", ${MINT_AMOUNT}:nat)'`;
-  }
-  console.log(chalk.green('✅ Auditor tokens minted.'));
   console.log('');
 
   // Transfer USDC
@@ -81,6 +75,17 @@ async function main() {
   const transferArgs = `(record { to = record { owner = principal \"${AUDITOR_PRINCIPAL}\"; subaccount = null }; amount = ${USDC_TRANSFER_AMOUNT}:nat })`;
   await $`dfx canister call ${usdc_ledger} icrc1_transfer ${transferArgs}`;
   console.log(chalk.green('✅ USDC transfer complete.'));
+  console.log('');
+
+  // Fund MCP Registry for build bounties
+  console.log(
+    chalk.yellow(
+      `💸 Transferring ${REGISTRY_USDC_AMOUNT} USDC units to MCP Registry for build bounties...`,
+    ),
+  );
+  const registryTransferArgs = `(record { to = record { owner = principal \"${mcp_registry}\"; subaccount = null }; amount = ${REGISTRY_USDC_AMOUNT}:nat })`;
+  await $`dfx canister call ${usdc_ledger} icrc1_transfer ${registryTransferArgs}`;
+  console.log(chalk.green('✅ MCP Registry funded.'));
   console.log('');
 
   // Fabricate cycles

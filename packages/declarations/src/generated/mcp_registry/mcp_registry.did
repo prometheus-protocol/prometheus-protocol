@@ -452,6 +452,7 @@ type ICRC118WasmRegistryCanister =
    get_bounties_for_wasm: (wasm_id: text) -> (vec Bounty) query;
    get_canister_type_version: (req: GetCanisterTypeVersionRequest) ->
     (Result_2) query;
+   get_divergence_progress: (wasm_id: text) -> (vec nat) query;
    get_env_requirements: () ->
     (variant {
        v1:
@@ -460,6 +461,7 @@ type ICRC118WasmRegistryCanister =
           dependencies: vec EnvDependency;
         };}) query;
    get_tip: () -> (Tip) query;
+   get_verification_progress: (wasm_id: text) -> (vec nat) query;
    /// * @notice Fetches the original verification request metadata for a given WASM ID.
    ///    * @param wasm_id The hex-encoded SHA-256 hash of the WASM.
    ///    * @return The optional `VerificationRequest` record, which contains the repo URL and commit hash.
@@ -488,8 +490,16 @@ type ICRC118WasmRegistryCanister =
    icrc118_update_wasm: (req: UpdateWasmRequest) -> (UpdateWasmResult);
    icrc118_upload_wasm_chunk: (req: UploadRequest) -> (UploadResponse);
    icrc126_file_attestation: (req: AttestationRequest) -> (AttestationResult);
+   /// * File an attestation using an API key instead of caller identity.
+   ///    * This allows verifier bots to authenticate without managing identities.
+   icrc126_file_attestation_with_api_key: (api_key: text, req:
+    AttestationRequest) -> (AttestationResult);
    icrc126_file_divergence: (req: DivergenceReportRequest) ->
     (DivergenceResult);
+   /// * File a divergence report using an API key instead of caller identity.
+   ///    * This allows verifier bots to authenticate without managing identities.
+   icrc126_file_divergence_with_api_key: (api_key: text, req:
+    DivergenceReportRequest) -> (DivergenceResult);
    icrc126_verification_request: (req: VerificationRequest) -> (nat);
    icrc127_create_bounty: (req: CreateBountyRequest) -> (CreateBountyResult);
    icrc127_get_bounty: (bounty_id: nat) -> (opt Bounty) query;

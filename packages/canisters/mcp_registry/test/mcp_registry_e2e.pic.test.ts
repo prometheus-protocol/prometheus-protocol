@@ -358,8 +358,28 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       wasm_hash: wasmHash,
       repo: 'https://github.com/test/repo',
       commit_hash: new Uint8Array([1]),
-      metadata: [],
+      metadata: [
+        ['name', { Text: 'TaskPad On-Chain' }],
+        [
+          'description',
+          { Text: 'A simple and permanent to-do list for agents.' },
+        ],
+        ['publisher', { Text: 'Atlas Labs' }],
+        [
+          'tags',
+          {
+            Array: [
+              { Text: 'productivity' },
+              { Text: 'utility' },
+              { Text: 'todo' },
+            ],
+          },
+        ],
+      ],
     });
+
+    // Allow the IC to process the indexing inter-canister call
+    await pic.tick(5);
 
     // ASSERT: At this point, the WASM is known but NOT verified.
     expect(await registryActor.is_wasm_verified(wasmId)).toBe(false);
@@ -666,68 +686,10 @@ describe('MCP Registry Full E2E Lifecycle', () => {
   // ... after the last 'it' block ...
 
   it('should correctly index app data and return search results', async () => {
-    // === ARRANGE: Setup the data that will be indexed ===
-    // We will use the wasmId and appNamespace from the first E2E test.
-    const wasmBytes = await readFile(MCP_SERVER_DUMMY_WASM_PATH);
-    const wasmHash = createHash('sha256').update(wasmBytes).digest();
-    const wasmId = Buffer.from(wasmHash).toString('hex');
-    const appNamespace = 'com.prometheus.test-server'; // Match the first test's namespace
-    const bountyAmount = 100_000n;
-
-    // The searchable metadata for our test app
-    const appInfo = {
-      name: 'TaskPad On-Chain',
-      description: 'A simple and permanent to-do list for agents.',
-      publisher: 'Atlas Labs',
-      tags: ['productivity', 'utility', 'todo'],
-    };
-
-    // Create a new bounty specifically for the app_info audit
-    registryActor.setIdentity(bountyCreatorIdentity);
-    const appInfoBountyResult = await registryActor.icrc127_create_bounty({
-      challenge_parameters: {
-        Map: [
-          ['wasm_hash', { Blob: wasmHash }],
-          ['audit_type', { Text: 'app_info_v1' }],
-        ],
-      },
-      bounty_metadata: [
-        ['icrc127:reward_canister', { Principal: ledgerCanisterId }],
-        ['icrc127:reward_amount', { Nat: bountyAmount }],
-      ],
-      timeout_date: BigInt(Date.now() + 8.64e10) * 1000000n,
-      start_date: [],
-      bounty_id: [],
-      validation_canister_id: registryCanisterId,
-    });
-    const appInfoBountyId =
-      ('Ok' in appInfoBountyResult && appInfoBountyResult.Ok.bounty_id) || 0n;
-    console.log('App Info Bounty Result:', appInfoBountyResult);
-
-    // === ACT: File the `app_info_v1` attestation, which triggers the indexing ===
-    auditHubActor.setIdentity(appInfoAuditor);
-    const resRes = await auditHubActor.reserve_bounty(
-      appInfoBountyId,
-      ledgerCanisterId.toText(),
-    );
-    console.log('App Info Reserve Result:', resRes);
-
-    registryActor.setIdentity(appInfoAuditor);
-    await registryActor.icrc126_file_attestation({
-      wasm_id: wasmId,
-      metadata: [
-        ['126:audit_type', { Text: 'app_info_v1' }],
-        ['bounty_id', { Nat: appInfoBountyId }],
-        ['name', { Text: appInfo.name }],
-        ['description', { Text: appInfo.description }],
-        ['publisher', { Text: appInfo.publisher }],
-        ['tags', { Array: appInfo.tags.map((t) => ({ Text: t })) }],
-      ],
-    });
-
-    // CRITICAL: Allow the IC to process the "fire-and-forget" inter-canister call
-    // from the Registry to the Indexer.
-    await pic.tick(2);
+    // === ARRANGE: The app data was already indexed during update_wasm ===
+    // The first test already submitted a verification request with metadata,
+    // which triggered the search indexer to index the app data.
+    const appNamespace = 'com.prometheus.test-server';
 
     // === ASSERT: Query the indexer and verify the results ===
     // Test 1: Search for a unique word from the name

@@ -151,6 +151,7 @@ export const AuditContent = ({ audit }: { audit: AuditBountyWithDetails }) => {
             return (
               <BuildReproducibilityAttestation
                 data={data as BuildReproducibilityAttestationData}
+                auditor={audit.results.auditor}
               />
             );
           default:

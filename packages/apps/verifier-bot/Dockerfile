@@ -4,10 +4,11 @@
 FROM node:20-alpine
 
 # Install git for cloning repositories
-# Docker CLI for running reproducible builds (uses host Docker daemon)
+# Docker CLI + Compose for running reproducible builds (uses host Docker daemon)
 RUN apk add --no-cache \
     git \
     docker-cli \
+    docker-cli-compose \
     bash
 
 WORKDIR /app

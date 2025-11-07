@@ -56,6 +56,7 @@ export interface AuditBounty {
   claimedTimestamp?: bigint;
   claimedDate?: Date;
   timeoutDate?: Date;
+  wasmHashHex?: string; // Hex string of the WASM hash for easy grouping
 }
 
 export interface ProcessedVerificationRequest {
@@ -278,7 +279,6 @@ export interface ToolsAttestationData {
 export interface BuildReproducibilityAttestationData {
   '126:audit_type': 'build_reproducibility_v1';
   // V2 fields
-  verifier_principal?: string;
   verifier_version?: string;
   build_timestamp?: bigint;
   build_duration_seconds?: bigint;
@@ -389,6 +389,7 @@ export const getAuditBounty = async (
       results = {
         type: 'success',
         data: matchingRecord.metadata as AttestationData,
+        auditor: matchingRecord.auditor,
       };
     } else {
       // type is 'divergence'
@@ -640,7 +641,7 @@ export interface BuildInfo {
 }
 
 export type AuditResults =
-  | { type: 'success'; data: Record<string, any> }
+  | { type: 'success'; data: Record<string, any>; auditor: Principal }
   | { type: 'failure'; reason: string };
 
 export type DataSafetyInfo = {
@@ -879,6 +880,74 @@ export const submitDivergence = async (
 };
 
 /**
+ * Submits a divergence report using an API key for authentication.
+ * This is used by verifier bots that authenticate with API keys instead of identities.
+ * @param apiKey - The verifier's API key
+ * @param args - The arguments for the divergence report
+ * @returns The result from the canister
+ */
+export const submitDivergenceWithApiKey = async (
+  apiKey: string,
+  { bountyId, wasmId, reason }: SubmitDivergenceArgs,
+) => {
+  const actor = getRegistryActor();
+
+  const metadata: ICRC16Map = [['bounty_id', { Nat: bountyId }]];
+
+  const result = await actor.icrc126_file_divergence_with_api_key(apiKey, {
+    wasm_id: wasmId,
+    divergence_report: reason,
+    metadata: [metadata],
+  });
+
+  if ('Error' in result) {
+    const errorType = Object.keys(result.Error)[0];
+    const errorValue = result.Error[errorType as keyof typeof result.Error];
+    const errorMsg = typeof errorValue === 'string' ? errorValue : errorType;
+    throw new Error(`Failed to submit divergence: ${errorMsg}`);
+  }
+
+  return result.Ok;
+};
+
+export interface FileAttestationWithApiKeyArgs {
+  wasm_id: string;
+  bounty_id: bigint;
+  attestationData: AttestationData;
+}
+
+/**
+ * Files an attestation for a successful build verification using an API key.
+ * This is used by verifier bots that authenticate with API keys instead of identities.
+ * @param apiKey - The verifier's API key
+ * @param args - The arguments for the attestation
+ * @returns The result from the canister
+ */
+export const fileAttestationWithApiKey = async (
+  apiKey: string,
+  args: FileAttestationWithApiKeyArgs,
+): Promise<void> => {
+  const { wasm_id, bounty_id, attestationData } = args;
+  const actor = getRegistryActor();
+
+  // Serialize the structured data into the required on-chain format
+  const metadata = serializeToIcrc16Map(attestationData);
+
+  const result = await actor.icrc126_file_attestation_with_api_key(apiKey, {
+    wasm_id: wasm_id,
+    metadata: [...metadata, ['bounty_id', { Nat: bounty_id }]],
+  });
+
+  if ('Error' in result) {
+    throw new Error(
+      `Failed to file attestation: ${JSON.stringify(result.Error)}`,
+    );
+  }
+
+  return result.Ok;
+};
+
+/**
  * Fetches the complete audit history (attestations and divergences) for a given WASM ID.
  */
 export const getAuditRecordsForWasm = async (
@@ -952,6 +1021,51 @@ export const hasVerifierParticipatedWithApiKey = async (
   const rawBounties = await registryActor.get_bounties_for_wasm(wasmId);
   const bounties = rawBounties.map(processBounty);
 
+  // Check each bounty to see if our verifier has claimed it (and lock is not expired)
+  for (const bounty of bounties) {
+    const lock = await auditHubActor.get_bounty_lock(bounty.id);
+    const bountyLock: AuditHub.BountyLock | undefined = fromNullable(lock);
+
+    if (
+      bountyLock &&
+      bountyLock.claimant.compareTo(verifierPrincipal) === 'eq'
+    ) {
+      // Check if the lock is expired
+      const currentTime = BigInt(Date.now()) * 1_000_000n; // Convert to nanoseconds
+      const isExpired = currentTime > bountyLock.expires_at;
+
+      if (!isExpired) {
+        return true; // This verifier has an active (non-expired) lock
+      }
+      // If expired, continue checking other bounties
+    }
+  }
+
+  return false;
+};
+
+/**
+ * Gets the specific bounty that a verifier has locked for a given WASM.
+ * Returns the bounty object if found, null otherwise.
+ */
+export const getLockedBountyForVerifier = async (
+  wasmId: string,
+  apiKey: string,
+): Promise<AuditBounty | null> => {
+  const registryActor = getRegistryActor();
+  const auditHubActor = getAuditHubActor();
+
+  // First, validate the API key and get the verifier's principal
+  const validateResult = await auditHubActor.validate_api_key(apiKey);
+  if ('err' in validateResult) {
+    throw new Error(`Invalid API key: ${validateResult.err}`);
+  }
+  const verifierPrincipal = validateResult.ok;
+
+  // Get all bounties for this WASM
+  const rawBounties = await registryActor.get_bounties_for_wasm(wasmId);
+  const bounties = rawBounties.map(processBounty);
+
   // Check each bounty to see if our verifier has claimed it
   for (const bounty of bounties) {
     const lock = await auditHubActor.get_bounty_lock(bounty.id);
@@ -961,11 +1075,33 @@ export const hasVerifierParticipatedWithApiKey = async (
       bountyLock &&
       bountyLock.claimant.compareTo(verifierPrincipal) === 'eq'
     ) {
-      return true; // This verifier has already claimed a bounty for this WASM
+      return bounty; // Found the bounty this verifier has locked
     }
   }
 
-  return false; // Verifier has not participated yet
+  return null; // Verifier has not locked any bounty for this WASM
+};
+
+/**
+ * Gets the verification progress (attestation count) for a specific WASM.
+ * Returns array of bounty IDs that have filed successful attestations.
+ */
+export const getVerificationProgress = async (
+  wasmId: string,
+): Promise<bigint[]> => {
+  const registryActor = getRegistryActor();
+  return await registryActor.get_verification_progress(wasmId);
+};
+
+/**
+ * Gets the divergence progress (divergence report count) for a specific WASM.
+ * Returns array of bounty IDs that have filed divergence reports.
+ */
+export const getDivergenceProgress = async (
+  wasmId: string,
+): Promise<bigint[]> => {
+  const registryActor = getRegistryActor();
+  return await registryActor.get_divergence_progress(wasmId);
 };
 
 /**

@@ -4,7 +4,11 @@ import {
   reserveBountyWithApiKey,
   fileAttestation,
   submitDivergence,
+  fileAttestationWithApiKey,
+  submitDivergenceWithApiKey,
   hasVerifierParticipatedWithApiKey,
+  getBountyLock,
+  getLockedBountyForVerifier,
   AttestationData,
   configure as configureIcJs,
 } from '@prometheus-protocol/ic-js';
@@ -19,6 +23,38 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Path to persist participated WASMs across restarts
+const PARTICIPATED_CACHE_FILE = path.join(
+  __dirname,
+  '.participated-wasms.json',
+);
+
+// Load participated WASMs from disk
+function loadParticipatedWasms(): Set<string> {
+  try {
+    if (fs.existsSync(PARTICIPATED_CACHE_FILE)) {
+      const data = fs.readFileSync(PARTICIPATED_CACHE_FILE, 'utf-8');
+      return new Set(JSON.parse(data));
+    }
+  } catch (error) {
+    console.error('Failed to load participated cache:', error);
+  }
+  return new Set();
+}
+
+// Save participated WASMs to disk
+function saveParticipatedWasms(wasms: Set<string>): void {
+  try {
+    fs.writeFileSync(
+      PARTICIPATED_CACHE_FILE,
+      JSON.stringify([...wasms]),
+      'utf-8',
+    );
+  } catch (error) {
+    console.error('Failed to save participated cache:', error);
+  }
+}
 
 // --- CONFIGURE THE SHARED PACKAGE ---
 // Configuration from environment variables
@@ -96,9 +132,9 @@ if (IC_NETWORK === 'ic') {
 
 // Configure the shared library with the chosen set of IDs
 const host =
-  IC_NETWORK === 'ic' 
-    ? 'https://icp-api.io' 
-    : (process.env.IC_HOST || 'http://host.docker.internal:4943');
+  IC_NETWORK === 'ic'
+    ? 'https://icp-api.io'
+    : process.env.IC_HOST || 'http://host.docker.internal:4943';
 
 console.log(`[Bot] Host: ${host}`);
 configureIcJs({ canisterIds, host });
@@ -110,6 +146,13 @@ console.log(`🔑 API Key: ${VERIFIER_API_KEY.slice(0, 12)}...`);
 console.log(`🌐 Network: ${IC_NETWORK}`);
 console.log(`⏱️  Poll Interval: ${POLL_INTERVAL_MS}ms`);
 console.log('====================================\n');
+
+// Track WASMs where we've already submitted results to avoid retrying failed submissions
+// Persisted to disk so it survives restarts
+const participatedWasms = loadParticipatedWasms();
+console.log(
+  `📝 Loaded ${participatedWasms.size} previously participated WASMs from cache\n`,
+);
 
 /**
  * Main polling and verification loop.
@@ -132,35 +175,97 @@ async function pollAndVerify(): Promise<void> {
       const jobSummary = `${job.wasm_hash.slice(0, 12)}... from ${job.repo}`;
 
       try {
+        // Skip WASMs where we've already submitted results (and got "already participated" error)
+        if (participatedWasms.has(job.wasm_hash)) {
+          continue; // Silent skip - no need to log every time
+        }
+
         // Check if this job has a build_reproducibility_v1 bounty
         console.log(`   🔍 Checking bounties for WASM: ${job.wasm_hash}`);
         const bounties = await getBountiesForWasm(job.wasm_hash);
         console.log(`   📋 Found ${bounties.length} bounties for this WASM`);
 
-        // Check if we've already participated in this WASM verification
+        // Find all build reproducibility bounties
+        const buildBounties = bounties.filter((b: any) => {
+          const auditType = b.challengeParameters?.audit_type;
+          return auditType === 'build_reproducibility_v1';
+        });
+
+        if (buildBounties.length === 0) {
+          console.log(`   ⏭️  Skipping ${jobSummary}: No bounty sponsored yet`);
+          continue;
+        }
+
+        // First, check if we already have an active lock on any bounty for this WASM
+        // This allows resuming work after restart/disconnect
+        let buildBounty: any = null;
+        let isResumingWork = false;
+
         const alreadyParticipated = await hasVerifierParticipatedWithApiKey(
           job.wasm_hash,
           VERIFIER_API_KEY,
         );
 
         if (alreadyParticipated) {
+          // We have an active lock - find which bounty it is
           console.log(
-            `   ⏭️  Skipping ${jobSummary}: Already participated in this verification`,
+            `   🔄 Found existing lock, finding which bounty to resume...`,
           );
-          continue;
-        }
 
-        // Find an available bounty that isn't already claimed
-        const buildBounty = bounties.find((b: any) => {
-          const auditType = b.challengeParameters?.audit_type;
-          const isBuildBounty = auditType === 'build_reproducibility_v1';
-          // Note: claimed bounties won't be returned by getBountiesForWasm as they're filtered
-          return isBuildBounty;
-        });
+          // Use the helper function to find which bounty this verifier has locked
+          buildBounty = await getLockedBountyForVerifier(
+            job.wasm_hash,
+            VERIFIER_API_KEY,
+          );
 
-        if (!buildBounty) {
-          console.log(`   ⏭️  Skipping ${jobSummary}: No bounty sponsored yet`);
-          continue;
+          if (!buildBounty) {
+            // Couldn't find our lock - it may have expired
+            console.log(
+              `   ⏭️  Skipping ${jobSummary}: Lock expired or work already completed`,
+            );
+            continue;
+          }
+
+          isResumingWork = true;
+          console.log(`   ♻️  Resuming work on bounty ${buildBounty.id}`);
+        } else {
+          // Try to reserve a new bounty - attempt each one until successful
+          let reservationError: string | null = null;
+
+          for (const bounty of buildBounties) {
+            try {
+              console.log(`\n🔒 Attempting to reserve bounty ${bounty.id}...`);
+              await reserveBountyWithApiKey({
+                api_key: VERIFIER_API_KEY,
+                bounty_id: bounty.id,
+                token_id: canisterIds.USDC_LEDGER,
+              });
+              buildBounty = bounty;
+              console.log(
+                `   ✅ Bounty ${bounty.id} reserved, stake locked for 1 hour`,
+              );
+              break;
+            } catch (error: any) {
+              const errorMsg = error.message || String(error);
+              if (errorMsg.includes('already locked')) {
+                console.log(
+                  `   ⏭️  Bounty ${bounty.id} is already locked, trying next...`,
+                );
+                continue;
+              } else {
+                // Other errors (insufficient balance, etc.) should stop trying
+                reservationError = errorMsg;
+                break;
+              }
+            }
+          }
+
+          if (!buildBounty) {
+            console.log(
+              `   ⏭️  Skipping ${jobSummary}: ${reservationError || 'All bounties are locked'}`,
+            );
+            continue;
+          }
         }
 
         console.log(`\n🎯 Processing verification job`);
@@ -169,15 +274,6 @@ async function pollAndVerify(): Promise<void> {
         console.log(`   Commit: ${job.commit_hash}`);
         console.log(`   Bounty ID: ${buildBounty.id}`);
         console.log(`   Reward: ${buildBounty.tokenAmount} tokens`);
-
-        // Reserve the bounty using API key (stakes USDC automatically)
-        console.log(`\n🔒 Reserving bounty with API key...`);
-        await reserveBountyWithApiKey({
-          api_key: VERIFIER_API_KEY,
-          bounty_id: buildBounty.id,
-          token_id: 'build_reproducibility_v1',
-        });
-        console.log(`   ✅ Bounty reserved, stake locked for 1 hour`);
 
         // Run the reproducible build (auto-detects canister name from dfx.json)
         console.log(`\n🔨 Starting reproducible build...`);
@@ -192,6 +288,31 @@ async function pollAndVerify(): Promise<void> {
         if (result.success) {
           // Success: File attestation
           console.log(`✅ Build verified! Hash matches. Filing attestation...`);
+
+          // Re-check which bounty we actually own after the build
+          // (state may have changed during the long build process)
+          console.log(`🔍 Re-verifying bounty ownership after build...`);
+          const currentBounty = await getLockedBountyForVerifier(
+            job.wasm_hash,
+            VERIFIER_API_KEY,
+          );
+
+          if (!currentBounty) {
+            console.log(
+              `   ⚠️  No longer have a lock on any bounty for this WASM`,
+            );
+            console.log(
+              `   This can happen if the lock expired or was taken by another bot`,
+            );
+            continue;
+          }
+
+          if (currentBounty.id !== buildBounty.id) {
+            console.log(
+              `   ℹ️  Bounty changed from ${buildBounty.id} to ${currentBounty.id} during build`,
+            );
+            buildBounty = currentBounty; // Update to the current bounty
+          }
 
           const attestationData: AttestationData = {
             '126:audit_type': 'build_reproducibility_v1',
@@ -210,15 +331,27 @@ async function pollAndVerify(): Promise<void> {
             );
           }
 
-          // Note: fileAttestation needs to be updated to not require identity
-          // For now, we'll need to add an API-key variant
-          await fileAttestation(undefined as any, {
-            bounty_id: buildBounty.id,
-            wasm_id: job.wasm_hash,
-            attestationData,
-          });
-
-          console.log(`   ✅ Attestation filed successfully`);
+          try {
+            await fileAttestationWithApiKey(VERIFIER_API_KEY, {
+              bounty_id: buildBounty.id,
+              wasm_id: job.wasm_hash,
+              attestationData,
+            });
+            console.log(`   ✅ Attestation filed successfully`);
+          } catch (error: any) {
+            // Check if we already participated - if so, mark and skip in future
+            if (
+              error.message &&
+              error.message.includes('already participated')
+            ) {
+              console.log(`   ℹ️  Already participated in this verification`);
+              participatedWasms.add(job.wasm_hash);
+              saveParticipatedWasms(participatedWasms);
+              continue; // Skip to next job
+            }
+            console.error(`   ❌ Failed to file attestation:`, error.message);
+            throw error;
+          }
           console.log(`   ⏳ Waiting for 5-of-9 consensus...`);
           console.log(
             `   ✅ WASM ${job.wasm_hash.slice(0, 12)}... attestation recorded`,
@@ -233,12 +366,30 @@ async function pollAndVerify(): Promise<void> {
           );
           console.log(`   Reason: ${result.error}`);
 
-          // Note: submitDivergence needs to be updated to not require identity
-          await submitDivergence(undefined as any, {
-            bountyId: buildBounty.id,
-            wasmId: job.wasm_hash,
-            reason: result.error || 'Build failed or hash mismatch',
-          });
+          try {
+            await submitDivergenceWithApiKey(VERIFIER_API_KEY, {
+              bountyId: buildBounty.id,
+              wasmId: job.wasm_hash,
+              reason: result.error || 'Build failed or hash mismatch',
+            });
+            console.log(`   ✅ Divergence report filed successfully`);
+          } catch (error: any) {
+            // Check if we already participated - if so, mark and skip in future
+            if (
+              error.message &&
+              error.message.includes('already participated')
+            ) {
+              console.log(`   ℹ️  Already participated in this verification`);
+              participatedWasms.add(job.wasm_hash);
+              saveParticipatedWasms(participatedWasms);
+              continue; // Skip to next job
+            }
+            console.error(
+              `   ❌ Failed to file divergence report:`,
+              error.message,
+            );
+            throw error;
+          }
 
           console.log(`   ✅ Divergence report filed`);
           console.log(`   ⏳ Waiting for 5-of-9 consensus...`);
@@ -287,7 +438,7 @@ async function main() {
   // Wait a moment for replica to be fully ready (avoid noisy startup errors)
   if (IC_NETWORK === 'local') {
     console.log('⏳ Waiting for local replica to be ready...');
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await new Promise((resolve) => setTimeout(resolve, 3000));
   }
 
   // Run immediately on startup

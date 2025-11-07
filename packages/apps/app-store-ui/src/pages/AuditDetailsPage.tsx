@@ -14,13 +14,14 @@ export default function AuditDetailsPage() {
     data: audit,
     error,
     isLoading,
+    isFetched,
     isError,
     refetch,
   } = useGetAuditBounty(bountyId);
 
-  if (isLoading) return <AuditDetailsSkeleton />;
+  if (!isFetched || isLoading) return <AuditDetailsSkeleton />;
   if (isError) return <AuditHubError onRetry={refetch} />;
-  if (!audit) {
+  if (!isLoading && !audit) {
     return (
       <div className="w-full max-w-6xl mx-auto pt-12 pb-24 text-center text-gray-400">
         <h1 className="text-2xl font-bold text-white">Audit Not Found</h1>

@@ -259,12 +259,12 @@ describe('Audit Hub Canister - USDC Staking System', () => {
       );
       expect(withdrawResult).toHaveProperty('ok');
 
-      // Verify balances
+      // Verify balances (3 USDC minus the transfer fee for withdrawal)
       const profile = await auditHubActor.get_verifier_profile(
         verifier1Identity.getPrincipal(),
         usdcLedgerCanisterId.toText(),
       );
-      expect(profile.available_balance_usdc).toBe(toUSDC(3));
+      expect(profile.available_balance_usdc).toBe(toUSDC(3) - USDC_FEE);
     });
 
     it('should reject withdrawal of more than available balance', async () => {

@@ -62,5 +62,9 @@ module AuditHub {
     get_available_balance_by_audit_type : query (auditor : Principal, audit_type : Text) -> async Balance;
     get_staked_balance : query (auditor : Principal, token_id : TokenId) -> async Balance;
     get_bounty_lock : query (bounty_id : BountyId) -> async ?BountyLock;
+    has_active_bounty_lock : query (verifier : Principal) -> async Bool;
+
+    // == API KEY AUTHENTICATION ==
+    validate_api_key : query (api_key : Text) -> async Result.Result<Principal, Text>;
   };
 };

@@ -29,6 +29,7 @@ import AppBountiesPage from './pages/AppBountiesPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import AuditHubPage from './pages/AuditHubPage';
 import AuditDetailsPage from './pages/AuditDetailsPage';
+import VerificationDetailsPage from './pages/VerificationDetailsPage';
 import WalletPage from './pages/WalletPage';
 import LoginPage from './pages/LoginPage';
 import SetupPage from './pages/SetupPage';
@@ -113,7 +114,10 @@ function App() {
               {/* Audit Hub Routes */}
               <Route path="audit-hub">
                 <Route index element={<AuditHubPage />} />
-                <Route path=":auditId" element={<AuditDetailsPage />} />
+                {/* New: WASM-based verification route */}
+                <Route path=":wasmId" element={<VerificationDetailsPage />} />
+                {/* Legacy: Keep bounty-based route for backward compatibility */}
+                <Route path="bounty/:auditId" element={<AuditDetailsPage />} />
               </Route>
 
               {/* Main pages */}

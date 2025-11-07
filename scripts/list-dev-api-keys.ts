@@ -26,7 +26,8 @@ const DEV_IDENTITIES = [
 // --- MAIN SCRIPT ---
 
 async function getPrincipal(identity: string): Promise<string> {
-  const result = await $`dfx identity use ${identity} 2>/dev/null && dfx identity get-principal`;
+  const result =
+    await $`dfx identity use ${identity} 2>/dev/null && dfx identity get-principal`;
   return result.stdout.trim();
 }
 
@@ -38,9 +39,7 @@ async function getCurrentIdentity(): Promise<string> {
 async function main() {
   $.verbose = false;
 
-  console.log(
-    chalk.bold.cyan('🔑 Listing API keys for dev verifiers...'),
-  );
+  console.log(chalk.bold.cyan('🔑 Listing API keys for dev verifiers...'));
   console.log(chalk.dim(`Network: ${NETWORK}`));
   console.log('');
 
@@ -48,7 +47,9 @@ async function main() {
   const originalIdentity = await getCurrentIdentity();
 
   // Get canister IDs
-  const audit_hub = (await $`dfx canister id audit_hub --network ${NETWORK}`).stdout.trim();
+  const audit_hub = (
+    await $`dfx canister id audit_hub --network ${NETWORK}`
+  ).stdout.trim();
 
   console.log(chalk.bold('Dev Verifier API Keys'));
   console.log('═'.repeat(80));
@@ -65,9 +66,10 @@ async function main() {
       console.log(chalk.dim(`Principal: ${principal}`));
 
       // List API keys
-      const apiKeysResult = await $`dfx canister call ${audit_hub} list_api_keys --network ${NETWORK}`;
+      const apiKeysResult =
+        await $`dfx canister call ${audit_hub} list_api_keys --network ${NETWORK}`;
       const output = apiKeysResult.stdout.trim();
-      
+
       // Parse the output to extract just the API key
       if (output.includes('vec {}') || output === '(vec {})') {
         console.log(chalk.red('  ❌ No API keys found'));
@@ -75,12 +77,16 @@ async function main() {
         // Extract API key from the Candid output
         const keyMatch = output.match(/api_key = "([^"]+)"/);
         const createdMatch = output.match(/created_at = ([\d_]+)/);
-        
+
         if (keyMatch) {
           const apiKey = keyMatch[1];
-          const created = createdMatch ? createdMatch[1].replace(/_/g, '') : 'unknown';
-          const date = createdMatch ? new Date(Number(created) / 1_000_000).toLocaleString() : 'unknown';
-          
+          const created = createdMatch
+            ? createdMatch[1].replace(/_/g, '')
+            : 'unknown';
+          const date = createdMatch
+            ? new Date(Number(created) / 1_000_000).toLocaleString()
+            : 'unknown';
+
           console.log(chalk.green('  ✅ API Key: ') + chalk.cyan(apiKey));
           console.log(chalk.dim(`     Created: ${date}`));
         } else {
@@ -89,9 +95,11 @@ async function main() {
         }
       }
       console.log('');
-
     } catch (error) {
-      console.error(chalk.red.bold(`❌ Error listing keys for ${identity}:`), error);
+      console.error(
+        chalk.red.bold(`❌ Error listing keys for ${identity}:`),
+        error,
+      );
     }
   }
 

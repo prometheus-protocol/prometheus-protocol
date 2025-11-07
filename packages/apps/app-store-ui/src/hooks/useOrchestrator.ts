@@ -1,11 +1,13 @@
 import {
   getServerCanisterId,
   provisionInstance,
+  type AppVersionSummary,
 } from '@prometheus-protocol/ic-js';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import { Principal } from '@icp-sdk/core/principal';
 import useMutation from './useMutation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
+import { useMemo } from 'react';
 
 /**
  * React Query mutation hook to provision a new instance of an MCP server.
@@ -57,4 +59,55 @@ export const useGetCanisterId = (namespace?: string, wasmId?: string) => {
     // Provide a placeholder to prevent undefined issues during initialization
     placeholderData: null,
   });
+};
+
+/**
+ * React Query hook to fetch canister IDs for all versions of an MCP server.
+ * Returns an array of Principal IDs for all versions that have been provisioned.
+ */
+export const useGetAllVersionCanisterIds = (
+  namespace?: string,
+  allVersions?: AppVersionSummary[],
+) => {
+  const { identity } = useInternetIdentity();
+
+  const queries = useQueries({
+    queries: (allVersions ?? []).map((version) => ({
+      queryKey: ['serverCanisterId', namespace, version.wasmId],
+      queryFn: async (): Promise<Principal | null> => {
+        if (!namespace || !version.wasmId || !identity) {
+          return null;
+        }
+        try {
+          const id = await getServerCanisterId(
+            identity,
+            namespace,
+            version.wasmId,
+          );
+          return id ?? null;
+        } catch {
+          return null;
+        }
+      },
+      enabled: !!namespace && !!version.wasmId && !!identity,
+    })),
+    combine: (results) => {
+      return {
+        data: results.map((r) => r.data),
+        pending: results.some((r) => r.isPending),
+      };
+    },
+  });
+
+  // Extract all valid canister IDs
+  const canisterIds = useMemo(() => {
+    return queries.data.filter(
+      (id): id is Principal => id !== null && id !== undefined,
+    );
+  }, [queries.data]);
+
+  return {
+    canisterIds,
+    isPending: queries.pending,
+  };
 };

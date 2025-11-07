@@ -121,7 +121,7 @@ Finally, we built the most critical piece: the financial tools that make an agen
     ```bash
     # Start dfx with Docker networking enabled
     dfx start --host 0.0.0.0:4943 --domain localhost --domain host.docker.internal --clean --background
-    
+
     # Deploy all canisters
     dfx deploy
     ```
@@ -141,14 +141,14 @@ Finally, we built the most critical piece: the financial tools that make an agen
     ```bash
     # Register 6 dev verifier accounts with API keys and stakes
     pnpm exec tsx scripts/register-dev-verifiers.ts
-    
+
     # Generate .env file for docker-compose
     pnpm exec tsx scripts/generate-verifier-env.ts
-    
+
     # Start verifier bots in Docker
     cd packages/apps/verifier-bot/deployment
     docker-compose up -d
-    
+
     # View logs
     docker-compose logs -f
     ```

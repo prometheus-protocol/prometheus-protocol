@@ -13,6 +13,11 @@ export const TEMPLATES = {
     mops-cli: &mops-cli {{MOPS_CLI_VERSION}}
   name: &base_name 'ghcr.io/research-ag/motoko-build:moc-{{MOC_VERSION}}'
 
+networks:
+  default:
+    external: true
+    name: verifier-shared-network
+
 services:
   base:
     build:
@@ -22,12 +27,14 @@ services:
         MOC_VERSION: *moc
         IC_WASM_VERSION: *ic_wasm
         MOPS_CLI_VERSION: *mops-cli
+        GITHUB_TOKEN: \${GITHUB_TOKEN}
     image: *base_name
   wasm:
     build:
       context: .
       args:
         IMAGE: *base_name
+        GITHUB_TOKEN: \${GITHUB_TOKEN}
     volumes:
       - ./out:/project/out
     environment:
@@ -46,6 +53,9 @@ COPY mops.toml ./
 # mops.lock.
 # Note: We trick mops-cli into not downloading binaries and not compiling
 # anything. We also make it use the moc version from the base image.
+# Accept GITHUB_TOKEN as build arg to authenticate API requests
+ARG GITHUB_TOKEN
+ENV GITHUB_TOKEN=\${GITHUB_TOKEN}
 RUN mkdir -p ~/.mops/bin \\
     && ln -s /usr/local/bin/moc ~/.mops/bin/moc \\
     && touch ~/.mops/bin/mo-fmt \\
@@ -90,6 +100,8 @@ RUN if dpkg --compare-versions "\${MOC_VERSION}" lt "0.9.5"; then \\
     && install moc /install/bin 
 
 FROM --platform=\${PLATFORM} alpine:latest
+ARG GITHUB_TOKEN
+ENV GITHUB_TOKEN=\${GITHUB_TOKEN}
 RUN apk add bash
 COPY --from=build /install/bin/* /usr/local/bin/
 `,
