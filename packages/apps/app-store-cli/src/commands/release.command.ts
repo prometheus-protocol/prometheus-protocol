@@ -28,7 +28,7 @@ export function registerReleaseCommand(program: Command) {
       false,
     )
     .option('--skip-build', 'Skip building the WASM (use existing)', false)
-    .action(async (version: string, options: any) => {
+    .action(async (version: string, options: any, thisCommand: Command) => {
       console.log(`\n🚀 Starting release workflow for version ${version}...\n`);
 
       const configPath = path.join(process.cwd(), 'prometheus.yml');
@@ -130,14 +130,22 @@ export function registerReleaseCommand(program: Command) {
         if (!options.skipBuild) {
           console.log('\n🔨 Step 4: Building WASM with reproducible build...');
           console.log('   (This may take a few minutes)');
-          execSync('app-store-cli build', { stdio: 'inherit' });
+          // Get network from parent command and pass it to build
+          const network = thisCommand.parent?.opts().network || 'ic';
+          execSync(`app-store-cli build --network ${network}`, {
+            stdio: 'inherit',
+          });
         } else {
           console.log('\n⏭️  Step 4: Skipping build (using existing WASM)');
         }
 
         // Step 5: Publish to registry
         console.log('\n📦 Step 5: Publishing to registry...');
-        execSync(`app-store-cli publish ${version}`, { stdio: 'inherit' });
+        // Get network from parent command and pass it to publish
+        const network = thisCommand.parent?.opts().network || 'ic';
+        execSync(`app-store-cli publish ${version} --network ${network}`, {
+          stdio: 'inherit',
+        });
 
         console.log('\n✅ Successfully released version ' + version + '!');
         console.log('\n📊 Next steps:');

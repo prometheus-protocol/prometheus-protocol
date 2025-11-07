@@ -23,6 +23,11 @@ spec:
           image: verifier-bot:latest
           imagePullPolicy: Never
           env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
             - name: VERIFIER_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -112,6 +117,11 @@ spec:
           image: verifier-bot:latest
           imagePullPolicy: Never
           env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
             - name: VERIFIER_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -201,6 +211,11 @@ spec:
           image: verifier-bot:latest
           imagePullPolicy: Never
           env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
             - name: VERIFIER_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -290,6 +305,11 @@ spec:
           image: verifier-bot:latest
           imagePullPolicy: Never
           env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
             - name: VERIFIER_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -379,6 +399,11 @@ spec:
           image: verifier-bot:latest
           imagePullPolicy: Never
           env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
             - name: VERIFIER_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -468,6 +493,11 @@ spec:
           image: verifier-bot:latest
           imagePullPolicy: Never
           env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
             - name: VERIFIER_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -557,6 +587,11 @@ spec:
           image: verifier-bot:latest
           imagePullPolicy: Never
           env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
             - name: VERIFIER_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -646,6 +681,11 @@ spec:
           image: verifier-bot:latest
           imagePullPolicy: Never
           env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
             - name: VERIFIER_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -735,6 +775,11 @@ spec:
           image: verifier-bot:latest
           imagePullPolicy: Never
           env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
             - name: VERIFIER_API_KEY
               valueFrom:
                 secretKeyRef:
