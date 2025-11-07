@@ -30,8 +30,16 @@ docker tag ${IMAGE_NAME}:latest ${GHCR_IMAGE}:latest
 
 # Step 4: Login to GHCR (if not already logged in)
 echo "🔐 Logging in to GitHub Container Registry..."
-echo "   (You may be prompted for your GitHub token)"
-echo $GITHUB_TOKEN | docker login ghcr.io -u ${REPO_OWNER} --password-stdin
+echo "   (Using GHCR_TOKEN for authentication)"
+
+if [ -z "$GHCR_TOKEN" ]; then
+  echo "❌ Error: GHCR_TOKEN environment variable is not set"
+  echo "   Please set a GitHub token with 'write:packages' permission"
+  echo "   Example: export GHCR_TOKEN=ghp_your_token_here"
+  exit 1
+fi
+
+echo $GHCR_TOKEN | docker login ghcr.io -u ${REPO_OWNER} --password-stdin
 
 # Step 5: Push to GHCR
 echo "⬆️  Pushing to GHCR..."

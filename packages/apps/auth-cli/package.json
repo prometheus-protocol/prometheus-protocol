@@ -12,7 +12,7 @@
   "scripts": {
     "build": "node build.mjs",
     "dev": "tsx src/index.ts",
-    "test": "vitest",
+    "test": "vitest run",
     "prepublishOnly": "pnpm build"
   },
   "dependencies": {

@@ -20,6 +20,7 @@
     "deploy": "dfx deploy",
     "ic:up": "dfx start --host 0.0.0.0:4943 --domain localhost --domain host.docker.internal --background",
     "ic:down": "dfx stop",
+    "test": "pnpm test:apps && pnpm test:libs && pnpm test:canisters",
     "test:apps": "pnpm --filter \"./packages/apps/*\" test",
     "test:libs": "pnpm --filter \"./packages/libs/*\" test",
     "test:mo": "pnpm --filter \"./packages/canisters/*\" test:mo",

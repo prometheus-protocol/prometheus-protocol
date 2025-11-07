@@ -5,6 +5,7 @@ import { AuditDetailsSkeleton } from '@/components/audits/AuditDetailsSkeleton';
 import { AuditHubError } from '@/components/audits/AuditHubError';
 import { BountyPanel } from '@/components/audits/details/BountyPanel';
 import { AuditContent } from '@/components/audits/details/AuditContent';
+import { Card, CardContent } from '@/components/ui/card';
 
 export default function AuditDetailsPage() {
   const { auditId } = useParams<{ auditId: string }>();
@@ -32,6 +33,18 @@ export default function AuditDetailsPage() {
           <Link to="/audit-hub">Return to Audit Hub</Link>
         </Button>
       </div>
+    );
+  }
+
+  if (!audit) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-12">
+          <p className="text-center text-muted-foreground">
+            Audit details not available.
+          </p>
+        </CardContent>
+      </Card>
     );
   }
 

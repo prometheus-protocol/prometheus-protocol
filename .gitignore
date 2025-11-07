@@ -29,4 +29,3 @@ dist/
 libs/ICRC118WasmRegistry-mo
 packages/apps/verifier-bot/deployment/k8s/secrets.yaml
 packages/apps/verifier-bot/deployment/k8s/secrets-prod.yaml
-
