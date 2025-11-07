@@ -2,6 +2,29 @@
 
 This directory contains Kubernetes manifests for deploying Prometheus Protocol verifier bots.
 
+## Publishing Container Image
+
+Before deploying to production, you need to build and publish the verifier-bot container to GitHub Container Registry (GHCR):
+
+```bash
+# From the verifier-bot directory
+cd packages/apps/verifier-bot
+
+# Build and publish (requires GITHUB_TOKEN in environment)
+./publish-container.sh v1.0.0
+
+# Or using npm/pnpm
+pnpm docker:publish v1.0.0
+```
+
+The script will:
+1. Build the TypeScript code
+2. Build the Docker image
+3. Tag it for GHCR
+4. Push to `ghcr.io/prometheus-protocol/verifier-bot:latest` and `ghcr.io/prometheus-protocol/verifier-bot:[version]`
+
+**Note:** You need a GitHub Personal Access Token with `write:packages` permission. Set it as `GITHUB_TOKEN` in your environment or `.env` file.
+
 ## Files
 
 ### Local Development (kind cluster)
