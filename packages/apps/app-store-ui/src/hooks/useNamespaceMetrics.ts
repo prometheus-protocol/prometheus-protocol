@@ -20,7 +20,7 @@ export const useNamespaceMetrics = (namespace?: string) => {
     queryKey: namespace
       ? ['namespaceMetrics', namespace]
       : ['namespaceMetrics', 'no-namespace'],
-    queryFn: async () => {
+    queryFn: async (): Promise<NamespaceMetrics | null> => {
       if (!namespace) {
         return null;
       }
@@ -34,5 +34,7 @@ export const useNamespaceMetrics = (namespace?: string) => {
       }
     },
     enabled: !!namespace,
+    // Provide placeholder to prevent undefined issues
+    placeholderData: null,
   });
 };

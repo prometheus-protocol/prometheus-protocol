@@ -26,12 +26,18 @@ export function PendingVerificationsTab() {
   // --- 1. Add state to manage the dialog ---
   // It will store the wasm_id of the selected project, or null if the dialog is closed.
   const [sponsoringWasmId, setSponsoringWasmId] = useState<string | null>(null);
+  const [sponsoredWasms, setSponsoredWasms] = useState<Set<string>>(new Set());
   const [visibleCount, setVisibleCount] = useState(ITEMS_PER_PAGE);
   const observerTarget = useRef<HTMLDivElement>(null);
 
   // --- 2. Define the handler to be passed to the child component ---
   const handleSponsorClick = (wasmId: string) => {
     setSponsoringWasmId(wasmId);
+  };
+
+  // --- Handle successful sponsorship ---
+  const handleSponsorSuccess = (wasmId: string) => {
+    setSponsoredWasms((prev) => new Set(prev).add(wasmId));
   };
 
   const visibleVerifications = useMemo(() => {
@@ -54,10 +60,10 @@ export function PendingVerificationsTab() {
           });
         }
       },
-      { 
+      {
         threshold: 0.1,
-        rootMargin: '100px'
-      }
+        rootMargin: '100px',
+      },
     );
 
     const currentTarget = observerTarget.current;
@@ -147,6 +153,7 @@ export function PendingVerificationsTab() {
                 key={req.wasm_hash}
                 request={req}
                 onSponsorClick={handleSponsorClick}
+                isSponsored={sponsoredWasms.has(req.wasm_hash)}
               />
             ))}
             {hasMore && (
@@ -155,7 +162,8 @@ export function PendingVerificationsTab() {
                 className="flex flex-col items-center justify-center py-8 gap-2">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <p className="text-sm text-muted-foreground">
-                  Loading more verifications... ({visibleCount} of {verifications?.length || 0})
+                  Loading more verifications... ({visibleCount} of{' '}
+                  {verifications?.length || 0})
                 </p>
               </div>
             )}
@@ -179,6 +187,11 @@ export function PendingVerificationsTab() {
         wasmId={sponsoringWasmId ?? ''} // Pass the selected wasm_id as the appId
         auditType="build_reproducibility_v1" // This is always the audit type for this tab
         paymentToken={Tokens.USDC} // Assuming a default payment token
+        onSuccess={() => {
+          if (sponsoringWasmId) {
+            handleSponsorSuccess(sponsoringWasmId);
+          }
+        }}
       />
     </>
   );

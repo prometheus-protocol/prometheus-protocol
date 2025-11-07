@@ -76,6 +76,29 @@ export function registerPublishCommand(program: Command) {
           return;
         }
 
+        // Warn if WASM path doesn't look like it came from reproducible build
+        if (
+          !wasmPath.includes('/out/out_Linux_x86_64.wasm') &&
+          !wasmPath.includes('\\out\\out_Linux_x86_64.wasm')
+        ) {
+          console.warn(
+            '\n⚠️  WARNING: Your WASM path does not match the reproducible build output.',
+          );
+          console.warn(
+            '   Expected path: ./out/out_Linux_x86_64.wasm (from docker-compose build)',
+          );
+          console.warn(`   Your path: ${manifest.submission.wasm_path}`);
+          console.warn(
+            '\n   If you did not build using "docker-compose run --rm wasm",',
+          );
+          console.warn(
+            '   verification WILL FAIL because the hash will not match!',
+          );
+          console.warn(
+            '\n   See: https://github.com/prometheus-protocol/prometheus-protocol/tree/main/libs/icrc118#usage-by-verifier\n',
+          );
+        }
+
         const versionParts = version.split('.').map(BigInt);
         if (versionParts.length !== 3) {
           throw new Error(

@@ -275,9 +275,17 @@ export interface ToolsAttestationData {
 
 export interface BuildReproducibilityAttestationData {
   '126:audit_type': 'build_reproducibility_v1';
-  status: 'success' | 'failure';
-  git_commit: string;
-  repo_url: string;
+  // V2 fields
+  verifier_principal?: string;
+  verifier_version?: string;
+  build_timestamp?: bigint;
+  build_duration_seconds?: bigint;
+  build_log_excerpt?: string;
+  bounty_id?: bigint;
+  git_commit?: string;
+  repo_url?: string;
+  // Legacy v1 fields (kept for backward compatibility)
+  status?: 'success' | 'failure';
   failure_reason?: string;
 }
 
@@ -866,4 +874,16 @@ export const getAuditRecordsForWasm = async (
       };
     }
   });
+};
+
+/**
+ * Helper function to get bounties for a specific WASM ID.
+ * Used by the verifier bot to check if a pending verification has a bounty.
+ */
+export const getBountiesForWasm = async (
+  wasmId: string,
+): Promise<AuditBounty[]> => {
+  const registryActor = getRegistryActor();
+  const bounties = await registryActor.get_bounties_for_wasm(wasmId);
+  return bounties.map(processBounty);
 };

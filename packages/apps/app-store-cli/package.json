@@ -21,6 +21,7 @@
     "@dfinity/utils": "^3.2.0",
     "@prometheus-protocol/declarations": "workspace:*",
     "@prometheus-protocol/ic-js": "workspace:*",
+    "@prometheus-protocol/reproducible-build": "workspace:*",
     "commander": "^12.1.0",
     "js-yaml": "^4.1.0",
     "pem-file": "^1.0.1",

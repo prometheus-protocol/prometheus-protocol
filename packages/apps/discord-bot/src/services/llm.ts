@@ -894,13 +894,24 @@ export class LLMService {
       .map((tool) => tool.name);
 
     // Use PromptBuilder to construct the system prompt
-    return PromptBuilder.buildStandard({
+    const prompt = PromptBuilder.buildStandard({
       utcTime: timeContext.utcTime,
       userTimezone: timezone,
       userLocalTime: timeContext.userLocalTime,
       availableTools: availableTools || [],
       mcpToolNames,
     });
+
+    llmLogger.debug('Generated system prompt', {
+      userId,
+      promptLength: prompt.length,
+      hasTimezone: !!timezone,
+      mcpToolCount: mcpToolNames.length,
+      totalToolCount: availableTools?.length || 0,
+      promptPreview: prompt.substring(0, 500) + '...',
+    });
+
+    return prompt;
   }
 
   // Execute promises with controlled concurrency to avoid overwhelming MCP servers

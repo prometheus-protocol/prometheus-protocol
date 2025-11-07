@@ -7,11 +7,13 @@ import { truncateHash } from '@prometheus-protocol/ic-js/utils';
 interface PendingVerificationListItemProps {
   request: ProcessedVerificationRecord;
   onSponsorClick: (wasmId: string) => void;
+  isSponsored?: boolean;
 }
 
 export const PendingVerificationListItem = ({
   request,
   onSponsorClick,
+  isSponsored = false,
 }: PendingVerificationListItemProps) => {
   return (
     <div className="border border-gray-700 rounded-lg hover:border-primary transition-colors">
@@ -50,8 +52,9 @@ export const PendingVerificationListItem = ({
             variant="outline"
             size="sm"
             className="border-gray-600"
-            onClick={() => onSponsorClick(request.wasm_hash)}>
-            Sponsor
+            onClick={() => onSponsorClick(request.wasm_hash)}
+            disabled={isSponsored}>
+            {isSponsored ? 'Sponsored' : 'Sponsor'}
           </Button>
         </div>
       </div>
@@ -65,8 +68,13 @@ export const PendingVerificationListItem = ({
               {truncateHash(request.wasm_hash)}
             </span>
           </div>
-          <Button variant="outline" size="sm" className="border-gray-600">
-            Sponsor
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-gray-600"
+            onClick={() => onSponsorClick(request.wasm_hash)}
+            disabled={isSponsored}>
+            {isSponsored ? 'Sponsored' : 'Sponsor'}
           </Button>
         </div>
         <div className="grid grid-cols-2 gap-4 text-sm">

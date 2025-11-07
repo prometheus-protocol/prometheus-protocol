@@ -33,6 +33,7 @@ interface CreateBountyDialogProps {
   auditType: string;
   // For the MVP, we'll assume USDC. A future version could pass a list of accepted tokens.
   paymentToken: Token;
+  onSuccess?: () => void;
 }
 
 // Helper component for displaying cost rows
@@ -59,6 +60,7 @@ export function CreateBountyDialog({
   wasmId,
   auditType,
   paymentToken,
+  onSuccess,
 }: CreateBountyDialogProps) {
   const { mutate: sponsorBounty, isPending, status } = useSponsorBounty();
   const { data: balance, isLoading: isBalanceLoading } =
@@ -118,6 +120,7 @@ export function CreateBountyDialog({
         onSuccess: () => {
           onOpenChange(false);
           form.reset();
+          onSuccess?.();
         },
       },
     );

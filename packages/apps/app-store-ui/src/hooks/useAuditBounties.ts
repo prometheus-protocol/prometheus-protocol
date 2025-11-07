@@ -76,16 +76,16 @@ export const useGetAuditBounty = (bountyId: number | undefined) => {
   return useQuery<AuditBountyWithDetails | null>({
     // The query key includes the specific ID to ensure uniqueness per bounty.
     queryKey: ['auditBounties', bountyId, identity?.getPrincipal().toText()],
-    queryFn: async () => {
-      if (bountyId === undefined) {
-        // This should not be called if bountyId is undefined due to the `enabled` flag,
-        // but we add it for type safety and robustness.
-        throw new Error('Bounty ID is not available');
+    queryFn: async (): Promise<AuditBountyWithDetails | null> => {
+      if (bountyId === undefined || !identity) {
+        return null;
       }
       return getAuditBounty(identity, BigInt(bountyId));
     },
     // The query should only execute when we have a valid bountyId.
-    enabled: bountyId !== undefined,
+    enabled: bountyId !== undefined && !!identity,
+    // Provide placeholder to prevent undefined issues
+    placeholderData: null,
   });
 };
 
@@ -97,14 +97,16 @@ export const useGetReputationBalance = (tokenId: string | undefined) => {
       identity?.getPrincipal().toString(),
       tokenId,
     ],
-    queryFn: async () => {
+    queryFn: async (): Promise<number> => {
       if (!identity || !tokenId) {
-        throw new Error('Principal ID or Token ID is not available');
+        return 0;
       }
       const balance = await getReputationBalance(identity, tokenId);
       return Number(balance) || 0;
     },
     enabled: !!identity && !!tokenId,
+    // Provide placeholder to prevent undefined issues
+    placeholderData: 0,
   });
 };
 

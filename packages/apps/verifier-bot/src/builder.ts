@@ -1,0 +1,350 @@
+import { execSync } from 'child_process';
+import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import type { BuildResult } from './types.js';
+import {
+  bootstrapBuildFiles,
+  getMocVersionFromMopsToml,
+  validateMotokoProject,
+} from '@prometheus-protocol/reproducible-build';
+
+/**
+ * Verifies that a git repository at a specific commit produces the expected WASM hash.
+ * Uses Docker-based reproducible builds to ensure deterministic compilation.
+ * Automatically detects the canister name from dfx.json.
+ */
+export async function verifyBuild(
+  repo: string,
+  commitHash: string,
+  expectedWasmHash: string,
+): Promise<BuildResult> {
+  const startTime = Date.now();
+  const workDir = `/tmp/verify-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+  try {
+    console.log(`📦 Cloning ${repo}...`);
+    execSync(`git clone --depth 1 ${repo} ${workDir}`, {
+      timeout: 120_000,
+      stdio: 'pipe',
+    });
+
+    console.log(`🔀 Fetching commit ${commitHash.slice(0, 8)}...`);
+    execSync(`git -C ${workDir} fetch --depth 1 origin ${commitHash}`, {
+      timeout: 60_000,
+      stdio: 'pipe',
+    });
+
+    console.log(`🔀 Checking out commit...`);
+    execSync(`git -C ${workDir} checkout ${commitHash}`, {
+      timeout: 10_000,
+      stdio: 'pipe',
+    });
+
+    // Auto-detect canister name from dfx.json
+    const canisterName = extractCanisterNameFromDfx(workDir);
+    console.log(`📦 Detected canister: ${canisterName}`);
+
+    // Locate the canister directory
+    const canisterPath = findCanisterPath(workDir, canisterName);
+    console.log(`📂 Canister path: ${canisterPath}`);
+
+    // Set up reproducible build environment
+    await setupReproducibleBuild(canisterPath, canisterName, workDir);
+
+    // Clean any existing output and Docker resources to ensure fresh build
+    const outPath = path.join(canisterPath, 'out');
+    if (fs.existsSync(outPath)) {
+      console.log(`🧹 Cleaning existing output directory...`);
+      execSync(`rm -rf ${outPath}`, { cwd: canisterPath });
+    }
+
+    console.log(`🧹 Cleaning Docker compose resources...`);
+    try {
+      execSync(`docker-compose down -v`, {
+        cwd: canisterPath,
+        timeout: 60_000,
+        stdio: 'pipe',
+      });
+    } catch (e) {
+      // Ignore errors if compose isn't running
+    }
+
+    console.log(`🔨 Building Docker image (no cache)...`);
+    execSync(`docker-compose build --no-cache`, {
+      cwd: canisterPath,
+      timeout: 600_000, // 10 minutes max
+      stdio: 'pipe',
+    });
+
+    console.log(`🔨 Running build in Docker...`);
+    // Remove --rm flag so we can exec into container for cleanup
+    const buildLog = execSync(
+      `docker-compose run --name verify-container-${Date.now()} wasm`,
+      {
+        cwd: canisterPath,
+        timeout: 600_000, // 10 minutes max
+        stdio: 'pipe',
+        env: {
+          ...process.env,
+          DOCKER_BUILDKIT: '1',
+        },
+      },
+    ).toString();
+
+    console.log(`📋 Build output:\n${buildLog.slice(-500)}`); // Last 500 chars
+
+    // Read the output WASM
+    const wasmPath = path.join(canisterPath, 'out', 'out_Linux_x86_64.wasm');
+    if (!fs.existsSync(wasmPath)) {
+      throw new Error(`Built WASM not found at ${wasmPath}`);
+    }
+
+    const wasmBytes = fs.readFileSync(wasmPath);
+    const actualHash = crypto
+      .createHash('sha256')
+      .update(wasmBytes)
+      .digest('hex');
+
+    const duration = Math.floor((Date.now() - startTime) / 1000);
+
+    console.log(`📊 Expected hash: ${expectedWasmHash}`);
+    console.log(`📊 Actual hash:   ${actualHash}`);
+
+    if (actualHash === expectedWasmHash) {
+      console.log(`✅ Hash match! Build verified.`);
+      return {
+        success: true,
+        wasmHash: actualHash,
+        buildLog: buildLog.slice(-1000), // Keep last 1KB
+        duration,
+      };
+    } else {
+      console.log(`❌ Hash mismatch!`);
+      return {
+        success: false,
+        error: `Hash mismatch. Expected: ${expectedWasmHash}, Got: ${actualHash}`,
+        buildLog: buildLog.slice(-1000),
+        duration,
+      };
+    }
+  } catch (error: any) {
+    const duration = Math.floor((Date.now() - startTime) / 1000);
+    console.error(`❌ Build error:`, error.message);
+
+    return {
+      success: false,
+      error: `Build failed: ${error.message}`,
+      duration,
+    };
+  } finally {
+    // Cleanup
+    try {
+      console.log(`🧹 Cleaning up ${workDir}...`);
+
+      // First, try to remove root-owned files using Docker
+      const outPath = path.join(workDir, 'out');
+      if (fs.existsSync(outPath)) {
+        try {
+          console.log(`🐳 Using Docker to remove root-owned files...`);
+          // Use alpine container to remove files as root
+          // Remove contents but not the mount point itself
+          execSync(
+            `docker run --rm -v ${outPath}:/cleanup alpine sh -c "rm -rf /cleanup/*"`,
+            { timeout: 10_000, stdio: 'pipe' },
+          );
+        } catch (dockerErr) {
+          console.log('⚠️  Docker cleanup failed, files may remain');
+        }
+      }
+
+      // Clean up any leftover containers
+      try {
+        const containers = execSync(
+          `docker ps -a -q -f name=verify-container`,
+          { encoding: 'utf-8', timeout: 5_000 },
+        )
+          .trim()
+          .split('\n')
+          .filter(Boolean);
+
+        if (containers.length > 0) {
+          console.log(
+            `🐳 Removing ${containers.length} Docker container(s)...`,
+          );
+          for (const containerId of containers) {
+            execSync(`docker rm -f ${containerId}`, {
+              timeout: 10_000,
+              stdio: 'pipe',
+            });
+          }
+        }
+      } catch (dockerErr) {
+        // Ignore errors
+      }
+
+      // Now remove the entire work directory
+      execSync(`rm -rf ${workDir}`, { timeout: 30_000 });
+      console.log(`✅ Cleanup completed successfully`);
+    } catch (e) {
+      console.error('⚠️  Cleanup failed (non-critical):', e);
+    }
+  }
+}
+
+/**
+ * Extracts the canister name from dfx.json by finding which canister
+ * has src/main.mo as its main file.
+ */
+function extractCanisterNameFromDfx(repoPath: string): string {
+  try {
+    const dfxJsonPath = path.join(repoPath, 'dfx.json');
+
+    if (!fs.existsSync(dfxJsonPath)) {
+      console.warn(`   ⚠️  dfx.json not found, using fallback`);
+      return 'canister';
+    }
+
+    const dfxJson = JSON.parse(fs.readFileSync(dfxJsonPath, 'utf8'));
+
+    if (!dfxJson.canisters) {
+      console.warn(`   ⚠️  No canisters in dfx.json, using fallback`);
+      return 'canister';
+    }
+
+    // Look for a canister with src/main.mo as its main file
+    for (const [name, config] of Object.entries(dfxJson.canisters)) {
+      const canisterConfig = config as any;
+
+      // Check if this is a Motoko canister with src/main.mo
+      if (
+        canisterConfig.type === 'motoko' &&
+        (canisterConfig.main === 'src/main.mo' ||
+          canisterConfig.main?.endsWith('/src/main.mo'))
+      ) {
+        return name;
+      }
+    }
+
+    // If no exact match, return the first Motoko canister
+    for (const [name, config] of Object.entries(dfxJson.canisters)) {
+      const canisterConfig = config as any;
+      if (canisterConfig.type === 'motoko') {
+        return name;
+      }
+    }
+
+    console.warn(`   ⚠️  No Motoko canisters in dfx.json, using fallback`);
+    return 'canister';
+  } catch (error: any) {
+    console.warn(`   ⚠️  Error reading dfx.json: ${error.message}`);
+    return 'canister';
+  }
+}
+
+/**
+ * Finds the canister source directory in the cloned repository.
+ */
+function findCanisterPath(workDir: string, canisterName: string): string {
+  // Try standard locations
+  const candidates = [
+    path.join(workDir, 'packages/canisters', canisterName),
+    path.join(workDir, 'canisters', canisterName),
+    path.join(workDir, 'src'),
+    workDir,
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, 'src'))) {
+      return candidate;
+    }
+  }
+
+  throw new Error(
+    `Could not find canister source directory for ${canisterName}`,
+  );
+}
+
+/**
+ * Sets up the reproducible build environment in the canister directory.
+ * Uses the shared reproducible-build library for consistent builds.
+ */
+async function setupReproducibleBuild(
+  canisterPath: string,
+  canisterName: string,
+  repoRoot: string,
+): Promise<void> {
+  console.log(`📝 Setting up reproducible build...`);
+
+  // Read moc version from project's mops.toml
+  let mocVersion = getMocVersionFromMopsToml(canisterPath) || '0.16.0';
+  console.log(`� Using moc version: ${mocVersion}`);
+
+  // If mops.toml doesn't exist, create it
+  const mopsPath = path.join(canisterPath, 'mops.toml');
+  if (!fs.existsSync(mopsPath)) {
+    console.log(`📝 Generating mops.toml with moc version ${mocVersion}...`);
+    await generateMopsToml(canisterPath, canisterName, repoRoot, mocVersion);
+  }
+
+  // Validate project structure
+  const validation = validateMotokoProject(canisterPath);
+  if (!validation.valid) {
+    throw new Error(
+      `Invalid Motoko project. Missing: ${validation.missing.join(', ')}`,
+    );
+  }
+
+  // Use shared library to bootstrap build files
+  bootstrapBuildFiles({
+    projectPath: canisterPath,
+    mocVersion,
+  });
+
+  console.log(`✅ Reproducible build environment ready`);
+}
+
+/**
+ * Generates a mops.toml file with dependencies and toolchain version.
+ * This is only used as a fallback if the project doesn't have mops.toml.
+ */
+async function generateMopsToml(
+  canisterPath: string,
+  canisterName: string,
+  repoRoot: string,
+  mocVersion: string,
+): Promise<void> {
+  // Try to read dfx.json from repo root for dependencies
+  const dfxPath = path.join(repoRoot, 'dfx.json');
+
+  // Default dependencies for Motoko projects
+  const dependencies = {
+    base: '0.16.0',
+  };
+
+  try {
+    if (fs.existsSync(dfxPath)) {
+      const dfxJson = JSON.parse(fs.readFileSync(dfxPath, 'utf8'));
+      // Could enhance this to extract dependencies from dfx.json if needed
+    }
+  } catch (error) {
+    console.warn(`⚠️  Could not read dfx.json, using minimal dependencies`);
+  }
+
+  const mopsToml = `[package]
+name = "${canisterName}"
+version = "1.0.0"
+description = "Verified canister"
+
+[dependencies]
+${Object.entries(dependencies)
+  .map(([pkg, ver]) => `${pkg} = "${ver}"`)
+  .join('\n')}
+
+[toolchain]
+moc = "${mocVersion}"
+`;
+
+  fs.writeFileSync(path.join(canisterPath, 'mops.toml'), mopsToml);
+  console.log(`✅ Generated mops.toml with moc version ${mocVersion}`);
+}

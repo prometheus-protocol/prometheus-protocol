@@ -30,15 +30,15 @@ export const useGetAppBounty = (bountyId: bigint | undefined) => {
   return useQuery<AppBounties.Bounty | null>({
     // The query key includes the specific ID to ensure uniqueness per bounty.
     queryKey: ['appBounty', bountyId],
-    queryFn: async () => {
+    queryFn: async (): Promise<AppBounties.Bounty | null> => {
       if (!bountyId) {
-        // This should not be called if bountyId is undefined due to the `enabled` flag,
-        // but we add it for type safety and robustness.
-        throw new Error('Bounty ID is not available');
+        return null;
       }
       return getAppBounty(bountyId);
     },
     // The query should only execute when we have a valid bountyId.
     enabled: !!bountyId,
+    // Provide placeholder to prevent undefined issues
+    placeholderData: null,
   });
 };

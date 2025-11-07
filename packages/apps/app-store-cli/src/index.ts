@@ -10,6 +10,7 @@ import { registerInitCommand } from './commands/init.command.js';
 import { registerStatusCommand } from './commands/status.command.js';
 import { registerPublishCommand } from './commands/publish.command.js';
 import { registerDiscoverCommand } from './commands/discover.js';
+import { registerBuildCommand } from './commands/build.command.js';
 import { registerBountyCommands } from './commands/bounty/bounty.commands.js';
 import { registerAttestCommands } from './commands/attest/attest.commands.js';
 import { registerLeaderboardCommands } from './commands/leaderboard/leaderboard.commands.js';
@@ -119,6 +120,7 @@ program.hook('preAction', (thisCommand) => {
 
 // 1. Primary Developer Workflow (The most common entry point)
 registerInitCommand(program);
+registerBuildCommand(program);
 registerStatusCommand(program);
 registerPublishCommand(program);
 registerDiscoverCommand(program);

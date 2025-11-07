@@ -1,0 +1,38 @@
+{
+  "name": "@prometheus-protocol/verifier-bot",
+  "version": "1.0.0",
+  "description": "Automated build verification bot for the Prometheus Protocol App Store",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "icp",
+    "internet-computer",
+    "verifier",
+    "reproducible-builds",
+    "motoko"
+  ],
+  "author": "Prometheus Protocol",
+  "license": "MIT",
+  "dependencies": {
+    "@icp-sdk/core": "^4.0.1",
+    "@prometheus-protocol/ic-js": "workspace:*",
+    "@prometheus-protocol/reproducible-build": "workspace:*",
+    "dotenv": "^17.2.3",
+    "pem-file": "^1.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "esbuild": "^0.25.9",
+    "tsx": "^4.10.5",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
