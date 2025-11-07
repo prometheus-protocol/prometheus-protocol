@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: canister-ids
+  namespace: prometheus-verifiers
+data:
+  canister_ids.json: |
+    {
+      "__Candid_UI": {
+        "local": "xad5d-bh777-77774-qaaia-cai"
+      },
+      "app_bounties": {
+        "local": "uxrrr-q7777-77774-qaaaq-cai"
+      },
+      "app_store_ui": {
+        "local": "u6s2n-gx777-77774-qaaba-cai"
+      },
+      "audit_hub": {
+        "local": "uzt4z-lp777-77774-qaabq-cai"
+      },
+      "auth_server": {
+        "local": "umunu-kh777-77774-qaaca-cai"
+      },
+      "auth_ui": {
+        "local": "ulvla-h7777-77774-qaacq-cai"
+      },
+      "icrc1_ledger": {
+        "local": "ucwa4-rx777-77774-qaada-cai"
+      },
+      "internet_identity": {
+        "local": "ufxgi-4p777-77774-qaadq-cai"
+      },
+      "leaderboard": {
+        "local": "vizcg-th777-77774-qaaea-cai"
+      },
+      "mcp_orchestrator": {
+        "local": "vpyes-67777-77774-qaaeq-cai"
+      },
+      "mcp_registry": {
+        "local": "vg3po-ix777-77774-qaafa-cai"
+      },
+      "mcp_server": {
+        "local": "vb2j2-fp777-77774-qaafq-cai"
+      },
+      "search_index": {
+        "local": "vu5yx-eh777-77774-qaaga-cai"
+      },
+      "token_watchlist": {
+        "local": "vt46d-j7777-77774-qaagq-cai"
+      },
+      "usage_tracker": {
+        "local": "v27v7-7x777-77774-qaaha-cai"
+      },
+      "usdc_ledger": {
+        "local": "v56tl-sp777-77774-qaahq-cai"
+      }
+    }

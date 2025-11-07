@@ -20,8 +20,8 @@ spec:
     spec:
       containers:
         - name: verifier-bot
-          image: verifier-bot:latest
-          imagePullPolicy: Never
+          image: ghcr.io/prometheus-protocol/verifier-bot:latest
+          imagePullPolicy: Always
           env:
             - name: VERIFIER_API_KEY
               valueFrom:
@@ -109,8 +109,8 @@ spec:
     spec:
       containers:
         - name: verifier-bot
-          image: verifier-bot:latest
-          imagePullPolicy: Never
+          image: ghcr.io/prometheus-protocol/verifier-bot:latest
+          imagePullPolicy: Always
           env:
             - name: VERIFIER_API_KEY
               valueFrom:
@@ -198,8 +198,8 @@ spec:
     spec:
       containers:
         - name: verifier-bot
-          image: verifier-bot:latest
-          imagePullPolicy: Never
+          image: ghcr.io/prometheus-protocol/verifier-bot:latest
+          imagePullPolicy: Always
           env:
             - name: VERIFIER_API_KEY
               valueFrom:
@@ -287,8 +287,8 @@ spec:
     spec:
       containers:
         - name: verifier-bot
-          image: verifier-bot:latest
-          imagePullPolicy: Never
+          image: ghcr.io/prometheus-protocol/verifier-bot:latest
+          imagePullPolicy: Always
           env:
             - name: VERIFIER_API_KEY
               valueFrom:
@@ -376,8 +376,8 @@ spec:
     spec:
       containers:
         - name: verifier-bot
-          image: verifier-bot:latest
-          imagePullPolicy: Never
+          image: ghcr.io/prometheus-protocol/verifier-bot:latest
+          imagePullPolicy: Always
           env:
             - name: VERIFIER_API_KEY
               valueFrom:
@@ -465,8 +465,8 @@ spec:
     spec:
       containers:
         - name: verifier-bot
-          image: verifier-bot:latest
-          imagePullPolicy: Never
+          image: ghcr.io/prometheus-protocol/verifier-bot:latest
+          imagePullPolicy: Always
           env:
             - name: VERIFIER_API_KEY
               valueFrom:
@@ -554,8 +554,8 @@ spec:
     spec:
       containers:
         - name: verifier-bot
-          image: verifier-bot:latest
-          imagePullPolicy: Never
+          image: ghcr.io/prometheus-protocol/verifier-bot:latest
+          imagePullPolicy: Always
           env:
             - name: VERIFIER_API_KEY
               valueFrom:
@@ -643,8 +643,8 @@ spec:
     spec:
       containers:
         - name: verifier-bot
-          image: verifier-bot:latest
-          imagePullPolicy: Never
+          image: ghcr.io/prometheus-protocol/verifier-bot:latest
+          imagePullPolicy: Always
           env:
             - name: VERIFIER_API_KEY
               valueFrom:
@@ -732,8 +732,8 @@ spec:
     spec:
       containers:
         - name: verifier-bot
-          image: verifier-bot:latest
-          imagePullPolicy: Never
+          image: ghcr.io/prometheus-protocol/verifier-bot:latest
+          imagePullPolicy: Always
           env:
             - name: VERIFIER_API_KEY
               valueFrom:

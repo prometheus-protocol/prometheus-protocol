@@ -4,8 +4,13 @@ metadata:
   name: verifier-config
   namespace: prometheus-verifiers
 data:
-  IC_NETWORK: 'ic'
+  IC_NETWORK: 'local'
+  IC_HOST: 'http://host.docker.internal:4943'
   POLL_INTERVAL_MS: '60000'
   BUILD_TIMEOUT_MS: '600000'
-  # Add production canister IDs here or bake them into the Docker image
-  # These will be available as environment variables in the pods
+  # Local canister IDs
+  MCP_REGISTRY_CANISTER_ID: 'vg3po-ix777-77774-qaafa-cai'
+  AUDIT_HUB_CANISTER_ID: 'uzt4z-lp777-77774-qaabq-cai'
+  USDC_LEDGER_CANISTER_ID: 'v56tl-sp777-77774-qaahq-cai'
+  # Local development - uses host.docker.internal to reach the local dfx replica
+  # For production, set IC_NETWORK to 'ic' and remove IC_HOST

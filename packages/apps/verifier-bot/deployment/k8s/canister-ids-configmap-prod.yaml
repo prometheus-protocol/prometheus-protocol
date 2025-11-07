@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: canister-ids
+  namespace: prometheus-verifiers
+data:
+  canister_ids.json: |
+    {
+      "mcp_registry": {
+        "ic": "grhdx-gqaaa-aaaai-q32va-cai"
+      },
+      "audit_hub": {
+        "ic": "eq6xo-cyaaa-aaaai-q32yq-cai"
+      },
+      "usdc_ledger": {
+        "ic": "53nhb-haaaa-aaaar-qbn5q-cai"
+      },
+      "app_bounties": {
+        "ic": "jld6p-yqaaa-aaaai-q33ra-cai"
+      },
+      "leaderboard": {
+        "ic": "jmcy3-viaaa-aaaai-q33rq-cai"
+      },
+      "mcp_orchestrator": {
+        "ic": "ez54s-uqaaa-aaaai-q32za-cai"
+      },
+      "mcp_server": {
+        "ic": "jcavt-oyaaa-aaaai-q33qq-cai"
+      },
+      "search_index": {
+        "ic": "kst7v-syaaa-aaaai-q33yq-cai"
+      },
+      "usage_tracker": {
+        "ic": "m63pw-fqaaa-aaaai-q33pa-cai"
+      },
+      "token_watchlist": {
+        "ic": "ljntu-eaaaa-aaaai-q34bq-cai"
+      }
+    }
