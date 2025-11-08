@@ -22,7 +22,7 @@ export function FeaturedServerCard({ server }: FeaturedServerCardProps) {
     <Link to={`/app/${server.namespace}`} className="block group">
       <Card className="overflow-hidden border-transparent transition-all p-0">
         <CardContent className="p-0">
-          <div className="relative overflow-hidden rounded-3xl">
+          <div className="relative overflow-hidden rounded-4xl">
             {/* 2. Replace the banner image */}
             <ImageWithFallback
               src={server.bannerUrl}
@@ -33,7 +33,7 @@ export function FeaturedServerCard({ server }: FeaturedServerCardProps) {
                 scale-[1.01] group-hover:scale-105
               "
             />
-            <PromoBadge className="md:py-2 md:px-4 md:text-xs">
+            <PromoBadge className="md:py-3 py-2 pt-3 px-4 pr-5 md:text-xs">
               {statusMap[status] ?? status}
             </PromoBadge>
           </div>
