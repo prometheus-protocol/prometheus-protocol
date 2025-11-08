@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { ServerGrid } from '@/components/ServerGrid';
 import { ValuePropBanner } from '@/components/ValuePropBanner';
-import { PromoBanner } from '@/components/PromoBanner';
+import { WinnerBanner } from '@/components/WinnerBanner';
 import { FeaturedCarousel } from '@/components/FeaturedCarousel';
 import { OfferBanner } from '@/components/OfferBanner';
 import { useInternetIdentity } from 'ic-use-internet-identity';
@@ -98,11 +98,7 @@ function HomePage() {
         <ServerGrid title="Gold Tier Apps" servers={goldTierApps} />
       )}
 
-      <PromoBanner
-        imageUrl="/images/wchl-banner-1920.webp"
-        altText="World Computer Hacker League 2025"
-        linkTo="https://dorahacks.io/org/3634"
-      />
+      <WinnerBanner />
 
       {comingSoonApps.length > 0 && (
         <ServerGrid title="Coming Soon" servers={comingSoonApps} />

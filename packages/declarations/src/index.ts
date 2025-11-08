@@ -10,8 +10,6 @@ import * as SearchIndex from './generated/search_index/search_index.did.js';
 import * as UsageTracker from './generated/usage_tracker/usage_tracker.did.js';
 import * as TokenWatchlist from './generated/token_watchlist/token_watchlist.did.js';
 
-// Centralized export for all canisters
-// This allows other packages to import canister interfaces from a single location
 export {
   Registry,
   Orchestrator,
