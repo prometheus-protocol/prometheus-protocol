@@ -1,6 +1,6 @@
 export function ValuePropBanner() {
   return (
-    <section className="bg-primary/90 rounded-4xl p-8 md:p-12 my-20 flex items-center justify-between relative">
+    <section className="bg-primary/90 rounded-4xl p-8 py-16 md:p-12 my-20 flex items-center justify-between relative">
       <div>
         <h2 className="text-3xl font-bold tracking-tight text-neutral-900">
           Get Peace of Mind with Verified Apps.

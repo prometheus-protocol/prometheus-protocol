@@ -20,11 +20,6 @@ const protocolLinks = [
     external: true,
   },
   {
-    href: `${DOCS_LINK}/guides/auditors/overview`,
-    label: 'For Auditors',
-    external: true,
-  },
-  {
     href: GITHUB_LINK,
     label: 'GitHub',
     external: true,
