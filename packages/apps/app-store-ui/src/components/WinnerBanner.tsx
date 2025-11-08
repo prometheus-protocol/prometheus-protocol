@@ -19,7 +19,7 @@ export function WinnerBanner() {
         alt="Winner Owl with Trophy"
         className="w-32 h-32 lg:w-54 lg:h-54 absolute right-0 -bottom-16 md:right-0 md:-bottom-12"
       />
-      <PromoBadge className="absolute top-0 left-0">
+      <PromoBadge className="absolute -top-px -left-px">
         Exciting Update!
       </PromoBadge>
     </section>
