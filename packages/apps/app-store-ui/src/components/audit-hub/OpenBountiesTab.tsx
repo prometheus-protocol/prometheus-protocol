@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Frown, Loader2 } from 'lucide-react';
+import { Search, Frown, Loader2, RefreshCw } from 'lucide-react';
 import { useGetAuditBountiesInfinite } from '@/hooks/useAuditBounties';
 import { useGetWasmVerifications } from '@/hooks/useWasmVerifications';
 import { AuditHubSkeleton } from '@/components/audits/AuditHubSkeleton';
@@ -15,7 +15,6 @@ const PAGE_SIZE = 90;
 export function OpenBountiesTab() {
   const [searchQuery, setSearchQuery] = useState('');
   const observerTarget = useRef<HTMLDivElement>(null);
-  const previousVerificationsRef = useRef<typeof verifications>(null);
 
   const {
     data,
@@ -41,35 +40,24 @@ export function OpenBountiesTab() {
     isFetching: isVerificationsFetching,
   } = useGetWasmVerifications(allBounties);
 
-  // Keep previous verifications visible while loading new ones
-  const displayVerifications =
-    verifications ?? previousVerificationsRef.current;
-
-  // Update ref when we have new data
-  useEffect(() => {
-    if (verifications) {
-      previousVerificationsRef.current = verifications;
-    }
-  }, [verifications]);
-
   // Filter verifications based on search query
   const filteredVerifications = useMemo(() => {
-    if (!displayVerifications) return [];
+    if (!verifications) return [];
     const lowercasedQuery = searchQuery.toLowerCase().trim();
-    if (!lowercasedQuery) return displayVerifications;
+    if (!lowercasedQuery) return verifications;
 
-    return displayVerifications.filter((verification) => {
+    return verifications.filter((verification) => {
       const auditType = verification.auditType.toLowerCase();
       const wasmId = verification.wasmId.toLowerCase();
       return (
         auditType.includes(lowercasedQuery) || wasmId.includes(lowercasedQuery)
       );
     });
-  }, [displayVerifications, searchQuery]);
+  }, [verifications, searchQuery]);
 
   // Show skeleton only on true initial load (no cached data)
   const isInitialLoading =
-    (isBountiesLoading || isVerificationsLoading) && !displayVerifications;
+    (isBountiesLoading || isVerificationsLoading) && !verifications;
 
   if (isInitialLoading) return <AuditHubSkeleton />;
   if (isBountiesError || isVerificationsError)
@@ -77,22 +65,34 @@ export function OpenBountiesTab() {
 
   return (
     <div className="space-y-6">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
-        <Input
-          type="search"
-          placeholder="Search by audit type or WASM hash..."
-          className="w-full bg-gray-900/50 border-gray-700 pl-10 focus:ring-primary focus:border-primary"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
+      <div className="flex gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
+          <Input
+            type="search"
+            placeholder="Search by audit type or WASM hash..."
+            className="w-full bg-gray-900/50 border-gray-700 pl-10 focus:ring-primary focus:border-primary"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <Button
+          onClick={() => refetch()}
+          variant="outline"
+          size="icon"
+          disabled={isBountiesLoading || isVerificationsFetching}
+          className="shrink-0">
+          <RefreshCw
+            className={`h-4 w-4 ${isBountiesLoading || isVerificationsFetching ? 'animate-spin' : ''}`}
+          />
+        </Button>
       </div>
       <div className="space-y-3">
         {filteredVerifications.length > 0 ? (
           <>
             {filteredVerifications.map((verification) => (
               <VerificationListItem
-                key={verification.wasmId}
+                key={`${verification.wasmId}::${verification.auditType}`}
                 verification={verification}
               />
             ))}

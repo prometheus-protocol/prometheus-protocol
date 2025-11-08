@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
-import { AuditBountyWithDetails } from '@prometheus-protocol/ic-js';
+import { AuditBountyWithDetails, Tokens } from '@prometheus-protocol/ic-js';
 import { truncateHash } from '@prometheus-protocol/ic-js/utils';
 import { getReputationDisplayInfo } from '@/components/LoginButton';
 
@@ -17,8 +17,11 @@ interface StartAuditDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   audit: AuditBountyWithDetails;
-  auditorBalance: number; // Pass the auditor's balance for this token
-  onConfirm: () => Promise<void>; // A function to call when "Claim" is clicked
+  walletBalance: number; // USDC in wallet (human-readable)
+  auditHubBalance: number; // USDC already staked in audit hub (human-readable)
+  neededStake: number; // Additional USDC needed to deposit (human-readable)
+  hasEnoughInWallet: boolean; // Whether wallet has enough to cover needed stake
+  onConfirm: () => Promise<void>; // A function to call when "Stake and Claim" is clicked
 }
 
 const DetailRow = ({ label, value }: { label: string; value: string }) => (
@@ -32,13 +35,16 @@ export function StartAuditDialog({
   isOpen,
   onOpenChange,
   audit,
-  auditorBalance,
+  walletBalance,
+  auditHubBalance,
+  neededStake,
+  hasEnoughInWallet,
   onConfirm,
 }: StartAuditDialogProps) {
   const [isAgreed, setIsAgreed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const stakeAmount = audit.stake;
+  const stakeRequired = Number(Tokens.USDC.fromAtomic(audit.stake));
 
   const handleConfirm = async () => {
     setIsSubmitting(true);
@@ -75,20 +81,38 @@ export function StartAuditDialog({
             <DetailRow label="WASM" value={truncateHash(audit.projectName)} />
             <DetailRow label="Time limit for completion" value="72 Hours" />
             <DetailRow
-              label="Required stake"
-              value={`${stakeAmount} ${reputationDisplayInfo.name}`}
+              label="Stake required"
+              value={`$${stakeRequired.toLocaleString()} USDC`}
             />
             <DetailRow
-              label="Available balance"
-              value={`${auditorBalance.toLocaleString()} ${reputationDisplayInfo.name}`}
+              label="Already staked in Audit Hub"
+              value={`$${auditHubBalance.toLocaleString()} USDC`}
+            />
+            {neededStake > 0 && (
+              <DetailRow
+                label="Additional stake needed"
+                value={`$${neededStake.toLocaleString()} USDC`}
+              />
+            )}
+            <DetailRow
+              label="Wallet balance"
+              value={`$${walletBalance.toLocaleString()} USDC`}
             />
           </div>
 
+          {!hasEnoughInWallet && neededStake > 0 && (
+            <p className="text-left text-sm text-red-400 max-w-md mb-4">
+              <strong>Insufficient wallet balance:</strong> You need $
+              {neededStake.toLocaleString()} more USDC in your wallet to stake
+              for this bounty.
+            </p>
+          )}
+
           <p className="text-left text-sm text-gray-400 max-w-md mb-4">
-            By clicking the "Claim" button, you agree to stake the required
-            amount of tokens for this bounty. If the project is not completed
-            within the specified time frame, the staked tokens will be deducted
-            from your account as outlined in the bounty terms.
+            By clicking the "Stake and Claim" button, you agree to stake the
+            required amount of USDC for this bounty. If the project is not
+            completed within the specified time frame, the staked tokens will be
+            deducted from your account as outlined in the bounty terms.
           </p>
 
           <div className="flex space-x-2 mb-12 w-full max-w-md">
@@ -104,13 +128,17 @@ export function StartAuditDialog({
 
           <Button
             onClick={handleConfirm}
-            disabled={!isAgreed || isSubmitting}
+            disabled={
+              !isAgreed ||
+              isSubmitting ||
+              (neededStake > 0 && !hasEnoughInWallet)
+            }
             size="lg"
             className="bg-primary hover:bg-primary/90 text-black font-bold px-12 py-6 text-lg w-full max-w-xs">
             {isSubmitting ? (
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
             ) : (
-              'Claim'
+              'Stake and Claim'
             )}
           </Button>
         </div>

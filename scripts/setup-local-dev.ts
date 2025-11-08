@@ -57,10 +57,19 @@ async function main() {
 
   // Configure stake requirements (using USDC ledger as token_id, must use pp_owner identity)
   console.log(chalk.bold('💰 Setting stake requirements...'));
+
+  // Step 1: Register audit types to use USDC ledger
+  console.log(`  - Registering audit types to use USDC ledger...`);
+  await $`dfx identity use pp_owner 2>/dev/null`;
+  for (const auditType of AUDIT_TYPES) {
+    console.log(`    • ${auditType}`);
+    await $`dfx canister call ${audit_hub} register_audit_type '("${auditType}", "${usdc_ledger}")'`;
+  }
+
+  // Step 2: Set stake requirement for USDC ledger
   console.log(
     `  - Setting stake requirement for USDC ledger to ${STAKE_AMOUNT}...`,
   );
-  await $`dfx identity use pp_owner 2>/dev/null`;
   await $`dfx canister call ${audit_hub} set_stake_requirement '("${usdc_ledger}", ${STAKE_AMOUNT}:nat)'`;
   await $`dfx identity use pp_owner 2>/dev/null`;
   console.log(chalk.green('✅ Stake requirements set.'));

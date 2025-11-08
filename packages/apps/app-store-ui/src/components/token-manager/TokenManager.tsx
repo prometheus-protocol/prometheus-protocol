@@ -56,8 +56,6 @@ export const TokenManager: React.FC<TokenManagerProps> = ({
   showPrincipalId = false,
   principalIdLabel = 'Principal ID',
   principalIdDescription = 'Send tokens to this address',
-  onDeposit,
-  onWithdraw,
 }) => {
   const { identity } = useInternetIdentity();
   const {
@@ -143,8 +141,6 @@ export const TokenManager: React.FC<TokenManagerProps> = ({
                 key={token.canisterId.toText()}
                 token={token}
                 targetPrincipal={targetPrincipal}
-                onDeposit={onDeposit}
-                onWithdraw={onWithdraw}
                 onRemove={() => {
                   removeWatchedToken(token.canisterId.toText());
                   toast.success(`${token.symbol} removed from watchlist`);

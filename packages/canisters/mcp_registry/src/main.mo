@@ -788,7 +788,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     // Registry uses custom environment hook to transfer funds directly (icrc1_transfer)
     // instead of delegation (icrc2_transfer_from) to avoid minter account limitations
     let wasm_id = Base16.encode(req.wasm_hash);
-    await _create_bounties_for_verification(wasm_id, req.wasm_hash);
+    ignore await _create_bounties_for_verification(wasm_id, req.wasm_hash);
 
     // Note: Indexing now happens in icrc118_update_wasm when the WASM is registered
 
@@ -1442,14 +1442,40 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   };
   public shared (msg) func icrc127_submit_bounty(req : ICRC127Service.BountySubmissionRequest) : async ICRC127Service.BountySubmissionResult {
     // ==========================================================================
-    // == CONSENSUS-BASED SYSTEM: Manual bounty claims are disabled.
-    // == Bounties are automatically distributed by the registry after reaching
+    // == CONSENSUS-BASED SYSTEM: Manual bounty claims are disabled for build_reproducibility.
+    // == Build reproducibility bounties are automatically distributed by the registry after reaching
     // == 5-of-9 majority consensus. This prevents:
     // == - Verifiers on the losing side from claiming rewards before slashing
     // == - Early claims that bypass consensus outcome handling
     // == - Gaming the system by claiming before final verification
+    // ==
+    // == For other audit types (tools_v1, data_safety_v1, etc.), manual claims are allowed
+    // == since they are single-node attestations, not consensus-based.
     // ==========================================================================
-    return #Error(#Generic("Manual bounty claims are disabled. Bounties are automatically distributed after reaching 5-of-9 consensus."));
+
+    // Get the bounty to check its audit type
+    let ?bounty = icrc127().icrc127_get_bounty(req.bounty_id) else {
+      return #Error(#Generic("Bounty not found"));
+    };
+
+    // Extract audit_type from challenge_parameters
+    let audit_type = switch (bounty.challenge_parameters) {
+      case (#Map(params_map)) {
+        switch (Array.find<(Text, ICRC127.ICRC16)>(params_map, func((key, _)) { key == "audit_type" })) {
+          case (?("audit_type", #Text(t))) { t };
+          case (_) { "" };
+        };
+      };
+      case (_) { "" };
+    };
+
+    // Only block manual claims for build_reproducibility_v1
+    if (audit_type == "build_reproducibility_v1") {
+      return #Error(#Generic("Manual bounty claims are disabled for build reproducibility audits. Bounties are automatically distributed after reaching 5-of-9 consensus."));
+    };
+
+    // Allow manual claims for other audit types
+    await icrc127().icrc127_submit_bounty<system>(msg.caller, req);
   };
   public query func icrc127_get_bounty(bounty_id : Nat) : async ?ICRC127.Bounty {
     icrc127().icrc127_get_bounty(bounty_id);

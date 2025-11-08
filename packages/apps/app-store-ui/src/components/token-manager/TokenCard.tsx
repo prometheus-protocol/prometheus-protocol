@@ -2,14 +2,7 @@ import React, { useState } from 'react';
 import { Principal } from '@icp-sdk/core/principal';
 import { Token } from '@prometheus-protocol/ic-js';
 import { toast } from 'sonner';
-import {
-  Loader2,
-  Copy,
-  ArrowDown,
-  ArrowUp,
-  X,
-  ChevronDown,
-} from 'lucide-react';
+import { Loader2, Copy, X, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TokenLogo } from '@/components/ui/TokenLogo';
@@ -20,7 +13,6 @@ import {
 } from '@/components/ui/collapsible';
 import {
   useGetTokenBalance,
-  useGetTokenBalanceForPrincipal,
   useGetTokenAllowance,
   useUpdateAllowance,
 } from '@/hooks/usePayment';
@@ -30,29 +22,22 @@ interface TokenCardProps {
   token: Token;
   targetPrincipal: Principal;
   onRemove?: () => void;
-  onDeposit?: (token: Token) => void;
-  onWithdraw?: (token: Token, canisterPrincipal: Principal) => void;
 }
 
 export const TokenCard: React.FC<TokenCardProps> = ({
   token,
   targetPrincipal,
   onRemove,
-  onDeposit,
-  onWithdraw,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const { data: userBalance, isLoading: isLoadingUserBalance } =
     useGetTokenBalance(token);
-  const { data: appBalance, isLoading: isLoadingAppBalance } =
-    useGetTokenBalanceForPrincipal(token, targetPrincipal);
   const { data: allowance, isLoading: isLoadingAllowance } =
     useGetTokenAllowance(targetPrincipal, token);
   const updateAllowance = useUpdateAllowance();
   const [newAllowance, setNewAllowance] = useState('');
 
-  const isLoading =
-    isLoadingUserBalance || isLoadingAppBalance || isLoadingAllowance;
+  const isLoading = isLoadingUserBalance || isLoadingAllowance;
 
   const handleUpdateAllowance = async () => {
     try {
@@ -65,22 +50,6 @@ export const TokenCard: React.FC<TokenCardProps> = ({
       toast.success('Allowance updated successfully');
     } catch (error) {
       toast.error('Failed to update allowance');
-    }
-  };
-
-  const handleSetMaxAllowance = async () => {
-    try {
-      // Set to a very large number to represent "max"
-      const maxAmount = '1000000000';
-      await updateAllowance.mutateAsync({
-        token,
-        spender: targetPrincipal,
-        amount: maxAmount,
-      });
-      setNewAllowance('');
-      toast.success('Allowance set to maximum');
-    } catch (error) {
-      toast.error('Failed to set maximum allowance');
     }
   };
 
@@ -139,20 +108,14 @@ export const TokenCard: React.FC<TokenCardProps> = ({
               </div>
             </div>
 
-            {/* Quick view balances and controls */}
+            {/* Quick view - Current allowance */}
             <div className="flex items-center gap-3 ml-3">
-              {/* Quick Balance Display - Hidden on small screens */}
+              {/* Quick Allowance Display - Hidden on small screens */}
               <div className="hidden lg:flex items-center gap-4 text-sm">
                 <div className="text-right">
-                  <div className="text-muted-foreground text-xs">Wallet</div>
+                  <div className="text-muted-foreground text-xs">Allowance</div>
                   <div className="font-semibold">
-                    {userBalance ? token.fromAtomic(userBalance) : '0'}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-muted-foreground text-xs">App</div>
-                  <div className="font-semibold">
-                    {appBalance ? token.fromAtomic(appBalance) : '0'}
+                    {allowance ? token.fromAtomic(allowance) : '0'}
                   </div>
                 </div>
               </div>
@@ -183,144 +146,51 @@ export const TokenCard: React.FC<TokenCardProps> = ({
 
         {/* Collapsible Content - Shows details when expanded */}
         <CollapsibleContent>
-          <div className="px-4 pb-4 space-y-6 border-t pt-4">
-            {/* Balances Section */}
+          <div className="px-4 pb-4 space-y-4 border-t pt-4">
+            {/* Allowance Management Section */}
             <div className="space-y-3">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Balances
-              </h3>
-
-              {/* Mobile Layout (Stacked) */}
-              <div className="flex flex-col gap-3 md:hidden">
-                {/* Your Wallet */}
-                <div className="p-3 bg-muted/30 rounded-lg">
-                  <div className="text-xs text-muted-foreground mb-1">
-                    Your Wallet
-                  </div>
-                  <div className="text-lg font-semibold">
-                    {userBalance ? token.fromAtomic(userBalance) : '0'}{' '}
-                    {token.symbol}
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                {(onDeposit || onWithdraw) && (
-                  <div className="flex gap-2">
-                    {onDeposit && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onDeposit(token)}
-                        className="flex-1 h-9"
-                        title={`Deposit ${token.symbol} to app`}>
-                        <ArrowDown className="h-4 w-4 mr-1" />
-                        Deposit
-                      </Button>
-                    )}
-                    {onWithdraw && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onWithdraw(token, targetPrincipal)}
-                        className="flex-1 h-9"
-                        title={`Withdraw ${token.symbol} from app`}>
-                        <ArrowUp className="h-4 w-4 mr-1" />
-                        Withdraw
-                      </Button>
-                    )}
-                  </div>
-                )}
-
-                {/* App Canister Balance */}
-                <div className="p-3 bg-muted/30 rounded-lg">
-                  <div className="text-xs text-muted-foreground mb-1">
-                    App Canister Balance
-                  </div>
-                  <div className="text-lg font-semibold">
-                    {appBalance ? token.fromAtomic(appBalance) : '0'}{' '}
-                    {token.symbol}
-                  </div>
-                </div>
-              </div>
-
-              {/* Desktop Layout (Side by Side) */}
-              <div className="hidden md:grid grid-cols-[1fr_auto_1fr] gap-4 items-center">
-                {/* Your Wallet */}
-                <div className="text-center p-3 bg-muted/30 rounded-lg">
-                  <div className="text-sm text-muted-foreground mb-1">
-                    Your Wallet
-                  </div>
-                  <div className="text-xl font-semibold">
-                    {userBalance ? token.fromAtomic(userBalance) : '0'}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {token.symbol}
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                {(onDeposit || onWithdraw) && (
-                  <div className="flex flex-col gap-2">
-                    {onDeposit && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onDeposit(token)}
-                        className="h-9 px-3"
-                        title={`Deposit ${token.symbol} to app`}>
-                        <ArrowDown className="h-4 w-4 mr-1" />
-                        Deposit
-                      </Button>
-                    )}
-                    {onWithdraw && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onWithdraw(token, targetPrincipal)}
-                        className="h-9 px-3"
-                        title={`Withdraw ${token.symbol} from app`}>
-                        <ArrowUp className="h-4 w-4 mr-1" />
-                        Withdraw
-                      </Button>
-                    )}
-                  </div>
-                )}
-
-                {/* App Canister Balance */}
-                <div className="text-center p-3 bg-muted/30 rounded-lg">
-                  <div className="text-sm text-muted-foreground mb-1">
-                    App Canister Balance
-                  </div>
-                  <div className="text-xl font-semibold">
-                    {appBalance ? token.fromAtomic(appBalance) : '0'}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {token.symbol}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Allowance Section */}
-            <div className="space-y-3 pt-4 border-t">
               <div>
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                  Allowance
+                  Manage Allowance
                 </h3>
                 <p className="text-xs text-muted-foreground mt-1">
-                  The max amount the app can pull from your wallet.
+                  Set the maximum amount the app can pull from your wallet.
                 </p>
               </div>
 
+              {/* Current Allowance Display */}
+              <div className="p-3 bg-muted/30 rounded-lg border">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">
+                      Current Allowance
+                    </div>
+                    <div className="text-lg font-semibold">
+                      {allowance ? token.fromAtomic(allowance) : '0'}{' '}
+                      {token.symbol}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-muted-foreground mb-1">
+                      Your Balance
+                    </div>
+                    <div className="text-sm font-medium text-muted-foreground">
+                      {userBalance ? token.fromAtomic(userBalance) : '0'}{' '}
+                      {token.symbol}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Allowance Input and Actions */}
               <div className="space-y-2">
                 <div className="relative">
                   <Input
-                    value={
-                      newAllowance ||
-                      (allowance ? token.fromAtomic(allowance) : '0.00')
-                    }
+                    value={newAllowance}
                     onChange={(e) => setNewAllowance(e.target.value)}
-                    placeholder="0.00"
+                    placeholder={
+                      allowance ? token.fromAtomic(allowance) : '0.00'
+                    }
                     className="h-10 text-right pr-16"
                     disabled={updateAllowance.isPending}
                   />
@@ -328,7 +198,45 @@ export const TokenCard: React.FC<TokenCardProps> = ({
                     {token.symbol}
                   </div>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-2">
+
+                {/* Quick Amount Buttons */}
+                <div className="grid grid-cols-4 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setNewAllowance('10')}
+                    disabled={updateAllowance.isPending}
+                    className="h-8 text-xs">
+                    10
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setNewAllowance('100')}
+                    disabled={updateAllowance.isPending}
+                    className="h-8 text-xs">
+                    100
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setNewAllowance('1000')}
+                    disabled={updateAllowance.isPending}
+                    className="h-8 text-xs">
+                    1K
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setNewAllowance('10000')}
+                    disabled={updateAllowance.isPending}
+                    className="h-8 text-xs">
+                    10K
+                  </Button>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-2">
                   <Button
                     variant="default"
                     onClick={handleUpdateAllowance}
@@ -337,14 +245,7 @@ export const TokenCard: React.FC<TokenCardProps> = ({
                     {updateAllowance.isPending && (
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
                     )}
-                    Update
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleSetMaxAllowance}
-                    disabled={updateAllowance.isPending}
-                    className="flex-1">
-                    Set Max
+                    Approve
                   </Button>
                   <Button
                     variant="outline"

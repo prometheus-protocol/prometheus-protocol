@@ -569,6 +569,15 @@ export default function ServerDetailsPage() {
             </div>
             {/* Conditionally render the new container component */}
 
+            {/* Token Allowances Section */}
+            {identity && canisterId && (
+              <AppTokenSection
+                targetPrincipal={canisterId}
+                isOwnerOrDeveloper={isOwnerOrDeveloper}
+                appName={server.name}
+              />
+            )}
+
             <AboutSection server={server} />
 
             {/* Conditional rendering now correctly checks the nested status. */}
@@ -609,15 +618,6 @@ export default function ServerDetailsPage() {
               latestVersion={server.latestVersion}
               canisterId={canisterId ?? undefined}
             />
-
-            {/* Token Watchlist Section */}
-            {identity && canisterId && (
-              <AppTokenSection
-                targetPrincipal={canisterId}
-                isOwnerOrDeveloper={isOwnerOrDeveloper}
-                appName={server.name}
-              />
-            )}
 
             <div>
               <label className="text-sm font-medium text-muted-foreground">

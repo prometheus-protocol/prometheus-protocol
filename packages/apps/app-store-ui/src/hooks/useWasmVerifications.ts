@@ -22,30 +22,38 @@ export function useGetWasmVerifications(bounties: AuditBounty[] | undefined) {
         return [];
       }
 
-      // Group bounties by WASM ID
+      // Group bounties by WASM ID and audit type
       const groupedMap = groupBountiesByWasm(bounties);
 
-      // For each WASM, fetch progress data
+      // For each WASM+audit_type group, fetch progress data
       const verifications = await Promise.all(
-        Array.from(groupedMap.entries()).map(async ([wasmId, wasmBounties]) => {
-          try {
-            const [attestationIds, divergenceIds] = await Promise.all([
-              getVerificationProgress(wasmId),
-              getDivergenceProgress(wasmId),
-            ]);
+        Array.from(groupedMap.entries()).map(
+          async ([groupKey, wasmBounties]) => {
+            // Extract wasmId from the composite key (format: "wasmId::auditType")
+            const wasmId = groupKey.split('::')[0];
 
-            return createWasmVerification(
-              wasmId,
-              wasmBounties,
-              attestationIds,
-              divergenceIds,
-            );
-          } catch (error) {
-            console.error(`Error fetching progress for WASM ${wasmId}:`, error);
-            // Return verification with zero progress on error
-            return createWasmVerification(wasmId, wasmBounties, [], []);
-          }
-        }),
+            try {
+              const [attestationIds, divergenceIds] = await Promise.all([
+                getVerificationProgress(wasmId),
+                getDivergenceProgress(wasmId),
+              ]);
+
+              return createWasmVerification(
+                wasmId,
+                wasmBounties,
+                attestationIds,
+                divergenceIds,
+              );
+            } catch (error) {
+              console.error(
+                `Error fetching progress for WASM ${wasmId}:`,
+                error,
+              );
+              // Return verification with zero progress on error
+              return createWasmVerification(wasmId, wasmBounties, [], []);
+            }
+          },
+        ),
       );
 
       // Sort by most recent bounty creation date (newest first)

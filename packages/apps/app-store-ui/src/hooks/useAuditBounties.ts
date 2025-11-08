@@ -21,6 +21,7 @@ import {
   getVerifierProfile,
   listPendingVerifications,
   submitDivergence,
+  depositStake,
 } from '@prometheus-protocol/ic-js';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import useMutation from './useMutation';
@@ -144,10 +145,14 @@ export const useReserveAuditBounty = (bountyId?: bigint) => {
         throw new Error('Could not determine audit type from bounty details.');
       }
 
-      // Step 2: Call the canister to reserve the bounty
+      // Step 2: For now, we use USDC as the token for all audit types
+      // In the future, different audit types might use different tokens
+      const tokenId = Tokens.USDC.canisterId.toText();
+
+      // Step 3: Call the canister to reserve the bounty
       await reserveBounty(identity, {
         bounty_id: bountyId,
-        token_id: auditType,
+        token_id: tokenId,
       });
     },
 
@@ -406,6 +411,33 @@ export const useSubmitDivergence = () => {
       ['appStoreListings'],
       ['appDetails'],
       ['balance', identity?.getPrincipal().toText()],
+    ],
+  });
+};
+
+/**
+ * Hook to deposit USDC stake into the verifier's account.
+ * This performs a two-step process:
+ * 1. Approves the Audit Hub to spend USDC
+ * 2. Deposits the stake into the verifier's account
+ */
+export const useDepositStake = () => {
+  const { identity } = useInternetIdentity();
+
+  return useMutation({
+    mutationFn: async (amount: bigint) => {
+      if (!identity) {
+        throw new Error('Must be logged in to deposit stake');
+      }
+
+      await depositStake(identity, amount, Tokens.USDC);
+    },
+
+    successMessage: 'Stake deposited successfully!',
+
+    queryKeysToRefetch: [
+      ['tokenBalance', identity?.getPrincipal().toText()],
+      ['verifierProfile'],
     ],
   });
 };
