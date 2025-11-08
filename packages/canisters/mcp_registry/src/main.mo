@@ -1475,7 +1475,37 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
 
     // Allow manual claims for other audit types
-    await icrc127().icrc127_submit_bounty<system>(msg.caller, req);
+    let submission_result = await icrc127().icrc127_submit_bounty<system>(msg.caller, req);
+
+    // If submission was successful, release the verifier's stake
+    switch (submission_result) {
+      case (#Ok(_)) {
+        // Release the stake for successful manual claims
+        switch (_credentials_canister_id) {
+          case (?audit_hub_id) {
+            let auditHub : AuditHub.Service = actor (Principal.toText(audit_hub_id));
+            let release_result = await auditHub.release_stake(req.bounty_id);
+            switch (release_result) {
+              case (#ok(_)) {
+                Debug.print("Released stake for manual bounty claim " # Nat.toText(req.bounty_id));
+              };
+              case (#err(e)) {
+                Debug.print("Warning: Failed to release stake for bounty " # Nat.toText(req.bounty_id) # ": " # e);
+                // Don't fail the submission if stake release fails - the submission already succeeded
+              };
+            };
+          };
+          case (null) {
+            Debug.print("Warning: Cannot release stake - Audit Hub not configured");
+          };
+        };
+      };
+      case (#Error(_)) {
+        // Submission failed, don't release stake
+      };
+    };
+
+    return submission_result;
   };
   public query func icrc127_get_bounty(bounty_id : Nat) : async ?ICRC127.Bounty {
     icrc127().icrc127_get_bounty(bounty_id);

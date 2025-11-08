@@ -63,16 +63,6 @@ export const VerificationListItem = ({
     verification.attestationCount,
     verification.divergenceCount,
   );
-  const progressPercent = (leadingCount / CONSENSUS_THRESHOLD) * 100;
-
-  // Determine progress bar color based on what's leading
-  const isAttestationLeading =
-    verification.attestationCount > verification.divergenceCount;
-  const progressColor = isAttestationLeading
-    ? 'bg-green-500'
-    : verification.divergenceCount > 0
-      ? 'bg-red-500'
-      : 'bg-primary';
 
   return (
     <div className="bg-card/50 border border-gray-700 rounded-lg hover:border-primary transition-colors">
@@ -135,7 +125,7 @@ export const VerificationListItem = ({
                   /{TOTAL_VERIFIERS} participated
                 </span>
               </div>
-              <div className="relative h-4 bg-gray-800 rounded-full overflow-hidden">
+              <div className="relative h-3 bg-gray-800 rounded-full overflow-hidden">
                 {/* Green bar from left (attestations) */}
                 <div
                   className="absolute left-0 top-0 h-full bg-green-500 transition-all duration-300"
