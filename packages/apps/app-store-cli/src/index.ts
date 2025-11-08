@@ -28,6 +28,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // This cli is built with production canister IDs baked in at build time.
+// During local development, we can override these with local canister IDs.
 const program = new Command();
 
 program
