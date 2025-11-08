@@ -321,6 +321,7 @@ export async function verifyBuild(
 **Key components of the reproducible build setup**:
 
 - **Base Docker image**: Pre-built locally with pinned versions of `moc` (Motoko compiler), `ic-wasm`, and `mops-cli`
+  - **Template source**: [github.com/prometheus-protocol/prometheus-protocol/tree/main/packages/libs/reproducible-build](https://github.com/prometheus-protocol/prometheus-protocol/tree/main/packages/libs/reproducible-build)
 - **Isolated environment**: Each build runs in a fresh container with no cache
 - **Deterministic output**: Same source code + same toolchain = byte-for-byte identical WASM
 - **Fast verification**: Base images are built locally and verification completes in <10 seconds
@@ -667,6 +668,10 @@ Want to earn tokens by verifying builds? Here's how:
    - Performance metrics and uptime
 
 ### Step 2: Run the Verifier Bot
+
+**Source Code**: [github.com/prometheus-protocol/prometheus-protocol/tree/main/packages/apps/verifier-bot](https://github.com/prometheus-protocol/prometheus-protocol/tree/main/packages/apps/verifier-bot)
+
+**Docker Image**: [ghcr.io/prometheus-protocol/verifier-bot](https://github.com/prometheus-protocol/prometheus-protocol/pkgs/container/verifier-bot)
 
 ```bash
 # Clone the verifier bot

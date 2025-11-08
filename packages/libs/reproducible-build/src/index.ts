@@ -4,6 +4,7 @@ import toml from 'toml';
 
 /**
  * Template files for reproducible Motoko builds
+ * Updated for npm publish compatibility
  */
 export const TEMPLATES = {
   'docker-compose.yml': `x-base-image:

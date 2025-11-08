@@ -107,15 +107,20 @@ export function registerReleaseCommand(program: Command) {
           console.log(`\n📌 Step 2: Using current commit hash: ${commitHash}`);
         }
 
-        // Step 3: Update prometheus.yml with commit hash
+        // Step 3: Update prometheus.yml with commit hash and wasm_path
         console.log('\n📝 Step 3: Updating prometheus.yml with commit hash...');
         const manifest = yaml.load(
           fs.readFileSync(configPath, 'utf-8'),
         ) as Manifest;
         manifest.submission.git_commit = commitHash;
 
+        // Set wasm_path to the reproducible build output path
+        const wasmPath = './out/out_Linux_x86_64.wasm';
+        manifest.submission.wasm_path = wasmPath;
+
         fs.writeFileSync(configPath, yaml.dump(manifest));
         console.log('   ✅ Updated prometheus.yml');
+        console.log(`   ✅ Set wasm_path to ${wasmPath}`);
 
         if (!options.skipGit) {
           execSync('git add prometheus.yml', { stdio: 'inherit' });

@@ -66,7 +66,7 @@ spec:
             privileged: true
           env:
             - name: DOCKER_TLS_CERTDIR
-              value: ""
+              value: ''
           resources:
             requests:
               memory: '256Mi'
@@ -152,7 +152,7 @@ spec:
             privileged: true
           env:
             - name: DOCKER_TLS_CERTDIR
-              value: ""
+              value: ''
           resources:
             requests:
               memory: '256Mi'
@@ -238,7 +238,7 @@ spec:
             privileged: true
           env:
             - name: DOCKER_TLS_CERTDIR
-              value: ""
+              value: ''
           resources:
             requests:
               memory: '256Mi'
@@ -324,7 +324,7 @@ spec:
             privileged: true
           env:
             - name: DOCKER_TLS_CERTDIR
-              value: ""
+              value: ''
           resources:
             requests:
               memory: '256Mi'
@@ -410,7 +410,7 @@ spec:
             privileged: true
           env:
             - name: DOCKER_TLS_CERTDIR
-              value: ""
+              value: ''
           resources:
             requests:
               memory: '256Mi'
@@ -496,7 +496,7 @@ spec:
             privileged: true
           env:
             - name: DOCKER_TLS_CERTDIR
-              value: ""
+              value: ''
           resources:
             requests:
               memory: '256Mi'
@@ -582,7 +582,7 @@ spec:
             privileged: true
           env:
             - name: DOCKER_TLS_CERTDIR
-              value: ""
+              value: ''
           resources:
             requests:
               memory: '256Mi'
@@ -668,7 +668,7 @@ spec:
             privileged: true
           env:
             - name: DOCKER_TLS_CERTDIR
-              value: ""
+              value: ''
           resources:
             requests:
               memory: '256Mi'
@@ -754,7 +754,7 @@ spec:
             privileged: true
           env:
             - name: DOCKER_TLS_CERTDIR
-              value: ""
+              value: ''
           resources:
             requests:
               memory: '256Mi'
