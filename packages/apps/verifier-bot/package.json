@@ -1,6 +1,7 @@
 {
   "name": "@prometheus-protocol/verifier-bot",
   "version": "1.0.0",
+  "private": true,
   "description": "Automated build verification bot for the Prometheus Protocol App Store",
   "type": "module",
   "main": "dist/index.js",
