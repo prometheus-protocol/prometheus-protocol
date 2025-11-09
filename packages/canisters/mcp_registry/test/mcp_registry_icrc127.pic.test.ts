@@ -308,8 +308,8 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
     expect(attestResult.Error).toHaveProperty('Unauthorized');
   });
 
-  it('should REJECT bounty submission because manual claims are disabled', async () => {
-    // The auditor files the attestation WITHOUT reserving first (which will fail)
+  it('should ALLOW manual bounty submission for tools_v1 audit type', async () => {
+    // The auditor files the attestation WITHOUT reserving first
     registryActor.setIdentity(auditorIdentity);
     await registryActor.icrc126_file_attestation({
       wasm_id: wasmIdToVerify,
@@ -319,21 +319,19 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
       ],
     });
 
-    // Now they try to claim the bounty. The system rejects all manual claims.
+    // Now they try to claim the bounty. Manual claims are allowed for tools_v1 audits.
     const submitResult = await registryActor.icrc127_submit_bounty({
       bounty_id: bountyId,
       submission: { Text: 'I claim this bounty' },
       account: [],
     });
 
-    expect(submitResult).toHaveProperty('Error');
+    expect(submitResult).toHaveProperty('Ok');
     // @ts-ignore
-    expect(submitResult.Error.Generic).toMatch(
-      /Manual bounty claims are disabled/,
-    );
+    expect(submitResult.Ok.result.length).toBeGreaterThan(0);
   });
 
-  it('should REJECT manual bounty claims even with valid reservation and attestation', async () => {
+  it('should ALLOW manual bounty claims with valid reservation and attestation for tools_v1', async () => {
     // --- 1. Reserve the Bounty ---
     auditHubActor.setIdentity(auditorIdentity);
     const reserveResult = await auditHubActor.reserve_bounty(
@@ -353,18 +351,16 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
     });
     expect(attestResult).toHaveProperty('Ok');
 
-    // --- 3. Attempt to manually submit the bounty (should be rejected) ---
+    // --- 3. Manually submit the bounty (should succeed for tools_v1) ---
     const submitResult = await registryActor.icrc127_submit_bounty({
       bounty_id: bountyId,
       submission: { Text: 'I claim this bounty now' },
       account: [], // Payout to self
     });
 
-    // Manual claims are disabled - all bounties are auto-distributed after consensus
-    expect(submitResult).toHaveProperty('Error');
+    // Manual claims are allowed for tools_v1 audits (not build_reproducibility_v1)
+    expect(submitResult).toHaveProperty('Ok');
     // @ts-ignore
-    expect(submitResult.Error.Generic).toMatch(
-      /Manual bounty claims are disabled/,
-    );
+    expect(submitResult.Ok.result.length).toBeGreaterThan(0);
   });
 });
