@@ -15,7 +15,7 @@ This document outlines the streamlined workflow for publishing a new version usi
 From your project directory (e.g., `/tmp/test`):
 
 ```bash
-app-store-cli release 0.18.0
+app-store-cli release 0.18.0 --network local
 ```
 
 **That's it!** This single command handles the entire workflow automatically.

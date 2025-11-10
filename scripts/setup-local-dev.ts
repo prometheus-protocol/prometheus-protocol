@@ -7,7 +7,8 @@ import { $, chalk } from 'zx';
 // This script performs LOCAL DEVELOPMENT ONLY operations after deploying canisters:
 // - Sets stake requirements for audit types
 // - Transfers test USDC to test auditor
-// - Funds MCP Registry for sponsoring build bounties
+// - Configures and funds bounty_sponsor canister
+// - Configures registry to use bounty_sponsor
 // - Fabricates cycles for the orchestrator
 //
 // For canister linking/configuration, use: pnpm config:inject
@@ -24,7 +25,8 @@ const AUDITOR_PRINCIPAL =
 
 const STAKE_AMOUNT = 300_000; // 0.30 USDC (USDC has 6 decimals, so 300,000 = 0.30 USDC)
 const USDC_TRANSFER_AMOUNT = 100_000_000; // Enough for multiple stakes
-const REGISTRY_USDC_AMOUNT = 1_000_000_000; // 1,000 USDC for sponsoring build bounties
+const BOUNTY_SPONSOR_USDC_AMOUNT = 10_000_000_000; // 10,000 USDC for sponsoring bounties
+const BOUNTY_REWARD_AMOUNT = 250_000; // 0.25 USDC per bounty
 const ORCHESTRATOR_CYCLES_IN_TRILLIONS = 100; // 100T cycles
 
 const AUDIT_TYPES = [
@@ -49,6 +51,9 @@ async function main() {
   const audit_hub = (await $`dfx canister id audit_hub`).stdout.trim();
   const usdc_ledger = (await $`dfx canister id usdc_ledger`).stdout.trim();
   const mcp_registry = (await $`dfx canister id mcp_registry`).stdout.trim();
+  const bounty_sponsor = (
+    await $`dfx canister id bounty_sponsor`
+  ).stdout.trim();
   const mcp_orchestrator = (
     await $`dfx canister id mcp_orchestrator`
   ).stdout.trim();
@@ -86,15 +91,48 @@ async function main() {
   console.log(chalk.green('✅ USDC transfer complete.'));
   console.log('');
 
-  // Fund MCP Registry for build bounties
+  // Configure bounty_sponsor canister
+  console.log(chalk.bold('🎯 Configuring bounty_sponsor canister...'));
+  await $`dfx identity use pp_owner 2>/dev/null`;
+
+  console.log(`  - Setting registry canister ID...`);
+  await $`dfx canister call ${bounty_sponsor} set_registry_canister_id '(principal "${mcp_registry}")'`;
+
+  console.log(`  - Setting reward token canister ID...`);
+  await $`dfx canister call ${bounty_sponsor} set_reward_token_canister_id '(principal "${usdc_ledger}")'`;
+
+  console.log(`  - Setting audit hub canister ID...`);
+  await $`dfx canister call ${bounty_sponsor} set_audit_hub_canister_id '(principal "${audit_hub}")'`;
+
+  console.log(`  - Setting reward amounts for audit types...`);
+  for (const auditType of AUDIT_TYPES) {
+    console.log(`    • ${auditType}: ${BOUNTY_REWARD_AMOUNT}`);
+    await $`dfx canister call ${bounty_sponsor} set_reward_amount_for_audit_type '("${auditType}", ${BOUNTY_REWARD_AMOUNT}:nat)'`;
+  }
+
+  console.log(chalk.green('✅ Bounty sponsor configured.'));
+  console.log('');
+
+  // Fund bounty_sponsor with USDC
   console.log(
     chalk.yellow(
-      `💸 Transferring ${REGISTRY_USDC_AMOUNT} USDC units to MCP Registry for build bounties...`,
+      `💸 Transferring ${BOUNTY_SPONSOR_USDC_AMOUNT} USDC units to bounty_sponsor...`,
     ),
   );
-  const registryTransferArgs = `(record { to = record { owner = principal \"${mcp_registry}\"; subaccount = null }; amount = ${REGISTRY_USDC_AMOUNT}:nat })`;
-  await $`dfx canister call ${usdc_ledger} icrc1_transfer ${registryTransferArgs}`;
-  console.log(chalk.green('✅ MCP Registry funded.'));
+  const sponsorTransferArgs = `(record { to = record { owner = principal \"${bounty_sponsor}\"; subaccount = null }; amount = ${BOUNTY_SPONSOR_USDC_AMOUNT}:nat })`;
+  await $`dfx canister call ${usdc_ledger} icrc1_transfer ${sponsorTransferArgs}`;
+  console.log(chalk.green('✅ Bounty sponsor funded.'));
+  console.log('');
+
+  // Configure registry to use bounty_sponsor and audit_hub
+  console.log(
+    chalk.bold('🔗 Linking registry to bounty_sponsor and audit_hub...'),
+  );
+  await $`dfx canister call ${mcp_registry} set_bounty_sponsor_canister_id '(principal "${bounty_sponsor}")'`;
+  await $`dfx canister call ${mcp_registry} set_auditor_credentials_canister_id '(principal "${audit_hub}")'`;
+  console.log(
+    chalk.green('✅ Registry linked to bounty_sponsor and audit_hub.'),
+  );
   console.log('');
 
   // Fabricate cycles

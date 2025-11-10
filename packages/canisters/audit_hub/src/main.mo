@@ -80,6 +80,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   // Verifier Dashboard canister ID - for API credential validation
   var dashboard_canister_id : ?Principal = null;
   var registry_canister_id : ?Principal = null;
+  var bounty_sponsor_canister_id : ?Principal = null;
 
   // Tracks the available (unstaked) balances for each verifier and token type
   // Map<Verifier Principal, Map<TokenId, Balance>>
@@ -287,6 +288,18 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
 
   public shared query func get_registry_canister_id() : async ?Principal {
     return registry_canister_id;
+  };
+
+  public shared (msg) func set_bounty_sponsor_canister_id(bounty_sponsor_id : Principal) : async Result.Result<(), Text> {
+    if (not is_owner(msg.caller)) {
+      return #err("Unauthorized.");
+    };
+    bounty_sponsor_canister_id := ?bounty_sponsor_id;
+    return #ok(());
+  };
+
+  public shared query func get_bounty_sponsor_canister_id() : async ?Principal {
+    return bounty_sponsor_canister_id;
   };
 
   public shared (msg) func set_stake_requirement(token_id : TokenId, amount : Balance) : async Result.Result<(), Text> {
@@ -917,6 +930,13 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
           current_value = registry_canister_id;
         },
         {
+          key = "bounty_sponsor_canister_id";
+          setter = "set_bounty_sponsor_canister_id";
+          canister_name = "bounty_sponsor";
+          required = true;
+          current_value = bounty_sponsor_canister_id;
+        },
+        {
           key = "dashboard_canister_id";
           setter = "set_dashboard_canister_id";
           canister_name = "dashboard";
@@ -945,16 +965,30 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     required_verifiers : Nat,
     bounty_ids : [BountyId],
   ) : async Result.Result<(), Text> {
-    // Only registry can add jobs
+    // Only registry or bounty_sponsor can add jobs
+    var authorized = false;
     switch (registry_canister_id) {
-      case (null) {
-        return #err("Registry canister not configured");
-      };
       case (?registry_id) {
-        if (not Principal.equal(msg.caller, registry_id)) {
-          return #err("Only the registry canister can add verification jobs");
+        if (Principal.equal(msg.caller, registry_id)) {
+          authorized := true;
         };
       };
+      case (null) {};
+    };
+
+    if (not authorized) {
+      switch (bounty_sponsor_canister_id) {
+        case (?sponsor_id) {
+          if (Principal.equal(msg.caller, sponsor_id)) {
+            authorized := true;
+          };
+        };
+        case (null) {};
+      };
+    };
+
+    if (not authorized) {
+      return #err("Only the registry or bounty_sponsor canister can add verification jobs");
     };
 
     // Check if job already exists

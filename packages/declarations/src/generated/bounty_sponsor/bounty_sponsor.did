@@ -1,0 +1,76 @@
+type WasmId = text;
+type Result_1 = 
+ variant {
+   err: text;
+   ok: record {
+         bounty_ids: vec BountyId;
+         total_sponsored: nat;
+       };
+ };
+type Result = 
+ variant {
+   err: text;
+   ok;
+ };
+type EnvDependency = 
+ record {
+   canister_name: text;
+   current_value: opt principal;
+   key: text;
+   required: bool;
+   setter: text;
+ };
+type EnvConfig = 
+ record {
+   current_value: opt text;
+   key: text;
+   required: bool;
+   setter: text;
+   value_type: text;
+ };
+type BountySponsor = 
+ service {
+   get_bounty_info: (bounty_id: BountyId) ->
+    (opt record {
+           audit_type: text;
+           timestamp: int;
+           wasm_id: WasmId;
+         }) query;
+   get_config: () ->
+    (record {
+       registry_canister_id: opt principal;
+       required_verifiers: nat;
+       reward_amounts: vec record {
+                             text;
+                             nat;
+                           };
+       reward_token_canister_id: opt principal;
+     }) query;
+   /// * Returns the environment requirements for this canister.
+   ///    * This enables automated configuration discovery and injection.
+   get_env_requirements: () ->
+    (variant {
+       v1:
+        record {
+          configuration: vec EnvConfig;
+          dependencies: vec EnvDependency;
+        };}) query;
+   get_owner: () -> (principal) query;
+   get_reward_amount_for_audit_type: (audit_type: text) -> (opt nat) query;
+   get_sponsored_audit_types_for_wasm: (wasm_id: WasmId) -> (vec text) query;
+   get_sponsored_bounties_for_wasm: (wasm_id: WasmId) -> (vec BountyId) query;
+   get_total_sponsored_bounties: () -> (nat) query;
+   is_wasm_sponsored: (wasm_id: WasmId) -> (bool) query;
+   set_registry_canister_id: (canister_id: principal) -> (Result);
+   set_reward_amount_for_audit_type: (audit_type: text, amount: nat) ->
+    (Result);
+   set_reward_token_canister_id: (canister_id: principal) -> (Result);
+   /// * Sponsor bounties for a WASM verification.
+   ///    * Creates 9 bounties for each specified audit type.
+   ///    * Idempotent: safe to call multiple times for the same WASM + audit type combination.
+   sponsor_bounties_for_wasm: (wasm_id: WasmId, wasm_hash: blob,
+    audit_types_to_sponsor: vec text) -> (Result_1);
+   transfer_ownership: (new_owner: principal) -> (Result);
+ };
+type BountyId = nat;
+service : () -> BountySponsor

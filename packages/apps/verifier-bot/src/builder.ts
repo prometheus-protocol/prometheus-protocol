@@ -210,9 +210,11 @@ export async function verifyBuild(
 
     if (actualHash === expectedWasmHash) {
       console.log(`✅ Hash match! Build verified.`);
+      const wasmPath = path.join(canisterPath, 'out', 'out_Linux_x86_64.wasm');
       return {
         success: true,
         wasmHash: actualHash,
+        wasmPath,
         buildLog: buildLog.slice(-1000), // Keep last 1KB
         duration,
       };

@@ -39,6 +39,10 @@ import {
 } from '@declarations/icrc1_ledger/icrc1_ledger.did.js';
 import { idlFactory as serverIdl } from '@declarations/mcp_server/mcp_server.did.js';
 import type { _SERVICE as ServerService } from '@declarations/mcp_server/mcp_server.did.js';
+import {
+  idlFactory as bountySponsorIdlFactory,
+  type _SERVICE as BountySponsorService,
+} from '@declarations/bounty_sponsor/bounty_sponsor.did.js';
 
 // --- Wasm Paths ---
 const ORCHESTRATOR_WASM_PATH = path.resolve(
@@ -65,6 +69,11 @@ const MCP_SERVER_DUMMY_WASM_PATH = path.resolve(
   __dirname,
   '../../../../',
   '.dfx/local/canisters/mcp_server/mcp_server.wasm',
+);
+const BOUNTY_SPONSOR_WASM_PATH = path.resolve(
+  __dirname,
+  '../../../../',
+  '.dfx/local/canisters/bounty_sponsor/bounty_sponsor.wasm',
 );
 // --- Identities ---
 const daoIdentity: Identity = createIdentity('dao-principal');
@@ -143,17 +152,24 @@ async function setupEnvironment(pic: PocketIc) {
     controllers: [orchestratorFixture.canisterId, daoIdentity.getPrincipal()],
     arg: IDL.encode(orchestratorInit({ IDL }), [[]]).buffer,
   });
+  const bountySponsorFixture = await pic.setupCanister<BountySponsorService>({
+    idlFactory: bountySponsorIdlFactory,
+    wasm: BOUNTY_SPONSOR_WASM_PATH,
+    sender: daoIdentity.getPrincipal(),
+  });
 
   return {
     registryActor: registryFixture.actor,
     orchestratorActor: orchestratorFixture.actor,
     auditHubActor: auditHubFixture.actor,
     ledgerActor: ledgerFixture.actor,
+    bountySponsorActor: bountySponsorFixture.actor,
     managedCanisterId: managedCanisterFixture.canisterId,
     ledgerCanisterId: ledgerFixture.canisterId,
     registryCanisterId: registryFixture.canisterId,
     orchestratorCanisterId: orchestratorFixture.canisterId,
     auditHubCanisterId: auditHubFixture.canisterId,
+    bountySponsorCanisterId: bountySponsorFixture.canisterId,
   };
 }
 
@@ -164,9 +180,11 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
   let registryActor: Actor<RegistryService>;
   let auditHubActor: Actor<AuditHubService>;
   let ledgerActor: Actor<LedgerService>;
+  let bountySponsorActor: Actor<BountySponsorService>;
   let targetCanisterId: Principal;
   let registryCanisterId: Principal;
   let ledgerCanisterId: Principal;
+  let bountySponsorCanisterId: Principal;
   let unverifiedWasmHash: Uint8Array;
   let verifiedWasmHash: Uint8Array;
   const secureNamespace = 'com.prometheus.secure-server';
@@ -180,8 +198,10 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
     registryActor = env.registryActor;
     auditHubActor = env.auditHubActor;
     ledgerActor = env.ledgerActor;
+    bountySponsorActor = env.bountySponsorActor;
     registryCanisterId = env.registryCanisterId;
     ledgerCanisterId = env.ledgerCanisterId;
+    bountySponsorCanisterId = env.bountySponsorCanisterId;
     targetCanisterId = env.managedCanisterId;
 
     // --- Configure inter-canister dependencies ---
@@ -209,10 +229,19 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
     );
     await auditHubActor.set_registry_canister_id(env.registryCanisterId);
 
-    // Fund registry with USDC for bounty rewards (9 bounties × ~260k = ~2.34M + buffer)
+    // Configure bounty_sponsor for automated bounty creation
+    bountySponsorActor.setIdentity(daoIdentity);
+    await bountySponsorActor.set_registry_canister_id(registryCanisterId);
+    await bountySponsorActor.set_reward_token_canister_id(ledgerCanisterId);
+    await bountySponsorActor.set_reward_amount_for_audit_type(
+      buildReproTokenId,
+      250_000n,
+    );
+
+    // Fund bounty_sponsor with USDC for bounty rewards (9 bounties × ~260k = ~2.34M + buffer)
     ledgerActor.setIdentity(daoIdentity);
     await ledgerActor.icrc1_transfer({
-      to: { owner: registryCanisterId, subaccount: [] },
+      to: { owner: bountySponsorCanisterId, subaccount: [] },
       amount: 3_000_000n,
       fee: [],
       memo: [],
@@ -383,6 +412,14 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       metadata: [],
     });
 
+    // Sponsor bounties for this WASM
+    bountySponsorActor.setIdentity(daoIdentity);
+    await bountySponsorActor.sponsor_bounties_for_wasm(
+      wasmId,
+      verifiedWasmHash,
+      [buildReproTokenId],
+    );
+
     // 2. Fetch the auto-created bounties for this WASM
     const wasmBounties = await registryActor.get_bounties_for_wasm(wasmId);
     expect(wasmBounties.length).toBeGreaterThanOrEqual(5);
@@ -434,6 +471,14 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
         commit_hash: new Uint8Array([1]),
         metadata: [],
       });
+
+      // Sponsor bounties for this WASM
+      bountySponsorActor.setIdentity(daoIdentity);
+      await bountySponsorActor.sponsor_bounties_for_wasm(
+        wasmId,
+        verifiedWasmHash,
+        [buildReproTokenId],
+      );
 
       // Fetch the auto-created bounties for this WASM
       const wasmBounties = await registryActor.get_bounties_for_wasm(wasmId);
@@ -511,8 +556,10 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
     let registryActor: Actor<RegistryService>;
     let auditHubActor: Actor<AuditHubService>;
     let ledgerActor: Actor<LedgerService>;
+    let bountySponsorActor: Actor<BountySponsorService>;
     let ledgerCanisterId: Principal;
     let registryCanisterId: Principal;
+    let bountySponsorCanisterId: Principal;
     let targetCanisterId: Principal;
     let verifiedWasmHash: Uint8Array;
     const managedNamespace = 'com.test.cycles-topup';
@@ -533,8 +580,10 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       registryActor = env.registryActor;
       auditHubActor = env.auditHubActor;
       ledgerActor = env.ledgerActor;
+      bountySponsorActor = env.bountySponsorActor;
       ledgerCanisterId = env.ledgerCanisterId;
       registryCanisterId = env.registryCanisterId;
+      bountySponsorCanisterId = env.bountySponsorCanisterId;
       targetCanisterId = env.managedCanisterId;
       targetCanisterId = env.managedCanisterId;
 
@@ -562,10 +611,19 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       );
       await auditHubActor.set_registry_canister_id(env.registryCanisterId);
 
-      // Fund registry with USDC for bounty rewards (9 bounties × ~260k = ~2.34M + buffer)
+      // Configure bounty_sponsor for automated bounty creation
+      bountySponsorActor.setIdentity(daoIdentity);
+      await bountySponsorActor.set_registry_canister_id(registryCanisterId);
+      await bountySponsorActor.set_reward_token_canister_id(ledgerCanisterId);
+      await bountySponsorActor.set_reward_amount_for_audit_type(
+        buildReproTokenId,
+        250_000n,
+      );
+
+      // Fund bounty_sponsor with USDC for bounty rewards (9 bounties × ~260k = ~2.34M + buffer)
       ledgerActor.setIdentity(daoIdentity);
       await ledgerActor.icrc1_transfer({
-        to: { owner: registryCanisterId, subaccount: [] },
+        to: { owner: bountySponsorCanisterId, subaccount: [] },
         amount: 3_000_000n,
         fee: [],
         memo: [],
@@ -713,6 +771,14 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
         commit_hash: new Uint8Array([1]),
         metadata: [],
       });
+
+      // Sponsor bounties for this WASM
+      bountySponsorActor.setIdentity(daoIdentity);
+      await bountySponsorActor.sponsor_bounties_for_wasm(
+        wasmId,
+        verifiedWasmHash,
+        [buildReproTokenId],
+      );
 
       // Get auto-created bounties and have 5 auditors attest
       const wasmBounties = await registryActor.get_bounties_for_wasm(wasmId);
@@ -906,8 +972,10 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
     let registryActor: Actor<RegistryService>;
     let auditHubActor: Actor<AuditHubService>;
     let ledgerActor: Actor<LedgerService>;
+    let bountySponsorActor: Actor<BountySponsorService>;
     let ledgerCanisterId: Principal;
     let registryCanisterId: Principal;
+    let bountySponsorCanisterId: Principal;
     let wasmId: string;
 
     const globalNamespace = 'com.test.global-server';
@@ -922,8 +990,10 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       registryActor = env.registryActor;
       auditHubActor = env.auditHubActor;
       ledgerActor = env.ledgerActor;
+      bountySponsorActor = env.bountySponsorActor;
       ledgerCanisterId = env.ledgerCanisterId;
       registryCanisterId = env.registryCanisterId;
+      bountySponsorCanisterId = env.bountySponsorCanisterId;
 
       // --- Configure inter-canister dependencies ---
       registryActor.setIdentity(daoIdentity);
@@ -949,10 +1019,19 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       );
       await auditHubActor.set_registry_canister_id(env.registryCanisterId);
 
-      // Fund registry with USDC for auto-bounty creation (9 bounties × ~260k = ~2.34M + buffer)
+      // Configure bounty_sponsor for automated bounty creation
+      bountySponsorActor.setIdentity(daoIdentity);
+      await bountySponsorActor.set_registry_canister_id(registryCanisterId);
+      await bountySponsorActor.set_reward_token_canister_id(ledgerCanisterId);
+      await bountySponsorActor.set_reward_amount_for_audit_type(
+        buildReproTokenId,
+        250_000n,
+      );
+
+      // Fund bounty_sponsor with USDC for bounty rewards (9 bounties × ~260k = ~2.34M + buffer)
       ledgerActor.setIdentity(daoIdentity);
       await ledgerActor.icrc1_transfer({
-        to: { owner: env.registryCanisterId, subaccount: [] },
+        to: { owner: bountySponsorCanisterId, subaccount: [] },
         amount: 3_000_000n,
         fee: [],
         memo: [],
@@ -1040,6 +1119,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       await verifyWasm(
         registryActor,
         auditHubActor,
+        bountySponsorActor,
         env.ledgerCanisterId,
         wasmHash,
         {
@@ -1082,6 +1162,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       await verifyWasm(
         registryActor,
         auditHubActor,
+        bountySponsorActor,
         env.ledgerCanisterId,
         wasmHash,
         {
@@ -1191,6 +1272,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
   async function verifyWasm(
     registryActor: Actor<RegistryService>,
     auditHubActor: Actor<AuditHubService>,
+    bountySponsorActor: Actor<BountySponsorService>,
     ledgerCanisterId: Principal,
     wasmHash: Uint8Array,
     deploymentType: { Text: 'global' } | { Text: 'provisioned' },
@@ -1211,6 +1293,12 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
         ['deployment_type', deploymentType],
       ],
     });
+
+    // Sponsor bounties for this WASM
+    bountySponsorActor.setIdentity(daoIdentity);
+    await bountySponsorActor.sponsor_bounties_for_wasm(wasmId, wasmHash, [
+      buildReproTokenId,
+    ]);
 
     // Fetch the auto-created bounties for this WASM
     const wasmBounties = await registryActor.get_bounties_for_wasm(wasmId);

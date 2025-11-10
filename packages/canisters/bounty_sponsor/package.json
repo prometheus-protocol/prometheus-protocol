@@ -1,0 +1,10 @@
+{
+  "name": "@prometheus-protocol/bounty-sponsor",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The Motoko canister for the Prometheus Protocol Bounty Sponsor.",
+  "scripts": {},
+  "devDependencies": {
+    "@dfinity/pic": "^0.16.1"
+  }
+}

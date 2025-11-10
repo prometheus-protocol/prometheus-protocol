@@ -59,6 +59,8 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   stable var _orchestrator_canister_id : ?Principal = null;
   stable var _usage_tracker_canister_id : ?Principal = null;
   stable var _search_index_canister_id : ?Principal = null;
+  stable var _audit_hub_canister_id : ?Principal = null; // DEPRECATED: No longer used, audit_hub is now called by bounty_sponsor
+  stable var _bounty_sponsor_canister_id : ?Principal = null;
   stable var _bounty_reward_token_canister_id : ?Principal = null;
   stable var _bounty_reward_amount : Nat = 250_000; // Default: $0.25 in 6-decimal token
 
@@ -278,6 +280,12 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   public shared ({ caller }) func set_search_index_canister_id(canister_id : Principal) : async Result.Result<(), Text> {
     if (caller != _owner) { return #err("Caller is not the owner") };
     _search_index_canister_id := ?canister_id;
+    return #ok(());
+  };
+
+  public shared ({ caller }) func set_bounty_sponsor_canister_id(canister_id : Principal) : async Result.Result<(), Text> {
+    if (caller != _owner) { return #err("Caller is not the owner") };
+    _bounty_sponsor_canister_id := ?canister_id;
     return #ok(());
   };
 
@@ -782,152 +790,89 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
 
   // --- ICRC126 Endpoints ---
   public shared (msg) func icrc126_verification_request(req : ICRC126Service.VerificationRequest) : async Nat {
-    let trx_id = await icrc126().icrc126_verification_request(msg.caller, req);
-
-    // Auto-create 9 bounties for this verification request
-    // Registry uses custom environment hook to transfer funds directly (icrc1_transfer)
-    // instead of delegation (icrc2_transfer_from) to avoid minter account limitations
     let wasm_id = Base16.encode(req.wasm_hash);
-    ignore await _create_bounties_for_verification(wasm_id, req.wasm_hash, req.repo, req.commit_hash, req.metadata);
 
-    // Note: Indexing now happens in icrc118_update_wasm when the WASM is registered
-
-    return trx_id;
-  };
-
-  /**
-   * Automatically create 9 separate bounties for a verification request.
-   * This enables majority consensus (5 of 9) for build verification.
-   */
-  private func _create_bounties_for_verification(
-    wasm_id : Text,
-    wasm_hash : Blob,
-    repo : Text,
-    commit_hash : Blob,
-    build_config : ICRC126Service.ICRC16Map,
-  ) : async () {
-    // Check if bounties already exist for this WASM
-    let existing_bounties = _get_bounties_for_wasm(wasm_id);
-    if (existing_bounties.size() > 0) {
-      Debug.print("Bounties already exist for wasm_id " # wasm_id # ". Skipping creation.");
-      return;
-    };
-
-    Debug.print("Creating " # Nat.toText(REQUIRED_VERIFIERS) # " bounties for wasm_id " # wasm_id);
-
-    // Get reward token configuration
-    let reward_token_id = switch (_bounty_reward_token_canister_id) {
-      case (?id) { id };
-      case (null) {
-        Debug.print("Warning: Bounty reward token not configured. Bounties created without reward token.");
-        Principal.fromText("aaaaa-aa"); // Placeholder - bounties won't be claimable without proper config
-      };
-    };
-
-    // Create 9 separate bounties
-    var i = 0;
-    let created_bounty_ids = Buffer.Buffer<Nat>(REQUIRED_VERIFIERS);
-    while (i < REQUIRED_VERIFIERS) {
-      let bounty_request : ICRC127Service.CreateBountyRequest = {
-        challenge_parameters = #Map([
-          ("wasm_hash", #Blob(wasm_hash)),
-          ("audit_type", #Text("build_reproducibility_v1")),
-        ]);
-        timeout_date = Int.abs(Time.now() + (7 * 24 * 60 * 60 * 1_000_000_000)); // 7 days
-        start_date = null;
-        bounty_id = null;
-        validation_canister_id = thisPrincipal;
-        bounty_metadata = [
-          ("icrc127:reward_canister", #Principal(reward_token_id)),
-          ("icrc127:reward_amount", #Nat(_bounty_reward_amount)),
-        ];
-      };
-
-      try {
-        // Use registry canister as caller so funds come from registry's balance
-        let result = await icrc127().icrc127_create_bounty<system>(thisPrincipal, bounty_request);
-        switch (result) {
-          case (#Ok(bounty_result)) {
-            Debug.print("Created bounty #" # Nat.toText(bounty_result.bounty_id) # " for wasm_id " # wasm_id);
-
-            // Track the bounty ID
-            created_bounty_ids.add(bounty_result.bounty_id);
-
-            // Add to reverse index for fast lookup
-            let existing_bounties = Option.get(BTree.get(wasm_to_bounties_map, Text.compare, wasm_id), []);
-            let updated_bounties = Array.append(existing_bounties, [bounty_result.bounty_id]);
-            ignore BTree.insert(wasm_to_bounties_map, Text.compare, wasm_id, updated_bounties);
-          };
-          case (#Error(err)) {
-            Debug.print("Error creating bounty: " # debug_show (err));
-          };
-        };
-      } catch (e) {
-        Debug.print("Exception creating bounty: " # Error.message(e));
-      };
-
-      i += 1;
-    };
-
-    // Notify audit hub about this verification job
-    switch (_credentials_canister_id) {
-      case (?audit_hub_id) {
-        let auditHub : AuditHub.Service = actor (Principal.toText(audit_hub_id));
-
-        // Convert commit_hash Blob to Text (hex string)
-        let commit_hash_text = Base16.encode(commit_hash);
-
-        // Convert ICRC126 ICRC16Map to AuditHub ICRC16Map
-        let converted_config : AuditHub.ICRC16Map = Array.map<(Text, ICRC126Service.ICRC16), AuditHub.ICRC16Value>(
-          build_config,
-          func(item : (Text, ICRC126Service.ICRC16)) : AuditHub.ICRC16Value {
-            let (key, val) = item;
-            let converted_val : {
+    // Auto-trigger build_reproducibility_v1 bounties and verification job registration
+    // This happens asynchronously and doesn't block the verification request
+    ignore async {
+      switch (_bounty_sponsor_canister_id) {
+        case (?sponsor_id) {
+          // Convert ICRC126 metadata format to the format expected by bounty_sponsor/audit_hub
+          let converted_config : [(
+            Text,
+            {
               #Text : Text;
               #Nat : Nat;
               #Int : Int;
               #Blob : Blob;
               #Bool : Bool;
-              #Array : [AuditHub.ICRC16Value];
-              #Map : [AuditHub.ICRC16Value];
-            } = switch (val) {
-              case (#Text(t)) { #Text(t) };
-              case (#Nat(n)) { #Nat(n) };
-              case (#Int(i)) { #Int(i) };
-              case (#Blob(b)) { #Blob(b) };
-              case (#Bool(b)) { #Bool(b) };
-              case (_) { #Text("") }; // Fallback for complex types
-            };
-            (key, converted_val);
-          },
-        );
-
-        try {
-          let result = await auditHub.add_verification_job(
-            wasm_id,
-            repo,
-            commit_hash_text,
-            converted_config,
-            REQUIRED_VERIFIERS,
-            Buffer.toArray(created_bounty_ids),
+              #Array : [Any];
+              #Map : [Any];
+            },
+          )] = Array.map<(Text, ICRC126Service.ICRC16), (Text, { #Text : Text; #Nat : Nat; #Int : Int; #Blob : Blob; #Bool : Bool; #Array : [Any]; #Map : [Any] })>(
+            req.metadata,
+            func(item : (Text, ICRC126Service.ICRC16)) : (
+              Text,
+              {
+                #Text : Text;
+                #Nat : Nat;
+                #Int : Int;
+                #Blob : Blob;
+                #Bool : Bool;
+                #Array : [Any];
+                #Map : [Any];
+              },
+            ) {
+              let (key, val) = item;
+              let converted_val = switch (val) {
+                case (#Text(t)) { #Text(t) };
+                case (#Nat(n)) { #Nat(n) };
+                case (#Int(i)) { #Int(i) };
+                case (#Blob(b)) { #Blob(b) };
+                case (#Bool(b)) { #Bool(b) };
+                case (#Array(arr)) { #Array([]) }; // Simplified for now
+                case (#Map(m)) { #Map([]) }; // Simplified for now
+                case (_) { #Text("") }; // Fallback
+              };
+              (key, converted_val);
+            },
           );
 
-          switch (result) {
-            case (#ok()) {
-              Debug.print("Successfully added verification job to audit hub queue for " # wasm_id);
+          let sponsor = actor (Principal.toText(sponsor_id)) : actor {
+            sponsor_bounties_for_wasm : (Text, Blob, [Text], Text, Text, [(Text, { #Text : Text; #Nat : Nat; #Int : Int; #Blob : Blob; #Bool : Bool; #Array : [Any]; #Map : [Any] })], Nat) -> async Result.Result<{ bounty_ids : [Nat]; total_sponsored : Nat }, Text>;
+          };
+
+          // Bounty sponsor will create bounties AND register the job with audit_hub
+          switch (
+            await sponsor.sponsor_bounties_for_wasm(
+              wasm_id,
+              req.wasm_hash,
+              ["build_reproducibility_v1"],
+              req.repo,
+              Base16.encode(req.commit_hash),
+              converted_config,
+              REQUIRED_VERIFIERS,
+            )
+          ) {
+            case (#ok(result)) {
+              Debug.print("Successfully created " # debug_show (result.bounty_ids.size()) # " bounties and registered job with audit hub for WASM " # wasm_id);
             };
-            case (#err(e)) {
-              Debug.print("Warning: Failed to add verification job to audit hub: " # e);
+            case (#err(msg)) {
+              // Log error but don't fail the verification request
+              Debug.print("Error creating bounties/registering job: " # msg);
             };
           };
-        } catch (e) {
-          Debug.print("Exception notifying audit hub: " # Error.message(e));
         };
-      };
-      case (null) {
-        Debug.print("Audit hub not configured - skipping job queue notification");
+        case (null) { /* Bounty sponsor not configured */ };
       };
     };
+
+    // Register the verification request and return transaction ID
+    let trx_id = await icrc126().icrc126_verification_request(msg.caller, req);
+
+    // Note: Indexing now happens in icrc118_update_wasm when the WASM is registered
+
+    return trx_id;
   };
 
   /**
@@ -1103,6 +1048,76 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
             ("verification_method", #Text("majority_consensus_5_of_9")),
           ];
           ignore await _finalize_verification(req.wasm_id, #Verified, finalization_meta);
+
+          // Auto-trigger tools_v1 bounties now that build is verified
+          switch (_bounty_sponsor_canister_id) {
+            case (?sponsor_id) {
+              // Get the original verification request to extract repo and metadata
+              let verification_request_opt = _get_verification_request(req.wasm_id);
+              switch (verification_request_opt) {
+                case (?verification_request) {
+                  let sponsor = actor (Principal.toText(sponsor_id)) : actor {
+                    sponsor_bounties_for_wasm : (Text, Blob, [Text], Text, Text, [(Text, { #Text : Text; #Nat : Nat; #Int : Int; #Blob : Blob; #Bool : Bool; #Array : [Any]; #Map : [Any] })], Nat) -> async Result.Result<{ bounty_ids : [Nat]; total_sponsored : Nat }, Text>;
+                  };
+
+                  // Convert metadata format
+                  let converted_config : [(
+                    Text,
+                    {
+                      #Text : Text;
+                      #Nat : Nat;
+                      #Int : Int;
+                      #Blob : Blob;
+                      #Bool : Bool;
+                      #Array : [Any];
+                      #Map : [Any];
+                    },
+                  )] = Array.map<(Text, ICRC126Service.ICRC16), (Text, { #Text : Text; #Nat : Nat; #Int : Int; #Blob : Blob; #Bool : Bool; #Array : [Any]; #Map : [Any] })>(
+                    verification_request.metadata,
+                    func(item : (Text, ICRC126Service.ICRC16)) : (
+                      Text,
+                      {
+                        #Text : Text;
+                        #Nat : Nat;
+                        #Int : Int;
+                        #Blob : Blob;
+                        #Bool : Bool;
+                        #Array : [Any];
+                        #Map : [Any];
+                      },
+                    ) {
+                      let (key, val) = item;
+                      let converted_val = switch (val) {
+                        case (#Text(t)) { #Text(t) };
+                        case (#Nat(n)) { #Nat(n) };
+                        case (#Int(i)) { #Int(i) };
+                        case (#Blob(b)) { #Blob(b) };
+                        case (#Bool(b)) { #Bool(b) };
+                        case (#Array(arr)) { #Array([]) };
+                        case (#Map(m)) { #Map([]) };
+                        case (_) { #Text("") };
+                      };
+                      (key, converted_val);
+                    },
+                  );
+
+                  ignore sponsor.sponsor_bounties_for_wasm(
+                    req.wasm_id,
+                    verification_request.wasm_hash,
+                    ["tools_v1"],
+                    verification_request.repo,
+                    Base16.encode(verification_request.commit_hash),
+                    converted_config,
+                    REQUIRED_VERIFIERS,
+                  );
+                };
+                case (null) {
+                  Debug.print("Cannot create tools_v1 bounties: verification request not found for " # req.wasm_id);
+                };
+              };
+            };
+            case (null) { /* No bounty sponsor configured */ };
+          };
         };
       } else {
         Debug.print("Bounty " # Nat.toText(bounty_id) # " already counted for wasm_id " # req.wasm_id);
@@ -1409,6 +1424,79 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
                 ("total_attestations", #Nat(updated_attestations.size())),
               ];
               let _ = await _finalize_verification(req.wasm_id, #Verified, finalization_meta);
+
+              // Auto-trigger tools_v1 bounties now that build is verified
+              switch (_bounty_sponsor_canister_id) {
+                case (?sponsor_id) {
+                  // Get the original verification request to extract repo and metadata
+                  let verification_request_opt = _get_verification_request(req.wasm_id);
+                  switch (verification_request_opt) {
+                    case (?verification_request) {
+                      let sponsor = actor (Principal.toText(sponsor_id)) : actor {
+                        sponsor_bounties_for_wasm : (Text, Blob, [Text], Text, Text, [(Text, { #Text : Text; #Nat : Nat; #Int : Int; #Blob : Blob; #Bool : Bool; #Array : [Any]; #Map : [Any] })], Nat) -> async Result.Result<{ bounty_ids : [Nat]; total_sponsored : Nat }, Text>;
+                      };
+
+                      // Convert metadata format
+                      let converted_config : [(
+                        Text,
+                        {
+                          #Text : Text;
+                          #Nat : Nat;
+                          #Int : Int;
+                          #Blob : Blob;
+                          #Bool : Bool;
+                          #Array : [Any];
+                          #Map : [Any];
+                        },
+                      )] = Array.map<(Text, ICRC126Service.ICRC16), (Text, { #Text : Text; #Nat : Nat; #Int : Int; #Blob : Blob; #Bool : Bool; #Array : [Any]; #Map : [Any] })>(
+                        verification_request.metadata,
+                        func(item : (Text, ICRC126Service.ICRC16)) : (
+                          Text,
+                          {
+                            #Text : Text;
+                            #Nat : Nat;
+                            #Int : Int;
+                            #Blob : Blob;
+                            #Bool : Bool;
+                            #Array : [Any];
+                            #Map : [Any];
+                          },
+                        ) {
+                          let (key, val) = item;
+                          let converted_val = switch (val) {
+                            case (#Text(t)) { #Text(t) };
+                            case (#Nat(n)) { #Nat(n) };
+                            case (#Int(i)) { #Int(i) };
+                            case (#Blob(b)) { #Blob(b) };
+                            case (#Bool(b)) { #Bool(b) };
+                            case (#Array(arr)) { #Array([]) };
+                            case (#Map(m)) { #Map([]) };
+                            case (_) { #Text("") };
+                          };
+                          (key, converted_val);
+                        },
+                      );
+
+                      Debug.print("🎯 Auto-triggering tools_v1 bounties for verified WASM " # req.wasm_id);
+                      ignore sponsor.sponsor_bounties_for_wasm(
+                        req.wasm_id,
+                        verification_request.wasm_hash,
+                        ["tools_v1"],
+                        verification_request.repo,
+                        Base16.encode(verification_request.commit_hash),
+                        converted_config,
+                        REQUIRED_VERIFIERS,
+                      );
+                    };
+                    case (null) {
+                      Debug.print("Cannot create tools_v1 bounties: verification request not found for " # req.wasm_id);
+                    };
+                  };
+                };
+                case (null) {
+                  Debug.print("Cannot create tools_v1 bounties: bounty_sponsor not configured");
+                };
+              };
             };
           };
         } else {
@@ -2940,6 +3028,13 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           canister_name = "search_index";
           required = true;
           current_value = _search_index_canister_id;
+        },
+        {
+          key = "_bounty_sponsor_canister_id";
+          setter = "set_bounty_sponsor_canister_id";
+          canister_name = "bounty_sponsor";
+          required = true;
+          current_value = _bounty_sponsor_canister_id;
         },
         {
           key = "_bounty_reward_token_canister_id";

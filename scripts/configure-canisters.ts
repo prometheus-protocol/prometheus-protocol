@@ -59,7 +59,9 @@ interface CanisterStatus {
 // List of canisters to check (in dependency order)
 const CANISTER_NAMES = [
   'usdc_ledger',
+  'auth_server',
   'audit_hub',
+  'bounty_sponsor',
   'usage_tracker',
   'leaderboard',
   'mcp_orchestrator',
