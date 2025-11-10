@@ -65,6 +65,9 @@ export async function verifyBuild(
   const startTime = Date.now();
   const workDir = `/tmp/verify-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
+  // Generate unique container name for this build (used in try and finally blocks)
+  const containerName = `verify-container-${Date.now()}-${Math.random().toString(36).slice(2, 9)}-${process.pid}`;
+
   try {
     console.log(`📦 Cloning ${repo}...`);
     execSync(`git clone --depth 1 ${repo} ${workDir}`, {
@@ -168,9 +171,8 @@ export async function verifyBuild(
 
     console.log(`🔨 Running build in Docker...`);
     // Use --rm to auto-remove container after build completes
-    // Use a unique container name combining timestamp, random string, and process ID
+    // Use a unique container name (defined at function scope for cleanup access)
     // Network is configured in docker-compose.yml to use shared network
-    const containerName = `verify-container-${Date.now()}-${Math.random().toString(36).slice(2, 9)}-${process.pid}`;
     const buildLog = await retryWithBackoff(
       () => {
         return execSync(
@@ -263,10 +265,11 @@ export async function verifyBuild(
         }
       }
 
-      // Clean up any leftover containers
+      // Clean up THIS SPECIFIC container only (if it still exists)
+      // IMPORTANT: Only clean up our container, not others that might be running concurrently
       try {
         const containers = execSync(
-          `docker ps -a -q -f name=verify-container`,
+          `docker ps -a -q -f name=${containerName}`,
           { encoding: 'utf-8', timeout: 5_000 },
         )
           .trim()
@@ -274,9 +277,7 @@ export async function verifyBuild(
           .filter(Boolean);
 
         if (containers.length > 0) {
-          console.log(
-            `🐳 Removing ${containers.length} Docker container(s)...`,
-          );
+          console.log(`🐳 Removing this build's container: ${containerName}`);
           for (const containerId of containers) {
             execSync(`docker rm -f ${containerId}`, {
               timeout: 10_000,

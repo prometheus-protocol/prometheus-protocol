@@ -17,7 +17,12 @@ pnpm config:inject
 # 4. Set up local dev environment (test tokens, cycles, etc.)
 pnpm setup:local
 
-# 5. Verify configuration
+# 5. Set up verifier nodes (optional, for bounty testing)
+pnpm register:dev-verifiers
+pnpm generate:verifier-env
+pnpm verifiers:up
+
+# 6. Verify configuration
 pnpm config:check
 ```
 
@@ -89,6 +94,31 @@ pnpm seed:leaderboard
 
 # Seed everything
 pnpm seed
+```
+
+### Verifier Node Management
+
+```bash
+# Register dev verifiers with audit hub
+pnpm register:dev-verifiers
+
+# Generate .env files for verifier bots
+pnpm generate:verifier-env
+
+# Start all verifier nodes
+pnpm verifiers:up
+
+# Stop all verifier nodes
+pnpm verifiers:down
+
+# View verifier logs
+pnpm verifiers:logs
+
+# Check verifier balances
+pnpm check:verifier-balances
+
+# Top up verifier balances (local)
+pnpm topup:verifiers --amount 5
 ```
 
 ### View Canister IDs

@@ -9,6 +9,8 @@ import {
   hasVerifierParticipatedWithApiKey,
   getBountyLock,
   getLockedBountyForVerifier,
+  requestVerificationJob,
+  releaseJobAssignment,
   AttestationData,
   configure as configureIcJs,
 } from '@prometheus-protocol/ic-js';
@@ -24,35 +26,37 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Path to persist participated WASMs across restarts
-const PARTICIPATED_CACHE_FILE = path.join(
+// Path to persist completed bounties across restarts
+const COMPLETED_BOUNTIES_CACHE_FILE = path.join(
   __dirname,
-  '.participated-wasms.json',
+  '.completed-bounties.json',
 );
 
-// Load participated WASMs from disk
-function loadParticipatedWasms(): Set<string> {
+// Load completed bounties from disk
+function loadCompletedBounties(): Set<bigint> {
   try {
-    if (fs.existsSync(PARTICIPATED_CACHE_FILE)) {
-      const data = fs.readFileSync(PARTICIPATED_CACHE_FILE, 'utf-8');
-      return new Set(JSON.parse(data));
+    if (fs.existsSync(COMPLETED_BOUNTIES_CACHE_FILE)) {
+      const data = fs.readFileSync(COMPLETED_BOUNTIES_CACHE_FILE, 'utf-8');
+      const arr = JSON.parse(data);
+      return new Set(arr.map((id: string) => BigInt(id)));
     }
   } catch (error) {
-    console.error('Failed to load participated cache:', error);
+    console.error('Failed to load completed bounties cache:', error);
   }
   return new Set();
 }
 
-// Save participated WASMs to disk
-function saveParticipatedWasms(wasms: Set<string>): void {
+// Save completed bounties to disk
+function saveCompletedBounties(bounties: Set<bigint>): void {
   try {
+    const arr = [...bounties].map((id) => id.toString());
     fs.writeFileSync(
-      PARTICIPATED_CACHE_FILE,
-      JSON.stringify([...wasms]),
+      COMPLETED_BOUNTIES_CACHE_FILE,
+      JSON.stringify(arr),
       'utf-8',
     );
   } catch (error) {
-    console.error('Failed to save participated cache:', error);
+    console.error('Failed to save completed bounties cache:', error);
   }
 }
 
@@ -147,273 +151,160 @@ console.log(`🌐 Network: ${IC_NETWORK}`);
 console.log(`⏱️  Poll Interval: ${POLL_INTERVAL_MS}ms`);
 console.log('====================================\n');
 
-// Track WASMs where we've already submitted results to avoid retrying failed submissions
+// Track completed bounties to avoid re-processing the same job
 // Persisted to disk so it survives restarts
-const participatedWasms = loadParticipatedWasms();
+const completedBounties = loadCompletedBounties();
 console.log(
-  `📝 Loaded ${participatedWasms.size} previously participated WASMs from cache\n`,
+  `📝 Loaded ${completedBounties.size} previously completed bounties from cache\n`,
 );
 
 /**
- * Main polling and verification loop.
- * Fetches pending verifications, checks for bounties, and processes jobs.
+ * New job-queue-based polling function.
+ * Requests work directly from audit hub instead of scanning all pending verifications.
  */
-async function pollAndVerify(): Promise<void> {
-  try {
-    console.log(
-      `🔍 [${new Date().toISOString()}] Polling for pending verifications...`,
-    );
+async function pollAndVerifyWithJobQueue(): Promise<void> {
+  const MAX_JOB_ATTEMPTS = 5; // Try up to 5 times to get a valid job
 
-    const pending = await listPendingVerifications();
-    console.log(`   Found ${pending.length} pending verification(s)`);
+  for (let attempt = 0; attempt < MAX_JOB_ATTEMPTS; attempt++) {
+    try {
+      if (attempt > 0) {
+        console.log(
+          `   🔄 Attempt ${attempt + 1}/${MAX_JOB_ATTEMPTS} to get a new job...`,
+        );
+      } else {
+        console.log(
+          `🔍 [${new Date().toISOString()}] Requesting verification job from audit hub...`,
+        );
+      }
 
-    if (pending.length === 0) {
-      return;
-    }
+      // Request a job assignment from the audit hub
+      const job = await requestVerificationJob(VERIFIER_API_KEY!);
 
-    for (const job of pending) {
-      const jobSummary = `${job.wasm_hash.slice(0, 12)}... from ${job.repo}`;
+      if (!job) {
+        console.log(`   ℹ️  No verification jobs available`);
+        return;
+      }
 
-      try {
-        // Skip WASMs where we've already submitted results (and got "already participated" error)
-        if (participatedWasms.has(job.wasm_hash)) {
-          continue; // Silent skip - no need to log every time
+      // Check if we've already completed this bounty
+      if (completedBounties.has(job.bounty_id)) {
+        console.log(
+          `   ✅ Already completed bounty ${job.bounty_id}. Skipping...`,
+        );
+        return;
+      }
+
+      console.log(`\n🎯 Received job assignment`);
+      console.log(`   WASM ID: ${job.wasm_id}`);
+      console.log(`   Repo: ${job.repo}`);
+      console.log(`   Commit: ${job.commit_hash}`);
+      console.log(`   Bounty ID: ${job.bounty_id}`);
+      console.log(
+        `   Expires: ${new Date(Number(job.expires_at) / 1_000_000).toISOString()}`,
+      );
+
+      // Run the reproducible build
+      console.log(`\n🔨 Starting reproducible build...`);
+      const buildResult = await verifyBuild(
+        job.repo,
+        job.commit_hash,
+        job.wasm_id,
+      );
+
+      console.log(`\n📊 Build completed in ${buildResult.duration}s`);
+
+      if (buildResult.success) {
+        // Success: File attestation
+        console.log(`✅ Build verified! Hash matches. Filing attestation...`);
+
+        // Mark bounty as completed BEFORE filing so we don't retry on error
+        completedBounties.add(job.bounty_id);
+        saveCompletedBounties(completedBounties);
+
+        const attestationData: AttestationData = {
+          '126:audit_type': 'build_reproducibility_v1',
+          build_duration_seconds: buildResult.duration,
+          verifier_version: '3.0.0', // Job queue version
+          build_timestamp: Date.now() * 1_000_000,
+          git_commit: job.commit_hash,
+          repo_url: job.repo,
+        };
+
+        if (buildResult.buildLog) {
+          attestationData['build_log_excerpt'] = buildResult.buildLog.slice(
+            0,
+            500,
+          );
         }
 
-        // Check if this job has a build_reproducibility_v1 bounty
-        console.log(`   🔍 Checking bounties for WASM: ${job.wasm_hash}`);
-        const bounties = await getBountiesForWasm(job.wasm_hash);
-        console.log(`   📋 Found ${bounties.length} bounties for this WASM`);
+        // Mark bounty as completed BEFORE filing so we don't retry on error
+        completedBounties.add(job.bounty_id);
+        saveCompletedBounties(completedBounties);
 
-        // Find all build reproducibility bounties
-        const buildBounties = bounties.filter((b: any) => {
-          const auditType = b.challengeParameters?.audit_type;
-          return auditType === 'build_reproducibility_v1';
+        await fileAttestationWithApiKey(VERIFIER_API_KEY!, {
+          bounty_id: job.bounty_id,
+          wasm_id: job.wasm_id,
+          attestationData,
         });
 
-        if (buildBounties.length === 0) {
-          console.log(`   ⏭️  Skipping ${jobSummary}: No bounty sponsored yet`);
-          continue;
-        }
-
-        // First, check if we already have an active lock on any bounty for this WASM
-        // This allows resuming work after restart/disconnect
-        let buildBounty: any = null;
-        let isResumingWork = false;
-
-        const alreadyParticipated = await hasVerifierParticipatedWithApiKey(
-          job.wasm_hash,
-          VERIFIER_API_KEY,
+        console.log(`   ✅ Attestation filed successfully`);
+        console.log(`   ⏳ Waiting for 5-of-9 consensus...`);
+        console.log(
+          `   💰 Payout will be automatic after consensus is reached\n`,
         );
-
-        if (alreadyParticipated) {
-          // We have an active lock - find which bounty it is
-          console.log(
-            `   🔄 Found existing lock, finding which bounty to resume...`,
-          );
-
-          // Use the helper function to find which bounty this verifier has locked
-          buildBounty = await getLockedBountyForVerifier(
-            job.wasm_hash,
-            VERIFIER_API_KEY,
-          );
-
-          if (!buildBounty) {
-            // Couldn't find our lock - it may have expired
-            console.log(
-              `   ⏭️  Skipping ${jobSummary}: Lock expired or work already completed`,
-            );
-            continue;
-          }
-
-          isResumingWork = true;
-          console.log(`   ♻️  Resuming work on bounty ${buildBounty.id}`);
-        } else {
-          // Try to reserve a new bounty - attempt each one until successful
-          let reservationError: string | null = null;
-
-          for (const bounty of buildBounties) {
-            try {
-              console.log(`\n🔒 Attempting to reserve bounty ${bounty.id}...`);
-              await reserveBountyWithApiKey({
-                api_key: VERIFIER_API_KEY,
-                bounty_id: bounty.id,
-                token_id: canisterIds.USDC_LEDGER,
-              });
-              buildBounty = bounty;
-              console.log(
-                `   ✅ Bounty ${bounty.id} reserved, stake locked for 1 hour`,
-              );
-              break;
-            } catch (error: any) {
-              const errorMsg = error.message || String(error);
-              if (errorMsg.includes('already locked')) {
-                console.log(
-                  `   ⏭️  Bounty ${bounty.id} is already locked, trying next...`,
-                );
-                continue;
-              } else {
-                // Other errors (insufficient balance, etc.) should stop trying
-                reservationError = errorMsg;
-                break;
-              }
-            }
-          }
-
-          if (!buildBounty) {
-            console.log(
-              `   ⏭️  Skipping ${jobSummary}: ${reservationError || 'All bounties are locked'}`,
-            );
-            continue;
-          }
-        }
-
-        console.log(`\n🎯 Processing verification job`);
-        console.log(`   WASM Hash: ${job.wasm_hash}`);
-        console.log(`   Repo: ${job.repo}`);
-        console.log(`   Commit: ${job.commit_hash}`);
-        console.log(`   Bounty ID: ${buildBounty.id}`);
-        console.log(`   Reward: ${buildBounty.tokenAmount} tokens`);
-
-        // Run the reproducible build (auto-detects canister name from dfx.json)
-        console.log(`\n🔨 Starting reproducible build...`);
-        const result = await verifyBuild(
-          job.repo,
-          job.commit_hash,
-          job.wasm_hash,
+      } else {
+        // Failure: File divergence
+        console.log(
+          `❌ Build verification failed. Filing divergence report...`,
         );
+        console.log(`   Reason: ${buildResult.error}`);
 
-        console.log(`\n📊 Build completed in ${result.duration}s`);
+        // Mark bounty as completed BEFORE filing so we don't retry on error
+        completedBounties.add(job.bounty_id);
+        saveCompletedBounties(completedBounties);
 
-        if (result.success) {
-          // Success: File attestation
-          console.log(`✅ Build verified! Hash matches. Filing attestation...`);
+        await submitDivergenceWithApiKey(VERIFIER_API_KEY!, {
+          bountyId: job.bounty_id,
+          wasmId: job.wasm_id,
+          reason: buildResult.error || 'Build failed or hash mismatch',
+        });
 
-          // Re-check which bounty we actually own after the build
-          // (state may have changed during the long build process)
-          console.log(`🔍 Re-verifying bounty ownership after build...`);
-          const currentBounty = await getLockedBountyForVerifier(
-            job.wasm_hash,
-            VERIFIER_API_KEY,
-          );
-
-          if (!currentBounty) {
-            console.log(
-              `   ⚠️  No longer have a lock on any bounty for this WASM`,
-            );
-            console.log(
-              `   This can happen if the lock expired or was taken by another bot`,
-            );
-            continue;
-          }
-
-          if (currentBounty.id !== buildBounty.id) {
-            console.log(
-              `   ℹ️  Bounty changed from ${buildBounty.id} to ${currentBounty.id} during build`,
-            );
-            buildBounty = currentBounty; // Update to the current bounty
-          }
-
-          const attestationData: AttestationData = {
-            '126:audit_type': 'build_reproducibility_v1',
-            build_duration_seconds: result.duration,
-            verifier_version: '2.0.0', // Updated for API key auth
-            build_timestamp: Date.now() * 1_000_000, // Convert to nanoseconds (IC standard)
-            git_commit: job.commit_hash,
-            repo_url: job.repo,
-          };
-
-          // Add truncated build log if available
-          if (result.buildLog) {
-            attestationData['build_log_excerpt'] = result.buildLog.slice(
-              0,
-              500,
-            );
-          }
-
-          try {
-            await fileAttestationWithApiKey(VERIFIER_API_KEY, {
-              bounty_id: buildBounty.id,
-              wasm_id: job.wasm_hash,
-              attestationData,
-            });
-            console.log(`   ✅ Attestation filed successfully`);
-          } catch (error: any) {
-            // Check if we already participated - if so, mark and skip in future
-            if (
-              error.message &&
-              error.message.includes('already participated')
-            ) {
-              console.log(`   ℹ️  Already participated in this verification`);
-              participatedWasms.add(job.wasm_hash);
-              saveParticipatedWasms(participatedWasms);
-              continue; // Skip to next job
-            }
-            console.error(`   ❌ Failed to file attestation:`, error.message);
-            throw error;
-          }
-          console.log(`   ⏳ Waiting for 5-of-9 consensus...`);
-          console.log(
-            `   ✅ WASM ${job.wasm_hash.slice(0, 12)}... attestation recorded`,
-          );
-          console.log(
-            `   💰 Payout will be automatic after consensus is reached\n`,
-          );
-        } else {
-          // Failure: File divergence
-          console.log(
-            `❌ Build verification failed. Filing divergence report...`,
-          );
-          console.log(`   Reason: ${result.error}`);
-
-          try {
-            await submitDivergenceWithApiKey(VERIFIER_API_KEY, {
-              bountyId: buildBounty.id,
-              wasmId: job.wasm_hash,
-              reason: result.error || 'Build failed or hash mismatch',
-            });
-            console.log(`   ✅ Divergence report filed successfully`);
-          } catch (error: any) {
-            // Check if we already participated - if so, mark and skip in future
-            if (
-              error.message &&
-              error.message.includes('already participated')
-            ) {
-              console.log(`   ℹ️  Already participated in this verification`);
-              participatedWasms.add(job.wasm_hash);
-              saveParticipatedWasms(participatedWasms);
-              continue; // Skip to next job
-            }
-            console.error(
-              `   ❌ Failed to file divergence report:`,
-              error.message,
-            );
-            throw error;
-          }
-
-          console.log(`   ✅ Divergence report filed`);
-          console.log(`   ⏳ Waiting for 5-of-9 consensus...`);
-          console.log(
-            `   ❌ WASM ${job.wasm_hash.slice(0, 12)}... divergence reported`,
-          );
-          console.log(
-            `   💰 Payout will be automatic after consensus is reached\n`,
-          );
-        }
-      } catch (error: any) {
-        console.error(`\n❌ Error processing ${jobSummary}:`);
-        console.error(`   ${error.message}`);
-
-        // If we reserved the bounty but failed to submit results,
-        // the lock will expire in 1 hour and our stake will be slashed.
-        // This is intentional to prevent griefing attacks.
-        console.error(`   ⚠️  Lock will expire in 1 hour if not resolved`);
+        console.log(`   ✅ Divergence report filed successfully`);
+        console.log(`   ⏳ Waiting for 5-of-9 consensus...`);
+        console.log(
+          `   ❌ WASM ${job.wasm_id.slice(0, 12)}... divergence reported\n`,
+        );
       }
+
+      // Don't release the assignment - let it stay locked until verification completes
+      // This prevents the verifier from being re-assigned to the same WASM
+      console.log(`   🔒 Assignment remains locked until consensus`);
+
+      // Successfully processed job - exit the retry loop
+      return;
+    } catch (error: any) {
+      console.error(`\n❌ Error processing job:`);
+      console.error(`   ${error.message}`);
+
+      // On error, release the assignment so the bounty can be re-assigned
+      try {
+        const job = await requestVerificationJob(VERIFIER_API_KEY!);
+        if (job) {
+          await releaseJobAssignment(VERIFIER_API_KEY!, job.bounty_id);
+          console.error(`   🔓 Job assignment released after error`);
+        }
+      } catch (releaseError: any) {
+        console.error(
+          `   ⚠️  Failed to release assignment: ${releaseError.message}`,
+        );
+      }
+      // Don't retry on error - wait for next poll
+      return;
     }
-  } catch (error: any) {
-    console.error(`\n❌ Polling error: ${error.message}`);
-    console.error(error.stack);
-  }
+  } // end for loop
+
+  console.log(
+    `   ⚠️  Could not find a valid job after ${MAX_JOB_ATTEMPTS} attempts`,
+  );
 }
 
 /**
@@ -442,11 +333,11 @@ async function main() {
   }
 
   // Run immediately on startup
-  await pollAndVerify();
+  await pollAndVerifyWithJobQueue();
 
   // Then poll on interval
   setInterval(async () => {
-    await pollAndVerify();
+    await pollAndVerifyWithJobQueue();
   }, POLL_INTERVAL_MS);
 
   console.log(`✅ Verifier Bot is now running`);

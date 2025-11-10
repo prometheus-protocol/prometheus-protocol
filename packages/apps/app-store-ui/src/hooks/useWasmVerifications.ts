@@ -78,7 +78,7 @@ export function useGetWasmVerifications(bounties: AuditBounty[] | undefined) {
 export function useGetSingleWasmVerification(
   wasmId: string | undefined,
   bounties: AuditBounty[] | undefined,
-  options?: { refetchInterval?: number | false },
+  options?: { refetchInterval?: number | false; enabled?: boolean },
 ) {
   return useQuery({
     queryKey: ['wasmVerification', wasmId],
@@ -112,27 +112,6 @@ export function useGetSingleWasmVerification(
         return createWasmVerification(wasmId, wasmBounties, [], []);
       }
     },
-    enabled: !!wasmId && !!bounties && bounties.length > 0,
-    refetchInterval: (query) => {
-      const data = query.state.data as WasmVerification | null;
-
-      // Stop refetching only if:
-      // 1. Consensus has been reached (verified/rejected) AND
-      // 2. All 9 verifiers have participated (filed attestation or divergence)
-      if (data) {
-        const isConsensusReached =
-          data.status === 'verified' || data.status === 'rejected';
-        const totalParticipated =
-          data.attestationBountyIds.length + data.divergenceBountyIds.length;
-        const allVerifiersParticipated = totalParticipated >= 9;
-
-        if (isConsensusReached && allVerifiersParticipated) {
-          return false; // Stop polling
-        }
-      }
-
-      return options?.refetchInterval ?? false;
-    },
-    refetchIntervalInBackground: true,
+    enabled: !!wasmId && options?.enabled,
   });
 }

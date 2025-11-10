@@ -148,6 +148,7 @@ This registers the version and creates verification bounties.
 - **Commit hash is auto-updated**: The command ensures `prometheus.yml` always has the correct hash
 - **Safety checks built-in**: The command validates your git state before starting
 - **After updating GITHUB_TOKEN in .env**, recreate the verifier bots:
+
   ```bash
   cd packages/apps/verifier-bot/deployment && docker-compose up -d
   ```
@@ -195,7 +196,7 @@ If publishing to mainnet (`--network ic`), ensure you have ICP in your pp_owner 
 
 ```bash
 cd /tmp/test
-app-store-cli release 0.18.0
+app-store-cli release 0.18.0 --network local
 ```
 
 ### Publishing v0.18.0 (Automated - Script)

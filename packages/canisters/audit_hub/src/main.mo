@@ -1,6 +1,7 @@
 // packages/canisters/audit_hub/src/Main.mo
 import Map "mo:map/Map";
 import { phash; thash } "mo:map/Map";
+import BTree "mo:stableheapbtreemap/BTree";
 import Principal "mo:base/Principal";
 import Result "mo:base/Result";
 import Option "mo:base/Option";
@@ -15,6 +16,9 @@ import Nat8 "mo:base/Nat8";
 import Array "mo:base/Array";
 import Buffer "mo:base/Buffer";
 import Debug "mo:base/Debug";
+import Error "mo:base/Error";
+
+import Types "Types";
 
 shared ({ caller = deployer }) persistent actor class AuditHub() = this {
 
@@ -22,43 +26,38 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   // == TYPES & CONSTANTS
   // ==================================================================================
 
-  // API Credential for verifier bots
-  public type ApiCredential = {
-    api_key : Text; // Generated unique key
-    verifier_principal : Principal; // Owner of this credential
-    created_at : Timestamp;
-    last_used : ?Timestamp;
-    is_active : Bool;
+  // MCPRegistry interface (minimal for what we need)
+  type MCPRegistryService = actor {
+    icrc126_list_attestations : (wasm_id : Text) -> async [Nat];
+    icrc126_list_divergences : (wasm_id : Text) -> async [Nat];
   };
+
+  // API Credential for verifier bots
+  public type ApiCredential = Types.ApiCredential;
 
   // A unique identifier for a reputation token type (e.g., "build_reproducibility_v1").
-  public type TokenId = Text;
+  public type TokenId = Types.TokenId;
 
   // A unique identifier for a bounty, matching the ID from the ICRC-127 canister.
-  public type BountyId = Nat;
+  public type BountyId = Types.BountyId;
 
   // A balance in USDC (atomic units).
-  public type Balance = Nat;
+  public type Balance = Types.Balance;
 
   // A timestamp in nanoseconds since the epoch.
-  public type Timestamp = Int;
+  public type Timestamp = Types.Timestamp;
 
   // A record representing an active lock on a bounty.
-  public type BountyLock = {
-    claimant : Principal;
-    expires_at : Timestamp;
-    stake_amount : Balance;
-    stake_token_id : TokenId;
-  };
+  public type BountyLock = Types.BountyLock;
 
   // The profile of a verifier, including their balances and reputation scores.
-  public type VerifierProfile = {
-    available_balance_usdc : Balance; // USDC not currently staked
-    staked_balance_usdc : Balance; // USDC locked in active bounties
-    total_verifications : Nat; // Number of successful verifications
-    reputation_score : Nat; // Performance metric (0-100)
-    total_earnings : Balance; // Total amount earned from successful verifications
-  };
+  public type VerifierProfile = Types.VerifierProfile;
+
+  public type AssignedJob = Types.AssignedJob;
+  public type VerificationJob = Types.VerificationJob;
+  public type ICRC16Value = Types.ICRC16Value;
+  public type ICRC16Map = Types.ICRC16Map;
+  public type VerificationJobAssignment = Types.VerificationJobAssignment;
 
   // The duration a lock is valid before it expires (1 hour for automated builds).
   let LOCK_DURATION_NS : Int = 1 * 60 * 60 * 1_000_000_000; // 1 hour in nanoseconds
@@ -115,6 +114,26 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   // Track which verifiers have participated in each WASM verification
   // Map<BountyId, Principal> - maps bounty to the verifier who reserved it
   var _bounty_verifier_map = Map.new<BountyId, Principal>();
+
+  // ==================================================================================
+  // == JOB QUEUE STATE
+  // ==================================================================================
+
+  // Pending verification jobs waiting to be assigned
+  // BTree<wasm_id, VerificationJob>
+  var pending_verifications = BTree.init<Text, Types.VerificationJob>(null);
+
+  // Currently assigned jobs
+  // Map<BountyId, AssignedJob>
+  var assigned_jobs = Map.new<BountyId, Types.AssignedJob>();
+
+  // Track which verifiers have been assigned to which WASMs (to prevent duplicate assignments)
+  // Map<WASM_ID, Set<Principal>>
+  var wasm_verifier_assignments = Map.new<Text, Map.Map<Principal, Bool>>();
+
+  // Track which verifiers have COMPLETED verification for which WASMs (persists after lock release)
+  // Map<WASM_ID, Set<Principal>> - DEPRECATED: Not currently used, will remove in production
+  var wasm_verifier_completions = Map.new<Text, Map.Map<Principal, Bool>>();
 
   // ==================================================================================
   // == HELPER FUNCTIONS
@@ -191,6 +210,19 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     };
 
     return "vr_" # result; // Prefix with "vr_" for clarity
+  };
+
+  // Helper to validate API key (internal, non-query version)
+  private func _validate_api_key_internal(api_key : Text) : Result.Result<Principal, Text> {
+    switch (Map.get(api_credentials, thash, api_key)) {
+      case (null) { return #err("Invalid API key.") };
+      case (?cred) {
+        if (not cred.is_active) {
+          return #err("API key has been revoked.");
+        };
+        return #ok(cred.verifier_principal);
+      };
+    };
   };
 
   // ==================================================================================
@@ -894,5 +926,347 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
       ];
       configuration = Buffer.toArray(audit_type_mappings);
     });
+  };
+
+  // ==================================================================================
+  // == JOB QUEUE MANAGEMENT
+  // ==================================================================================
+
+  /**
+   * Add a new verification job to the queue.
+   * Called by mcp_registry when a new WASM is registered.
+   * Only the registry canister can call this function.
+   */
+  public shared (msg) func add_verification_job(
+    wasm_id : Text,
+    repo : Text,
+    commit_hash : Text,
+    build_config : ICRC16Map,
+    required_verifiers : Nat,
+    bounty_ids : [BountyId],
+  ) : async Result.Result<(), Text> {
+    // Only registry can add jobs
+    switch (registry_canister_id) {
+      case (null) {
+        return #err("Registry canister not configured");
+      };
+      case (?registry_id) {
+        if (not Principal.equal(msg.caller, registry_id)) {
+          return #err("Only the registry canister can add verification jobs");
+        };
+      };
+    };
+
+    // Check if job already exists
+    switch (BTree.get(pending_verifications, Text.compare, wasm_id)) {
+      case (?existing) {
+        // Job already exists, update it if needed
+        Debug.print("Job for WASM " # wasm_id # " already exists, updating");
+      };
+      case (null) {
+        Debug.print("Adding new verification job for WASM " # wasm_id);
+      };
+    };
+
+    let job : VerificationJob = {
+      wasm_id;
+      repo;
+      commit_hash;
+      build_config;
+      created_at = Time.now();
+      required_verifiers;
+      assigned_count = 0;
+      bounty_ids;
+    };
+
+    ignore BTree.insert(pending_verifications, Text.compare, wasm_id, job);
+    #ok();
+  };
+
+  /**
+   * Mark a verification job as complete.
+   * Called by mcp_registry when a WASM is finalized.
+   * Only the registry canister can call this function.
+   */
+  public shared (msg) func mark_verification_complete(wasm_id : Text) : async Result.Result<(), Text> {
+    // Only registry can mark jobs complete
+    switch (registry_canister_id) {
+      case (null) {
+        return #err("Registry canister not configured");
+      };
+      case (?registry_id) {
+        if (not Principal.equal(msg.caller, registry_id)) {
+          return #err("Only the registry canister can mark jobs complete");
+        };
+      };
+    };
+
+    Debug.print("Marking verification job complete for WASM " # wasm_id);
+    ignore BTree.delete(pending_verifications, Text.compare, wasm_id);
+    #ok();
+  };
+
+  /**
+   * Request a verification job assignment.
+   * Called by verifier bots using their API key.
+   * Returns a job assignment with bounty_id, or an error if no jobs available.
+   */
+  public shared func request_verification_job_with_api_key(
+    api_key : Text
+  ) : async Result.Result<VerificationJobAssignment, Text> {
+    // 1. Validate API key
+    let verifier = switch (_validate_api_key_internal(api_key)) {
+      case (#err(e)) { return #err(e) };
+      case (#ok(v)) { v };
+    };
+
+    Debug.print("Verifier " # Principal.toText(verifier) # " requesting verification job");
+
+    // 2. Check if verifier already has an active assignment
+    let current_time = Time.now();
+    for ((bounty_id, assignment) in Map.entries(assigned_jobs)) {
+      if (Principal.equal(assignment.verifier, verifier)) {
+        if (assignment.expires_at > current_time) {
+          // Return the existing assignment instead of an error
+          Debug.print("Verifier already has active assignment for bounty " # Nat.toText(bounty_id) # " - returning existing job");
+
+          // Look up the job details
+          switch (BTree.get(pending_verifications, Text.compare, assignment.wasm_id)) {
+            case (?job) {
+              return #ok({
+                bounty_id;
+                wasm_id = assignment.wasm_id;
+                repo = job.repo;
+                commit_hash = job.commit_hash;
+                build_config = job.build_config;
+                expires_at = assignment.expires_at;
+              });
+            };
+            case (null) {
+              // Job not found - assignment is stale, clean it up
+              Debug.print("Warning: Assignment found but job not in pending_verifications - cleaning up");
+              ignore Map.remove(assigned_jobs, Map.nhash, bounty_id);
+            };
+          };
+        } else {
+          // Assignment expired, clean it up
+          Debug.print("Cleaning up expired assignment for bounty " # Nat.toText(bounty_id));
+          ignore Map.remove(assigned_jobs, Map.nhash, bounty_id);
+        };
+      };
+    };
+
+    // 3. Find a WASM needing verification
+    for ((wasm_id, job) in BTree.entries(pending_verifications)) {
+      // Check if this verifier has a bounty lock for ANY bounty in this job's bounty list
+      // This includes both active assignments and completed verifications (locks persist until consensus)
+      var has_bounty_for_wasm = false;
+      for (bounty_id in job.bounty_ids.vals()) {
+        switch (Map.get(bounty_locks, Map.nhash, bounty_id)) {
+          case (?lock) {
+            if (Principal.equal(lock.claimant, verifier)) {
+              has_bounty_for_wasm := true;
+              Debug.print("Verifier " # Principal.toText(verifier) # " already has bounty " # Nat.toText(bounty_id) # " for WASM " # wasm_id);
+            };
+          };
+          case (null) {};
+        };
+      };
+
+      if (has_bounty_for_wasm) {
+        Debug.print("Verifier " # Principal.toText(verifier) # " already has a bounty for WASM " # wasm_id # " - skipping");
+        // Continue to next WASM
+      } else if (job.assigned_count < job.required_verifiers) {
+        Debug.print("Found job needing verification: " # wasm_id # " (" # Nat.toText(job.assigned_count) # "/" # Nat.toText(job.required_verifiers) # " assigned)");
+
+        // 4. Find an available bounty from the list (one that's not assigned yet)
+        var available_bounty_id : ?BountyId = null;
+        label bounty_search for (bounty_id in job.bounty_ids.vals()) {
+          // Check if this bounty is already assigned
+          let is_assigned = Option.isSome(Map.get(assigned_jobs, Map.nhash, bounty_id));
+          if (not is_assigned) {
+            available_bounty_id := ?bounty_id;
+            Debug.print("Found available bounty: " # Nat.toText(bounty_id));
+            break bounty_search; // Stop after finding first available bounty
+          };
+        };
+
+        let bounty_id = switch (available_bounty_id) {
+          case (?id) { id };
+          case (null) {
+            Debug.print("No available bounties for this job");
+            return #err("No available bounties for this WASM (all assigned)");
+          };
+        };
+
+        // 5. Create temporary job assignment BEFORE reserving to prevent race conditions
+        let assignment : AssignedJob = {
+          wasm_id;
+          verifier;
+          bounty_id;
+          assigned_at = current_time;
+          expires_at = current_time + LOCK_DURATION_NS;
+        };
+
+        // Add to assigned_jobs immediately to prevent other verifiers from selecting this bounty
+        ignore Map.put(assigned_jobs, Map.nhash, bounty_id, assignment);
+
+        // 6. Reserve the bounty atomically
+        let token_id = "build_reproducibility_v1"; // Default token type
+        switch (await _reserve_bounty_internal(verifier, bounty_id, token_id)) {
+          case (#err(e)) {
+            // Reservation failed - remove from assigned_jobs
+            ignore Map.remove(assigned_jobs, Map.nhash, bounty_id);
+            return #err("Failed to reserve bounty: " # e);
+          };
+          case (#ok()) {};
+        };
+
+        // 7. Update job assignment count
+        let updated_job : VerificationJob = {
+          job with
+          assigned_count = job.assigned_count + 1;
+        };
+        ignore BTree.insert(pending_verifications, Text.compare, wasm_id, updated_job);
+
+        Debug.print("Assigned job to verifier: bounty_id=" # Nat.toText(bounty_id) # ", wasm_id=" # wasm_id);
+
+        // 8. Return assignment to verifier
+        return #ok({
+          bounty_id;
+          wasm_id;
+          repo = job.repo;
+          commit_hash = job.commit_hash;
+          build_config = job.build_config;
+          expires_at = assignment.expires_at;
+        });
+      };
+    };
+
+    // No jobs available
+    Debug.print("No verification jobs available");
+    #err("No verification jobs available");
+  };
+
+  /**
+   * Release a job assignment when verification is complete or expired.
+   * Can be called by the verifier or by cleanup processes.
+   */
+  public shared func release_job_assignment(bounty_id : BountyId) : async Result.Result<(), Text> {
+    // Remove from assigned jobs
+    switch (Map.remove(assigned_jobs, Map.nhash, bounty_id)) {
+      case (?assignment) {
+        Debug.print("Released job assignment for bounty " # Nat.toText(bounty_id));
+
+        // Also release the bounty lock
+        switch (Map.remove(bounty_locks, Map.nhash, bounty_id)) {
+          case (?lock) {
+            Debug.print("Released bounty lock for bounty " # Nat.toText(bounty_id));
+
+            // Return staked tokens to available balance
+            let token_id = "build_reproducibility_v1"; // Default token type
+            let stake_amount = switch (Map.get(stake_requirements, Map.thash, token_id)) {
+              case (?amt) { amt };
+              case (null) { 0 };
+            };
+
+            if (stake_amount > 0) {
+              let current_staked = _get_balance(staked_balances, lock.claimant, token_id);
+              let current_available = _get_balance(available_balances, lock.claimant, token_id);
+              _set_balance(staked_balances, lock.claimant, token_id, current_staked - stake_amount);
+              _set_balance(available_balances, lock.claimant, token_id, current_available + stake_amount);
+              Debug.print("Returned " # Nat.toText(stake_amount) # " staked tokens to available balance");
+            };
+          };
+          case (null) {
+            Debug.print("Warning: No bounty lock found for bounty " # Nat.toText(bounty_id));
+          };
+        };
+
+        #ok();
+      };
+      case (null) {
+        #err("No assignment found for bounty " # Nat.toText(bounty_id));
+      };
+    };
+  };
+
+  /**
+   * Get all pending verification jobs (for debugging/monitoring).
+   */
+  public shared query func list_pending_jobs() : async [(Text, VerificationJob)] {
+    let jobs = Buffer.Buffer<(Text, VerificationJob)>(0);
+    for ((wasm_id, job) in BTree.entries(pending_verifications)) {
+      jobs.add((wasm_id, job));
+    };
+    Buffer.toArray(jobs);
+  };
+
+  /**
+   * Get all currently assigned jobs (for debugging/monitoring).
+   */
+  public shared query func list_assigned_jobs() : async [(BountyId, AssignedJob)] {
+    let assignments = Buffer.Buffer<(BountyId, AssignedJob)>(0);
+    for ((bounty_id, assignment) in Map.entries(assigned_jobs)) {
+      assignments.add((bounty_id, assignment));
+    };
+    Buffer.toArray(assignments);
+  };
+
+  // Helper: Generate a unique bounty ID
+  // In production, this would be handled by ICRC-127
+  var _next_bounty_id : Nat = 1000;
+  private func _generate_bounty_id(wasm_id : Text, verifier : Principal) : BountyId {
+    let bounty_id = _next_bounty_id;
+    _next_bounty_id += 1;
+    bounty_id;
+  };
+
+  // Helper: Internal version of reserve_bounty that doesn't require msg.caller
+  private func _reserve_bounty_internal(
+    verifier : Principal,
+    bounty_id : BountyId,
+    token_id : TokenId,
+  ) : async Result.Result<(), Text> {
+    // Check if bounty is already locked
+    switch (Map.get(bounty_locks, Map.nhash, bounty_id)) {
+      case (?existing) {
+        if (existing.expires_at > Time.now()) {
+          return #err("Bounty " # Nat.toText(bounty_id) # " is already locked by " # Principal.toText(existing.claimant));
+        };
+      };
+      case (null) {};
+    };
+
+    // Get stake requirement
+    let stake_amount = switch (Map.get(stake_requirements, Map.thash, token_id)) {
+      case (?amt) { amt };
+      case (null) { 0 }; // Default to 0 if not configured
+    };
+
+    // Check if verifier has enough balance
+    let available = _get_balance(available_balances, verifier, token_id);
+    if (available < stake_amount) {
+      return #err("Insufficient balance. Required: " # Nat.toText(stake_amount) # ", available: " # Nat.toText(available));
+    };
+
+    // Transfer from available to staked
+    _set_balance(available_balances, verifier, token_id, available - stake_amount);
+    let current_staked = _get_balance(staked_balances, verifier, token_id);
+    _set_balance(staked_balances, verifier, token_id, current_staked + stake_amount);
+
+    // Create the lock
+    let lock : BountyLock = {
+      claimant = verifier;
+      expires_at = Time.now() + LOCK_DURATION_NS;
+      stake_amount;
+      stake_token_id = token_id;
+    };
+
+    ignore Map.put(bounty_locks, Map.nhash, bounty_id, lock);
+    ignore Map.put(_bounty_verifier_map, Map.nhash, bounty_id, verifier);
+
+    Debug.print("Reserved bounty " # Nat.toText(bounty_id) # " for verifier " # Principal.toText(verifier));
+    #ok();
   };
 };

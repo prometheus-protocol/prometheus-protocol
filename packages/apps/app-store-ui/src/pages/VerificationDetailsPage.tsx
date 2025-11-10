@@ -34,7 +34,12 @@ export default function VerificationDetailsPage() {
 
   const allBounties = useMemo(() => {
     if (!data?.pages) return [];
-    return data.pages.flatMap((page) => page);
+    return data.pages
+      .flatMap((page) => page)
+      .filter(
+        (bounty) =>
+          bounty.challengeParameters.audit_type === 'build_reproducibility_v1',
+      );
   }, [data]);
 
   // Get verification data for this specific WASM only

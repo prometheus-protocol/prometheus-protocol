@@ -1241,3 +1241,65 @@ export const listApiKeys = async (
   const auditHubActor = getAuditHubActor(identity);
   return await auditHubActor.list_api_keys();
 };
+
+/**
+ * Requests a verification job assignment from the audit hub job queue.
+ * This is the new request-based flow that eliminates race conditions.
+ * The audit hub atomically assigns a unique job to this verifier.
+ *
+ * @param apiKey The verifier's API key
+ * @returns Verification job assignment with bounty_id, wasm_id, repo, commit, etc.
+ * @throws Error if no jobs available or verifier already has an active assignment
+ */
+export interface VerificationJobAssignment {
+  bounty_id: bigint;
+  wasm_id: string;
+  repo: string;
+  commit_hash: string;
+  build_config: Array<[string, any]>;
+  expires_at: bigint;
+}
+
+export const requestVerificationJob = async (
+  apiKey: string,
+): Promise<VerificationJobAssignment | null> => {
+  const auditHubActor = getAuditHubActor();
+  const result =
+    await auditHubActor.request_verification_job_with_api_key(apiKey);
+
+  if ('err' in result) {
+    // No jobs available is expected, not an error
+    if (result.err.includes('No verification jobs available')) {
+      return null;
+    }
+    throw new Error(`Failed to request verification job: ${result.err}`);
+  }
+
+  const job = result.ok;
+  return {
+    bounty_id: job.bounty_id,
+    wasm_id: job.wasm_id,
+    repo: job.repo,
+    commit_hash: job.commit_hash,
+    build_config: job.build_config,
+    expires_at: job.expires_at,
+  };
+};
+
+/**
+ * Releases a job assignment when verification is complete or expired.
+ *
+ * @param apiKey The verifier's API key
+ * @param bountyId The bounty ID to release
+ */
+export const releaseJobAssignment = async (
+  apiKey: string,
+  bountyId: bigint,
+): Promise<void> => {
+  const auditHubActor = getAuditHubActor();
+  const result = await auditHubActor.release_job_assignment(bountyId);
+
+  if ('err' in result) {
+    throw new Error(`Failed to release job assignment: ${result.err}`);
+  }
+};

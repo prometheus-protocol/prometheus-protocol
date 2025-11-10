@@ -78,12 +78,10 @@ export const updateWasm = async (
     previous: [],
   });
 
-  console.log(result);
-
   if ('Error' in result) {
-    throw new Error(
-      `Failed to publish version: ${JSON.stringify(result.Error)}`,
-    );
+    // Extract the error type for cleaner error messages
+    const errorType = Object.keys(result.Error)[0];
+    throw new Error(`Failed to publish version: ${errorType}`);
   }
 };
 
@@ -110,11 +108,19 @@ export const uploadWasmChunk = async (
     expected_chunk_hash: chunk_hash,
   });
 
-  // The canister returns total_chunks = 0 on error.
+  // The canister returns total_chunks = 0 on error OR if chunks already exist.
+  // We distinguish by checking if it's the first chunk or not.
+  // If total_chunks is 0 and it's not chunk 0, it might already be uploaded.
   if (result.total_chunks === 0n) {
-    throw new Error(
-      `Failed to upload chunk ${chunk_index}. The canister rejected the chunk (hash mismatch or out of bounds).`,
+    // This could mean either:
+    // 1. The chunk was already uploaded (idempotent case)
+    // 2. There was an actual error (hash mismatch, out of bounds, etc.)
+    // We'll throw an error and let the caller decide how to handle it
+    const error = new Error(
+      `Chunk ${chunk_index} was not accepted. This may indicate the chunk is already uploaded or there was a hash mismatch.`,
     );
+    (error as any).code = 'CHUNK_NOT_ACCEPTED';
+    throw error;
   }
 };
 
