@@ -15,8 +15,8 @@ export const idlFactory = ({ IDL }) => {
     )
   );
   const ICRC16Map = IDL.Vec(ICRC16Value);
-  const Result = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   const BountyId = IDL.Nat;
+  const Result = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   const TokenId = IDL.Text;
   const Balance = IDL.Nat;
   const Result_3 = IDL.Variant({ 'ok' : IDL.Text, 'err' : IDL.Text });
@@ -64,6 +64,7 @@ export const idlFactory = ({ IDL }) => {
   });
   const VerificationJob = IDL.Record({
     'repo' : IDL.Text,
+    'bounty_ids' : IDL.Vec(BountyId),
     'created_at' : Timestamp,
     'build_config' : ICRC16Map,
     'assigned_count' : IDL.Nat,
@@ -86,7 +87,12 @@ export const idlFactory = ({ IDL }) => {
   const Result_1 = IDL.Variant({ 'ok' : IDL.Principal, 'err' : IDL.Text });
   const AuditHub = IDL.Service({
     'add_verification_job' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Text, ICRC16Map, IDL.Nat],
+        [IDL.Text, IDL.Text, IDL.Text, ICRC16Map, IDL.Nat, IDL.Vec(BountyId)],
+        [Result],
+        [],
+      ),
+    'admin_add_bounties_to_job' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Nat)],
         [Result],
         [],
       ),
@@ -104,6 +110,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'get_bounty_lock' : IDL.Func([BountyId], [IDL.Opt(BountyLock)], ['query']),
+    'get_bounty_sponsor_canister_id' : IDL.Func(
+        [],
+        [IDL.Opt(IDL.Principal)],
+        ['query'],
+      ),
     'get_env_requirements' : IDL.Func(
         [],
         [
@@ -134,8 +145,8 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'get_stake_requirement' : IDL.Func(
-        [TokenId],
-        [IDL.Opt(Balance)],
+        [IDL.Text],
+        [IDL.Opt(IDL.Tuple(TokenId, Balance))],
         ['query'],
       ),
     'get_staked_balance' : IDL.Func(
@@ -166,7 +177,6 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'mark_verification_complete' : IDL.Func([IDL.Text], [Result], []),
-    'register_audit_type' : IDL.Func([IDL.Text, TokenId], [Result], []),
     'release_job_assignment' : IDL.Func([BountyId], [Result], []),
     'release_stake' : IDL.Func([BountyId], [Result], []),
     'request_verification_job_with_api_key' : IDL.Func(
@@ -174,13 +184,14 @@ export const idlFactory = ({ IDL }) => {
         [Result_2],
         [],
       ),
-    'reserve_bounty' : IDL.Func([BountyId, TokenId], [Result], []),
+    'reserve_bounty' : IDL.Func([BountyId, IDL.Text], [Result], []),
     'reserve_bounty_with_api_key' : IDL.Func(
-        [IDL.Text, BountyId, TokenId],
+        [IDL.Text, BountyId, IDL.Text],
         [Result],
         [],
       ),
     'revoke_api_key' : IDL.Func([IDL.Text], [Result], []),
+    'set_bounty_sponsor_canister_id' : IDL.Func([IDL.Principal], [Result], []),
     'set_dashboard_canister_id' : IDL.Func([IDL.Principal], [Result], []),
     'set_payment_token_config' : IDL.Func(
         [IDL.Principal, IDL.Text, IDL.Nat8],
@@ -188,7 +199,11 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'set_registry_canister_id' : IDL.Func([IDL.Principal], [Result], []),
-    'set_stake_requirement' : IDL.Func([TokenId, Balance], [Result], []),
+    'set_stake_requirement' : IDL.Func(
+        [IDL.Text, TokenId, Balance],
+        [Result],
+        [],
+      ),
     'set_usdc_ledger_id' : IDL.Func([IDL.Principal], [Result], []),
     'slash_stake_for_incorrect_consensus' : IDL.Func([BountyId], [Result], []),
     'transfer_ownership' : IDL.Func([IDL.Principal], [Result], []),

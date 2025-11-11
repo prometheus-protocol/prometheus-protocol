@@ -701,7 +701,7 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'get_divergence_progress' : IDL.Func(
-        [IDL.Text],
+        [IDL.Text, IDL.Text],
         [IDL.Vec(IDL.Nat)],
         ['query'],
       ),
@@ -719,7 +719,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'get_tip' : IDL.Func([], [Tip], ['query']),
     'get_verification_progress' : IDL.Func(
-        [IDL.Text],
+        [IDL.Text, IDL.Text],
         [IDL.Vec(IDL.Nat)],
         ['query'],
       ),

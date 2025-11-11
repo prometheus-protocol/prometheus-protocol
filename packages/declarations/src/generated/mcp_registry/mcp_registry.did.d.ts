@@ -318,7 +318,7 @@ export interface ICRC118WasmRegistryCanister {
     [GetCanisterTypeVersionRequest],
     Result_2
   >,
-  'get_divergence_progress' : ActorMethod<[string], Array<bigint>>,
+  'get_divergence_progress' : ActorMethod<[string, string], Array<bigint>>,
   'get_env_requirements' : ActorMethod<
     [],
     {
@@ -329,7 +329,7 @@ export interface ICRC118WasmRegistryCanister {
       }
   >,
   'get_tip' : ActorMethod<[], Tip>,
-  'get_verification_progress' : ActorMethod<[string], Array<bigint>>,
+  'get_verification_progress' : ActorMethod<[string, string], Array<bigint>>,
   'get_verification_request' : ActorMethod<
     [string],
     [] | [VerificationRequest]

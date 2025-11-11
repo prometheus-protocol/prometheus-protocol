@@ -251,28 +251,6 @@ async function injectConfiguration(
 
   let injectedCount = 0;
 
-  // Special case: Configure payment token for audit_hub
-  const auditHubId = canisterIds.get('audit_hub');
-  const usdcLedgerId = canisterIds.get('usdc_ledger');
-  if (auditHubId && usdcLedgerId) {
-    try {
-      console.log(
-        chalk.cyan('   Configuring payment token (USDC) for audit_hub...'),
-      );
-      if (NETWORK === 'local') {
-        await $`dfx canister call audit_hub set_payment_token_config '(principal "${usdcLedgerId}", "USDC", 6:nat8)'`;
-      } else {
-        await $`dfx canister call audit_hub set_payment_token_config '(principal "${usdcLedgerId}", "USDC", 6:nat8)' --network ${NETWORK}`;
-      }
-      injectedCount++;
-      console.log(chalk.green('   ✅ Payment token configured'));
-    } catch (error) {
-      console.log(
-        chalk.red(`   ❌ Failed to configure payment token: ${error}`),
-      );
-    }
-  }
-
   for (const status of statuses) {
     if (!status.hasStandard || !status.requirements) {
       continue;

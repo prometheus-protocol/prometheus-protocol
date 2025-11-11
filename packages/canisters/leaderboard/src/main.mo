@@ -203,6 +203,51 @@ shared ({ caller = deployer }) persistent actor class Leaderboard() {
     return #ok(());
   };
 
+  public shared (msg) func stop_timer() : async Result.Result<(), Text> {
+    if (msg.caller != owner) { return #err("Unauthorized") };
+    switch (timer_id) {
+      case (null) { return #err("No timer is currently running") };
+      case (?id) {
+        Timer.cancelTimer(id);
+        timer_id := null;
+        return #ok(());
+      };
+    };
+  };
+
+  public shared (msg) func start_timer() : async Result.Result<(), Text> {
+    if (msg.caller != owner) { return #err("Unauthorized") };
+    switch (timer_id) {
+      case (?_) { return #err("Timer is already running. Stop it first.") };
+      case (null) {
+        timer_id := ?Timer.recurringTimer<system>(#nanoseconds(UPDATE_INTERVAL_NS), update_leaderboards);
+        return #ok(());
+      };
+    };
+  };
+
+  public shared (msg) func restart_timer() : async Result.Result<(), Text> {
+    if (msg.caller != owner) { return #err("Unauthorized") };
+    // Cancel existing timer if it exists
+    switch (timer_id) {
+      case (?id) { Timer.cancelTimer(id) };
+      case (null) {};
+    };
+    // Start a new timer
+    timer_id := ?Timer.recurringTimer<system>(#nanoseconds(UPDATE_INTERVAL_NS), update_leaderboards);
+    return #ok(());
+  };
+
+  public query func get_timer_status() : async {
+    is_running : Bool;
+    update_interval_minutes : Nat;
+  } {
+    return {
+      is_running = Option.isSome(timer_id);
+      update_interval_minutes = UPDATE_INTERVAL_NS / (60 * 1_000_000_000);
+    };
+  };
+
   public shared query func get_owner() : async Principal {
     return owner;
   };

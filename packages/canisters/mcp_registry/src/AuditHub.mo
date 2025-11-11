@@ -113,7 +113,7 @@ module AuditHub {
 
     // == JOB QUEUE MANAGEMENT ==
     add_verification_job : (wasm_id : Text, repo : Text, commit_hash : Text, build_config : ICRC16Map, required_verifiers : Nat, bounty_ids : [BountyId]) -> async Result.Result<(), Text>;
-    mark_verification_complete : (wasm_id : Text) -> async Result.Result<(), Text>;
+    mark_verification_complete : (wasm_id : Text, audit_type : Text) -> async Result.Result<(), Text>;
     request_verification_job_with_api_key : (api_key : Text) -> async Result.Result<VerificationJobAssignment, Text>;
     release_job_assignment : (bounty_id : BountyId) -> async Result.Result<(), Text>;
     list_pending_jobs : query () -> async [(Text, VerificationJob)];

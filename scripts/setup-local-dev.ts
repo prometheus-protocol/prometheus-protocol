@@ -50,7 +50,7 @@ async function main() {
   console.log(chalk.bold('🔍 Fetching canister IDs...'));
   const audit_hub = (await $`dfx canister id audit_hub`).stdout.trim();
   const usdc_ledger = (await $`dfx canister id usdc_ledger`).stdout.trim();
-  const mcp_registry = (await $`dfx canister id mcp_registry`).stdout.trim();
+
   const bounty_sponsor = (
     await $`dfx canister id bounty_sponsor`
   ).stdout.trim();
@@ -63,20 +63,13 @@ async function main() {
   // Configure stake requirements (using USDC ledger as token_id, must use pp_owner identity)
   console.log(chalk.bold('💰 Setting stake requirements...'));
 
-  // Step 1: Register audit types to use USDC ledger
-  console.log(`  - Registering audit types to use USDC ledger...`);
+  // Set stake requirement for each audit type (audit_type, token_id, amount)
+  console.log(`  - Setting stake requirements for audit types...`);
   await $`dfx identity use pp_owner 2>/dev/null`;
   for (const auditType of AUDIT_TYPES) {
-    console.log(`    • ${auditType}`);
-    await $`dfx canister call ${audit_hub} register_audit_type '("${auditType}", "${usdc_ledger}")'`;
+    console.log(`    • ${auditType}: ${STAKE_AMOUNT} (token: ${usdc_ledger})`);
+    await $`dfx canister call ${audit_hub} set_stake_requirement '("${auditType}", "${usdc_ledger}", ${STAKE_AMOUNT}:nat)'`;
   }
-
-  // Step 2: Set stake requirement for USDC ledger
-  console.log(
-    `  - Setting stake requirement for USDC ledger to ${STAKE_AMOUNT}...`,
-  );
-  await $`dfx canister call ${audit_hub} set_stake_requirement '("${usdc_ledger}", ${STAKE_AMOUNT}:nat)'`;
-  await $`dfx identity use pp_owner 2>/dev/null`;
   console.log(chalk.green('✅ Stake requirements set.'));
   console.log('');
 
@@ -94,15 +87,6 @@ async function main() {
   // Configure bounty_sponsor canister
   console.log(chalk.bold('🎯 Configuring bounty_sponsor canister...'));
   await $`dfx identity use pp_owner 2>/dev/null`;
-
-  console.log(`  - Setting registry canister ID...`);
-  await $`dfx canister call ${bounty_sponsor} set_registry_canister_id '(principal "${mcp_registry}")'`;
-
-  console.log(`  - Setting reward token canister ID...`);
-  await $`dfx canister call ${bounty_sponsor} set_reward_token_canister_id '(principal "${usdc_ledger}")'`;
-
-  console.log(`  - Setting audit hub canister ID...`);
-  await $`dfx canister call ${bounty_sponsor} set_audit_hub_canister_id '(principal "${audit_hub}")'`;
 
   console.log(`  - Setting reward amounts for audit types...`);
   for (const auditType of AUDIT_TYPES) {
@@ -122,17 +106,6 @@ async function main() {
   const sponsorTransferArgs = `(record { to = record { owner = principal \"${bounty_sponsor}\"; subaccount = null }; amount = ${BOUNTY_SPONSOR_USDC_AMOUNT}:nat })`;
   await $`dfx canister call ${usdc_ledger} icrc1_transfer ${sponsorTransferArgs}`;
   console.log(chalk.green('✅ Bounty sponsor funded.'));
-  console.log('');
-
-  // Configure registry to use bounty_sponsor and audit_hub
-  console.log(
-    chalk.bold('🔗 Linking registry to bounty_sponsor and audit_hub...'),
-  );
-  await $`dfx canister call ${mcp_registry} set_bounty_sponsor_canister_id '(principal "${bounty_sponsor}")'`;
-  await $`dfx canister call ${mcp_registry} set_auditor_credentials_canister_id '(principal "${audit_hub}")'`;
-  console.log(
-    chalk.green('✅ Registry linked to bounty_sponsor and audit_hub.'),
-  );
   console.log('');
 
   // Fabricate cycles

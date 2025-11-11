@@ -8,6 +8,7 @@ import {
   getMocVersionFromMopsToml,
   validateMotokoProject,
 } from '@prometheus-protocol/reproducible-build';
+import { downloadWasmByHash as downloadWasmFromRegistry } from '@prometheus-protocol/ic-js';
 
 /**
  * Retry a function with exponential backoff
@@ -470,4 +471,47 @@ moc = "${mocVersion}"
 
   fs.writeFileSync(path.join(canisterPath, 'mops.toml'), mopsToml);
   console.log(`✅ Generated mops.toml with moc version ${mocVersion}`);
+}
+
+/**
+ * Downloads a WASM from the registry by its hash and saves it to a temporary location.
+ * This is used for tools_v1 verification to skip rebuilding when we already have
+ * consensus that the build is reproducible.
+ *
+ * @param wasmHash The hex hash of the WASM to download
+ * @returns Path to the downloaded WASM file
+ */
+export async function downloadWasmByHash(
+  wasmHash: string,
+): Promise<{ wasmPath: string }> {
+  const startTime = Date.now();
+
+  try {
+    console.log(`📥 Downloading WASM from registry...`);
+    console.log(`   Hash: ${wasmHash}`);
+
+    // Download the complete WASM from the registry
+    const wasmBytes = await downloadWasmFromRegistry(wasmHash);
+
+    // Create a temporary directory for this WASM
+    const workDir = `/tmp/wasm-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    fs.mkdirSync(workDir, { recursive: true });
+
+    // Save WASM to disk
+    const wasmPath = path.join(workDir, 'downloaded.wasm');
+    fs.writeFileSync(wasmPath, wasmBytes);
+
+    const duration = Math.floor((Date.now() - startTime) / 1000);
+    console.log(`✅ WASM downloaded successfully (${duration}s)`);
+    console.log(`   Path: ${wasmPath}`);
+    console.log(`   Size: ${wasmBytes.length} bytes`);
+
+    return { wasmPath };
+  } catch (error) {
+    const duration = Math.floor((Date.now() - startTime) / 1000);
+    console.error(`❌ Failed to download WASM:`, error);
+    throw new Error(
+      `Failed to download WASM after ${duration}s: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }

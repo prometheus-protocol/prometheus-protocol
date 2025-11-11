@@ -29,13 +29,13 @@ export function useGetWasmVerifications(bounties: AuditBounty[] | undefined) {
       const verifications = await Promise.all(
         Array.from(groupedMap.entries()).map(
           async ([groupKey, wasmBounties]) => {
-            // Extract wasmId from the composite key (format: "wasmId::auditType")
-            const wasmId = groupKey.split('::')[0];
+            // Extract wasmId and auditType from the composite key (format: "wasmId::auditType")
+            const [wasmId, auditType] = groupKey.split('::');
 
             try {
               const [attestationIds, divergenceIds] = await Promise.all([
-                getVerificationProgress(wasmId),
-                getDivergenceProgress(wasmId),
+                getVerificationProgress(wasmId, auditType),
+                getDivergenceProgress(wasmId, auditType),
               ]);
 
               return createWasmVerification(
@@ -46,7 +46,7 @@ export function useGetWasmVerifications(bounties: AuditBounty[] | undefined) {
               );
             } catch (error) {
               console.error(
-                `Error fetching progress for WASM ${wasmId}:`,
+                `Error fetching progress for WASM ${wasmId} (${auditType}):`,
                 error,
               );
               // Return verification with zero progress on error
@@ -78,12 +78,22 @@ export function useGetWasmVerifications(bounties: AuditBounty[] | undefined) {
 export function useGetSingleWasmVerification(
   wasmId: string | undefined,
   bounties: AuditBounty[] | undefined,
-  options?: { refetchInterval?: number | false; enabled?: boolean },
+  options?: {
+    refetchInterval?: number | false;
+    enabled?: boolean;
+    auditType?: string;
+  },
 ) {
+  // Use audit type from options (URL params) or fall back to first bounty
+  const auditType =
+    options?.auditType ||
+    bounties?.[0]?.challengeParameters.audit_type ||
+    'build_reproducibility_v1';
+
   return useQuery({
-    queryKey: ['wasmVerification', wasmId],
+    queryKey: ['wasmVerification', wasmId, auditType],
     queryFn: async (): Promise<WasmVerification | null> => {
-      console.log('Fetching verification progress for', wasmId);
+      console.log('Fetching verification progress for', wasmId, auditType);
       if (!wasmId || !bounties || bounties.length === 0) {
         return null;
       }
@@ -92,13 +102,18 @@ export function useGetSingleWasmVerification(
       const wasmBounties = bounties.filter((b) => b.wasmHashHex === wasmId);
 
       if (wasmBounties.length === 0) {
+        console.log('No bounties found for WASM', wasmId);
         return null;
       }
 
+      // Extract audit_type from the first bounty (all bounties in this group should have the same type)
+      const bountyAuditType =
+        wasmBounties[0]?.challengeParameters.audit_type || 'unknown';
+
       try {
         const [attestationIds, divergenceIds] = await Promise.all([
-          getVerificationProgress(wasmId),
-          getDivergenceProgress(wasmId),
+          getVerificationProgress(wasmId, bountyAuditType),
+          getDivergenceProgress(wasmId, bountyAuditType),
         ]);
 
         return createWasmVerification(
@@ -112,6 +127,11 @@ export function useGetSingleWasmVerification(
         return createWasmVerification(wasmId, wasmBounties, [], []);
       }
     },
-    enabled: !!wasmId && options?.enabled,
+    enabled:
+      !!wasmId &&
+      !!bounties &&
+      bounties.length > 0 &&
+      options?.enabled !== false,
+    refetchInterval: options?.refetchInterval,
   });
 }

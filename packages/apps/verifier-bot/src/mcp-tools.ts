@@ -1,4 +1,4 @@
-import { PocketIc } from '@dfinity/pic';
+import { PocketIc, PocketIcServer } from '@dfinity/pic';
 import { IDL } from '@dfinity/candid';
 import { AnonymousIdentity } from '@dfinity/agent';
 import { idlFactory as mcpServerIdlFactory } from '@prometheus-protocol/declarations/mcp_server/mcp_server.did.js';
@@ -25,21 +25,25 @@ export async function verifyMcpTools(
   wasmHash: string,
 ): Promise<McpToolsResult> {
   const startTime = Date.now();
+  let picServer: PocketIcServer | undefined;
+  let pic: PocketIc | undefined;
 
   try {
     console.log(`📦 Loading WASM into PocketIC...`);
 
-    // Initialize PocketIC - connect to a locally running PocketIC server
-    const picUrl = process.env.PIC_URL || 'http://localhost:8080';
-    const pic = await PocketIc.create(picUrl);
+    // Start a PocketIC server - this will automatically download the binary if needed
+    picServer = await PocketIcServer.start();
+    const picUrl = picServer.getUrl();
+    console.log(`   ✅ PocketIC server started at ${picUrl}`);
+
+    // Create a PocketIC instance connected to the server
+    pic = await PocketIc.create(picUrl);
 
     try {
-      // Create a canister with the WASM
+      // Create a canister with the WASM using the setupCanister convenience method
       const fixture = await pic.setupCanister<McpServerService>({
         idlFactory: mcpServerIdlFactory,
         wasm: wasmPath,
-        // Empty init args - MCP servers typically don't need init arguments
-        arg: new Uint8Array().buffer,
       });
 
       const serverActor: Actor<McpServerService> = fixture.actor;
@@ -93,6 +97,7 @@ export async function verifyMcpTools(
 
       // Clean up
       await pic.tearDown();
+      await picServer.stop();
 
       const duration = Math.floor((Date.now() - startTime) / 1000);
 
@@ -110,9 +115,18 @@ export async function verifyMcpTools(
       };
     } catch (error) {
       await pic.tearDown();
+      await picServer.stop();
       throw error;
     }
   } catch (error) {
+    // Cleanup on outer error
+    if (pic) {
+      await pic.tearDown();
+    }
+    if (picServer) {
+      await picServer.stop();
+    }
+
     const duration = Math.floor((Date.now() - startTime) / 1000);
     console.error(`❌ MCP tools verification failed:`, error);
 

@@ -44,14 +44,16 @@ export const VerificationListItem = ({
   const wasmDisplay =
     verification.wasmId.slice(0, 10) + '...' + verification.wasmId.slice(-4);
 
-  // Only show consensus progress for build_reproducibility audits
+  // Show consensus progress for build_reproducibility and tools_v1 audits
   const isBuildReproducibility =
     verification.auditType === 'build_reproducibility_v1';
+  const isToolsV1 = verification.auditType === 'tools_v1';
+  const usesConsensus = isBuildReproducibility || isToolsV1;
 
-  // For non-build_reproducibility audits, link to the single bounty
-  // For build_reproducibility, link to the WASM hash page
-  const linkTarget = isBuildReproducibility
-    ? `/audit-hub/${verification.wasmId}`
+  // For consensus-based audits, link to the WASM hash page with audit type
+  // For other audits, link to the single bounty
+  const linkTarget = usesConsensus
+    ? `/audit-hub/${verification.wasmId}?auditType=${verification.auditType}`
     : `/audit-hub/bounty/${verification.bounties[0]?.id}`;
 
   // Calculate progress percentage (5 out of 9 needed for consensus)
@@ -70,7 +72,7 @@ export const VerificationListItem = ({
         {/* --- DESKTOP VIEW --- */}
         <div className="hidden md:block px-6 py-5">
           <div
-            className={`flex items-center justify-between ${isBuildReproducibility ? 'mb-4' : ''}`}>
+            className={`flex items-center justify-between ${usesConsensus ? 'mb-4' : ''}`}>
             <div className="flex items-center gap-4">
               {statusConfig.icon}
               <div>
@@ -102,8 +104,8 @@ export const VerificationListItem = ({
             </div>
           </div>
 
-          {/* Consensus Progress Bar - Only for build_reproducibility */}
-          {isBuildReproducibility && (
+          {/* Consensus Progress Bar - For consensus-based audits */}
+          {usesConsensus && (
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-4">
@@ -148,7 +150,7 @@ export const VerificationListItem = ({
         {/* --- MOBILE VIEW --- */}
         <div className="md:hidden p-4">
           <div
-            className={`flex justify-between items-start ${isBuildReproducibility ? 'mb-4' : ''}`}>
+            className={`flex justify-between items-start ${usesConsensus ? 'mb-4' : ''}`}>
             <div className="flex items-center gap-3">
               {statusConfig.icon}
               <div>
@@ -165,8 +167,8 @@ export const VerificationListItem = ({
             </span>
           </div>
 
-          {/* Progress Bar - Only for build_reproducibility */}
-          {isBuildReproducibility && (
+          {/* Progress Bar - For consensus-based audits */}
+          {usesConsensus && (
             <div className="space-y-2 mb-4">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-green-400 font-semibold">

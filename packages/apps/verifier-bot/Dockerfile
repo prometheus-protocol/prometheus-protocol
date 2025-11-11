@@ -3,8 +3,7 @@
 
 FROM node:20-alpine
 
-# Install git for cloning repositories
-# Docker CLI + Compose for running reproducible builds (uses host Docker daemon)
+# Install git for cloning repositories and docker tools for reproducible builds
 RUN apk add --no-cache \
     git \
     docker-cli \
@@ -13,7 +12,15 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-# Copy compiled and bundled TypeScript (everything is bundled into dist/index.js)
+# Install only @dfinity/pic (the one external dependency)
+# Use npm to avoid pnpm workspace resolution issues
+# PicJS will automatically download the PocketIC binary on first use
+RUN npm install @dfinity/pic@^0.16.1 --omit=dev
+
+# Ensure PocketIC binary has correct permissions (readable and executable by all)
+RUN chmod 755 /app/node_modules/@dfinity/pic/pocket-ic 2>/dev/null || true
+
+# Copy compiled and bundled TypeScript (everything else is bundled into dist/index.js)
 COPY dist ./dist
 
 # Set environment variables

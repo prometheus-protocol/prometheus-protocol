@@ -38,6 +38,7 @@ export function OpenBountiesTab() {
     isLoading: isVerificationsLoading,
     isError: isVerificationsError,
     isFetching: isVerificationsFetching,
+    refetch: refetchVerifications,
   } = useGetWasmVerifications(allBounties);
 
   // Filter verifications based on search query
@@ -77,7 +78,10 @@ export function OpenBountiesTab() {
           />
         </div>
         <Button
-          onClick={() => refetch()}
+          onClick={() => {
+            refetch();
+            refetchVerifications();
+          }}
           variant="outline"
           size="icon"
           disabled={isBountiesLoading || isVerificationsFetching}

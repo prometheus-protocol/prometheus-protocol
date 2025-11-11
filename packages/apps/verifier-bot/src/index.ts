@@ -205,7 +205,14 @@ async function pollAndVerifyWithJobQueue(): Promise<void> {
 
       // Extract audit_type from build_config (challenge_parameters)
       const buildConfigMap = new Map(job.build_config);
+      console.log(
+        `   🐛 DEBUG: build_config entries:`,
+        Array.from(buildConfigMap.entries()),
+      );
+
       const auditTypeEntry = buildConfigMap.get('audit_type');
+      console.log(`   🐛 DEBUG: auditTypeEntry:`, auditTypeEntry);
+
       const auditType =
         auditTypeEntry && 'Text' in auditTypeEntry
           ? auditTypeEntry.Text
@@ -217,17 +224,20 @@ async function pollAndVerifyWithJobQueue(): Promise<void> {
       if (auditType === 'tools_v1') {
         // === MCP TOOLS VERIFICATION ===
         console.log(`\n🔨 Starting MCP tools verification...`);
-
-        // First, run build verification to get the WASM file
-        const buildResult = await verifyBuild(
-          job.repo,
-          job.commit_hash,
-          job.wasm_id,
+        console.log(
+          `   ℹ️  Skipping rebuild - tools_v1 only runs after build consensus`,
         );
 
-        if (!buildResult.success) {
-          console.log(`❌ Build failed, cannot verify tools`);
-          console.log(`   Reason: ${buildResult.error}`);
+        // Download the WASM directly from the registry instead of rebuilding
+        // This is safe because tools_v1 bounties only exist after build_reproducibility_v1 consensus
+        let wasmPath: string;
+        try {
+          const { downloadWasmByHash } = await import('./builder.js');
+          const downloadResult = await downloadWasmByHash(job.wasm_id);
+          wasmPath = downloadResult.wasmPath;
+        } catch (downloadError) {
+          console.log(`❌ Failed to download WASM from registry`);
+          console.log(`   Reason: ${downloadError}`);
 
           completedBounties.add(job.bounty_id);
           saveCompletedBounties(completedBounties);
@@ -235,20 +245,17 @@ async function pollAndVerifyWithJobQueue(): Promise<void> {
           await submitDivergenceWithApiKey(VERIFIER_API_KEY!, {
             bountyId: job.bounty_id,
             wasmId: job.wasm_id,
-            reason: `Build failed: ${buildResult.error}`,
+            reason: `Failed to download WASM: ${downloadError instanceof Error ? downloadError.message : String(downloadError)}`,
           });
 
           console.log(`   ✅ Divergence report filed successfully\n`);
           return;
         }
 
-        console.log(`✅ Build verified! Now discovering MCP tools...`);
+        console.log(`✅ WASM downloaded! Now discovering MCP tools...`);
 
         // Verify MCP tools using PocketIC
-        const toolsResult = await verifyMcpTools(
-          buildResult.wasmPath!,
-          job.wasm_id,
-        );
+        const toolsResult = await verifyMcpTools(wasmPath, job.wasm_id);
 
         if (toolsResult.success && toolsResult.tools) {
           console.log(

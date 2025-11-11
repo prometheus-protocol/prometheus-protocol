@@ -1,7 +1,19 @@
+import ICRC127Lib "../../../../libs/icrc127/src/lib";
+
 module {
   // ==================================================================================
   // == TYPES & CONSTANTS
   // ==================================================================================
+
+  // Use ICRC127 library types for consistency with mcp_registry
+  public type ICRC16 = ICRC127Lib.ICRC16;
+  public type ICRC16Map = ICRC127Lib.ICRC16Map;
+
+  // Result type for function returns
+  public type Result<Ok, Err> = {
+    #ok : Ok;
+    #err : Err;
+  };
 
   // API Credential for verifier bots
   public type ApiCredential = {
@@ -34,28 +46,12 @@ module {
 
   // The profile of a verifier, including their balances and reputation scores.
   public type VerifierProfile = {
-    available_balance_usdc : Balance; // USDC not currently staked
-    staked_balance_usdc : Balance; // USDC locked in active bounties
     total_verifications : Nat; // Number of successful verifications
     reputation_score : Nat; // Performance metric (0-100)
     total_earnings : Balance; // Total amount earned from successful verifications
   };
 
   // Job Queue Types - For managing verification work distribution
-  public type ICRC16Value = (
-    Text,
-    {
-      #Text : Text;
-      #Nat : Nat;
-      #Int : Int;
-      #Blob : Blob;
-      #Bool : Bool;
-      #Array : [ICRC16Value];
-      #Map : [ICRC16Value];
-    },
-  );
-
-  public type ICRC16Map = [ICRC16Value];
 
   // A verification job pending assignment
   public type VerificationJob = {

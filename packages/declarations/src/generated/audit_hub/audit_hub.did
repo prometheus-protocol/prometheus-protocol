@@ -18,6 +18,7 @@ type VerificationJobAssignment =
 type VerificationJob = 
  record {
    assigned_count: nat;
+   bounty_ids: vec BountyId;
    build_config: ICRC16Map;
    commit_hash: text;
    created_at: Timestamp;
@@ -92,7 +93,10 @@ type AuditHub =
    ///    * Called by mcp_registry when a new WASM is registered.
    ///    * Only the registry canister can call this function.
    add_verification_job: (wasm_id: text, repo: text, commit_hash: text,
-    build_config: ICRC16Map, required_verifiers: nat) -> (Result);
+    build_config: ICRC16Map, required_verifiers: nat, bounty_ids:
+    vec BountyId) -> (Result);
+   admin_add_bounties_to_job: (wasm_id: text, additional_bounty_ids:
+    vec nat) -> (Result);
    cleanup_expired_lock: (bounty_id: BountyId) -> (Result);
    /// * Deposit tokens as stake to become an eligible auditor.
    ///    * The caller must have already approved this canister to spend tokens on their behalf.
@@ -104,9 +108,12 @@ type AuditHub =
    generate_api_key: () -> (Result_3);
    get_available_balance: (verifier: principal, token_id: TokenId) ->
     (Balance) query;
+   /// * Get available balance by audit_type.
+   ///    * Looks up the token_id from the stake_requirements for this audit type.
    get_available_balance_by_audit_type: (verifier: principal, audit_type:
     text) -> (Balance) query;
    get_bounty_lock: (bounty_id: BountyId) -> (opt BountyLock) query;
+   get_bounty_sponsor_canister_id: () -> (opt principal) query;
    get_env_requirements: () ->
     (variant {
        v1:
@@ -122,7 +129,13 @@ type AuditHub =
        symbol: text;
      }) query;
    get_registry_canister_id: () -> (opt principal) query;
-   get_stake_requirement: (token_id: TokenId) -> (opt Balance) query;
+   /// * Get the stake requirement for a specific audit type.
+   ///    * Returns (token_id, amount) tuple.
+   get_stake_requirement: (audit_type: text) ->
+    (opt record {
+           TokenId;
+           Balance;
+         }) query;
    get_staked_balance: (verifier: principal, token_id: TokenId) ->
     (Balance) query;
    /// * Get verifier profile with balances for a specific token.
@@ -153,7 +166,6 @@ type AuditHub =
    ///    * Called by mcp_registry when a WASM is finalized.
    ///    * Only the registry canister can call this function.
    mark_verification_complete: (wasm_id: text) -> (Result);
-   register_audit_type: (audit_type: text, token_id: TokenId) -> (Result);
    /// * Release a job assignment when verification is complete or expired.
    ///    * Can be called by the verifier or by cleanup processes.
    release_job_assignment: (bounty_id: BountyId) -> (Result);
@@ -162,20 +174,31 @@ type AuditHub =
    ///    * Called by verifier bots using their API key.
    ///    * Returns a job assignment with bounty_id, or an error if no jobs available.
    request_verification_job_with_api_key: (api_key: text) -> (Result_2);
-   /// * Allows a verifier to stake USDC to reserve a bounty (1-hour lock).
-   ///    * Can be called directly by the verifier principal OR via API key from a bot.
-   reserve_bounty: (bounty_id: BountyId, token_id: TokenId) -> (Result);
+   /// * Allows a verifier to stake tokens to reserve a bounty (1-hour lock).
+   ///    * Can be called directly by the verifier principal.
+   ///    * @param bounty_id - The bounty to reserve
+   ///    * @param audit_type - The audit type (e.g., "tools_v1", "build_reproducibility_v1")
+   reserve_bounty: (bounty_id: BountyId, audit_type: text) -> (Result);
    /// * Reserve a bounty using an API key (for bot authentication).
    ///    * The bot passes its API key, and we resolve it to the verifier principal.
+   ///    * @param api_key - The verifier's API key
+   ///    * @param bounty_id - The bounty to reserve
+   ///    * @param audit_type - The audit type (e.g., "tools_v1", "build_reproducibility_v1")
    reserve_bounty_with_api_key: (api_key: text, bounty_id: BountyId,
-    token_id: TokenId) -> (Result);
+    audit_type: text) -> (Result);
    /// * Revoke an API key (makes it inactive).
    revoke_api_key: (api_key: text) -> (Result);
+   set_bounty_sponsor_canister_id: (bounty_sponsor_id: principal) -> (Result);
    set_dashboard_canister_id: (dashboard_id: principal) -> (Result);
    set_payment_token_config: (ledger_id: principal, symbol: text, decimals:
     nat8) -> (Result);
    set_registry_canister_id: (registry_id: principal) -> (Result);
-   set_stake_requirement: (token_id: TokenId, amount: Balance) -> (Result);
+   /// * Set the stake requirement for a specific audit type.
+   ///    * @param audit_type - The audit type (e.g., "tools_v1", "build_reproducibility_v1")
+   ///    * @param token_id - The ledger canister ID for the staking token
+   ///    * @param amount - The stake amount required (in token's smallest unit)
+   set_stake_requirement: (audit_type: text, token_id: TokenId, amount:
+    Balance) -> (Result);
    set_usdc_ledger_id: (ledger_id: principal) -> (Result);
    /// * Called by the registry when a verifier was on the losing side of consensus.
    ///    * Slashes their stake and penalizes reputation (they provided incorrect verification).

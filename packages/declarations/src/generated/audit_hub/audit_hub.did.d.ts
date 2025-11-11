@@ -18,9 +18,10 @@ export interface AssignedJob {
 }
 export interface AuditHub {
   'add_verification_job' : ActorMethod<
-    [string, string, string, ICRC16Map, bigint],
+    [string, string, string, ICRC16Map, bigint, Array<BountyId>],
     Result
   >,
+  'admin_add_bounties_to_job' : ActorMethod<[string, Array<bigint>], Result>,
   'cleanup_expired_lock' : ActorMethod<[BountyId], Result>,
   'deposit_stake' : ActorMethod<[TokenId, Balance], Result>,
   'generate_api_key' : ActorMethod<[], Result_3>,
@@ -30,6 +31,7 @@ export interface AuditHub {
     Balance
   >,
   'get_bounty_lock' : ActorMethod<[BountyId], [] | [BountyLock]>,
+  'get_bounty_sponsor_canister_id' : ActorMethod<[], [] | [Principal]>,
   'get_env_requirements' : ActorMethod<
     [],
     {
@@ -45,7 +47,7 @@ export interface AuditHub {
     { 'decimals' : number, 'ledger_id' : [] | [Principal], 'symbol' : string }
   >,
   'get_registry_canister_id' : ActorMethod<[], [] | [Principal]>,
-  'get_stake_requirement' : ActorMethod<[TokenId], [] | [Balance]>,
+  'get_stake_requirement' : ActorMethod<[string], [] | [[TokenId, Balance]]>,
   'get_staked_balance' : ActorMethod<[Principal, TokenId], Balance>,
   'get_verifier_profile' : ActorMethod<[Principal, TokenId], VerifierProfile>,
   'has_active_bounty_lock' : ActorMethod<[Principal], boolean>,
@@ -57,20 +59,20 @@ export interface AuditHub {
   'list_assigned_jobs' : ActorMethod<[], Array<[BountyId, AssignedJob]>>,
   'list_pending_jobs' : ActorMethod<[], Array<[string, VerificationJob]>>,
   'mark_verification_complete' : ActorMethod<[string], Result>,
-  'register_audit_type' : ActorMethod<[string, TokenId], Result>,
   'release_job_assignment' : ActorMethod<[BountyId], Result>,
   'release_stake' : ActorMethod<[BountyId], Result>,
   'request_verification_job_with_api_key' : ActorMethod<[string], Result_2>,
-  'reserve_bounty' : ActorMethod<[BountyId, TokenId], Result>,
+  'reserve_bounty' : ActorMethod<[BountyId, string], Result>,
   'reserve_bounty_with_api_key' : ActorMethod<
-    [string, BountyId, TokenId],
+    [string, BountyId, string],
     Result
   >,
   'revoke_api_key' : ActorMethod<[string], Result>,
+  'set_bounty_sponsor_canister_id' : ActorMethod<[Principal], Result>,
   'set_dashboard_canister_id' : ActorMethod<[Principal], Result>,
   'set_payment_token_config' : ActorMethod<[Principal, string, number], Result>,
   'set_registry_canister_id' : ActorMethod<[Principal], Result>,
-  'set_stake_requirement' : ActorMethod<[TokenId, Balance], Result>,
+  'set_stake_requirement' : ActorMethod<[string, TokenId, Balance], Result>,
   'set_usdc_ledger_id' : ActorMethod<[Principal], Result>,
   'slash_stake_for_incorrect_consensus' : ActorMethod<[BountyId], Result>,
   'transfer_ownership' : ActorMethod<[Principal], Result>,
@@ -122,6 +124,7 @@ export type Timestamp = bigint;
 export type TokenId = string;
 export interface VerificationJob {
   'repo' : string,
+  'bounty_ids' : Array<BountyId>,
   'created_at' : Timestamp,
   'build_config' : ICRC16Map,
   'assigned_count' : bigint,

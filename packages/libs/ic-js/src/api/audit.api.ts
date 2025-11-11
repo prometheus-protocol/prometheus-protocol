@@ -1083,25 +1083,27 @@ export const getLockedBountyForVerifier = async (
 };
 
 /**
- * Gets the verification progress (attestation count) for a specific WASM.
+ * Gets the verification progress (attestation count) for a specific WASM and audit type.
  * Returns array of bounty IDs that have filed successful attestations.
  */
 export const getVerificationProgress = async (
   wasmId: string,
+  auditType: string,
 ): Promise<bigint[]> => {
   const registryActor = getRegistryActor();
-  return await registryActor.get_verification_progress(wasmId);
+  return await registryActor.get_verification_progress(wasmId, auditType);
 };
 
 /**
- * Gets the divergence progress (divergence report count) for a specific WASM.
+ * Gets the divergence progress (divergence report count) for a specific WASM and audit type.
  * Returns array of bounty IDs that have filed divergence reports.
  */
 export const getDivergenceProgress = async (
   wasmId: string,
+  auditType: string,
 ): Promise<bigint[]> => {
   const registryActor = getRegistryActor();
-  return await registryActor.get_divergence_progress(wasmId);
+  return await registryActor.get_divergence_progress(wasmId, auditType);
 };
 
 /**

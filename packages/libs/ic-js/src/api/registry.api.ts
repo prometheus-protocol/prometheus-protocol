@@ -646,3 +646,80 @@ export const getAppDetailsByNamespace = async (
     return null;
   }
 };
+
+/**
+ * Downloads a complete WASM file by its hash from the registry.
+ * Fetches all chunks and assembles them into a complete binary.
+ *
+ * @param wasmHash The hex string hash of the WASM to download
+ * @returns The complete WASM binary as a Uint8Array
+ */
+export const downloadWasmByHash = async (
+  wasmHash: string,
+): Promise<Uint8Array> => {
+  const registryActor = getRegistryActor();
+
+  // Convert hex hash to Uint8Array
+  const hashBytes = new Uint8Array(
+    wasmHash.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16)),
+  );
+
+  // Query for the WASM metadata by hash
+  const wasms = await registryActor.icrc118_get_wasms({
+    filter: [[{ hash: hashBytes }]],
+    prev: [],
+    take: [BigInt(1)],
+  });
+
+  if (wasms.length === 0) {
+    throw new Error(`WASM with hash ${wasmHash} not found in registry`);
+  }
+
+  const wasmMetadata = wasms[0];
+  const namespace = wasmMetadata.canister_type_namespace;
+  const version = wasmMetadata.version_number;
+  const totalChunks = Number(wasmMetadata.total_chunks);
+
+  console.log(
+    `   📦 Downloading ${totalChunks} chunks from ${namespace} v${version.join('.')}...`,
+  );
+
+  // Download all chunks in parallel
+  const chunkPromises = Array.from({ length: totalChunks }, (_, i) =>
+    registryActor.icrc118_get_wasm_chunk({
+      canister_type_namespace: namespace,
+      version_number: version,
+      hash: hashBytes,
+      chunk_id: BigInt(i),
+    }),
+  );
+
+  const chunkResults = await Promise.all(chunkPromises);
+
+  // Validate and assemble chunks
+  const chunks: Uint8Array[] = [];
+  for (let i = 0; i < chunkResults.length; i++) {
+    const result = chunkResults[i];
+    if ('Err' in result) {
+      throw new Error(`Failed to download chunk ${i}: ${result.Err}`);
+    }
+    const chunkData = result.Ok.wasm_chunk;
+    chunks.push(
+      chunkData instanceof Uint8Array ? chunkData : new Uint8Array(chunkData),
+    );
+  }
+
+  // Calculate total size and assemble
+  const totalSize = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const completeWasm = new Uint8Array(totalSize);
+
+  let offset = 0;
+  for (const chunk of chunks) {
+    completeWasm.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  console.log(`   ✅ Downloaded complete WASM (${totalSize} bytes)`);
+
+  return completeWasm;
+};

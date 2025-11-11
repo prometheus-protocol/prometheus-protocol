@@ -196,8 +196,16 @@ If publishing to mainnet (`--network ic`), ensure you have ICP in your pp_owner 
 
 ```bash
 cd /tmp/test
+git restore .
 app-store-cli release 0.18.0 --network local
 ```
+
+With GITHUB
+
+```bash
+export GITHUB_TOKEN=$(grep GITHUB_TOKEN /home/jesse/prometheus-protocol/prometheus-protocol/packages/apps/verifier-bot/deployment/.env | cut -d'=' -f2) && cd /tmp/test && git restore . && app-store-cli release 0.120.0 --network local
+```
+
 
 ### Publishing v0.18.0 (Automated - Script)
 
