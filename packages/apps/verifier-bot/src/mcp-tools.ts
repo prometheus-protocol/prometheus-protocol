@@ -25,36 +25,59 @@ export async function verifyMcpTools(
   wasmHash: string,
 ): Promise<McpToolsResult> {
   const startTime = Date.now();
-  let picServer: PocketIcServer | undefined;
   let pic: PocketIc | undefined;
+  let picServer: PocketIcServer | undefined;
 
   try {
     console.log(`📦 Loading WASM into PocketIC...`);
 
-    // Start a PocketIC server - this will automatically download the binary if needed
-    picServer = await PocketIcServer.start();
+    // Start PocketIC server
+    console.log(`   🚀 Starting PocketIC server...`);
+    picServer = await PocketIcServer.start({
+      showCanisterLogs: true,
+      showRuntimeLogs: true,
+    });
     const picUrl = picServer.getUrl();
-    console.log(`   ✅ PocketIC server started at ${picUrl}`);
+    console.log(`   🔗 PocketIC server started at ${picUrl}`);
 
-    // Create a PocketIC instance connected to the server
+    // Create a PocketIC instance
     pic = await PocketIc.create(picUrl);
+    console.log(`   ✅ Connected to PocketIC server`);
 
     try {
-      // Create a canister with the WASM using the setupCanister convenience method
-      const fixture = await pic.setupCanister<McpServerService>({
-        idlFactory: mcpServerIdlFactory,
-        wasm: wasmPath,
-      });
+      // Create a canister with the WASM using explicit steps for better error handling
+      console.log(`   📝 Creating canister...`);
+      const canisterId = await pic.createCanister();
+      console.log(`   ✅ Canister ID: ${canisterId.toText()}`);
 
-      const serverActor: Actor<McpServerService> = fixture.actor;
-      const canisterId = fixture.canisterId.toText();
-      console.log(`   ✅ Canister created: ${canisterId}`);
+      console.log(`   📦 Installing WASM code...`);
+      try {
+        const initArg = IDL.encode(
+          [IDL.Opt(IDL.Record({ owner: IDL.Opt(IDL.Principal) }))],
+          [[]],
+        );
+        await pic.installCode({
+          canisterId,
+          wasm: wasmPath,
+          arg: initArg.buffer as ArrayBufferLike,
+        });
+        console.log(`   ✅ WASM installed successfully`);
+      } catch (installError) {
+        console.error(`   ❌ Install code failed:`, installError);
+        throw installError;
+      }
+      console.log(`   🎭 Creating actor...`);
+      const serverActor = pic.createActor<McpServerService>(
+        mcpServerIdlFactory,
+        canisterId,
+      );
+      console.log(`   ✅ Actor created`);
 
       // Set identity to anonymous - we'll authenticate via API key if needed
       serverActor.setIdentity(new AnonymousIdentity());
 
       // Prepare JSON-RPC request to list tools
-      console.log(`� Discovering tools via JSON-RPC...`);
+      console.log(`🔍 Discovering tools via JSON-RPC...`);
       const rpcPayload = {
         jsonrpc: '2.0',
         method: 'tools/list',
@@ -64,6 +87,7 @@ export async function verifyMcpTools(
       const body = new TextEncoder().encode(JSON.stringify(rpcPayload));
 
       // Make HTTP request to the MCP endpoint
+      console.log(`   📡 Making HTTP request to /mcp endpoint...`);
       const httpResponse = await serverActor.http_request_update({
         method: 'POST',
         url: '/mcp',
@@ -71,6 +95,7 @@ export async function verifyMcpTools(
         body,
         certificate_version: [],
       });
+      console.log(`   ✅ HTTP response received: ${httpResponse.status_code}`);
 
       // Check response status
       if (httpResponse.status_code !== 200) {
@@ -83,6 +108,7 @@ export async function verifyMcpTools(
       const responseBody = JSON.parse(
         new TextDecoder().decode(httpResponse.body as Uint8Array),
       );
+      console.log(`   ✅ Response parsed successfully`);
 
       // Check for JSON-RPC error
       if (responseBody.error) {
@@ -97,7 +123,9 @@ export async function verifyMcpTools(
 
       // Clean up
       await pic.tearDown();
-      await picServer.stop();
+      if (picServer) {
+        await picServer.stop();
+      }
 
       const duration = Math.floor((Date.now() - startTime) / 1000);
 
@@ -115,7 +143,9 @@ export async function verifyMcpTools(
       };
     } catch (error) {
       await pic.tearDown();
-      await picServer.stop();
+      if (picServer) {
+        await picServer.stop();
+      }
       throw error;
     }
   } catch (error) {

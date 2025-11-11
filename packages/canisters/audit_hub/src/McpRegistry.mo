@@ -36,5 +36,6 @@ module McpRegistry {
     icrc126_list_attestations : (wasm_id : Text) -> async [Nat];
     icrc126_list_divergences : (wasm_id : Text) -> async [Nat];
     icrc127_get_bounty : (bounty_id : Nat) -> async ?Bounty;
+    has_verifier_participated_in_wasm : (verifier : Principal, wasm_id : Text, audit_type : Text) -> async Bool;
   };
 };

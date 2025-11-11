@@ -135,6 +135,57 @@ export function registerReleaseCommand(program: Command) {
         if (!options.skipBuild) {
           console.log('\n🔨 Step 4: Building WASM with reproducible build...');
           console.log('   (This may take a few minutes)');
+
+          // Check if Docker network exists, create if needed
+          try {
+            execSync('docker network inspect verifier-shared-network', {
+              stdio: 'ignore',
+            });
+          } catch {
+            console.log('🌐 Creating Docker network: verifier-shared-network');
+            execSync('docker network create verifier-shared-network', {
+              stdio: 'inherit',
+            });
+          }
+
+          // Bootstrap if Docker files are missing
+          const dockerFiles = [
+            'Dockerfile',
+            'Dockerfile.base',
+            'docker-compose.yml',
+          ];
+          const missingDockerFiles = dockerFiles.filter(
+            (file) => !fs.existsSync(path.join(process.cwd(), file)),
+          );
+
+          if (missingDockerFiles.length > 0) {
+            console.log('🔧 Bootstrapping Docker build files...');
+            const network = thisCommand.parent?.opts().network || 'ic';
+            execSync(`app-store-cli build --bootstrap --network ${network}`, {
+              stdio: 'inherit',
+            });
+          }
+
+          // Check if base image exists, build it if needed
+          const mopsTomlPath = path.join(process.cwd(), 'mops.toml');
+          if (fs.existsSync(mopsTomlPath)) {
+            const mopsContent = fs.readFileSync(mopsTomlPath, 'utf-8');
+            const mocVersionMatch = mopsContent.match(/moc\s*=\s*"([^"]+)"/);
+            if (mocVersionMatch) {
+              const mocVersion = mocVersionMatch[1];
+              const baseImageName = `motoko-build-base:moc-${mocVersion}`;
+
+              try {
+                execSync(`docker image inspect ${baseImageName}`, {
+                  stdio: 'ignore',
+                });
+              } catch {
+                console.log(`🏗️  Building base image: ${baseImageName}`);
+                execSync('docker-compose build base', { stdio: 'inherit' });
+              }
+            }
+          }
+
           // Get network from parent command and pass it to build
           const network = thisCommand.parent?.opts().network || 'ic';
           execSync(`app-store-cli build --network ${network}`, {

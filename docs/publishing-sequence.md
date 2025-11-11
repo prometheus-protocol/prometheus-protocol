@@ -95,9 +95,9 @@ Replace `<COMMIT_HASH>` with the hash from step 2. This also commits and pushes 
 ### 4. Build the WASM with GITHUB_TOKEN
 
 ```bash
-cd /tmp/test && \
+cd /tmp/test && git restore . && \
 export GITHUB_TOKEN=$(grep GITHUB_TOKEN /home/jesse/prometheus-protocol/prometheus-protocol/packages/apps/verifier-bot/deployment/.env | cut -d'=' -f2) && \
-app-store-cli build 2>&1 | tail -10
+app-store-cli release 0.1.19 --network local 2>&1 | tail -10
 ```
 
 This builds the WASM file and extracts the hash from the build output.
@@ -205,7 +205,6 @@ With GITHUB
 ```bash
 export GITHUB_TOKEN=$(grep GITHUB_TOKEN /home/jesse/prometheus-protocol/prometheus-protocol/packages/apps/verifier-bot/deployment/.env | cut -d'=' -f2) && cd /tmp/test && git restore . && app-store-cli release 0.120.0 --network local
 ```
-
 
 ### Publishing v0.18.0 (Automated - Script)
 

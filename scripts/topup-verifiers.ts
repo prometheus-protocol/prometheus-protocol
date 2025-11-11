@@ -105,16 +105,24 @@ async function main() {
       // Switch back to the verifier identity
       await $`dfx identity use ${identity} 2>/dev/null`;
 
-      // 2. Approve the audit_hub to spend tokens
+      // 2. Approve the audit_hub to spend tokens (amount + fee for transfer_from)
       console.log(chalk.cyan(`   2️⃣  Approving audit_hub to spend USDC...`));
-      const approvalArgs = `(record { spender = record { owner = principal \"${audit_hub}\"; subaccount = null }; amount = ${TOPUP_AMOUNT}:nat })`;
+      const FEE = 10_000; // USDC fee is 0.01 USDC
+      const approvalArgs = `(record { spender = record { owner = principal \"${audit_hub}\"; subaccount = null }; amount = ${TOPUP_AMOUNT + FEE}:nat })`;
       await $`dfx canister call ${usdc_ledger} icrc2_approve ${approvalArgs} --network ${NETWORK}`;
       console.log(chalk.green('   ✅ Approval granted'));
 
       // 3. Deposit to audit hub
       console.log(chalk.cyan('   3️⃣  Depositing to audit hub...'));
       const depositArgs = `(\"${usdc_ledger}\", ${TOPUP_AMOUNT}:nat)`;
-      await $`dfx canister call ${audit_hub} deposit_stake ${depositArgs} --network ${NETWORK}`;
+      const depositResult =
+        await $`dfx canister call ${audit_hub} deposit_stake ${depositArgs} --network ${NETWORK}`;
+
+      // Check if deposit was successful
+      if (depositResult.stdout.includes('err')) {
+        throw new Error(`Deposit failed: ${depositResult.stdout}`);
+      }
+
       console.log(
         chalk.green(
           `   ✅ Deposited ${TOPUP_AMOUNT_USDC} USDC to available balance`,
@@ -123,12 +131,11 @@ async function main() {
 
       // 4. Verify new balance
       console.log(chalk.cyan('   4️⃣  Verifying new balance...'));
-      const profileArgs = `(principal \"${principal}\", \"${usdc_ledger}\")`;
-      const profile =
-        await $`dfx canister call ${audit_hub} get_verifier_profile ${profileArgs} --network ${NETWORK}`;
-      const availableMatch = profile.stdout.match(
-        /available_balance_usdc = ([\d_]+)/,
-      );
+      const balanceArgs = `(principal \"${principal}\", \"tools_v1\")`;
+      const balanceResult =
+        await $`dfx canister call ${audit_hub} get_available_balance_by_audit_type ${balanceArgs} --network ${NETWORK}`;
+      // Parse the balance from output like "(1_000_000 : nat)"
+      const availableMatch = balanceResult.stdout.match(/\(?([\d_]+)/);
       const available = availableMatch
         ? availableMatch[1].replace(/_/g, '')
         : '0';

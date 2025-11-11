@@ -6,7 +6,7 @@
 
 ```bash
 # 1. Start local replica
-dfx start --clean
+pnpm ic:up
 
 # 2. Deploy all canisters
 dfx deploy

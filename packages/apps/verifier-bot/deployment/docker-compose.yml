@@ -1,4 +1,4 @@
-# Docker Compose setup for running 6 verifier bots locally
+# Docker Compose setup for running 9 verifier bots locally
 # This is the simplest way to run multiple bots during development
 # For production, use the Kubernetes manifests in k8s/
 #

@@ -25,6 +25,7 @@ module {
     verifier : Principal,
     bounty_locks : Map.Map<Types.BountyId, Types.BountyLock>,
     registry_canister_id : ?Principal,
+    current_time : Int,
   ) : async ?(Types.BountyId, Types.ICRC16Map) {
     let wasm_id = job.wasm_id;
 
@@ -37,53 +38,58 @@ module {
       switch (Map.get(bounty_locks, Map.nhash, bounty_id)) {
         case (?lock) {
           if (Principal.equal(lock.claimant, verifier)) {
-            // This verifier has a lock - check if bounty is claimed and get challenge_parameters
-            var is_claimed = false;
-            var bounty_challenge_params : ?Types.ICRC16Map = null;
-
-            switch (registry) {
-              case (?reg) {
-                try {
-                  let bounty_opt = await reg.icrc127_get_bounty(bounty_id);
-                  switch (bounty_opt) {
-                    case (?bounty) {
-                      is_claimed := Option.isSome(bounty.claimed_date);
-                      // Extract challenge_parameters from the bounty
-                      switch (bounty.challenge_parameters) {
-                        case (#Map(params)) {
-                          bounty_challenge_params := ?params;
-                        };
-                        case (_) {};
-                      };
-                    };
-                    case (null) {};
-                  };
-                } catch (e) {
-                  Debug.print("Error checking if bounty is claimed: " # Error.message(e));
-                };
-              };
-              case (null) {};
-            };
-
-            if (not is_claimed) {
-              // Found an active locked bounty
-              switch (bounty_challenge_params) {
-                case (?params) {
-                  let audit_type_msg = switch (JobQueue.get_audit_type_from_metadata(params)) {
-                    case (?at) { " audit_type=" # at };
-                    case (null) { " audit_type=unknown" };
-                  };
-                  Debug.print("Verifier " # Principal.toText(verifier) # " has ACTIVE audit bounty " # Nat.toText(bounty_id) # audit_type_msg # " for WASM " # wasm_id # " - returning this job");
-                  return ?(bounty_id, params);
-                };
-                case (null) {
-                  Debug.print("Warning: Could not get challenge_parameters for active audit bounty " # Nat.toText(bounty_id) # ", falling back to job.build_config");
-                  return ?(bounty_id, job.build_config);
-                };
-              };
+            // Check if lock has expired
+            if (lock.expires_at <= current_time) {
+              // Skip expired locks silently (they'll be cleaned up elsewhere)
             } else {
-              Debug.print("Verifier " # Principal.toText(verifier) # " has COMPLETED audit bounty " # Nat.toText(bounty_id) # " for WASM " # wasm_id # " - can get another");
-            };
+              // This verifier has a valid active lock - check if bounty is claimed and get challenge_parameters
+              var is_claimed = false;
+              var bounty_challenge_params : ?Types.ICRC16Map = null;
+
+              switch (registry) {
+                case (?reg) {
+                  try {
+                    let bounty_opt = await reg.icrc127_get_bounty(bounty_id);
+                    switch (bounty_opt) {
+                      case (?bounty) {
+                        is_claimed := Option.isSome(bounty.claimed_date);
+                        // Extract challenge_parameters from the bounty
+                        switch (bounty.challenge_parameters) {
+                          case (#Map(params)) {
+                            bounty_challenge_params := ?params;
+                          };
+                          case (_) {};
+                        };
+                      };
+                      case (null) {};
+                    };
+                  } catch (e) {
+                    Debug.print("Error checking if bounty is claimed: " # Error.message(e));
+                  };
+                };
+                case (null) {};
+              };
+
+              if (not is_claimed) {
+                // Found an active locked bounty
+                switch (bounty_challenge_params) {
+                  case (?params) {
+                    let audit_type_msg = switch (JobQueue.get_audit_type_from_metadata(params)) {
+                      case (?at) { " audit_type=" # at };
+                      case (null) { " audit_type=unknown" };
+                    };
+                    Debug.print("Verifier " # Principal.toText(verifier) # " has ACTIVE audit bounty " # Nat.toText(bounty_id) # audit_type_msg # " for WASM " # wasm_id # " - returning this job");
+                    return ?(bounty_id, params);
+                  };
+                  case (null) {
+                    Debug.print("Warning: Could not get challenge_parameters for active audit bounty " # Nat.toText(bounty_id) # ", falling back to job.build_config");
+                    return ?(bounty_id, job.build_config);
+                  };
+                };
+              } else {
+                Debug.print("Verifier " # Principal.toText(verifier) # " has COMPLETED audit bounty " # Nat.toText(bounty_id) # " for WASM " # wasm_id # " - can get another");
+              };
+            }; // Close the else block for expired check
           };
         };
         case (null) {};
@@ -106,10 +112,46 @@ module {
     token_id : Types.TokenId,
     assigned_jobs : Map.Map<Types.BountyId, Types.AssignedJob>,
     bounty_locks : Map.Map<Types.BountyId, Types.BountyLock>,
-  ) : ?Types.BountyId {
+    registry_canister_id : ?Principal,
+  ) : async ?Types.BountyId {
     let wasm_id = job.wasm_id;
 
+    // Get registry actor if available
+    let registry_opt : ?McpRegistry.Service = switch (registry_canister_id) {
+      case (?id) { ?(actor (Principal.toText(id)) : McpRegistry.Service) };
+      case (null) { null };
+    };
+
     label bounty_search for (bounty_id in job.bounty_ids.vals()) {
+      // Check if bounty is already completed by querying the registry
+      switch (registry_opt) {
+        case (?registry) {
+          try {
+            let bounty_result = await registry.icrc127_get_bounty(bounty_id);
+            switch (bounty_result) {
+              case (?bounty) {
+                // Check if bounty has been claimed/completed
+                if (Option.isSome(bounty.claimed)) {
+                  Debug.print("Bounty " # Nat.toText(bounty_id) # " already claimed - skipping");
+                  continue bounty_search;
+                };
+              };
+              case (null) {
+                // Bounty doesn't exist in registry - skip it
+                Debug.print("Bounty " # Nat.toText(bounty_id) # " not found in registry - skipping");
+                continue bounty_search;
+              };
+            };
+          } catch (e) {
+            Debug.print("Error checking bounty " # Nat.toText(bounty_id) # " status: " # Error.message(e));
+            // Continue anyway - don't block on registry errors
+          };
+        };
+        case (null) {
+          // No registry configured - can't check completion status
+        };
+      };
+
       let is_assigned = Option.isSome(Map.get(assigned_jobs, Map.nhash, bounty_id));
       if (not is_assigned) {
         // IMMEDIATELY claim this bounty to prevent race conditions
@@ -211,6 +253,7 @@ module {
     assigned_jobs : Map.Map<Types.BountyId, Types.AssignedJob>,
     pending_audits : BTree.BTree<Text, Types.VerificationJob>,
     registry_canister_id : ?Principal,
+    bounty_locks : Map.Map<Types.BountyId, Types.BountyLock>,
   ) : async ?Types.VerificationJobAssignment {
     let registry : ?McpRegistry.Service = switch (registry_canister_id) {
       case (?id) { ?actor (Principal.toText(id)) };
@@ -278,6 +321,7 @@ module {
         // Assignment expired, clean it up
         Debug.print("Cleaning up expired assignment for bounty " # Nat.toText(bounty_id));
         ignore Map.remove(assigned_jobs, Map.nhash, bounty_id);
+        ignore Map.remove(bounty_locks, Map.nhash, bounty_id);
       };
     };
 

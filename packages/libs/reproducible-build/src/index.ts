@@ -41,7 +41,7 @@ services:
     volumes:
       - ./out:/project/out
     environment:
-      compress: no
+      compress: "false"
     command: bash --login build.sh
 `,
 

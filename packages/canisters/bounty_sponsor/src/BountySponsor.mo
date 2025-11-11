@@ -29,6 +29,47 @@ module {
     build_config : BuildConfig,
     _required_verifiers : Nat,
   ) : async Result.Result<{ bounty_ids : [Types.BountyId]; total_sponsored : Nat }, Text> {
+    // Check if there's already a pending operation for this WASM
+    switch (Map.get(state.pending_operations, Map.thash, wasm_id)) {
+      case (?true) {
+        return #err("Sponsoring operation already in progress for wasm_id " # wasm_id # ". Please wait for it to complete.");
+      };
+      case (_) {
+        // Set lock
+        Map.set(state.pending_operations, Map.thash, wasm_id, true);
+      };
+    };
+
+    // Ensure we clean up the lock when done
+    let result = await _sponsor_bounties_for_wasm_impl<system>(
+      state,
+      _canister_id,
+      wasm_id,
+      wasm_hash,
+      audit_types_to_sponsor,
+      repo,
+      commit_hash,
+      build_config,
+      _required_verifiers,
+    );
+
+    // Release lock
+    Map.delete(state.pending_operations, Map.thash, wasm_id);
+
+    return result;
+  };
+
+  func _sponsor_bounties_for_wasm_impl<system>(
+    state : Types.State,
+    _canister_id : Principal,
+    wasm_id : Types.WasmId,
+    wasm_hash : Blob,
+    audit_types_to_sponsor : [Text],
+    repo : Text,
+    commit_hash : Text,
+    build_config : BuildConfig,
+    _required_verifiers : Nat,
+  ) : async Result.Result<{ bounty_ids : [Types.BountyId]; total_sponsored : Nat }, Text> {
     // Validate we have audit types to sponsor
     if (audit_types_to_sponsor.size() == 0) {
       return #err("Must specify at least one audit type to sponsor");

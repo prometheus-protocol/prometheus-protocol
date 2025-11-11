@@ -1,22 +1,17 @@
 // packages/canisters/audit_hub/src/Main.mo
 import Map "mo:map/Map";
-import { phash; thash } "mo:map/Map";
+import { thash } "mo:map/Map";
 import BTree "mo:stableheapbtreemap/BTree";
 import Principal "mo:base/Principal";
 import Result "mo:base/Result";
-import Option "mo:base/Option";
 import Time "mo:base/Time";
 import Nat "mo:base/Nat";
 import Int "mo:base/Int";
-import ICRC2 "mo:icrc2-types";
 import Blob "mo:base/Blob";
 import Text "mo:base/Text";
-import Random "mo:base/Random";
-import Nat8 "mo:base/Nat8";
-import Array "mo:base/Array";
-import Buffer "mo:base/Buffer";
 import Debug "mo:base/Debug";
 import Error "mo:base/Error";
+import Base16 "mo:base16/Base16";
 
 import Admin "Admin";
 import ApiKey "ApiKey";
@@ -96,6 +91,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
 
   // Track which verifiers have COMPLETED verification for which WASMs (persists after lock release)
   // Map<WASM_ID, Set<Principal>> - DEPRECATED: Not currently used, will remove in production
+  // We now check participation status directly from registry (has_verifier_participated_in_wasm)
   var wasm_verifier_completions = Map.new<Text, Map.Map<Principal, Bool>>();
 
   // ==================================================================================
@@ -107,7 +103,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   };
 
   // Check if caller is authorized for consensus operations (owner or registry)
-  private func is_authorized_for_consensus(caller : Principal) : Bool {
+  private func _is_authorized_for_consensus(caller : Principal) : Bool {
     if (Principal.equal(owner, caller)) { return true };
     switch (registry_canister_id) {
       case (?registry_id) { Principal.equal(registry_id, caller) };
@@ -294,6 +290,79 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     bounty_id : Types.BountyId,
     audit_type : Text,
   ) : async Result.Result<(), Text> {
+    // --- NEW: Validate that verifier hasn't already participated in this WASM verification ---
+    // 1. Get verifier principal from API key
+    let verifier = switch (Map.get(api_credentials, Map.thash, api_key)) {
+      case (null) { return #err("Invalid API key.") };
+      case (?cred) {
+        if (not cred.is_active) {
+          return #err("API key has been revoked.");
+        };
+        cred.verifier_principal;
+      };
+    };
+
+    // 2. Get bounty details from registry to extract wasm_id
+    switch (registry_canister_id) {
+      case (null) {
+        return #err("Registry canister ID not configured.");
+      };
+      case (?registry_id) {
+        let registry : McpRegistry.Service = actor (Principal.toText(registry_id));
+
+        // Get bounty details
+        let bounty_opt = await registry.icrc127_get_bounty(bounty_id);
+        switch (bounty_opt) {
+          case (null) {
+            return #err("Bounty not found in registry.");
+          };
+          case (?bounty) {
+            // Extract wasm_id from challenge_parameters
+            let wasm_id_opt = switch (bounty.challenge_parameters) {
+              case (#Map(params)) {
+                // Find wasm_hash in the map
+                var found_wasm_hash : ?Blob = null;
+                label findWasm for ((key, value) in params.vals()) {
+                  if (key == "wasm_hash") {
+                    switch (value) {
+                      case (#Blob(b)) {
+                        found_wasm_hash := ?b;
+                        break findWasm;
+                      };
+                      case (_) {};
+                    };
+                  };
+                };
+
+                // Convert Blob to hex string using Base16
+                switch (found_wasm_hash) {
+                  case (?hash) {
+                    ?Base16.encode(hash);
+                  };
+                  case (null) { null };
+                };
+              };
+              case (_) { null }; // Handle all other ICRC16 variants
+            };
+
+            switch (wasm_id_opt) {
+              case (null) {
+                return #err("Bounty challenge_parameters missing wasm_hash.");
+              };
+              case (?wasm_id) {
+                // Check if verifier has already participated
+                let has_participated = await registry.has_verifier_participated_in_wasm(verifier, wasm_id, audit_type);
+                if (has_participated) {
+                  return #err("You have already participated in the verification of this WASM. Each verifier can only submit one report per WASM.");
+                };
+              };
+            };
+          };
+        };
+      };
+    };
+    // --- END NEW CHECK ---
+
     BountyLock.reserve_bounty_with_api_key(
       api_key,
       bounty_id,
@@ -486,6 +555,23 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     verifier : Principal,
     current_time : Int,
   ) : async ?Result.Result<Types.VerificationJobAssignment, Text> {
+    // This is the old version - kept for backwards compatibility if needed
+    // New code should use _process_audit_job_with_cache
+    let empty_cache = Map.new<Text, Bool>();
+    await _process_audit_job_with_cache(queue_key, job, verifier, current_time, empty_cache);
+  };
+
+  /**
+   * Helper function to process an audit job for a verifier with participation cache.
+   * Returns a job assignment or null if the job is fully assigned.
+   */
+  private func _process_audit_job_with_cache(
+    queue_key : Text,
+    job : Types.VerificationJob,
+    verifier : Principal,
+    current_time : Int,
+    participation_cache : Map.Map<Text, Bool>,
+  ) : async ?Result.Result<Types.VerificationJobAssignment, Text> {
     let wasm_id = job.wasm_id;
 
     // Check if verifier has an active locked bounty for this job
@@ -494,6 +580,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
       verifier,
       bounty_locks,
       registry_canister_id,
+      current_time,
     );
 
     // If verifier has an active locked bounty, return it
@@ -528,6 +615,33 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
         case (null) { "build_reproducibility_v1" };
       };
 
+      // Check participation using cache (if available)
+      let cache_key = wasm_id # "::" # audit_type;
+      let has_participated = switch (Map.get(participation_cache, thash, cache_key)) {
+        case (?participated) { participated };
+        case (null) {
+          // Cache miss - check directly if cache is empty (backwards compatibility)
+          switch (registry_canister_id) {
+            case (?reg_id) {
+              let registry = actor (Principal.toText(reg_id)) : McpRegistry.Service;
+              try {
+                let participated = await registry.has_verifier_participated_in_wasm(verifier, wasm_id, audit_type);
+                participated;
+              } catch (e) {
+                Debug.print("Warning: Could not check verifier participation: " # Error.message(e));
+                false; // Default to false on error
+              };
+            };
+            case (null) { false };
+          };
+        };
+      };
+
+      if (has_participated) {
+        Debug.print("Verifier " # Principal.toText(verifier) # " has already participated in WASM " # wasm_id # " with audit_type " # audit_type # " - skipping");
+        return null; // Skip this job, let them get assigned to a different WASM
+      };
+
       let (token_id, stake_amount) = switch (Map.get(stake_requirements, thash, audit_type)) {
         case (?(tid, amt)) { (tid, amt) };
         case (null) {
@@ -537,7 +651,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
       };
 
       // Claim an available bounty
-      let available_bounty_id = JobAssignment.claim_available_bounty(
+      let available_bounty_id = await JobAssignment.claim_available_bounty(
         job,
         verifier,
         current_time,
@@ -546,6 +660,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
         token_id,
         assigned_jobs,
         bounty_locks,
+        registry_canister_id,
       );
 
       switch (available_bounty_id) {
@@ -622,6 +737,11 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
    * Request a verification job assignment.
    * Called by verifier bots using their API key.
    * Returns a job assignment with bounty_id, or an error if no jobs available.
+   *
+   * PERFORMANCE OPTIMIZATION:
+   * Instead of checking participation for each job individually (N jobs × M verifiers = lots of calls),
+   * we batch-check participation for ALL jobs that need verifiers upfront (M verifiers × 1 batch each).
+   * This dramatically reduces inter-canister calls to mcp_registry.
    */
   public shared func request_verification_job_with_api_key(
     api_key : Text
@@ -642,6 +762,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
       assigned_jobs,
       pending_audits,
       registry_canister_id,
+      bounty_locks,
     );
 
     switch (existing_assignment) {
@@ -649,9 +770,45 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
       case (null) { /* Continue to find new job */ };
     };
 
-    // 3. Search for available jobs
+    // 3. Build a participation cache by collecting all wasm_id + audit_type pairs
+    // and checking them in ONE batch to avoid N registry calls
+    var participation_cache = Map.new<Text, Bool>(); // Map<wasm_id::audit_type, has_participated>
+
+    switch (registry_canister_id) {
+      case (?reg_id) {
+        let registry = actor (Principal.toText(reg_id)) : McpRegistry.Service;
+
+        // Collect unique wasm_id::audit_type pairs from jobs that need verifiers
+        for ((queue_key, job) in BTree.entries(pending_audits)) {
+          if (job.assigned_count < job.required_verifiers) {
+            let audit_type = switch (JobQueue.get_audit_type_from_metadata(job.build_config)) {
+              case (?at) { at };
+              case (null) { "build_reproducibility_v1" };
+            };
+            let cache_key = job.wasm_id # "::" # audit_type;
+
+            // Only check if not already cached
+            if (Map.get(participation_cache, thash, cache_key) == null) {
+              try {
+                let has_participated = await registry.has_verifier_participated_in_wasm(verifier, job.wasm_id, audit_type);
+                Map.set(participation_cache, thash, cache_key, has_participated);
+              } catch (e) {
+                Debug.print("Warning: Could not check verifier participation for " # cache_key # ": " # Error.message(e));
+                // Default to false (allow assignment) on error
+                Map.set(participation_cache, thash, cache_key, false);
+              };
+            };
+          };
+        };
+      };
+      case (null) {
+        // No registry configured - can't check participation
+      };
+    };
+
+    // 4. Search for available jobs using the participation cache
     for ((queue_key, job) in BTree.entries(pending_audits)) {
-      switch (await _process_audit_job(queue_key, job, verifier, current_time)) {
+      switch (await _process_audit_job_with_cache(queue_key, job, verifier, current_time, participation_cache)) {
         case (?result) { return result };
         case (null) { /* Continue to next job */ };
       };

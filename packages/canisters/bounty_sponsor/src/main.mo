@@ -10,14 +10,15 @@ import QueryMethods "./QueryMethods";
 
 shared ({ caller = deployer }) persistent actor class BountySponsorActor() = this {
   // State variables
-  stable var _owner = deployer;
-  stable var _registry_canister_id : ?Principal = null;
-  stable var _reward_token_canister_id : ?Principal = null;
-  stable var _audit_hub_canister_id : ?Principal = null;
+  var _owner = deployer;
+  var _registry_canister_id : ?Principal = null;
+  var _reward_token_canister_id : ?Principal = null;
+  var _audit_hub_canister_id : ?Principal = null;
   var _reward_amounts = Map.new<Text, Nat>();
   var _sponsored_bounties = Map.new<Types.BountyId, Types.SponsoredBountyInfo>();
   var _wasm_to_sponsored_bounties = BTree.init<Types.WasmId, [Types.BountyId]>(null);
-  stable var _required_verifiers : Nat = 9;
+  var _required_verifiers : Nat = 9;
+  var _pending_operations = Map.new<Types.WasmId, Bool>();
 
   // Create state object for modules
   let state : Types.State = {
@@ -29,6 +30,7 @@ shared ({ caller = deployer }) persistent actor class BountySponsorActor() = thi
     var sponsored_bounties = _sponsored_bounties;
     var wasm_to_sponsored_bounties = _wasm_to_sponsored_bounties;
     var required_verifiers = _required_verifiers;
+    var pending_operations = _pending_operations;
   };
 
   // --- Admin Functions ---

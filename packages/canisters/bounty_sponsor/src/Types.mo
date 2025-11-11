@@ -37,5 +37,6 @@ module {
     var sponsored_bounties : Map.Map<BountyId, SponsoredBountyInfo>;
     var wasm_to_sponsored_bounties : BTree.BTree<WasmId, [BountyId]>;
     var required_verifiers : Nat;
+    var pending_operations : Map.Map<WasmId, Bool>; // Lock to prevent concurrent sponsoring of same WASM
   };
 };

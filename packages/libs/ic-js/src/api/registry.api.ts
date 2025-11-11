@@ -678,7 +678,7 @@ export const downloadWasmByHash = async (
   const wasmMetadata = wasms[0];
   const namespace = wasmMetadata.canister_type_namespace;
   const version = wasmMetadata.version_number;
-  const totalChunks = Number(wasmMetadata.total_chunks);
+  const totalChunks = Number(wasmMetadata.chunkCount);
 
   console.log(
     `   📦 Downloading ${totalChunks} chunks from ${namespace} v${version.join('.')}...`,

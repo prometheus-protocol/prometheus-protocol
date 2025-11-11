@@ -608,6 +608,12 @@ importers:
 
   packages/canisters/auth_server: {}
 
+  packages/canisters/bounty_sponsor:
+    devDependencies:
+      '@dfinity/pic':
+        specifier: ^0.16.1
+        version: 0.16.1(@noble/curves@1.9.7)(@noble/hashes@1.8.0)
+
   packages/canisters/leaderboard:
     devDependencies:
       '@dfinity/pic':

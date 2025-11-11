@@ -848,6 +848,7 @@ export interface SubmitDivergenceArgs {
   bountyId: bigint;
   wasmId: string;
   reason: string;
+  auditType?: string;
 }
 
 /**
@@ -857,12 +858,16 @@ export interface SubmitDivergenceArgs {
  */
 export const submitDivergence = async (
   identity: Identity,
-  { bountyId, wasmId, reason }: SubmitDivergenceArgs,
+  { bountyId, wasmId, reason, auditType }: SubmitDivergenceArgs,
 ) => {
   const actor = getRegistryActor(identity);
 
-  // The canister requires the bounty_id in the metadata for authorization.
+  // The canister requires the bounty_id and audit_type in the metadata for authorization.
   const metadata: ICRC16Map = [['bounty_id', { Nat: bountyId }]];
+
+  if (auditType) {
+    metadata.push(['126:audit_type', { Text: auditType }]);
+  }
 
   const result = await actor.icrc126_file_divergence({
     wasm_id: wasmId,
@@ -888,11 +893,15 @@ export const submitDivergence = async (
  */
 export const submitDivergenceWithApiKey = async (
   apiKey: string,
-  { bountyId, wasmId, reason }: SubmitDivergenceArgs,
+  { bountyId, wasmId, reason, auditType }: SubmitDivergenceArgs,
 ) => {
   const actor = getRegistryActor();
 
   const metadata: ICRC16Map = [['bounty_id', { Nat: bountyId }]];
+
+  if (auditType) {
+    metadata.push(['126:audit_type', { Text: auditType }]);
+  }
 
   const result = await actor.icrc126_file_divergence_with_api_key(apiKey, {
     wasm_id: wasmId,
