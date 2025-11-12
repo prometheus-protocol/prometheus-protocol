@@ -21,17 +21,19 @@ export interface AuditHub {
     [string, string, string, ICRC16Map, bigint, Array<BountyId>],
     Result
   >,
-  'admin_add_bounties_to_job' : ActorMethod<[string, Array<bigint>], Result>,
+  'admin_add_bounties_to_job' : ActorMethod<
+    [string, string, Array<bigint>],
+    Result
+  >,
   'cleanup_expired_lock' : ActorMethod<[BountyId], Result>,
+  'debug_get_bounty' : ActorMethod<[bigint], string>,
   'deposit_stake' : ActorMethod<[TokenId, Balance], Result>,
   'generate_api_key' : ActorMethod<[], Result_3>,
-  'get_available_balance' : ActorMethod<[Principal, TokenId], Balance>,
   'get_available_balance_by_audit_type' : ActorMethod<
     [Principal, string],
     Balance
   >,
   'get_bounty_lock' : ActorMethod<[BountyId], [] | [BountyLock]>,
-  'get_bounty_sponsor_canister_id' : ActorMethod<[], [] | [Principal]>,
   'get_env_requirements' : ActorMethod<
     [],
     {
@@ -42,11 +44,6 @@ export interface AuditHub {
       }
   >,
   'get_owner' : ActorMethod<[], Principal>,
-  'get_payment_token_config' : ActorMethod<
-    [],
-    { 'decimals' : number, 'ledger_id' : [] | [Principal], 'symbol' : string }
-  >,
-  'get_registry_canister_id' : ActorMethod<[], [] | [Principal]>,
   'get_stake_requirement' : ActorMethod<[string], [] | [[TokenId, Balance]]>,
   'get_staked_balance' : ActorMethod<[Principal, TokenId], Balance>,
   'get_verifier_profile' : ActorMethod<[Principal, TokenId], VerifierProfile>,
@@ -58,7 +55,7 @@ export interface AuditHub {
   'list_api_keys' : ActorMethod<[], Array<ApiCredential>>,
   'list_assigned_jobs' : ActorMethod<[], Array<[BountyId, AssignedJob]>>,
   'list_pending_jobs' : ActorMethod<[], Array<[string, VerificationJob]>>,
-  'mark_verification_complete' : ActorMethod<[string], Result>,
+  'mark_verification_complete' : ActorMethod<[string, string], Result>,
   'release_job_assignment' : ActorMethod<[BountyId], Result>,
   'release_stake' : ActorMethod<[BountyId], Result>,
   'request_verification_job_with_api_key' : ActorMethod<[string], Result_2>,
@@ -69,13 +66,10 @@ export interface AuditHub {
   >,
   'revoke_api_key' : ActorMethod<[string], Result>,
   'set_bounty_sponsor_canister_id' : ActorMethod<[Principal], Result>,
-  'set_dashboard_canister_id' : ActorMethod<[Principal], Result>,
-  'set_payment_token_config' : ActorMethod<[Principal, string, number], Result>,
+  'set_owner' : ActorMethod<[Principal], Result>,
   'set_registry_canister_id' : ActorMethod<[Principal], Result>,
   'set_stake_requirement' : ActorMethod<[string, TokenId, Balance], Result>,
-  'set_usdc_ledger_id' : ActorMethod<[Principal], Result>,
   'slash_stake_for_incorrect_consensus' : ActorMethod<[BountyId], Result>,
-  'transfer_ownership' : ActorMethod<[Principal], Result>,
   'validate_api_key' : ActorMethod<[string], Result_1>,
   'withdraw_stake' : ActorMethod<[TokenId, Balance], Result>,
 }
@@ -101,17 +95,36 @@ export interface EnvDependency {
   'canister_name' : string,
   'current_value' : [] | [Principal],
 }
-export type ICRC16Map = Array<ICRC16Value>;
-export type ICRC16Value = [
-  string,
-  { 'Int' : bigint } |
-    { 'Map' : Array<ICRC16Value> } |
-    { 'Nat' : bigint } |
-    { 'Blob' : Uint8Array | number[] } |
-    { 'Bool' : boolean } |
-    { 'Text' : string } |
-    { 'Array' : Array<ICRC16Value> },
-];
+export type ICRC16 = { 'Int' : bigint } |
+  { 'Map' : Array<[string, ICRC16]> } |
+  { 'Nat' : bigint } |
+  { 'Set' : Array<ICRC16> } |
+  { 'Nat16' : number } |
+  { 'Nat32' : number } |
+  { 'Nat64' : bigint } |
+  { 'Blob' : Uint8Array | number[] } |
+  { 'Bool' : boolean } |
+  { 'Int8' : number } |
+  { 'Nat8' : number } |
+  { 'Nats' : Array<bigint> } |
+  { 'Text' : string } |
+  { 'Bytes' : Uint8Array | number[] } |
+  { 'Int16' : number } |
+  { 'Int32' : number } |
+  { 'Int64' : bigint } |
+  { 'Option' : [] | [ICRC16] } |
+  { 'Floats' : Array<number> } |
+  { 'Float' : number } |
+  { 'Principal' : Principal } |
+  { 'Array' : Array<ICRC16> } |
+  { 'ValueMap' : Array<[ICRC16, ICRC16]> } |
+  { 'Class' : Array<ICRC16Property> };
+export type ICRC16Map = Array<[string, ICRC16]>;
+export interface ICRC16Property {
+  'value' : ICRC16,
+  'name' : string,
+  'immutable' : boolean,
+}
 export type Result = { 'ok' : null } |
   { 'err' : string };
 export type Result_1 = { 'ok' : Principal } |
@@ -141,8 +154,6 @@ export interface VerificationJobAssignment {
   'expires_at' : Timestamp,
 }
 export interface VerifierProfile {
-  'staked_balance_usdc' : Balance,
-  'available_balance_usdc' : Balance,
   'reputation_score' : bigint,
   'total_verifications' : bigint,
   'total_earnings' : Balance,

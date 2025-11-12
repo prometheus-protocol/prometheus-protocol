@@ -215,9 +215,24 @@ async function pollAndVerifyWithJobQueue(): Promise<void> {
               `✅ Tools verified! Discovered ${toolsResult.tools.length} tools`,
             );
 
+            // Log feature checks
+            console.log(`\n📋 MCP Server Features:`);
+            console.log(
+              `   ${toolsResult.hasApiKeySystem ? '✅' : '❌'} API Key System (create_my_api_key, list_my_api_keys, revoke_my_api_key)`,
+            );
+            console.log(
+              `   ${toolsResult.hasOwnerSystem ? '✅' : '❌'} Owner System (get_owner, set_owner)`,
+            );
+            console.log(
+              `   ${toolsResult.hasWalletSystem ? '✅' : '❌'} Wallet System (get_treasury_balance, withdraw)`,
+            );
+
             const attestationData: AttestationData = {
               '126:audit_type': 'tools_v1',
               tools: toolsResult.tools,
+              hasApiKeySystem: toolsResult.hasApiKeySystem || false,
+              hasOwnerSystem: toolsResult.hasOwnerSystem || false,
+              hasWalletSystem: toolsResult.hasWalletSystem || false,
               verifier_version: '4.0.0', // Tools audit version
               build_timestamp: Date.now() * 1_000_000,
               git_commit: job.commit_hash,

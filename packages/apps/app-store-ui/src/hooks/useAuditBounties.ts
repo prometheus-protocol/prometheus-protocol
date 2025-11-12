@@ -6,7 +6,6 @@ import {
   AuditBounty,
   AuditBountyWithDetails,
   getAuditBounty,
-  getReputationBalance,
   getBounty,
   reserveBounty,
   AttestationData,
@@ -43,6 +42,35 @@ export const useGetAllAuditBounties = () => {
 };
 
 /**
+ * React Query hook to fetch bounties for a specific WASM ID.
+ * More efficient than fetching all bounties when you only need one WASM.
+ */
+export const useGetBountiesForWasm = (
+  wasmId: string | undefined,
+  auditType?: string,
+  options?: { refetchInterval?: number | false },
+) => {
+  return useQuery<AuditBounty[]>({
+    queryKey: ['auditBounties', 'wasm', wasmId, auditType],
+    queryFn: async () => {
+      if (!wasmId) return [];
+      const { getBountiesForWasm } = await import('@prometheus-protocol/ic-js');
+      const bounties = await getBountiesForWasm(wasmId);
+      // Filter by audit type if provided
+      if (auditType) {
+        return bounties.filter(
+          (b) => b.challengeParameters.audit_type === auditType,
+        );
+      }
+      return bounties;
+    },
+    enabled: !!wasmId,
+    refetchInterval: options?.refetchInterval,
+    staleTime: options?.refetchInterval ? 0 : undefined,
+  });
+};
+
+/**
  * React Query infinite hook to fetch paginated bounties.
  * This enables efficient infinite scrolling without fetching all bounties at once.
  */
@@ -70,6 +98,8 @@ export const useGetAuditBountiesInfinite = (
     },
     initialPageParam: undefined as number | undefined,
     refetchInterval: options?.refetchInterval,
+    staleTime: options?.refetchInterval ? 0 : undefined, // Force fresh data when polling
+    refetchOnMount: true,
   });
 };
 
@@ -91,27 +121,6 @@ export const useGetAuditBounty = (bountyId: number | undefined) => {
     },
     // The query should only execute when we have a valid bountyId.
     enabled: !!bountyId && !!identity,
-  });
-};
-
-export const useGetReputationBalance = (tokenId: string | undefined) => {
-  const { identity } = useInternetIdentity();
-  return useQuery<number>({
-    queryKey: [
-      'reputationBalance',
-      identity?.getPrincipal().toString(),
-      tokenId,
-    ],
-    queryFn: async (): Promise<number> => {
-      if (!identity || !tokenId) {
-        return 0;
-      }
-      const balance = await getReputationBalance(identity, tokenId);
-      return Number(balance) || 0;
-    },
-    enabled: !!identity && !!tokenId,
-    // Provide placeholder to prevent undefined issues
-    placeholderData: 0,
   });
 };
 

@@ -24,6 +24,9 @@ pnpm verifiers:up
 
 # 6. Verify configuration
 pnpm config:check
+
+# 7. (Optional) Release test app (auto-bumps version)
+pnpm release:test-app
 ```
 
 ### After Changes

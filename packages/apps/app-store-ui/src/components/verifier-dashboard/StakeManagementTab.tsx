@@ -10,6 +10,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Loader2, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -17,25 +24,91 @@ import {
   useDepositStake,
   useWithdrawStake,
   usePaymentToken,
+  useAvailableBalance,
+  useStakedBalance,
+  useStakeRequirement,
 } from '@/hooks/useVerifierDashboard';
 import { useGetTokenBalance } from '@/hooks/usePayment';
+import {
+  getAllAuditTypes,
+  getAuditTypeLabel,
+  getAuditTypeDescription,
+  type AuditType,
+  AUDIT_TYPES,
+} from '@prometheus-protocol/ic-js';
+import { DepositInstructions } from './DepositInstructions';
+import type { Token } from '@prometheus-protocol/ic-js';
+
+interface AuditTypeEligibilityRowProps {
+  auditType: AuditType;
+  paymentToken: Token;
+}
+
+function AuditTypeEligibilityRow({
+  auditType,
+  paymentToken,
+}: AuditTypeEligibilityRowProps) {
+  const { data: stakeRequirement, isLoading } = useStakeRequirement(auditType);
+
+  const stakeFormatted = stakeRequirement
+    ? paymentToken.fromAtomic(stakeRequirement)
+    : '—';
+
+  return (
+    <div className="flex justify-between items-center py-2 border-b last:border-0">
+      <div>
+        <div className="font-medium">{getAuditTypeLabel(auditType)}</div>
+        <div className="text-xs text-muted-foreground">
+          {getAuditTypeDescription(auditType)}
+        </div>
+      </div>
+      <div className="text-right">
+        {isLoading ? (
+          <Loader2 className="h-4 w-4 animate-spin inline" />
+        ) : (
+          <>
+            <div className="text-sm font-medium">
+              {stakeFormatted} {paymentToken.symbol}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Min. stake required
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function StakeManagementTab() {
   const { identity } = useInternetIdentity();
   const [depositAmount, setDepositAmount] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
 
-  // Fetch payment token (includes conversion utilities) and verifier profile
+  // Fetch payment token and verifier profile
   const { data: paymentToken, isLoading: tokenLoading } = usePaymentToken();
   const { data: profile, isLoading: profileLoading } = useVerifierProfile();
   const { data: walletBalance, isLoading: balanceLoading } =
     useGetTokenBalance(paymentToken);
 
-  const isLoading = tokenLoading || profileLoading || balanceLoading;
+  // Fetch available and staked balances
+  const { data: availableBalance, isLoading: availableBalanceLoading } =
+    useAvailableBalance();
+  const { data: stakedBalance, isLoading: stakedBalanceLoading } =
+    useStakedBalance(paymentToken?.canisterId.toText());
+
+  const isLoading =
+    tokenLoading ||
+    profileLoading ||
+    balanceLoading ||
+    availableBalanceLoading ||
+    stakedBalanceLoading;
 
   // Mutations
   const depositMutation = useDepositStake();
   const withdrawMutation = useWithdrawStake();
+
+  const auditTypes = getAllAuditTypes();
 
   const handleDeposit = () => {
     if (!paymentToken) return;
@@ -45,13 +118,15 @@ export function StakeManagementTab() {
       toast.error('Please enter a valid amount');
       return;
     }
-    // Use the token's toAtomic method for conversion
     const amountInSmallestUnits = paymentToken.toAtomic(amount);
     depositMutation.mutate(
-      { amount: amountInSmallestUnits },
+      {
+        amount: amountInSmallestUnits,
+        auditType: AUDIT_TYPES.BUILD_REPRODUCIBILITY_V1,
+      },
       {
         onSuccess: () => {
-          setDepositAmount(''); // Clear input on success
+          setDepositAmount('');
         },
       },
     );
@@ -65,13 +140,12 @@ export function StakeManagementTab() {
       toast.error('Please enter a valid amount');
       return;
     }
-    // Use the token's toAtomic method for conversion
     const amountInSmallestUnits = paymentToken.toAtomic(amount);
     withdrawMutation.mutate(
       { amount: amountInSmallestUnits },
       {
         onSuccess: () => {
-          setWithdrawAmount(''); // Clear input on success
+          setWithdrawAmount('');
         },
       },
     );
@@ -111,31 +185,32 @@ export function StakeManagementTab() {
     );
   }
 
-  // Use token's fromAtomic method for balance conversion
-  const availableBalance = profile
-    ? paymentToken.fromAtomic(profile.available_balance_usdc)
+  // Calculate balances
+  const availableBalanceFormatted = availableBalance
+    ? paymentToken.fromAtomic(availableBalance)
     : '0';
-  const stakedBalance = profile
-    ? paymentToken.fromAtomic(profile.staked_balance_usdc)
+  const stakedBalanceFormatted = stakedBalance
+    ? paymentToken.fromAtomic(stakedBalance)
     : '0';
   const accountTotal = (
-    parseFloat(availableBalance) + parseFloat(stakedBalance)
-  ).toString();
+    parseFloat(availableBalanceFormatted) + parseFloat(stakedBalanceFormatted)
+  ).toFixed(Math.min(paymentToken.decimals, 2));
   const totalBalance = walletBalance
     ? paymentToken.fromAtomic(walletBalance)
     : '0';
 
   // Calculate maximum withdrawable amount (available balance minus fee)
-  const fee = paymentToken
-    ? paymentToken.fromAtomic(BigInt(paymentToken.fee))
-    : '0';
+  const fee = paymentToken.fromAtomic(BigInt(paymentToken.fee));
   const maxWithdrawable = Math.max(
     0,
-    parseFloat(availableBalance) - parseFloat(fee),
-  ).toFixed(Math.min(paymentToken?.decimals ?? 6, 2));
+    parseFloat(availableBalanceFormatted) - parseFloat(fee),
+  ).toFixed(Math.min(paymentToken.decimals, 2));
 
   return (
     <div className="space-y-6">
+      {/* Deposit Instructions */}
+      <DepositInstructions />
+
       {/* Balance Overview */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
@@ -155,9 +230,11 @@ export function StakeManagementTab() {
             <CardTitle className="text-sm font-medium">Available</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{availableBalance}</div>
+            <div className="text-2xl font-bold">
+              {availableBalanceFormatted}
+            </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {availableBalance} / {accountTotal} in verifier account
+              {availableBalanceFormatted} / {accountTotal} in verifier account
             </p>
           </CardContent>
         </Card>
@@ -167,7 +244,7 @@ export function StakeManagementTab() {
             <CardTitle className="text-sm font-medium">Staked</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stakedBalance}</div>
+            <div className="text-2xl font-bold">{stakedBalanceFormatted}</div>
             <p className="text-xs text-muted-foreground mt-1">
               Locked in active bounties
             </p>
@@ -175,13 +252,36 @@ export function StakeManagementTab() {
         </Card>
       </div>
 
+      {/* Balances Per Audit Type */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Audit Type Eligibility</CardTitle>
+          <CardDescription>
+            Your available {paymentToken.symbol} balance can be used for any
+            audit type. Stake requirements vary by audit type - you must have
+            enough available balance to reserve bounties for that type.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {auditTypes.map((auditType) => {
+            return (
+              <AuditTypeEligibilityRow
+                key={auditType}
+                auditType={auditType}
+                paymentToken={paymentToken}
+              />
+            );
+          })}
+        </CardContent>
+      </Card>
+
       {/* Deposit Section */}
       <Card>
         <CardHeader>
           <CardTitle>Deposit Stake</CardTitle>
           <CardDescription>
-            Deposit {paymentToken.symbol} to your verifier account to reserve
-            bounties and earn rewards.
+            Deposit {paymentToken.symbol} to your verifier account. Your balance
+            can be used to reserve bounties for any audit type.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -192,7 +292,7 @@ export function StakeManagementTab() {
             <Input
               id="deposit-amount"
               type="number"
-              step={1 / 10 ** Math.min(paymentToken.decimals, 2)} // Step based on decimals, max 2
+              step={1 / 10 ** Math.min(paymentToken.decimals, 2)}
               placeholder="0.00"
               value={depositAmount}
               onChange={(e) => setDepositAmount(e.target.value)}
@@ -236,7 +336,7 @@ export function StakeManagementTab() {
               disabled={withdrawMutation.isPending}
             />
             <p className="text-xs text-muted-foreground">
-              Available: {availableBalance} {paymentToken.symbol} • Max
+              Available: {availableBalanceFormatted} {paymentToken.symbol} • Max
               withdrawable: {maxWithdrawable} {paymentToken.symbol} (after {fee}{' '}
               {paymentToken.symbol} fee)
             </p>

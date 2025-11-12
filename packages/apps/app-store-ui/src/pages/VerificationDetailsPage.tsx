@@ -1,6 +1,6 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { useGetAuditBountiesInfinite } from '@/hooks/useAuditBounties';
+import { useGetBountiesForWasm } from '@/hooks/useAuditBounties';
 import { useGetSingleWasmVerification } from '@/hooks/useWasmVerifications';
 import { VerificationDetailsSkeleton } from '@/components/audits/VerificationDetailsSkeleton';
 import { AuditHubError } from '@/components/audits/AuditHubError';
@@ -26,20 +26,15 @@ export default function VerificationDetailsPage() {
   const [searchParams] = useSearchParams();
   const auditType = searchParams.get('auditType') || 'build_reproducibility_v1';
 
-  // Fetch all bounties (no auto-refetch needed, verification query handles it)
+  // Fetch only bounties for this specific WASM and audit type
   const {
-    data,
+    data: allBounties = [],
     isLoading: isBountiesLoading,
     isError: isBountiesError,
     refetch,
-  } = useGetAuditBountiesInfinite(100);
-
-  const allBounties = useMemo(() => {
-    if (!data?.pages) return [];
-    return data.pages
-      .flatMap((page) => page)
-      .filter((bounty) => bounty.challengeParameters.audit_type === auditType);
-  }, [data, auditType]);
+  } = useGetBountiesForWasm(wasmId, auditType, {
+    refetchInterval: 10000, // Poll every 10 seconds
+  });
 
   // Get verification data for this specific WASM only
   const {
@@ -51,59 +46,38 @@ export default function VerificationDetailsPage() {
     auditType, // Pass audit type from URL params for stable cache key
   });
 
-  // If no verification data yet but bounties exist, create empty verification object
-  // This allows the page to render with 0 attestations/divergences
-  const displayVerification = verification || {
-    wasmId: wasmId!,
-    auditType: auditType || 'build_reproducibility_v1',
-    attestationCount: 0,
-    divergenceCount: 0,
-    verifierPrincipals: [],
-    attestationBountyIds: [],
-    divergenceBountyIds: [],
-    bounties: [],
-    status: 'pending' as const,
-    totalReward: 0n,
-  };
-
   // Fetch locks for all bounties in this verification
   const { data: locks } = useQuery({
     queryKey: ['bountyLocks', wasmId],
     queryFn: async () => {
       if (!verification) return new Map();
-      const lockPromises = displayVerification.bounties.map(async (bounty) => {
+      const lockPromises = verification.bounties.map(async (bounty) => {
         const lock = await getBountyLock(bounty.id);
         return [bounty.id.toString(), lock] as const;
       });
       const lockEntries = await Promise.all(lockPromises);
       return new Map(lockEntries);
     },
-    enabled: !!verification,
     refetchInterval: 10000,
   });
 
   // Count active verifiers: bounties that are locked OR claimed OR have completed work (attestation/divergence)
   const activeVerifiers = useMemo(() => {
     if (!verification || !locks) return 0;
-    return displayVerification.bounties.filter((bounty) => {
+    return verification.bounties.filter((bounty) => {
       const hasLock = !!locks.get(bounty.id.toString());
       const isClaimed = bounty.claimedTimestamp !== undefined;
       // Check if this bounty ID has filed an attestation or divergence
-      const hasAttestation = displayVerification.attestationBountyIds.some(
+      const hasAttestation = verification.attestationBountyIds.some(
         (id) => id === bounty.id,
       );
-      const hasDivergence = displayVerification.divergenceBountyIds.some(
+      const hasDivergence = verification.divergenceBountyIds.some(
         (id) => id === bounty.id,
       );
 
       return hasLock || isClaimed || hasAttestation || hasDivergence;
     }).length;
-  }, [
-    verification,
-    displayVerification.attestationBountyIds,
-    displayVerification.divergenceBountyIds,
-    locks,
-  ]);
+  }, [verification, locks]);
 
   // Show loading skeleton while either bounties are loading OR verification is loading
   const isLoading = isBountiesLoading || isVerificationLoading;
@@ -131,29 +105,29 @@ export default function VerificationDetailsPage() {
   }
 
   const leadingCount = Math.max(
-    displayVerification.attestationCount,
-    displayVerification.divergenceCount,
+    verification?.attestationCount || 0,
+    verification?.divergenceCount || 0,
   );
   const progressPercent = (leadingCount / CONSENSUS_THRESHOLD) * 100;
   const isAttestationLeading =
-    displayVerification.attestationCount >= displayVerification.divergenceCount;
+    (verification?.attestationCount || 0) >=
+    (verification?.divergenceCount || 0);
 
   // Determine title based on audit type
   const verificationTitle =
-    displayVerification.auditType === 'build_reproducibility_v1'
+    verification?.auditType === 'build_reproducibility_v1'
       ? 'Build Verification'
-      : displayVerification.auditType === 'tools_v1'
+      : verification?.auditType === 'tools_v1'
         ? 'MCP Tools Verification'
         : 'Verification';
 
   // Determine status config based on current state
   // Use dynamic leading side color until finalized, then use final status
   const isFinalized =
-    displayVerification.status === 'verified' ||
-    displayVerification.status === 'rejected';
+    verification?.status === 'verified' || verification?.status === 'rejected';
 
   const statusConfig = isFinalized
-    ? displayVerification.status === 'verified'
+    ? verification?.status === 'verified'
       ? {
           color: 'text-green-400',
           icon: <CheckCircle2 className="h-6 w-6 text-green-400" />,
@@ -171,8 +145,7 @@ export default function VerificationDetailsPage() {
             className={`h-6 w-6 ${isAttestationLeading ? 'text-green-400' : 'text-red-400'}`}
           />
         ),
-        label:
-          displayVerification.status === 'pending' ? 'Pending' : 'In Progress',
+        label: verification?.status === 'pending' ? 'Pending' : 'In Progress',
       };
 
   return (
@@ -203,7 +176,7 @@ export default function VerificationDetailsPage() {
           </span>
           <span className="text-gray-500">•</span>
           <span className="text-xl text-primary font-semibold">
-            {displayVerification.auditType}
+            {verification?.auditType || 'Unknown Audit Type'}
           </span>
         </div>
         <div className="font-mono text-sm text-gray-400 bg-gray-900/50 px-4 py-2 rounded-lg inline-block">
@@ -220,7 +193,7 @@ export default function VerificationDetailsPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           <div className="text-center">
             <div className="text-3xl font-bold text-green-400 mb-1">
-              {displayVerification.attestationCount}
+              {verification?.attestationCount || 0}
             </div>
             <div className="text-sm text-gray-400 uppercase">
               Successful Builds
@@ -228,7 +201,7 @@ export default function VerificationDetailsPage() {
           </div>
           <div className="text-center">
             <div className="text-3xl font-bold text-red-400 mb-1">
-              {displayVerification.divergenceCount}
+              {verification?.divergenceCount || 0}
             </div>
             <div className="text-sm text-gray-400 uppercase">
               Build Failures
@@ -250,8 +223,8 @@ export default function VerificationDetailsPage() {
               {leadingCount}/{CONSENSUS_THRESHOLD} votes needed for consensus
             </span>
             <span className="text-gray-400">
-              {displayVerification.attestationCount +
-                displayVerification.divergenceCount}
+              {(verification?.attestationCount || 0) +
+                (verification?.divergenceCount || 0)}
               /{TOTAL_VERIFIERS} verifiers participated
             </span>
           </div>
@@ -260,23 +233,23 @@ export default function VerificationDetailsPage() {
             <div
               className="absolute left-0 top-0 h-full bg-green-500 transition-all duration-300"
               style={{
-                width: `${(displayVerification.attestationCount / TOTAL_VERIFIERS) * 100}%`,
+                width: `${((verification?.attestationCount || 0) / TOTAL_VERIFIERS) * 100}%`,
               }}
             />
             {/* Red bar from right (divergences) */}
             <div
               className="absolute right-0 top-0 h-full bg-red-500 transition-all duration-300"
               style={{
-                width: `${(displayVerification.divergenceCount / TOTAL_VERIFIERS) * 100}%`,
+                width: `${((verification?.divergenceCount || 0) / TOTAL_VERIFIERS) * 100}%`,
               }}
             />
             {/* Center labels */}
             <div className="absolute inset-0 flex items-center justify-between px-3">
               <span className="text-xs font-semibold text-white mix-blend-difference">
-                {displayVerification.attestationCount} ✓
+                {verification?.attestationCount || 0} ✓
               </span>
               <span className="text-xs font-semibold text-white mix-blend-difference">
-                {displayVerification.divergenceCount} ✗
+                {verification?.divergenceCount || 0} ✗
               </span>
             </div>
           </div>
@@ -290,7 +263,7 @@ export default function VerificationDetailsPage() {
           <div>
             <div className="text-sm text-gray-400 mb-1">Total Reward Pool</div>
             <div className="flex items-center gap-2 text-3xl font-mono font-bold text-white">
-              ${Tokens.USDC.fromAtomic(displayVerification.totalReward)}
+              ${Tokens.USDC.fromAtomic(verification?.totalReward || 0n)}
               <Token className="h-8" />
             </div>
           </div>
@@ -299,7 +272,7 @@ export default function VerificationDetailsPage() {
             <div className="flex items-center justify-end gap-2 text-xl font-mono text-white">
               $
               {Tokens.USDC.fromAtomic(
-                displayVerification.totalReward / BigInt(TOTAL_VERIFIERS),
+                (verification?.totalReward || 0n) / BigInt(TOTAL_VERIFIERS),
               )}
               <Token className="h-6" />
             </div>
@@ -310,100 +283,112 @@ export default function VerificationDetailsPage() {
       {/* Individual Bounties */}
       <div className="bg-card/50 border border-gray-700 rounded-lg p-6">
         <h2 className="text-xl font-bold text-white mb-4">
-          Individual Bounties ({displayVerification.bounties.length})
+          Individual Bounties ({verification?.bounties.length || 0})
         </h2>
-        <div className="space-y-3">
-          {displayVerification.bounties.map((bounty) => {
-            const lock = locks?.get(bounty.id.toString());
-            const hasLock = !!lock;
-            const isClaimed = bounty.claimedTimestamp !== undefined;
-            // Check if work has been completed (attestation or divergence filed)
-            const hasAttestation =
-              displayVerification.attestationBountyIds.some(
+        {verification?.bounties.length === 0 ? (
+          <div className="text-center py-12 text-gray-500 flex flex-col items-center gap-4">
+            <Package className="h-12 w-12" />
+            <div>
+              <p className="font-semibold">No Bounties Available</p>
+              <p className="text-sm mt-1">
+                Bounties will appear here once they are created for this
+                verification.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {verification?.bounties.map((bounty) => {
+              const lock = locks?.get(bounty.id.toString());
+              const hasLock = !!lock;
+              const isClaimed = bounty.claimedTimestamp !== undefined;
+              // Check if work has been completed (attestation or divergence filed)
+              const hasAttestation = verification.attestationBountyIds.some(
                 (id) => id === bounty.id,
               );
-            const hasDivergence = displayVerification.divergenceBountyIds.some(
-              (id) => id === bounty.id,
-            );
-            const isCompleted = hasAttestation || hasDivergence;
+              const hasDivergence = verification.divergenceBountyIds.some(
+                (id) => id === bounty.id,
+              );
+              const isCompleted = hasAttestation || hasDivergence;
 
-            return (
-              <div
-                key={bounty.id.toString()}
-                className="bg-gray-900/50 border border-gray-700 rounded-lg p-4 hover:border-gray-600 transition-colors">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-mono text-sm text-gray-400 mb-1">
-                      Bounty #{bounty.id.toString()}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {isCompleted ? (
-                        <>
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2
-                              className={`h-4 w-4 ${hasAttestation ? 'text-green-400' : 'text-red-400'}`}
-                            />
-                            <span
-                              className={`font-semibold ${hasAttestation ? 'text-green-400' : 'text-red-400'}`}>
-                              {hasAttestation ? 'Verified' : 'Rejected'}
+              return (
+                <div
+                  key={bounty.id.toString()}
+                  className="bg-gray-900/50 border border-gray-700 rounded-lg p-4 hover:border-gray-600 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-mono text-sm text-gray-400 mb-1">
+                        Bounty #{bounty.id.toString()}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {isCompleted ? (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2
+                                className={`h-4 w-4 ${hasAttestation ? 'text-green-400' : 'text-red-400'}`}
+                              />
+                              <span
+                                className={`font-semibold ${hasAttestation ? 'text-green-400' : 'text-red-400'}`}>
+                                {hasAttestation ? 'Verified' : 'Rejected'}
+                              </span>
+                            </div>
+                          </>
+                        ) : isClaimed ? (
+                          <>
+                            <span className="font-semibold text-gray-400">
+                              Claimed
                             </span>
-                          </div>
-                        </>
-                      ) : isClaimed ? (
-                        <>
-                          <span className="font-semibold text-gray-400">
-                            Claimed
-                          </span>
-                          {bounty.claimedDate && (
+                            {bounty.claimedDate && (
+                              <span className="text-xs text-gray-500">
+                                {bounty.claimedDate.toLocaleDateString()}
+                              </span>
+                            )}
+                          </>
+                        ) : hasLock ? (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <Lock className="h-4 w-4 text-primary" />
+                              <span className="font-semibold text-primary">
+                                Locked
+                              </span>
+                            </div>
                             <span className="text-xs text-gray-500">
-                              {bounty.claimedDate.toLocaleDateString()}
+                              by {lock.claimant.toString().slice(0, 8)}...
                             </span>
-                          )}
-                        </>
-                      ) : hasLock ? (
-                        <>
-                          <div className="flex items-center gap-2">
-                            <Lock className="h-4 w-4 text-primary" />
-                            <span className="font-semibold text-primary">
-                              Locked
-                            </span>
-                          </div>
-                          <span className="text-xs text-gray-500">
-                            by {lock.claimant.toString().slice(0, 8)}...
+                          </>
+                        ) : (
+                          <span className="font-semibold text-green-400">
+                            Open
                           </span>
-                        </>
-                      ) : (
-                        <span className="font-semibold text-green-400">
-                          Open
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <div className="flex items-center gap-2 font-mono text-white">
-                        ${Tokens.USDC.fromAtomic(bounty.tokenAmount)}
-                        <Token className="h-5" />
+                        )}
                       </div>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      asChild
-                      className="hidden md:flex">
-                      <Link
-                        to={`/audit-hub/bounty/${bounty.id}`}
-                        className="flex items-center gap-2">
-                        Details
-                        <ExternalLink className="h-4 w-4" />
-                      </Link>
-                    </Button>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <div className="flex items-center gap-2 font-mono text-white">
+                          ${Tokens.USDC.fromAtomic(bounty.tokenAmount)}
+                          <Token className="h-5" />
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        asChild
+                        className="hidden md:flex">
+                        <Link
+                          to={`/audit-hub/bounty/${bounty.id}`}
+                          className="flex items-center gap-2">
+                          Details
+                          <ExternalLink className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

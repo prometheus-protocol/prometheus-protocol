@@ -64,20 +64,27 @@ async function getAuditHubBalances(
   ledgerId: string,
 ): Promise<{ available: number; staked: number }> {
   try {
-    const profileArgs = `(principal \"${principal}\", \"${ledgerId}\")`;
-    const result =
-      await $`dfx canister call ${auditHubId} get_verifier_profile ${profileArgs} --network ${NETWORK}`;
+    // Get available balance for build_reproducibility_v1 audit type
+    const availableArgs = `(principal \"${principal}\", \"build_reproducibility_v1\")`;
+    const availableResult =
+      await $`dfx canister call ${auditHubId} get_available_balance_by_audit_type ${availableArgs} --network ${NETWORK}`;
 
-    const availableMatch = result.stdout.match(
-      /available_balance_usdc = ([\d_]+)/,
-    );
-    const stakedMatch = result.stdout.match(/staked_balance_usdc = ([\d_]+)/);
+    const availableMatch = availableResult.stdout.match(/\((\d[_\d]*) : nat\)/);
+    const available = availableMatch
+      ? Number(availableMatch[1].replace(/_/g, ''))
+      : 0;
+
+    // Get staked balance for the token
+    const stakedArgs = `(principal \"${principal}\", \"${ledgerId}\")`;
+    const stakedResult =
+      await $`dfx canister call ${auditHubId} get_staked_balance ${stakedArgs} --network ${NETWORK}`;
+
+    const stakedMatch = stakedResult.stdout.match(/\((\d[_\d]*) : nat\)/);
+    const staked = stakedMatch ? Number(stakedMatch[1].replace(/_/g, '')) : 0;
 
     return {
-      available: availableMatch
-        ? Number(availableMatch[1].replace(/_/g, ''))
-        : 0,
-      staked: stakedMatch ? Number(stakedMatch[1].replace(/_/g, '')) : 0,
+      available,
+      staked,
     };
   } catch (error) {
     return { available: 0, staked: 0 };

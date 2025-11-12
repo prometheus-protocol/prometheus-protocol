@@ -57,18 +57,19 @@ export function ToolsAndResources({
                         <span>{count.toLocaleString()}</span>
                       </div>
                     )}
-                    {parseFloat(tool.cost) !== 0 && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-foreground font-mono font-semibold px-2 py-0.5 bg-accent rounded">
-                          {`${tool.cost} ${tool.tokenSymbol}`}
-                        </span>
-                      </div>
-                    )}
                   </div>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="pt-2 pb-4">
                 <p className="text-muted-foreground">{tool.description}</p>
+
+                {tool.cost && parseFloat(tool.cost) !== 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-foreground font-mono font-semibold px-2 py-0.5 bg-accent rounded">
+                      {`${tool.cost} ${tool.tokenSymbol}`}
+                    </span>
+                  </div>
+                )}
               </AccordionContent>
             </AccordionItem>
           );

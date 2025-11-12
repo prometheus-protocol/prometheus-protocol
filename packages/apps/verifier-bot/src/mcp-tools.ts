@@ -1,9 +1,11 @@
-import { PocketIc, PocketIcServer } from '@dfinity/pic';
+import { PocketIc, PocketIcServer, createIdentity } from '@dfinity/pic';
 import { IDL } from '@dfinity/candid';
 import { AnonymousIdentity } from '@dfinity/agent';
+import { Principal } from '@icp-sdk/core/principal';
 import { idlFactory as mcpServerIdlFactory } from '@prometheus-protocol/declarations/mcp_server/mcp_server.did.js';
 import type { _SERVICE as McpServerService } from '@prometheus-protocol/declarations/mcp_server/mcp_server.did.js';
 import type { Actor } from '@dfinity/pic';
+import { randomBytes } from 'node:crypto';
 
 export interface McpToolsResult {
   success: boolean;
@@ -12,6 +14,9 @@ export interface McpToolsResult {
     description?: string;
     inputSchema?: Record<string, unknown>;
   }>;
+  hasApiKeySystem?: boolean;
+  hasOwnerSystem?: boolean;
+  hasWalletSystem?: boolean;
   error?: string;
   duration: number;
 }
@@ -121,6 +126,94 @@ export async function verifyMcpTools(
       const toolsList = responseBody.result?.tools || [];
       console.log(`   ✅ Discovered ${toolsList.length} tools`);
 
+      // ===================================================================
+      // Check for API key system, owner system, and wallet system
+      // ===================================================================
+      console.log(`🔍 Checking for MCP server features...`);
+
+      // Since we successfully discovered tools with AnonymousIdentity,
+      // this is a public server. API key system is optional for public servers.
+      const isPublicServer = true;
+      console.log(`   ℹ️  Server is public (allows anonymous tool discovery)`);
+
+      // Check for API key system (optional for public servers)
+      let hasApiKeySystem = false;
+      try {
+        console.log(`   📋 Checking for API key methods...`);
+        const testIdentity = createIdentity('test-api-key-user');
+        serverActor.setIdentity(testIdentity);
+
+        // @ts-ignore - Method may not be in type definition but could exist on canister
+        const apiKey = await serverActor.create_my_api_key('test-key', []);
+        if (typeof apiKey === 'string' && apiKey.length > 0) {
+          console.log(
+            `   ✅ API key system verified (created test key: ${apiKey.substring(0, 10)}...)`,
+          );
+          hasApiKeySystem = true;
+        }
+      } catch (apiKeyError: any) {
+        const errorMsg = apiKeyError?.message || String(apiKeyError);
+        if (errorMsg.includes('has no update method')) {
+          console.log(
+            `   ℹ️  API key system not found (optional for public servers)`,
+          );
+        } else {
+          console.log(`   ⚠️  API key system check failed: ${errorMsg}`);
+        }
+      }
+
+      // Check for owner system
+      let hasOwnerSystem = false;
+      try {
+        console.log(`   👤 Checking for owner methods...`);
+        // @ts-ignore - Method may not be in type definition but could exist on canister
+        const owner = await serverActor.get_owner();
+        if (owner && typeof owner.toText === 'function') {
+          console.log(`   ✅ Owner system verified (owner: ${owner.toText()})`);
+          hasOwnerSystem = true;
+        }
+      } catch (ownerError: any) {
+        const errorMsg = ownerError?.message || String(ownerError);
+        if (errorMsg.includes('has no query method')) {
+          console.log(
+            `   ❌ Owner system not found: get_owner method does not exist`,
+          );
+        } else {
+          console.log(`   ⚠️  Owner system check failed: ${errorMsg}`);
+        }
+      }
+
+      // Check for wallet/treasury system
+      let hasWalletSystem = false;
+      try {
+        console.log(`   💰 Checking for wallet methods...`);
+        const dummyLedgerId = Principal.fromText('aaaaa-aa');
+        // @ts-ignore - Method may not be in type definition but could exist on canister
+        const balance = await serverActor.get_treasury_balance(dummyLedgerId);
+        if (typeof balance === 'bigint' || typeof balance === 'number') {
+          console.log(
+            `   ✅ Wallet system verified (treasury balance check returned: ${balance})`,
+          );
+          hasWalletSystem = true;
+        }
+      } catch (walletError: any) {
+        const errorMsg = walletError?.message || String(walletError);
+        if (errorMsg.includes('has no update method')) {
+          console.log(
+            `   ❌ Wallet system not found: get_treasury_balance method does not exist`,
+          );
+        } else {
+          console.log(`   ⚠️  Wallet system check failed: ${errorMsg}`);
+        }
+      }
+
+      // Check if all required systems are present
+      const missingSystems: string[] = [];
+      // API key system is only required for private servers
+      if (!isPublicServer && !hasApiKeySystem) missingSystems.push('API key system');
+      if (!hasOwnerSystem) missingSystems.push('owner system');
+      if (!hasWalletSystem) missingSystems.push('wallet system');
+
       // Clean up
       await pic.tearDown();
       if (picServer) {
@@ -128,6 +221,20 @@ export async function verifyMcpTools(
       }
 
       const duration = Math.floor((Date.now() - startTime) / 1000);
+
+      // If any required systems are missing, return failure
+      if (missingSystems.length > 0) {
+        const errorMsg = `Missing required systems: ${missingSystems.join(', ')}`;
+        console.log(`   ❌ ${errorMsg}`);
+        return {
+          success: false,
+          error: errorMsg,
+          hasApiKeySystem,
+          hasOwnerSystem,
+          hasWalletSystem,
+          duration,
+        };
+      }
 
       // Map tools to the format expected by attestation
       const tools = toolsList.map((tool: any) => ({
@@ -139,6 +246,9 @@ export async function verifyMcpTools(
       return {
         success: true,
         tools,
+        hasApiKeySystem,
+        hasOwnerSystem,
+        hasWalletSystem,
         duration,
       };
     } catch (error) {

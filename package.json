@@ -48,7 +48,8 @@
     "config:check": "zx ./scripts/configure-canisters.ts --check",
     "config:inject": "zx ./scripts/configure-canisters.ts --inject",
     "config:status": "zx ./scripts/configure-canisters.ts --status",
-    "sync:wasms": "tsx ./scripts/sync-historical-wasms.ts"
+    "sync:wasms": "tsx ./scripts/sync-historical-wasms.ts",
+    "release:test-app": "tsx ./scripts/release-test-app.ts"
   },
   "devDependencies": {
     "@anolilab/semantic-release-pnpm": "^2.0.3",

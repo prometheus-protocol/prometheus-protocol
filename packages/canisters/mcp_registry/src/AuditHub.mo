@@ -102,7 +102,6 @@ module AuditHub {
 
     // == PUBLIC QUERY & VERIFICATION METHODS ==
     is_bounty_ready_for_collection : query (bounty_id : BountyId, potential_claimant : Principal) -> async Bool;
-    get_available_balance : query (auditor : Principal, token_id : TokenId) -> async Balance;
     get_available_balance_by_audit_type : query (auditor : Principal, audit_type : Text) -> async Balance;
     get_staked_balance : query (auditor : Principal, token_id : TokenId) -> async Balance;
     get_bounty_lock : query (bounty_id : BountyId) -> async ?BountyLock;

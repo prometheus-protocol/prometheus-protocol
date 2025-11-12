@@ -479,7 +479,12 @@ export const getStakeRequirement = async (
 ): Promise<bigint | undefined> => {
   const auditHubActor = getAuditHubActor();
   const result = await auditHubActor.get_stake_requirement(audit_type);
-  return fromNullable(result);
+  const tuple = fromNullable(result);
+  // Result is [TokenId, Balance] tuple - we want the Balance (second element)
+  if (tuple && Array.isArray(tuple) && tuple.length === 2) {
+    return tuple[1];
+  }
+  return undefined;
 };
 
 export interface ReserveBountyArgs {
@@ -769,28 +774,9 @@ export const listBounties = async (
   }
 };
 
-/** Fetches the reputation token balance for the caller's identity.
- * @param identity The identity of the caller.
- * @param token_id The ID of the reputation token (e.g., "app_info_v1").
- * @returns The available balance of the specified reputation token.
- */
-export const getReputationBalance = async (
-  identity: Identity,
-  token_id: string,
-): Promise<bigint> => {
-  const auditHubActor = getAuditHubActor(identity);
-  const result = await auditHubActor.get_available_balance(
-    identity.getPrincipal(),
-    token_id,
-  );
-  return result;
-};
-
 // 1. Define the new, complete, and ergonomic interface.
 //    We use Maps for easy lookups in the frontend.
 export interface VerifierProfile {
-  available_balance_usdc: bigint;
-  staked_balance_usdc: bigint;
   total_verifications: bigint;
   reputation_score: bigint;
   total_earnings: bigint;
@@ -801,15 +787,6 @@ export interface PaymentTokenConfig {
   symbol: string;
   decimals: number;
 }
-
-/**
- * Fetches the payment token configuration from the Audit Hub.
- * Returns the token symbol, decimals, and ledger canister ID.
- */
-export const getPaymentTokenConfig = async (): Promise<PaymentTokenConfig> => {
-  const auditHubActor = getAuditHubActor();
-  return await auditHubActor.get_payment_token_config();
-};
 
 /**
  * Fetches the complete profile for the current user's principal from the Audit Hub.
@@ -828,6 +805,47 @@ export const getVerifierProfile = async (
   const profile = await auditHubActor.get_verifier_profile(principal, tokenId);
 
   return profile;
+};
+
+/**
+ * Fetches the available balance for a specific audit type.
+ *
+ * @param identity The user's identity.
+ * @param auditType The audit type (e.g., "build_reproducibility_v1", "tools_v1").
+ * @returns The available balance in atomic units.
+ */
+export const getAvailableBalanceByAuditType = async (
+  identity: Identity,
+  auditType: string,
+): Promise<bigint> => {
+  const auditHubActor = getAuditHubActor(identity);
+  const principal = identity.getPrincipal();
+
+  const balance = await auditHubActor.get_available_balance_by_audit_type(
+    principal,
+    auditType,
+  );
+
+  return balance;
+};
+
+/**
+ * Fetches the staked balance for a specific token.
+ *
+ * @param identity The user's identity.
+ * @param tokenId The token ID (ledger canister principal).
+ * @returns The staked balance in atomic units.
+ */
+export const getStakedBalance = async (
+  identity: Identity,
+  tokenId: string,
+): Promise<bigint> => {
+  const auditHubActor = getAuditHubActor(identity);
+  const principal = identity.getPrincipal();
+
+  const balance = await auditHubActor.get_staked_balance(principal, tokenId);
+
+  return balance;
 };
 
 /** Fetches a list of all pending verification requests from the registry.

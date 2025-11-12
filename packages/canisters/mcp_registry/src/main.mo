@@ -1654,384 +1654,381 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
                 };
               }; // End audit_type == "build_reproducibility_v1" check
             };
+          };
+        } else {
+          // WASM is finalized, but we need to track this late attestation for participation counting
+          // Add it to verification_progress even though it didn't affect the outcome
+          let latest_attestations = Option.get(
+            BTree.get(verification_progress, Text.compare, progress_key),
+            [],
+          );
+          let already_counted = Array.find<Nat>(latest_attestations, func(id) { id == bounty_id });
+          if (Option.isNull(already_counted)) {
+            let updated_attestations = Array.append(latest_attestations, [bounty_id]);
+            ignore BTree.insert(verification_progress, Text.compare, progress_key, updated_attestations);
+            Debug.print("   📊 Late attestation tracked. Total attestations: " # Nat.toText(updated_attestations.size()));
+          };
 
+          // Check if tools_v1 audit is now complete (in late attestation path)
+          let current_attestations = Option.get(
+            BTree.get(verification_progress, Text.compare, progress_key),
+            [],
+          );
+          if (audit_type == "tools_v1" and current_attestations.size() >= REQUIRED_VERIFIERS) {
+            Debug.print("🎉 tools_v1 audit complete (" # Nat.toText(current_attestations.size()) # "/" # Nat.toText(REQUIRED_VERIFIERS) # "). Marking job as complete.");
+            switch (_credentials_canister_id) {
+              case (?audit_hub_id) {
+                let auditHub : AuditHub.Service = actor (Principal.toText(audit_hub_id));
+                let mark_result = await auditHub.mark_verification_complete(req.wasm_id, audit_type);
+                Debug.print("   ✅ Job cleanup result: " # debug_show (mark_result));
+              };
+              case (null) {
+                Debug.print("⚠️ Cannot mark tools_v1 complete: audit_hub not configured");
+              };
+            };
+          };
+
+          // Check if all verifiers have now participated to trigger stake slashing
+          let latest_divergences = Option.get(
+            BTree.get(divergence_progress, Text.compare, progress_key),
+            [],
+          );
+          let total_participated = latest_attestations.size() + latest_divergences.size() + 1; // +1 for current submission
+
+          Debug.print("   📊 Total participated: " # Nat.toText(total_participated) # " of " # Nat.toText(REQUIRED_VERIFIERS));
+
+          if (total_participated >= REQUIRED_VERIFIERS) {
+            Debug.print("🎉 All " # Nat.toText(REQUIRED_VERIFIERS) # " verifiers have now participated! Processing stakes...");
+            // Get the outcome from finalization log
+            let finalization_record = BTree.get(finalization_log, Text.compare, req.wasm_id);
+            switch (finalization_record) {
+              case (?record) {
+                ignore await _handle_consensus_outcome(req.wasm_id, record.outcome, audit_type);
+              };
+              case (null) { /* Should not happen */ };
+            };
           };
         };
-      };
-    } else {
-      // WASM is finalized, but we need to track this late attestation for participation counting
-      // Add it to verification_progress even though it didn't affect the outcome
-      let latest_attestations = Option.get(
-        BTree.get(verification_progress, Text.compare, progress_key),
-        [],
-      );
-      let already_counted = Array.find<Nat>(latest_attestations, func(id) { id == bounty_id });
-      if (Option.isNull(already_counted)) {
-        let updated_attestations = Array.append(latest_attestations, [bounty_id]);
-        ignore BTree.insert(verification_progress, Text.compare, progress_key, updated_attestations);
-        Debug.print("   📊 Late attestation tracked. Total attestations: " # Nat.toText(updated_attestations.size()));
-      };
 
-      // Check if tools_v1 audit is now complete (in late attestation path)
-      let current_attestations = Option.get(
-        BTree.get(verification_progress, Text.compare, progress_key),
-        [],
-      );
-      if (audit_type == "tools_v1" and current_attestations.size() >= REQUIRED_VERIFIERS) {
-        Debug.print("🎉 tools_v1 audit complete (" # Nat.toText(current_attestations.size()) # "/" # Nat.toText(REQUIRED_VERIFIERS) # "). Marking job as complete.");
-        switch (_credentials_canister_id) {
-          case (?audit_hub_id) {
-            let auditHub : AuditHub.Service = actor (Principal.toText(audit_hub_id));
-            let mark_result = await auditHub.mark_verification_complete(req.wasm_id, audit_type);
-            Debug.print("   ✅ Job cleanup result: " # debug_show (mark_result));
-          };
-          case (null) {
-            Debug.print("⚠️ Cannot mark tools_v1 complete: audit_hub not configured");
-          };
-        };
-      };
-
-      // Check if all verifiers have now participated to trigger stake slashing
-      let latest_divergences = Option.get(
-        BTree.get(divergence_progress, Text.compare, progress_key),
-        [],
-      );
-      let total_participated = latest_attestations.size() + latest_divergences.size() + 1; // +1 for current submission
-
-      Debug.print("   📊 Total participated: " # Nat.toText(total_participated) # " of " # Nat.toText(REQUIRED_VERIFIERS));
-
-      if (total_participated >= REQUIRED_VERIFIERS) {
-        Debug.print("🎉 All " # Nat.toText(REQUIRED_VERIFIERS) # " verifiers have now participated! Processing stakes...");
-        // Get the outcome from finalization log
-        let finalization_record = BTree.get(finalization_log, Text.compare, req.wasm_id);
-        switch (finalization_record) {
-          case (?record) {
-            ignore await _handle_consensus_outcome(req.wasm_id, record.outcome, audit_type);
-          };
-          case (null) { /* Should not happen */ };
-        };
+        return result;
       };
     };
-
-    return result;
   };
-};
-};
 
-/**
+  /**
  * File a divergence report using an API key instead of caller identity.
  * This allows verifier bots to authenticate without managing identities.
  */
-public shared func icrc126_file_divergence_with_api_key(
-  api_key : Text,
-  req : ICRC126Service.DivergenceReportRequest,
-) : async ICRC126Service.DivergenceResult {
-  // 1. Validate API key with audit hub
-  switch (_credentials_canister_id) {
-    case (null) {
-      return #Error(#Generic("Audit Hub is not configured."));
-    };
-    case (?audit_hub_id) {
-      let auditHub : AuditHub.Service = actor (Principal.toText(audit_hub_id));
-
-      let validation_result = await auditHub.validate_api_key(api_key);
-      let verifier_principal = switch (validation_result) {
-        case (#err(msg)) {
-          return #Error(#Generic("Invalid API key: " # msg));
-        };
-        case (#ok(principal)) { principal };
+  public shared func icrc126_file_divergence_with_api_key(
+    api_key : Text,
+    req : ICRC126Service.DivergenceReportRequest,
+  ) : async ICRC126Service.DivergenceResult {
+    // 1. Validate API key with audit hub
+    switch (_credentials_canister_id) {
+      case (null) {
+        return #Error(#Generic("Audit Hub is not configured."));
       };
+      case (?audit_hub_id) {
+        let auditHub : AuditHub.Service = actor (Principal.toText(audit_hub_id));
 
-      // 2. Get bounty_id from metadata
-      let metadata = switch (req.metadata) { case null []; case (?m) m };
-      let bounty_id = switch (AuditHub.get_bounty_id_from_metadata(metadata)) {
-        case (null) {
-          return #Error(#Generic("Divergence metadata must include a 'bounty_id'."));
+        let validation_result = await auditHub.validate_api_key(api_key);
+        let verifier_principal = switch (validation_result) {
+          case (#err(msg)) {
+            return #Error(#Generic("Invalid API key: " # msg));
+          };
+          case (#ok(principal)) { principal };
         };
-        case (?id) { id };
-      };
 
-      // 2.5. Extract audit_type early
-      let audit_type = switch (AppStore.getICRC16TextOptional(metadata, "126:audit_type")) {
-        case (?t) { t };
-        case (null) {
-          return #Error(#Generic("Divergence metadata must include '126:audit_type'."));
+        // 2. Get bounty_id from metadata
+        let metadata = switch (req.metadata) { case null []; case (?m) m };
+        let bounty_id = switch (AuditHub.get_bounty_id_from_metadata(metadata)) {
+          case (null) {
+            return #Error(#Generic("Divergence metadata must include a 'bounty_id'."));
+          };
+          case (?id) { id };
         };
-      };
 
-      // Create composite key for progress tracking (wasm_id::audit_type)
-      let progress_key = _make_progress_key(req.wasm_id, audit_type);
-
-      // 3. Check if verifier has already participated (excluding current bounty)
-      let existing_attestations = Option.get(
-        BTree.get(verification_progress, Text.compare, progress_key),
-        [],
-      );
-      let existing_divergences = Option.get(
-        BTree.get(divergence_progress, Text.compare, progress_key),
-        [],
-      );
-
-      let all_recorded_bounties = Array.append(existing_attestations, existing_divergences);
-      for (recorded_bounty_id in all_recorded_bounties.vals()) {
-        // Skip checking the current bounty - verifier is allowed to file for their own reservation
-        if (recorded_bounty_id != bounty_id) {
-          let lock_opt = await auditHub.get_bounty_lock(recorded_bounty_id);
-          switch (lock_opt) {
-            case (?lock) {
-              if (Principal.equal(lock.claimant, verifier_principal)) {
-                return #Error(#Generic("You have already participated in the verification of this WASM. Each verifier can only submit one report per WASM."));
-              };
-            };
-            case (null) {};
+        // 2.5. Extract audit_type early
+        let audit_type = switch (AppStore.getICRC16TextOptional(metadata, "126:audit_type")) {
+          case (?t) { t };
+          case (null) {
+            return #Error(#Generic("Divergence metadata must include '126:audit_type'."));
           };
         };
-      };
 
-      // 3.5 CRITICAL: Check if this specific bounty has already SUCCESSFULLY filed attestation OR divergence
-      // This prevents race conditions where concurrent calls both pass the auditor check
-      // We check the actual ICRC126 storage, not just the progress tracking array
-      let bounty_in_attestations = Array.find<Nat>(existing_attestations, func(id) { id == bounty_id });
-      if (Option.isSome(bounty_in_attestations)) {
-        // Verify the attestation actually exists in ICRC126 storage
-        let state = icrc126().state;
-        let audit_records = Option.get(Map.get(state.audits, Map.thash, req.wasm_id), []);
-        let has_actual_attestation = Array.find<ICRC126.AuditRecord>(
-          audit_records,
-          func(record) {
-            switch (record) {
-              case (#Attestation(att)) {
-                let att_bounty_id = AuditHub.get_bounty_id_from_metadata(att.metadata);
-                Option.isSome(att_bounty_id) and att_bounty_id == ?bounty_id;
-              };
-              case (_) { false };
-            };
-          },
-        );
-        if (Option.isSome(has_actual_attestation)) {
-          return #Error(#Generic("This bounty has already filed an attestation for this WASM."));
-        } else {
-          Debug.print("   ⚠️  Bounty " # Nat.toText(bounty_id) # " in progress tracking but no actual attestation found - allowing retry");
-        };
-      };
-      let bounty_in_divergences = Array.find<Nat>(existing_divergences, func(id) { id == bounty_id });
-      if (Option.isSome(bounty_in_divergences)) {
-        // Verify the divergence actually exists in ICRC126 storage
-        let state = icrc126().state;
-        let audit_records = Option.get(Map.get(state.audits, Map.thash, req.wasm_id), []);
-        let has_actual_divergence = Array.find<ICRC126.AuditRecord>(
-          audit_records,
-          func(record) {
-            switch (record) {
-              case (#Divergence(div)) {
-                switch (div.metadata) {
-                  case (?meta) {
-                    let div_bounty_id = AuditHub.get_bounty_id_from_metadata(meta);
-                    Option.isSome(div_bounty_id) and div_bounty_id == ?bounty_id;
-                  };
-                  case (null) { false };
-                };
-              };
-              case (_) { false };
-            };
-          },
-        );
-        if (Option.isSome(has_actual_divergence)) {
-          return #Error(#Generic("This bounty has already filed a divergence for this WASM."));
-        } else {
-          Debug.print("   ⚠️  Bounty " # Nat.toText(bounty_id) # " in divergence tracking but no actual divergence found - allowing retry");
-        };
-      };
+        // Create composite key for progress tracking (wasm_id::audit_type)
+        let progress_key = _make_progress_key(req.wasm_id, audit_type);
 
-      // 4. Check authorization
-      Debug.print("🔐 [mcp_registry] Checking authorization for API key divergence:");
-      Debug.print("   bounty_id: " # debug_show (bounty_id));
-      Debug.print("   verifier_principal: " # debug_show (verifier_principal));
-      Debug.print("   wasm_id: " # req.wasm_id);
-
-      let is_authorized = await auditHub.is_bounty_ready_for_collection(bounty_id, verifier_principal);
-
-      Debug.print("   is_authorized result: " # debug_show (is_authorized));
-
-      if (not is_authorized) {
-        Debug.print("   ❌ Authorization failed - returning error");
-        return #Error(#Generic("Unauthorized: Caller is not the authorized claimant for this bounty."));
-      };
-
-      Debug.print("   ✅ Authorization successful - proceeding with divergence report");
-
-      // 5. CRITICAL: Check verifier hasn't already filed BEFORE any further async calls
-      switch (_check_auditor_has_not_filed(req.wasm_id, verifier_principal, audit_type)) {
-        case (#Error(err)) {
-          Debug.print("   🚫 Mutual exclusion check failed: " # err);
-          return #Error(#Generic(err));
-        };
-        case (#Ok) {
-          Debug.print("   ✅ Mutual exclusion check passed");
-        };
-      };
-
-      // 6. Check if WASM has already been finalized
-      // NOTE: We still allow divergences after finalization so verifiers can complete
-      // their work and unlock their stakes. We just don't count them toward consensus.
-      let is_finalized = Option.isSome(BTree.get(finalization_log, Text.compare, req.wasm_id));
-      if (is_finalized) {
-        Debug.print("   ℹ️  WASM " # req.wasm_id # " already finalized - accepting divergence but not counting toward consensus");
-      };
-
-      // 7. File the divergence with the verifier principal
-      let result = await icrc126().icrc126_file_divergence(verifier_principal, req);
-
-      Debug.print("   📝 icrc126_file_divergence result: " # debug_show (result));
-
-      // 8. Only track progress if divergence was successfully recorded
-      switch (result) {
-        case (#Error(e)) {
-          Debug.print("   ❌ Failed to record divergence in ICRC126: " # debug_show (e));
-          return result; // Return error early, don't track progress
-        };
-        case (#Ok(_)) {
-          Debug.print("   ✅ Divergence successfully recorded in ICRC126");
-        };
-      };
-
-      // 8.5. IMMEDIATELY pay bounty (reward for doing the work)
-      // NOTE: We do NOT release the stake yet - that waits for consensus outcome
-      Debug.print("💰 Immediately paying bounty " # Nat.toText(bounty_id) # " (stake remains locked)");
-
-      // Trigger the bounty payout through ICRC-127
-      let submission_req : ICRC127Service.BountySubmissionRequest = {
-        bounty_id = bounty_id;
-        submission = #Text("Divergence report filed successfully");
-        account = ?{ owner = verifier_principal; subaccount = null };
-      };
-
-      let payout_result = await icrc127().icrc127_submit_bounty(verifier_principal, submission_req);
-      switch (payout_result) {
-        case (#Ok(_)) {
-          Debug.print("   ✅ Bounty payout completed for bounty " # Nat.toText(bounty_id));
-        };
-        case (#Error(e)) {
-          Debug.print("   ⚠️  Error paying bounty " # Nat.toText(bounty_id) # ": " # debug_show (e));
-          // Continue anyway - we've recorded the divergence
-        };
-      };
-
-      // 9. Track progress and check for consensus (only if not already finalized)
-      if (not is_finalized) {
-        // Re-read existing divergences AFTER await to get latest state
-        let latest_divergences = Option.get(
-          BTree.get(divergence_progress, Text.compare, progress_key),
-          [],
-        );
-
-        let already_counted = Array.find<Nat>(latest_divergences, func(id) { id == bounty_id });
-        if (Option.isNull(already_counted)) {
-          let updated_divergences = Array.append(latest_divergences, [bounty_id]);
-          ignore BTree.insert(divergence_progress, Text.compare, progress_key, updated_divergences);
-
-          Debug.print(
-            "WASM " # req.wasm_id # " now has " #
-            Nat.toText(updated_divergences.size()) # " of " #
-            Nat.toText(REQUIRED_VERIFIERS) # " divergence reports"
-          );
-
-          if (updated_divergences.size() >= MAJORITY_THRESHOLD) {
-            Debug.print("Majority divergence consensus reached! Finalizing WASM " # req.wasm_id # " as Rejected");
-            let finalization_meta : ICRC126.ICRC16Map = [
-              ("auditor", #Principal(verifier_principal)),
-              ("bounty_id", #Nat(bounty_id)),
-              ("total_divergences", #Nat(updated_divergences.size())),
-              ("reason", #Text(req.divergence_report)),
-              ("rejection_method", #Text("majority_consensus_5_of_9_divergence")),
-            ];
-            let _ = await _finalize_verification(req.wasm_id, #Rejected, finalization_meta);
-          };
-        };
-      } else {
-        // WASM is finalized, but we need to track this late divergence for participation counting
-        // Add it to divergence_progress even though it didn't affect the outcome
-        let latest_divergences = Option.get(
-          BTree.get(divergence_progress, Text.compare, progress_key),
-          [],
-        );
-        let already_counted = Array.find<Nat>(latest_divergences, func(id) { id == bounty_id });
-        if (Option.isNull(already_counted)) {
-          let updated_divergences = Array.append(latest_divergences, [bounty_id]);
-          ignore BTree.insert(divergence_progress, Text.compare, progress_key, updated_divergences);
-          Debug.print("   📊 Late divergence tracked. Total divergences: " # Nat.toText(updated_divergences.size()));
-        };
-
-        // Check if all verifiers have now participated to trigger stake slashing
-        let latest_attestations = Option.get(
+        // 3. Check if verifier has already participated (excluding current bounty)
+        let existing_attestations = Option.get(
           BTree.get(verification_progress, Text.compare, progress_key),
           [],
         );
-        let total_participated = latest_attestations.size() + latest_divergences.size() + 1; // +1 for current submission
+        let existing_divergences = Option.get(
+          BTree.get(divergence_progress, Text.compare, progress_key),
+          [],
+        );
 
-        Debug.print("   📊 Total participated: " # Nat.toText(total_participated) # " of " # Nat.toText(REQUIRED_VERIFIERS));
-
-        if (total_participated >= REQUIRED_VERIFIERS) {
-          Debug.print("🎉 All " # Nat.toText(REQUIRED_VERIFIERS) # " verifiers have now participated! Processing stakes...");
-          // Get the outcome from finalization log
-          let finalization_record = BTree.get(finalization_log, Text.compare, req.wasm_id);
-          switch (finalization_record) {
-            case (?record) {
-              ignore await _handle_consensus_outcome(req.wasm_id, record.outcome, audit_type);
+        let all_recorded_bounties = Array.append(existing_attestations, existing_divergences);
+        for (recorded_bounty_id in all_recorded_bounties.vals()) {
+          // Skip checking the current bounty - verifier is allowed to file for their own reservation
+          if (recorded_bounty_id != bounty_id) {
+            let lock_opt = await auditHub.get_bounty_lock(recorded_bounty_id);
+            switch (lock_opt) {
+              case (?lock) {
+                if (Principal.equal(lock.claimant, verifier_principal)) {
+                  return #Error(#Generic("You have already participated in the verification of this WASM. Each verifier can only submit one report per WASM."));
+                };
+              };
+              case (null) {};
             };
-            case (null) { /* Should not happen */ };
           };
         };
-      };
 
-      return result;
+        // 3.5 CRITICAL: Check if this specific bounty has already SUCCESSFULLY filed attestation OR divergence
+        // This prevents race conditions where concurrent calls both pass the auditor check
+        // We check the actual ICRC126 storage, not just the progress tracking array
+        let bounty_in_attestations = Array.find<Nat>(existing_attestations, func(id) { id == bounty_id });
+        if (Option.isSome(bounty_in_attestations)) {
+          // Verify the attestation actually exists in ICRC126 storage
+          let state = icrc126().state;
+          let audit_records = Option.get(Map.get(state.audits, Map.thash, req.wasm_id), []);
+          let has_actual_attestation = Array.find<ICRC126.AuditRecord>(
+            audit_records,
+            func(record) {
+              switch (record) {
+                case (#Attestation(att)) {
+                  let att_bounty_id = AuditHub.get_bounty_id_from_metadata(att.metadata);
+                  Option.isSome(att_bounty_id) and att_bounty_id == ?bounty_id;
+                };
+                case (_) { false };
+              };
+            },
+          );
+          if (Option.isSome(has_actual_attestation)) {
+            return #Error(#Generic("This bounty has already filed an attestation for this WASM."));
+          } else {
+            Debug.print("   ⚠️  Bounty " # Nat.toText(bounty_id) # " in progress tracking but no actual attestation found - allowing retry");
+          };
+        };
+        let bounty_in_divergences = Array.find<Nat>(existing_divergences, func(id) { id == bounty_id });
+        if (Option.isSome(bounty_in_divergences)) {
+          // Verify the divergence actually exists in ICRC126 storage
+          let state = icrc126().state;
+          let audit_records = Option.get(Map.get(state.audits, Map.thash, req.wasm_id), []);
+          let has_actual_divergence = Array.find<ICRC126.AuditRecord>(
+            audit_records,
+            func(record) {
+              switch (record) {
+                case (#Divergence(div)) {
+                  switch (div.metadata) {
+                    case (?meta) {
+                      let div_bounty_id = AuditHub.get_bounty_id_from_metadata(meta);
+                      Option.isSome(div_bounty_id) and div_bounty_id == ?bounty_id;
+                    };
+                    case (null) { false };
+                  };
+                };
+                case (_) { false };
+              };
+            },
+          );
+          if (Option.isSome(has_actual_divergence)) {
+            return #Error(#Generic("This bounty has already filed a divergence for this WASM."));
+          } else {
+            Debug.print("   ⚠️  Bounty " # Nat.toText(bounty_id) # " in divergence tracking but no actual divergence found - allowing retry");
+          };
+        };
+
+        // 4. Check authorization
+        Debug.print("🔐 [mcp_registry] Checking authorization for API key divergence:");
+        Debug.print("   bounty_id: " # debug_show (bounty_id));
+        Debug.print("   verifier_principal: " # debug_show (verifier_principal));
+        Debug.print("   wasm_id: " # req.wasm_id);
+
+        let is_authorized = await auditHub.is_bounty_ready_for_collection(bounty_id, verifier_principal);
+
+        Debug.print("   is_authorized result: " # debug_show (is_authorized));
+
+        if (not is_authorized) {
+          Debug.print("   ❌ Authorization failed - returning error");
+          return #Error(#Generic("Unauthorized: Caller is not the authorized claimant for this bounty."));
+        };
+
+        Debug.print("   ✅ Authorization successful - proceeding with divergence report");
+
+        // 5. CRITICAL: Check verifier hasn't already filed BEFORE any further async calls
+        switch (_check_auditor_has_not_filed(req.wasm_id, verifier_principal, audit_type)) {
+          case (#Error(err)) {
+            Debug.print("   🚫 Mutual exclusion check failed: " # err);
+            return #Error(#Generic(err));
+          };
+          case (#Ok) {
+            Debug.print("   ✅ Mutual exclusion check passed");
+          };
+        };
+
+        // 6. Check if WASM has already been finalized
+        // NOTE: We still allow divergences after finalization so verifiers can complete
+        // their work and unlock their stakes. We just don't count them toward consensus.
+        let is_finalized = Option.isSome(BTree.get(finalization_log, Text.compare, req.wasm_id));
+        if (is_finalized) {
+          Debug.print("   ℹ️  WASM " # req.wasm_id # " already finalized - accepting divergence but not counting toward consensus");
+        };
+
+        // 7. File the divergence with the verifier principal
+        let result = await icrc126().icrc126_file_divergence(verifier_principal, req);
+
+        Debug.print("   📝 icrc126_file_divergence result: " # debug_show (result));
+
+        // 8. Only track progress if divergence was successfully recorded
+        switch (result) {
+          case (#Error(e)) {
+            Debug.print("   ❌ Failed to record divergence in ICRC126: " # debug_show (e));
+            return result; // Return error early, don't track progress
+          };
+          case (#Ok(_)) {
+            Debug.print("   ✅ Divergence successfully recorded in ICRC126");
+          };
+        };
+
+        // 8.5. IMMEDIATELY pay bounty (reward for doing the work)
+        // NOTE: We do NOT release the stake yet - that waits for consensus outcome
+        Debug.print("💰 Immediately paying bounty " # Nat.toText(bounty_id) # " (stake remains locked)");
+
+        // Trigger the bounty payout through ICRC-127
+        let submission_req : ICRC127Service.BountySubmissionRequest = {
+          bounty_id = bounty_id;
+          submission = #Text("Divergence report filed successfully");
+          account = ?{ owner = verifier_principal; subaccount = null };
+        };
+
+        let payout_result = await icrc127().icrc127_submit_bounty(verifier_principal, submission_req);
+        switch (payout_result) {
+          case (#Ok(_)) {
+            Debug.print("   ✅ Bounty payout completed for bounty " # Nat.toText(bounty_id));
+          };
+          case (#Error(e)) {
+            Debug.print("   ⚠️  Error paying bounty " # Nat.toText(bounty_id) # ": " # debug_show (e));
+            // Continue anyway - we've recorded the divergence
+          };
+        };
+
+        // 9. Track progress and check for consensus (only if not already finalized)
+        if (not is_finalized) {
+          // Re-read existing divergences AFTER await to get latest state
+          let latest_divergences = Option.get(
+            BTree.get(divergence_progress, Text.compare, progress_key),
+            [],
+          );
+
+          let already_counted = Array.find<Nat>(latest_divergences, func(id) { id == bounty_id });
+          if (Option.isNull(already_counted)) {
+            let updated_divergences = Array.append(latest_divergences, [bounty_id]);
+            ignore BTree.insert(divergence_progress, Text.compare, progress_key, updated_divergences);
+
+            Debug.print(
+              "WASM " # req.wasm_id # " now has " #
+              Nat.toText(updated_divergences.size()) # " of " #
+              Nat.toText(REQUIRED_VERIFIERS) # " divergence reports"
+            );
+
+            if (updated_divergences.size() >= MAJORITY_THRESHOLD) {
+              Debug.print("Majority divergence consensus reached! Finalizing WASM " # req.wasm_id # " as Rejected");
+              let finalization_meta : ICRC126.ICRC16Map = [
+                ("auditor", #Principal(verifier_principal)),
+                ("bounty_id", #Nat(bounty_id)),
+                ("total_divergences", #Nat(updated_divergences.size())),
+                ("reason", #Text(req.divergence_report)),
+                ("rejection_method", #Text("majority_consensus_5_of_9_divergence")),
+              ];
+              let _ = await _finalize_verification(req.wasm_id, #Rejected, finalization_meta);
+            };
+          };
+        } else {
+          // WASM is finalized, but we need to track this late divergence for participation counting
+          // Add it to divergence_progress even though it didn't affect the outcome
+          let latest_divergences = Option.get(
+            BTree.get(divergence_progress, Text.compare, progress_key),
+            [],
+          );
+          let already_counted = Array.find<Nat>(latest_divergences, func(id) { id == bounty_id });
+          if (Option.isNull(already_counted)) {
+            let updated_divergences = Array.append(latest_divergences, [bounty_id]);
+            ignore BTree.insert(divergence_progress, Text.compare, progress_key, updated_divergences);
+            Debug.print("   📊 Late divergence tracked. Total divergences: " # Nat.toText(updated_divergences.size()));
+          };
+
+          // Check if all verifiers have now participated to trigger stake slashing
+          let latest_attestations = Option.get(
+            BTree.get(verification_progress, Text.compare, progress_key),
+            [],
+          );
+          let total_participated = latest_attestations.size() + latest_divergences.size() + 1; // +1 for current submission
+
+          Debug.print("   📊 Total participated: " # Nat.toText(total_participated) # " of " # Nat.toText(REQUIRED_VERIFIERS));
+
+          if (total_participated >= REQUIRED_VERIFIERS) {
+            Debug.print("🎉 All " # Nat.toText(REQUIRED_VERIFIERS) # " verifiers have now participated! Processing stakes...");
+            // Get the outcome from finalization log
+            let finalization_record = BTree.get(finalization_log, Text.compare, req.wasm_id);
+            switch (finalization_record) {
+              case (?record) {
+                ignore await _handle_consensus_outcome(req.wasm_id, record.outcome, audit_type);
+              };
+              case (null) { /* Should not happen */ };
+            };
+          };
+        };
+
+        return result;
+      };
     };
   };
-};
 
-// --- Debug / Query helpers -------------------------------------------------
-// Expose the recorded attestations and divergences for a given WASM so we can
-// verify that attestations were actually recorded. These are read-only helper
-// methods intended for debugging and tests.
-public query func get_verification_progress(wasm_id : Text, audit_type : Text) : async [Nat] {
-  let progress_key = _make_progress_key(wasm_id, audit_type);
-  let arr = Option.get(BTree.get(verification_progress, Text.compare, progress_key), []);
-  Debug.print("Query get_verification_progress for " # progress_key # " -> " # debug_show (arr));
-  arr;
-};
+  // --- Debug / Query helpers -------------------------------------------------
+  // Expose the recorded attestations and divergences for a given WASM so we can
+  // verify that attestations were actually recorded. These are read-only helper
+  // methods intended for debugging and tests.
+  public query func get_verification_progress(wasm_id : Text, audit_type : Text) : async [Nat] {
+    let progress_key = _make_progress_key(wasm_id, audit_type);
+    let arr = Option.get(BTree.get(verification_progress, Text.compare, progress_key), []);
+    Debug.print("Query get_verification_progress for " # progress_key # " -> " # debug_show (arr));
+    arr;
+  };
 
-public query func get_divergence_progress(wasm_id : Text, audit_type : Text) : async [Nat] {
-  let progress_key = _make_progress_key(wasm_id, audit_type);
-  let arr = Option.get(BTree.get(divergence_progress, Text.compare, progress_key), []);
-  Debug.print("Query get_divergence_progress for " # progress_key # " -> " # debug_show (arr));
-  arr;
-};
+  public query func get_divergence_progress(wasm_id : Text, audit_type : Text) : async [Nat] {
+    let progress_key = _make_progress_key(wasm_id, audit_type);
+    let arr = Option.get(BTree.get(divergence_progress, Text.compare, progress_key), []);
+    Debug.print("Query get_divergence_progress for " # progress_key # " -> " # debug_show (arr));
+    arr;
+  };
 
-/**
+  /**
    * Check if a specific bounty has already filed an attestation by checking ICRC126 storage directly.
    * This is the source of truth, not the progress tracking arrays.
    */
-public query func has_bounty_filed_attestation(wasm_id : Text, bounty_id : Nat) : async Bool {
-  let state = icrc126().state;
-  let audit_records = Option.get(Map.get(state.audits, Map.thash, wasm_id), []);
+  public query func has_bounty_filed_attestation(wasm_id : Text, bounty_id : Nat) : async Bool {
+    let state = icrc126().state;
+    let audit_records = Option.get(Map.get(state.audits, Map.thash, wasm_id), []);
 
-  let has_attestation = Array.find<ICRC126.AuditRecord>(
-    audit_records,
-    func(record) {
-      switch (record) {
-        case (#Attestation(att)) {
-          let att_bounty_id = AuditHub.get_bounty_id_from_metadata(att.metadata);
-          Option.isSome(att_bounty_id) and att_bounty_id == ?bounty_id;
+    let has_attestation = Array.find<ICRC126.AuditRecord>(
+      audit_records,
+      func(record) {
+        switch (record) {
+          case (#Attestation(att)) {
+            let att_bounty_id = AuditHub.get_bounty_id_from_metadata(att.metadata);
+            Option.isSome(att_bounty_id) and att_bounty_id == ?bounty_id;
+          };
+          case (_) { false };
         };
-        case (_) { false };
-      };
-    },
-  );
+      },
+    );
 
-  Option.isSome(has_attestation);
-};
+    Option.isSome(has_attestation);
+  };
 
-/**
+  /**
    * Check if a verifier has already participated in the verification of a specific WASM.
    * This prevents a verifier from being assigned to multiple bounties for the same WASM.
    * Used by audit_hub during bounty reservation to enforce mutual exclusion.
@@ -2041,519 +2038,519 @@ public query func has_bounty_filed_attestation(wasm_id : Text, bounty_id : Nat) 
    * @param audit_type - The audit type (e.g., "tools_v1", "build_reproducibility_v1")
    * @returns true if verifier has filed any audit (attestation or divergence) for this WASM+audit_type
    */
-public query func has_verifier_participated_in_wasm(
-  verifier : Principal,
-  wasm_id : Text,
-  audit_type : Text,
-) : async Bool {
-  let state = icrc126().state;
-  let audit_records = Option.get(Map.get(state.audits, Map.thash, wasm_id), []);
+  public query func has_verifier_participated_in_wasm(
+    verifier : Principal,
+    wasm_id : Text,
+    audit_type : Text,
+  ) : async Bool {
+    let state = icrc126().state;
+    let audit_records = Option.get(Map.get(state.audits, Map.thash, wasm_id), []);
 
-  // Check if verifier has filed an attestation for this audit_type
-  let has_attestation = Array.find<ICRC126.AuditRecord>(
-    audit_records,
-    func(record) {
-      switch (record) {
-        case (#Attestation(att)) {
-          Principal.equal(att.auditor, verifier) and att.audit_type == audit_type;
-        };
-        case (_) { false };
-      };
-    },
-  );
-
-  if (Option.isSome(has_attestation)) {
-    return true;
-  };
-
-  // Check if verifier has filed a divergence for this WASM
-  // Note: Divergences don't have audit_type directly, so we check any divergence
-  let has_divergence = Array.find<ICRC126.AuditRecord>(
-    audit_records,
-    func(record) {
-      switch (record) {
-        case (#Divergence(div)) {
-          Principal.equal(div.reporter, verifier);
-        };
-        case (_) { false };
-      };
-    },
-  );
-
-  return Option.isSome(has_divergence);
-};
-
-// --- ICRC127 Endpoints ---
-public shared (msg) func icrc127_create_bounty(req : ICRC127Service.CreateBountyRequest) : async ICRC127Service.CreateBountyResult {
-  await icrc127().icrc127_create_bounty<system>(msg.caller, req);
-};
-public shared (msg) func icrc127_submit_bounty(req : ICRC127Service.BountySubmissionRequest) : async ICRC127Service.BountySubmissionResult {
-  // ==========================================================================
-  // == CONSENSUS-BASED SYSTEM: Manual bounty claims are disabled for build_reproducibility.
-  // == Build reproducibility bounties are automatically distributed by the registry after reaching
-  // == 5-of-9 majority consensus. This prevents:
-  // == - Verifiers on the losing side from claiming rewards before slashing
-  // == - Early claims that bypass consensus outcome handling
-  // == - Gaming the system by claiming before final verification
-  // ==
-  // == For other audit types (tools_v1, data_safety_v1, etc.), manual claims are allowed
-  // == since they are single-node attestations, not consensus-based.
-  // ==========================================================================
-
-  // Get the bounty to check its audit type
-  let ?bounty = icrc127().icrc127_get_bounty(req.bounty_id) else {
-    return #Error(#Generic("Bounty not found"));
-  };
-
-  // Extract audit_type from challenge_parameters
-  let audit_type = switch (bounty.challenge_parameters) {
-    case (#Map(params_map)) {
-      switch (Array.find<(Text, ICRC127.ICRC16)>(params_map, func((key, _)) { key == "audit_type" })) {
-        case (?("audit_type", #Text(t))) { t };
-        case (_) { "" };
-      };
-    };
-    case (_) { "" };
-  };
-
-  // Only block manual claims for build_reproducibility_v1
-  if (audit_type == "build_reproducibility_v1") {
-    return #Error(#Generic("Manual bounty claims are disabled for build reproducibility audits. Bounties are automatically distributed after reaching 5-of-9 consensus."));
-  };
-
-  // Allow manual claims for other audit types
-  let submission_result = await icrc127().icrc127_submit_bounty<system>(msg.caller, req);
-
-  // If submission was successful, release the verifier's stake
-  switch (submission_result) {
-    case (#Ok(_)) {
-      // Release the stake for successful manual claims
-      switch (_credentials_canister_id) {
-        case (?audit_hub_id) {
-          let auditHub : AuditHub.Service = actor (Principal.toText(audit_hub_id));
-          let release_result = await auditHub.release_stake(req.bounty_id);
-          switch (release_result) {
-            case (#ok(_)) {
-              Debug.print("Released stake for manual bounty claim " # Nat.toText(req.bounty_id));
-            };
-            case (#err(e)) {
-              Debug.print("Warning: Failed to release stake for bounty " # Nat.toText(req.bounty_id) # ": " # e);
-              // Don't fail the submission if stake release fails - the submission already succeeded
-            };
+    // Check if verifier has filed an attestation for this audit_type
+    let has_attestation = Array.find<ICRC126.AuditRecord>(
+      audit_records,
+      func(record) {
+        switch (record) {
+          case (#Attestation(att)) {
+            Principal.equal(att.auditor, verifier) and att.audit_type == audit_type;
           };
+          case (_) { false };
         };
-        case (null) {
-          Debug.print("Warning: Cannot release stake - Audit Hub not configured");
-        };
-      };
-    };
-    case (#Error(_)) {
-      // Submission failed, don't release stake
-    };
-  };
-
-  return submission_result;
-};
-public query func icrc127_get_bounty(bounty_id : Nat) : async ?ICRC127.Bounty {
-  icrc127().icrc127_get_bounty(bounty_id);
-};
-public query func icrc127_list_bounties({
-  filter : ?[ICRC127Service.ListBountiesFilter];
-  prev : ?Nat;
-  take : ?Nat;
-}) : async [ICRC127.Bounty] {
-  icrc127().icrc127_list_bounties(filter, prev, take);
-};
-public query func icrc127_metadata() : async ICRC127.ICRC16Map {
-  icrc127().icrc127_metadata();
-};
-
-// --- ICRC3 Endpoints ---
-public query func icrc3_get_blocks(args : ICRC3.GetBlocksArgs) : async ICRC3.GetBlocksResult {
-  icrc3().get_blocks(args);
-};
-public query func icrc3_get_archives(args : ICRC3.GetArchivesArgs) : async ICRC3.GetArchivesResult {
-  icrc3().get_archives(args);
-};
-public query func icrc3_supported_block_types() : async [ICRC3.BlockType] {
-  icrc3().supported_block_types();
-};
-public query func icrc3_get_tip_certificate() : async ?ICRC3.DataCertificate {
-  icrc3().get_tip_certificate();
-};
-public query func get_tip() : async ICRC3.Tip {
-  icrc3().get_tip();
-};
-
-// --- MCP Orchestrator InterCanister Endpoints ---
-// Used by the MCP Orchestrator to validate user requests.
-private func _is_owner(caller : Principal) : Bool {
-  Principal.equal(_owner, caller);
-};
-
-// HOOK 1: Check controller. Now returns a Result instead of trapping.
-public shared (msg) func is_controller_of_type(namespace : Text, user : Principal) : async Result.Result<Bool, Text> {
-  // Get the current state from the ICRC-118 module.
-  let state = icrc118wasmregistry().state;
-
-  // Find the canister type by its namespace using the library's internal map.
-  switch (BTree.get(state.canister_types, Text.compare, namespace)) {
-    case (null) {
-      // It's not an error if the type doesn't exist, just return false.
-      return #ok(false);
-    };
-    case (?canister_type) {
-      // Check if the user's principal exists in the controllers array.
-      let isController = Option.isSome(
-        Array.find(
-          canister_type.controllers,
-          func(controller : Principal) : Bool {
-            Principal.equal(controller, user);
-          },
-        )
-      );
-      return #ok(isController);
-    };
-  };
-};
-
-// The outcome of a DAO-led verification process.
-type VerificationOutcome = {
-  #Verified;
-  #Rejected;
-};
-
-// A record of the final decision.
-type FinalizationRecord = {
-  outcome : VerificationOutcome;
-  timestamp : Time.Time;
-  metadata : ICRC126.ICRC16Map;
-};
-
-/**
-   * Admin method to manually trigger consensus handling for stuck bounties.
-   * Use this when consensus was reached but payouts didn't happen due to bugs.
-   */
-public shared (msg) func admin_retrigger_consensus(wasm_id : Text, audit_type : Text) : async Result.Result<Text, Text> {
-  // Check if caller is owner
-  if (not Principal.equal(msg.caller, _owner)) {
-    return #err("Only the owner can retrigger consensus");
-  };
-
-  // Get the finalization record to see what the outcome was
-  let finalization_opt = BTree.get(finalization_log, Text.compare, wasm_id);
-  switch (finalization_opt) {
-    case (null) {
-      return #err("No finalization record found for WASM: " # wasm_id);
-    };
-    case (?record) {
-      Debug.print("Retriggering consensus for WASM " # wasm_id # " with outcome " # debug_show (record.outcome));
-
-      // Retrigger the consensus outcome handling
-      await _handle_consensus_outcome(wasm_id, record.outcome, audit_type);
-
-      return #ok("Consensus retriggered successfully for " # wasm_id);
-    };
-  };
-};
-
-/**
-   * Find the verifier principal who filed work for a given bounty.
-   * Checks attestation and divergence records to find which verifier worked on this bounty.
-   */
-private func _find_verifier_for_bounty(bounty_id : Nat, wasm_id : Text, audit_type : Text) : async ?Principal {
-  // Get all audit records for this WASM from ICRC126 state
-  let state = icrc126().state;
-  let all_audit_records = switch (Map.get(state.audits, Map.thash, wasm_id)) {
-    case (null) { return null };
-    case (?records) { records };
-  };
-
-  // Search through all audit records to find one matching this bounty_id
-  for (record in all_audit_records.vals()) {
-    switch (record) {
-      case (#Attestation(attestation)) {
-        // Extract bounty_id from metadata
-        switch (AuditHub.get_bounty_id_from_metadata(attestation.metadata)) {
-          case (?bid) {
-            if (bid == bounty_id) {
-              return ?attestation.auditor;
-            };
-          };
-          case (null) {};
-        };
-      };
-      case (#Divergence(divergence)) {
-        // Extract bounty_id from metadata if it exists
-        switch (divergence.metadata) {
-          case (?meta) {
-            switch (AuditHub.get_bounty_id_from_metadata(meta)) {
-              case (?bid) {
-                if (bid == bounty_id) {
-                  return ?divergence.reporter;
-                };
-              };
-              case (null) {};
-            };
-          };
-          case (null) {};
-        };
-      };
-    };
-  };
-
-  return null;
-};
-
-/**
-   * Handle consensus outcome by releasing stakes for winners and slashing stakes for losers.
-   * Winners: Verifiers who voted with the majority consensus
-   * Losers: Verifiers who voted against the majority consensus
-   */
-private func _handle_consensus_outcome(wasm_id : Text, outcome : VerificationOutcome, audit_type : Text) : async () {
-  // Get all bounties for this WASM
-  let all_bounties = _get_bounties_for_wasm(wasm_id);
-
-  // Create composite key for progress tracking (wasm_id::audit_type)
-  let progress_key = _make_progress_key(wasm_id, audit_type);
-
-  // Get the winning and losing attestation lists
-  let winning_attestations = switch (outcome) {
-    case (#Verified) {
-      Option.get(BTree.get(verification_progress, Text.compare, progress_key), []);
-    };
-    case (#Rejected) {
-      Option.get(BTree.get(divergence_progress, Text.compare, progress_key), []);
-    };
-  };
-
-  let losing_attestations = switch (outcome) {
-    case (#Verified) {
-      // If verified, divergence reports are the losers
-      Option.get(BTree.get(divergence_progress, Text.compare, progress_key), []);
-    };
-    case (#Rejected) {
-      // If rejected, success attestations are the losers
-      Option.get(BTree.get(verification_progress, Text.compare, progress_key), []);
-    };
-  };
-
-  // Check if all 9 verifiers have participated before processing stakes
-  // NOTE: Bounties are paid immediately when submitted, but stakes remain locked
-  // until all verifiers participate so we can properly slash the losers
-  let total_participated = winning_attestations.size() + losing_attestations.size();
-  if (total_participated < REQUIRED_VERIFIERS) {
-    Debug.print(
-      "⏳ Consensus reached but only " # Nat.toText(total_participated) # " of " #
-      Nat.toText(REQUIRED_VERIFIERS) # " verifiers have participated. " #
-      "Waiting for remaining " # Nat.toText(REQUIRED_VERIFIERS - total_participated) #
-      " verifiers before releasing/slashing stakes."
+      },
     );
-    return; // Exit early - don't process stakes yet
-  };
 
-  Debug.print(
-    "✅ All " # Nat.toText(REQUIRED_VERIFIERS) # " verifiers have participated. " #
-    "Processing stake releases for winners and slashing for losers..."
-  );
-
-  // Get audit hub reference
-  let auditHub : ?AuditHub.Service = switch (_credentials_canister_id) {
-    case (null) { null };
-    case (?id) { ?(actor (Principal.toText(id)) : AuditHub.Service) };
-  };
-
-  switch (auditHub) {
-    case (null) {
-      Debug.print("Cannot handle consensus outcome: Audit Hub not configured");
-      return;
+    if (Option.isSome(has_attestation)) {
+      return true;
     };
-    case (?hub) {
-      // Release stakes for winners (bounties were already paid when they submitted)
-      for (bounty_id in winning_attestations.vals()) {
-        try {
-          let release_result = await hub.release_stake(bounty_id);
-          switch (release_result) {
-            case (#ok(_)) {
-              Debug.print("Released stake for winning bounty " # Nat.toText(bounty_id));
-            };
-            case (#err(e)) {
-              Debug.print("Error releasing stake for bounty " # Nat.toText(bounty_id) # ": " # e);
-            };
+
+    // Check if verifier has filed a divergence for this WASM
+    // Note: Divergences don't have audit_type directly, so we check any divergence
+    let has_divergence = Array.find<ICRC126.AuditRecord>(
+      audit_records,
+      func(record) {
+        switch (record) {
+          case (#Divergence(div)) {
+            Principal.equal(div.reporter, verifier);
           };
-        } catch (e) {
-          Debug.print("Exception releasing stake for bounty " # Nat.toText(bounty_id) # ": " # Error.message(e));
+          case (_) { false };
+        };
+      },
+    );
+
+    return Option.isSome(has_divergence);
+  };
+
+  // --- ICRC127 Endpoints ---
+  public shared (msg) func icrc127_create_bounty(req : ICRC127Service.CreateBountyRequest) : async ICRC127Service.CreateBountyResult {
+    await icrc127().icrc127_create_bounty<system>(msg.caller, req);
+  };
+  public shared (msg) func icrc127_submit_bounty(req : ICRC127Service.BountySubmissionRequest) : async ICRC127Service.BountySubmissionResult {
+    // ==========================================================================
+    // == CONSENSUS-BASED SYSTEM: Manual bounty claims are disabled for build_reproducibility.
+    // == Build reproducibility bounties are automatically distributed by the registry after reaching
+    // == 5-of-9 majority consensus. This prevents:
+    // == - Verifiers on the losing side from claiming rewards before slashing
+    // == - Early claims that bypass consensus outcome handling
+    // == - Gaming the system by claiming before final verification
+    // ==
+    // == For other audit types (tools_v1, data_safety_v1, etc.), manual claims are allowed
+    // == since they are single-node attestations, not consensus-based.
+    // ==========================================================================
+
+    // Get the bounty to check its audit type
+    let ?bounty = icrc127().icrc127_get_bounty(req.bounty_id) else {
+      return #Error(#Generic("Bounty not found"));
+    };
+
+    // Extract audit_type from challenge_parameters
+    let audit_type = switch (bounty.challenge_parameters) {
+      case (#Map(params_map)) {
+        switch (Array.find<(Text, ICRC127.ICRC16)>(params_map, func((key, _)) { key == "audit_type" })) {
+          case (?("audit_type", #Text(t))) { t };
+          case (_) { "" };
         };
       };
-
-      // Slash stakes for losers (they were wrong - penalize bad verifiers)
-      for (bounty_id in losing_attestations.vals()) {
-        try {
-          let result = await hub.slash_stake_for_incorrect_consensus(bounty_id);
-          switch (result) {
-            case (#ok(_)) {
-              Debug.print("Slashed stake for losing bounty " # Nat.toText(bounty_id) # " (incorrect consensus)");
-            };
-            case (#err(e)) {
-              Debug.print("Error slashing stake for bounty " # Nat.toText(bounty_id) # ": " # e);
-            };
-          };
-        } catch (e) {
-          Debug.print("Exception slashing stake for bounty " # Nat.toText(bounty_id) # ": " # Error.message(e));
-        };
-      };
+      case (_) { "" };
     };
-  };
-};
 
-private func _finalize_verification(
-  wasm_id : Text,
-  outcome : VerificationOutcome,
-  metadata : ICRC126.ICRC16Map,
-) : async Nat {
-  // 1. Authorization check is no longer needed as this is an internal function.
+    // Only block manual claims for build_reproducibility_v1
+    if (audit_type == "build_reproducibility_v1") {
+      return #Error(#Generic("Manual bounty claims are disabled for build reproducibility audits. Bounties are automatically distributed after reaching 5-of-9 consensus."));
+    };
 
-  // Extract audit_type from metadata for consensus handling
-  let audit_type = switch (AppStore.getICRC16TextOptional(metadata, "audit_type")) {
-    case (?t) { t };
-    case (null) { "build_reproducibility_v1" }; // Default for legacy
-  };
+    // Allow manual claims for other audit types
+    let submission_result = await icrc127().icrc127_submit_bounty<system>(msg.caller, req);
 
-  // 2. Create and store the finalization record.
-  let record : FinalizationRecord = {
-    outcome = outcome;
-    timestamp = Time.now();
-    metadata = metadata;
-  };
-  ignore BTree.insert(finalization_log, Text.compare, wasm_id, record);
-
-  // 2.5. Handle consensus penalties - slash stakes of verifiers on the losing side
-  ignore await _handle_consensus_outcome(wasm_id, outcome, audit_type);
-
-  // 3. Log the official ICRC-3 block.
-  let btype = switch (outcome) {
-    case (#Verified) "126verified";
-    case (#Rejected) "126rejected";
-  };
-  let tx : ICRC126.ICRC16Map = [
-    ("wasm_id", #Text(wasm_id)),
-    ("metadata", #Map(metadata)),
-  ];
-  let trx_id = icrc3().add_record<system>(
-    convertIcrc126ValueToIcrc3Value(#Map(tx)),
-    ?convertIcrc126ValueToIcrc3Value(#Map([("btype", #Text(btype))])),
-  );
-
-  // --- 4. REFACTORED: Automated Deployment Trigger ---
-  if (outcome == #Verified) {
-    switch (_orchestrator_canister_id) {
-      case (?orc_id) {
-        // --- a. Find the namespace using our new reverse index ---
-        let namespace_opt = BTree.get(wasm_to_namespace_map, Text.compare, wasm_id);
-
-        switch (namespace_opt) {
-          case (?namespace) {
-            // We found the namespace! Now we can proceed.
-            Debug.print("WASM " # wasm_id # " verified for namespace " # namespace # ". Triggering auto-deployment...");
-
-            // --- b. Find the developer's principal from the original request ---
-            let request_record_opt = _get_verification_request(wasm_id);
-            switch (request_record_opt) {
-              case (?request_record) {
-
-                let deployment_type = Option.get(AppStore.getICRC16TextOptional(request_record.metadata, "deployment_type"), "global");
-                if (deployment_type != "global") {
-                  Debug.print("Auto-deployment skipped: deployment_type is '" # deployment_type # "', not 'global'.");
-                  return trx_id;
-                };
-
-                // --- c. Decode wasm_id and construct the request ---
-                let wasm_hash : Blob = switch (Base16.decode(wasm_id)) {
-                  case (?b) { b };
-                  case (null) { return trx_id; /* Should not happen */ };
-                };
-
-                let state = icrc118wasmregistry().state;
-                // Find the canister type by its namespace using the library's internal map.
-                let owner = switch (BTree.get(state.canister_types, Text.compare, namespace)) {
-                  case (null) {
-                    Debug.print("Internal error: Canister type not found for namespace " # namespace);
-                    return trx_id;
-                  }; // Should not happen if the namespace is valid.
-                  case (?canister_type) {
-                    if (canister_type.controllers.size() == 0) {
-                      // This should never happen
-                      Debug.print("Cannot determine owner: No controllers defined for canister type " # namespace);
-                      return trx_id;
-                    } else {
-                      // For simplicity, we take the first controller as the owner.
-                      // In a real-world scenario, this logic might be more complex.
-                      canister_type.controllers[0];
-                    };
-                  };
-                };
-
-                let deploy_request : Orchestrator.InternalDeployRequest = {
-                  namespace = namespace;
-                  hash = wasm_hash;
-                  owner = owner;
-                };
-
-                // --- d. Make the "fire-and-forget" call ---
-                try {
-                  let orchestrator : Orchestrator.Service = actor (Principal.toText(orc_id));
-                  ignore orchestrator.internal_deploy_or_upgrade(deploy_request);
-                } catch (e) {
-                  Debug.print("Error calling orchestrator: " # Error.message(e));
-                };
+    // If submission was successful, release the verifier's stake
+    switch (submission_result) {
+      case (#Ok(_)) {
+        // Release the stake for successful manual claims
+        switch (_credentials_canister_id) {
+          case (?audit_hub_id) {
+            let auditHub : AuditHub.Service = actor (Principal.toText(audit_hub_id));
+            let release_result = await auditHub.release_stake(req.bounty_id);
+            switch (release_result) {
+              case (#ok(_)) {
+                Debug.print("Released stake for manual bounty claim " # Nat.toText(req.bounty_id));
               };
-              case (null) {
-                Debug.print("Auto-deploy failed: Could not find original verification request for wasm_id " # wasm_id);
+              case (#err(e)) {
+                Debug.print("Warning: Failed to release stake for bounty " # Nat.toText(req.bounty_id) # ": " # e);
+                // Don't fail the submission if stake release fails - the submission already succeeded
               };
             };
           };
           case (null) {
-            // This is a valid scenario: the WASM was verified *before* a developer
-            // published it to a namespace. No deployment can happen yet.
-            Debug.print("WASM " # wasm_id # " verified, but not yet published to a namespace. Skipping auto-deployment.");
+            Debug.print("Warning: Cannot release stake - Audit Hub not configured");
           };
+        };
+      };
+      case (#Error(_)) {
+        // Submission failed, don't release stake
+      };
+    };
+
+    return submission_result;
+  };
+  public query func icrc127_get_bounty(bounty_id : Nat) : async ?ICRC127.Bounty {
+    icrc127().icrc127_get_bounty(bounty_id);
+  };
+  public query func icrc127_list_bounties({
+    filter : ?[ICRC127Service.ListBountiesFilter];
+    prev : ?Nat;
+    take : ?Nat;
+  }) : async [ICRC127.Bounty] {
+    icrc127().icrc127_list_bounties(filter, prev, take);
+  };
+  public query func icrc127_metadata() : async ICRC127.ICRC16Map {
+    icrc127().icrc127_metadata();
+  };
+
+  // --- ICRC3 Endpoints ---
+  public query func icrc3_get_blocks(args : ICRC3.GetBlocksArgs) : async ICRC3.GetBlocksResult {
+    icrc3().get_blocks(args);
+  };
+  public query func icrc3_get_archives(args : ICRC3.GetArchivesArgs) : async ICRC3.GetArchivesResult {
+    icrc3().get_archives(args);
+  };
+  public query func icrc3_supported_block_types() : async [ICRC3.BlockType] {
+    icrc3().supported_block_types();
+  };
+  public query func icrc3_get_tip_certificate() : async ?ICRC3.DataCertificate {
+    icrc3().get_tip_certificate();
+  };
+  public query func get_tip() : async ICRC3.Tip {
+    icrc3().get_tip();
+  };
+
+  // --- MCP Orchestrator InterCanister Endpoints ---
+  // Used by the MCP Orchestrator to validate user requests.
+  private func _is_owner(caller : Principal) : Bool {
+    Principal.equal(_owner, caller);
+  };
+
+  // HOOK 1: Check controller. Now returns a Result instead of trapping.
+  public shared (msg) func is_controller_of_type(namespace : Text, user : Principal) : async Result.Result<Bool, Text> {
+    // Get the current state from the ICRC-118 module.
+    let state = icrc118wasmregistry().state;
+
+    // Find the canister type by its namespace using the library's internal map.
+    switch (BTree.get(state.canister_types, Text.compare, namespace)) {
+      case (null) {
+        // It's not an error if the type doesn't exist, just return false.
+        return #ok(false);
+      };
+      case (?canister_type) {
+        // Check if the user's principal exists in the controllers array.
+        let isController = Option.isSome(
+          Array.find(
+            canister_type.controllers,
+            func(controller : Principal) : Bool {
+              Principal.equal(controller, user);
+            },
+          )
+        );
+        return #ok(isController);
+      };
+    };
+  };
+
+  // The outcome of a DAO-led verification process.
+  type VerificationOutcome = {
+    #Verified;
+    #Rejected;
+  };
+
+  // A record of the final decision.
+  type FinalizationRecord = {
+    outcome : VerificationOutcome;
+    timestamp : Time.Time;
+    metadata : ICRC126.ICRC16Map;
+  };
+
+  /**
+   * Admin method to manually trigger consensus handling for stuck bounties.
+   * Use this when consensus was reached but payouts didn't happen due to bugs.
+   */
+  public shared (msg) func admin_retrigger_consensus(wasm_id : Text, audit_type : Text) : async Result.Result<Text, Text> {
+    // Check if caller is owner
+    if (not Principal.equal(msg.caller, _owner)) {
+      return #err("Only the owner can retrigger consensus");
+    };
+
+    // Get the finalization record to see what the outcome was
+    let finalization_opt = BTree.get(finalization_log, Text.compare, wasm_id);
+    switch (finalization_opt) {
+      case (null) {
+        return #err("No finalization record found for WASM: " # wasm_id);
+      };
+      case (?record) {
+        Debug.print("Retriggering consensus for WASM " # wasm_id # " with outcome " # debug_show (record.outcome));
+
+        // Retrigger the consensus outcome handling
+        await _handle_consensus_outcome(wasm_id, record.outcome, audit_type);
+
+        return #ok("Consensus retriggered successfully for " # wasm_id);
+      };
+    };
+  };
+
+  /**
+   * Find the verifier principal who filed work for a given bounty.
+   * Checks attestation and divergence records to find which verifier worked on this bounty.
+   */
+  private func _find_verifier_for_bounty(bounty_id : Nat, wasm_id : Text, audit_type : Text) : async ?Principal {
+    // Get all audit records for this WASM from ICRC126 state
+    let state = icrc126().state;
+    let all_audit_records = switch (Map.get(state.audits, Map.thash, wasm_id)) {
+      case (null) { return null };
+      case (?records) { records };
+    };
+
+    // Search through all audit records to find one matching this bounty_id
+    for (record in all_audit_records.vals()) {
+      switch (record) {
+        case (#Attestation(attestation)) {
+          // Extract bounty_id from metadata
+          switch (AuditHub.get_bounty_id_from_metadata(attestation.metadata)) {
+            case (?bid) {
+              if (bid == bounty_id) {
+                return ?attestation.auditor;
+              };
+            };
+            case (null) {};
+          };
+        };
+        case (#Divergence(divergence)) {
+          // Extract bounty_id from metadata if it exists
+          switch (divergence.metadata) {
+            case (?meta) {
+              switch (AuditHub.get_bounty_id_from_metadata(meta)) {
+                case (?bid) {
+                  if (bid == bounty_id) {
+                    return ?divergence.reporter;
+                  };
+                };
+                case (null) {};
+              };
+            };
+            case (null) {};
+          };
+        };
+      };
+    };
+
+    return null;
+  };
+
+  /**
+   * Handle consensus outcome by releasing stakes for winners and slashing stakes for losers.
+   * Winners: Verifiers who voted with the majority consensus
+   * Losers: Verifiers who voted against the majority consensus
+   */
+  private func _handle_consensus_outcome(wasm_id : Text, outcome : VerificationOutcome, audit_type : Text) : async () {
+    // Get all bounties for this WASM
+    let all_bounties = _get_bounties_for_wasm(wasm_id);
+
+    // Create composite key for progress tracking (wasm_id::audit_type)
+    let progress_key = _make_progress_key(wasm_id, audit_type);
+
+    // Get the winning and losing attestation lists
+    let winning_attestations = switch (outcome) {
+      case (#Verified) {
+        Option.get(BTree.get(verification_progress, Text.compare, progress_key), []);
+      };
+      case (#Rejected) {
+        Option.get(BTree.get(divergence_progress, Text.compare, progress_key), []);
+      };
+    };
+
+    let losing_attestations = switch (outcome) {
+      case (#Verified) {
+        // If verified, divergence reports are the losers
+        Option.get(BTree.get(divergence_progress, Text.compare, progress_key), []);
+      };
+      case (#Rejected) {
+        // If rejected, success attestations are the losers
+        Option.get(BTree.get(verification_progress, Text.compare, progress_key), []);
+      };
+    };
+
+    // Check if all 9 verifiers have participated before processing stakes
+    // NOTE: Bounties are paid immediately when submitted, but stakes remain locked
+    // until all verifiers participate so we can properly slash the losers
+    let total_participated = winning_attestations.size() + losing_attestations.size();
+    if (total_participated < REQUIRED_VERIFIERS) {
+      Debug.print(
+        "⏳ Consensus reached but only " # Nat.toText(total_participated) # " of " #
+        Nat.toText(REQUIRED_VERIFIERS) # " verifiers have participated. " #
+        "Waiting for remaining " # Nat.toText(REQUIRED_VERIFIERS - total_participated) #
+        " verifiers before releasing/slashing stakes."
+      );
+      return; // Exit early - don't process stakes yet
+    };
+
+    Debug.print(
+      "✅ All " # Nat.toText(REQUIRED_VERIFIERS) # " verifiers have participated. " #
+      "Processing stake releases for winners and slashing for losers..."
+    );
+
+    // Get audit hub reference
+    let auditHub : ?AuditHub.Service = switch (_credentials_canister_id) {
+      case (null) { null };
+      case (?id) { ?(actor (Principal.toText(id)) : AuditHub.Service) };
+    };
+
+    switch (auditHub) {
+      case (null) {
+        Debug.print("Cannot handle consensus outcome: Audit Hub not configured");
+        return;
+      };
+      case (?hub) {
+        // Release stakes for winners (bounties were already paid when they submitted)
+        for (bounty_id in winning_attestations.vals()) {
+          try {
+            let release_result = await hub.release_stake(bounty_id);
+            switch (release_result) {
+              case (#ok(_)) {
+                Debug.print("Released stake for winning bounty " # Nat.toText(bounty_id));
+              };
+              case (#err(e)) {
+                Debug.print("Error releasing stake for bounty " # Nat.toText(bounty_id) # ": " # e);
+              };
+            };
+          } catch (e) {
+            Debug.print("Exception releasing stake for bounty " # Nat.toText(bounty_id) # ": " # Error.message(e));
+          };
+        };
+
+        // Slash stakes for losers (they were wrong - penalize bad verifiers)
+        for (bounty_id in losing_attestations.vals()) {
+          try {
+            let result = await hub.slash_stake_for_incorrect_consensus(bounty_id);
+            switch (result) {
+              case (#ok(_)) {
+                Debug.print("Slashed stake for losing bounty " # Nat.toText(bounty_id) # " (incorrect consensus)");
+              };
+              case (#err(e)) {
+                Debug.print("Error slashing stake for bounty " # Nat.toText(bounty_id) # ": " # e);
+              };
+            };
+          } catch (e) {
+            Debug.print("Exception slashing stake for bounty " # Nat.toText(bounty_id) # ": " # Error.message(e));
+          };
+        };
+      };
+    };
+  };
+
+  private func _finalize_verification(
+    wasm_id : Text,
+    outcome : VerificationOutcome,
+    metadata : ICRC126.ICRC16Map,
+  ) : async Nat {
+    // 1. Authorization check is no longer needed as this is an internal function.
+
+    // Extract audit_type from metadata for consensus handling
+    let audit_type = switch (AppStore.getICRC16TextOptional(metadata, "audit_type")) {
+      case (?t) { t };
+      case (null) { "build_reproducibility_v1" }; // Default for legacy
+    };
+
+    // 2. Create and store the finalization record.
+    let record : FinalizationRecord = {
+      outcome = outcome;
+      timestamp = Time.now();
+      metadata = metadata;
+    };
+    ignore BTree.insert(finalization_log, Text.compare, wasm_id, record);
+
+    // 2.5. Handle consensus penalties - slash stakes of verifiers on the losing side
+    ignore await _handle_consensus_outcome(wasm_id, outcome, audit_type);
+
+    // 3. Log the official ICRC-3 block.
+    let btype = switch (outcome) {
+      case (#Verified) "126verified";
+      case (#Rejected) "126rejected";
+    };
+    let tx : ICRC126.ICRC16Map = [
+      ("wasm_id", #Text(wasm_id)),
+      ("metadata", #Map(metadata)),
+    ];
+    let trx_id = icrc3().add_record<system>(
+      convertIcrc126ValueToIcrc3Value(#Map(tx)),
+      ?convertIcrc126ValueToIcrc3Value(#Map([("btype", #Text(btype))])),
+    );
+
+    // --- 4. REFACTORED: Automated Deployment Trigger ---
+    if (outcome == #Verified) {
+      switch (_orchestrator_canister_id) {
+        case (?orc_id) {
+          // --- a. Find the namespace using our new reverse index ---
+          let namespace_opt = BTree.get(wasm_to_namespace_map, Text.compare, wasm_id);
+
+          switch (namespace_opt) {
+            case (?namespace) {
+              // We found the namespace! Now we can proceed.
+              Debug.print("WASM " # wasm_id # " verified for namespace " # namespace # ". Triggering auto-deployment...");
+
+              // --- b. Find the developer's principal from the original request ---
+              let request_record_opt = _get_verification_request(wasm_id);
+              switch (request_record_opt) {
+                case (?request_record) {
+
+                  let deployment_type = Option.get(AppStore.getICRC16TextOptional(request_record.metadata, "deployment_type"), "global");
+                  if (deployment_type != "global") {
+                    Debug.print("Auto-deployment skipped: deployment_type is '" # deployment_type # "', not 'global'.");
+                    return trx_id;
+                  };
+
+                  // --- c. Decode wasm_id and construct the request ---
+                  let wasm_hash : Blob = switch (Base16.decode(wasm_id)) {
+                    case (?b) { b };
+                    case (null) { return trx_id; /* Should not happen */ };
+                  };
+
+                  let state = icrc118wasmregistry().state;
+                  // Find the canister type by its namespace using the library's internal map.
+                  let owner = switch (BTree.get(state.canister_types, Text.compare, namespace)) {
+                    case (null) {
+                      Debug.print("Internal error: Canister type not found for namespace " # namespace);
+                      return trx_id;
+                    }; // Should not happen if the namespace is valid.
+                    case (?canister_type) {
+                      if (canister_type.controllers.size() == 0) {
+                        // This should never happen
+                        Debug.print("Cannot determine owner: No controllers defined for canister type " # namespace);
+                        return trx_id;
+                      } else {
+                        // For simplicity, we take the first controller as the owner.
+                        // In a real-world scenario, this logic might be more complex.
+                        canister_type.controllers[0];
+                      };
+                    };
+                  };
+
+                  let deploy_request : Orchestrator.InternalDeployRequest = {
+                    namespace = namespace;
+                    hash = wasm_hash;
+                    owner = owner;
+                  };
+
+                  // --- d. Make the "fire-and-forget" call ---
+                  try {
+                    let orchestrator : Orchestrator.Service = actor (Principal.toText(orc_id));
+                    ignore orchestrator.internal_deploy_or_upgrade(deploy_request);
+                  } catch (e) {
+                    Debug.print("Error calling orchestrator: " # Error.message(e));
+                  };
+                };
+                case (null) {
+                  Debug.print("Auto-deploy failed: Could not find original verification request for wasm_id " # wasm_id);
+                };
+              };
+            };
+            case (null) {
+              // This is a valid scenario: the WASM was verified *before* a developer
+              // published it to a namespace. No deployment can happen yet.
+              Debug.print("WASM " # wasm_id # " verified, but not yet published to a namespace. Skipping auto-deployment.");
+            };
+          };
+        };
+        case (null) {
+          Debug.print("WASM " # wasm_id # " verified, but no orchestrator is configured.");
+        };
+      };
+    };
+
+    // Notify audit hub that verification is complete for this specific audit type
+    switch (_credentials_canister_id) {
+      case (?audit_hub_id) {
+        let auditHub : AuditHub.Service = actor (Principal.toText(audit_hub_id));
+
+        try {
+          let result = await auditHub.mark_verification_complete(wasm_id, audit_type);
+
+          switch (result) {
+            case (#ok()) {
+              Debug.print("Successfully marked " # audit_type # " verification complete in audit hub for " # wasm_id);
+            };
+            case (#err(e)) {
+              Debug.print("Warning: Failed to mark verification complete in audit hub: " # e);
+            };
+          };
+        } catch (e) {
+          Debug.print("Exception notifying audit hub of completion: " # Error.message(e));
         };
       };
       case (null) {
-        Debug.print("WASM " # wasm_id # " verified, but no orchestrator is configured.");
+        Debug.print("Audit hub not configured - skipping completion notification");
       };
     };
+
+    return trx_id;
   };
 
-  // Notify audit hub that verification is complete for this specific audit type
-  switch (_credentials_canister_id) {
-    case (?audit_hub_id) {
-      let auditHub : AuditHub.Service = actor (Principal.toText(audit_hub_id));
-
-      try {
-        let result = await auditHub.mark_verification_complete(wasm_id, audit_type);
-
-        switch (result) {
-          case (#ok()) {
-            Debug.print("Successfully marked " # audit_type # " verification complete in audit hub for " # wasm_id);
-          };
-          case (#err(e)) {
-            Debug.print("Warning: Failed to mark verification complete in audit hub: " # e);
-          };
-        };
-      } catch (e) {
-        Debug.print("Exception notifying audit hub of completion: " # Error.message(e));
-      };
-    };
-    case (null) {
-      Debug.print("Audit hub not configured - skipping completion notification");
-    };
-  };
-
-  return trx_id;
-};
-
-/**
+  /**
    * [OWNER-ONLY] Manually re-triggers the deployment process for a given WASM.
    * This is a utility function for debugging failed automated deployments without
    * needing to re-run the entire verification and attestation lifecycle.
@@ -2561,740 +2558,740 @@ private func _finalize_verification(
    * @param wasm_id The hex-encoded SHA256 hash of the WASM to deploy.
    * @returns An empty Ok(()) on success, or a Text error on failure.
    */
-public shared ({ caller }) func retrigger_deployment(wasm_id : Text) : async Result.Result<(), Text> {
-  // --- 1. Security: Ensure only the owner can call this ---
-  if (caller != _owner) {
-    return #err("Unauthorized: Only the owner can retrigger deployments.");
-  };
+  public shared ({ caller }) func retrigger_deployment(wasm_id : Text) : async Result.Result<(), Text> {
+    // --- 1. Security: Ensure only the owner can call this ---
+    if (caller != _owner) {
+      return #err("Unauthorized: Only the owner can retrigger deployments.");
+    };
 
-  // --- 2. Pre-flight Checks ---
-  // a. Ensure the orchestrator is configured.
-  let orc_id = switch (_orchestrator_canister_id) {
-    case (?id) { id };
-    case (null) { return #err("Orchestrator is not configured.") };
-  };
+    // --- 2. Pre-flight Checks ---
+    // a. Ensure the orchestrator is configured.
+    let orc_id = switch (_orchestrator_canister_id) {
+      case (?id) { id };
+      case (null) { return #err("Orchestrator is not configured.") };
+    };
 
-  // b. Ensure the WASM has actually been verified.
-  switch (BTree.get(finalization_log, Text.compare, wasm_id)) {
-    case (null) { return #err("WASM not found in finalization log.") };
-    case (?record) {
-      if (record.outcome != #Verified) {
-        return #err("Cannot deploy: WASM is not in a 'Verified' state.");
+    // b. Ensure the WASM has actually been verified.
+    switch (BTree.get(finalization_log, Text.compare, wasm_id)) {
+      case (null) { return #err("WASM not found in finalization log.") };
+      case (?record) {
+        if (record.outcome != #Verified) {
+          return #err("Cannot deploy: WASM is not in a 'Verified' state.");
+        };
       };
+    };
+
+    // --- 3. Replicate the Trigger Logic from _finalize_verification ---
+    // a. Find the namespace for this WASM.
+    let namespace = switch (BTree.get(wasm_to_namespace_map, Text.compare, wasm_id)) {
+      case (?ns) { ns };
+      case (null) { return #err("Namespace not found for this WASM.") };
+    };
+
+    // b. Decode the wasm_id back into a Blob.
+    let wasm_hash : Blob = switch (Base16.decode(wasm_id)) {
+      case (?b) { b };
+      case (null) { return #err("Invalid wasm_id format (not valid hex).") };
+    };
+
+    // c. Determine the owner (developer) from the canister type controllers.
+    let state = icrc118wasmregistry().state;
+    let developer_owner = switch (BTree.get(state.canister_types, Text.compare, namespace)) {
+      case (null) {
+        return #err("Internal error: Canister type not found for namespace.");
+      };
+      case (?canister_type) {
+        if (canister_type.controllers.size() == 0) {
+          return #err("Cannot determine owner: No controllers defined for this canister type.");
+        } else {
+          canister_type.controllers[0]; // Take the first controller as the owner.
+        };
+      };
+    };
+
+    // d. Construct the deployment request.
+    let deploy_request : Orchestrator.InternalDeployRequest = {
+      namespace = namespace;
+      hash = wasm_hash;
+      owner = developer_owner;
+    };
+
+    // --- 4. Make the Call to the Orchestrator ---
+    Debug.print("Owner manually retriggering deployment for namespace " # namespace);
+    try {
+      let orchestrator : Orchestrator.Service = actor (Principal.toText(orc_id));
+      ignore orchestrator.internal_deploy_or_upgrade(deploy_request);
+      return #ok(());
+    } catch (e) {
+      let err_msg = "Failed to call orchestrator: " # Error.message(e);
+      Debug.print(err_msg);
+      return #err(err_msg);
     };
   };
 
-  // --- 3. Replicate the Trigger Logic from _finalize_verification ---
-  // a. Find the namespace for this WASM.
-  let namespace = switch (BTree.get(wasm_to_namespace_map, Text.compare, wasm_id)) {
-    case (?ns) { ns };
-    case (null) { return #err("Namespace not found for this WASM.") };
+  // The request type for our new custom query.
+  public type GetCanisterTypeVersionRequest = {
+    canister_type_namespace : Text;
+    version_number : (Nat, Nat, Nat); // (major, minor, patch)
   };
 
-  // b. Decode the wasm_id back into a Blob.
-  let wasm_hash : Blob = switch (Base16.decode(wasm_id)) {
-    case (?b) { b };
-    case (null) { return #err("Invalid wasm_id format (not valid hex).") };
-  };
+  // This function resolves a specific version to its full record, including the WASM hash.
+  // It is not part of the ICRC-118 standard, but a helper for the orchestrator workflow.
+  public shared query func get_canister_type_version(req : GetCanisterTypeVersionRequest) : async Result.Result<Service.Wasm, Text> {
+    // We use the existing icrc118_get_wasms function with a precise filter
+    // to find the exact version record we're looking for.
+    let filter : [Service.GetWasmsFilter] = [
+      #canister_type_namespace(req.canister_type_namespace),
+      #version_number(req.version_number),
+    ];
 
-  // c. Determine the owner (developer) from the canister type controllers.
-  let state = icrc118wasmregistry().state;
-  let developer_owner = switch (BTree.get(state.canister_types, Text.compare, namespace)) {
-    case (null) {
-      return #err("Internal error: Canister type not found for namespace.");
-    };
-    case (?canister_type) {
-      if (canister_type.controllers.size() == 0) {
-        return #err("Cannot determine owner: No controllers defined for this canister type.");
-      } else {
-        canister_type.controllers[0]; // Take the first controller as the owner.
-      };
-    };
-  };
+    // We request up to 2 records to detect if there's an unexpected duplicate.
+    let results = icrc118wasmregistry().icrc118_get_wasms({
+      filter = ?filter;
+      prev = null;
+      take = ?2;
+    });
 
-  // d. Construct the deployment request.
-  let deploy_request : Orchestrator.InternalDeployRequest = {
-    namespace = namespace;
-    hash = wasm_hash;
-    owner = developer_owner;
-  };
-
-  // --- 4. Make the Call to the Orchestrator ---
-  Debug.print("Owner manually retriggering deployment for namespace " # namespace);
-  try {
-    let orchestrator : Orchestrator.Service = actor (Principal.toText(orc_id));
-    ignore orchestrator.internal_deploy_or_upgrade(deploy_request);
-    return #ok(());
-  } catch (e) {
-    let err_msg = "Failed to call orchestrator: " # Error.message(e);
-    Debug.print(err_msg);
-    return #err(err_msg);
-  };
-};
-
-// The request type for our new custom query.
-public type GetCanisterTypeVersionRequest = {
-  canister_type_namespace : Text;
-  version_number : (Nat, Nat, Nat); // (major, minor, patch)
-};
-
-// This function resolves a specific version to its full record, including the WASM hash.
-// It is not part of the ICRC-118 standard, but a helper for the orchestrator workflow.
-public shared query func get_canister_type_version(req : GetCanisterTypeVersionRequest) : async Result.Result<Service.Wasm, Text> {
-  // We use the existing icrc118_get_wasms function with a precise filter
-  // to find the exact version record we're looking for.
-  let filter : [Service.GetWasmsFilter] = [
-    #canister_type_namespace(req.canister_type_namespace),
-    #version_number(req.version_number),
-  ];
-
-  // We request up to 2 records to detect if there's an unexpected duplicate.
-  let results = icrc118wasmregistry().icrc118_get_wasms({
-    filter = ?filter;
-    prev = null;
-    take = ?2;
-  });
-
-  if (results.size() == 1) {
-    // Found exactly one match, which is the expected outcome.
-    return #ok(results[0]);
-  } else if (results.size() == 0) {
-    // No match found.
-    return #err("Version not found for the given namespace.");
-  } else {
-    // This case should ideally never happen with a unique version number.
-    return #err("Internal consistency error: Multiple records found for the same version.");
-  };
-};
-
-// --- PRIVATE HELPER: Translates AppStore filters to Registry filters ---
-private func _translate_filters(filters : [AppStore.AppListingFilter]) : [Service.GetCanisterTypesFilter] {
-  var out = Buffer.Buffer<Service.GetCanisterTypesFilter>(filters.size());
-  for (f in filters.vals()) {
-    switch (f) {
-      case (#namespace(ns)) { out.add(#namespace(ns)) };
-      case (#publisher(pub)) {
-        // Note: The registry doesn't filter by publisher directly.
-        // This is a limitation we accept for now to gain performance.
-        // A future version of the registry could add this capability.
-      };
-      case (#name(_)) {
-        // The registry also doesn't filter by app name.
-      };
+    if (results.size() == 1) {
+      // Found exactly one match, which is the expected outcome.
+      return #ok(results[0]);
+    } else if (results.size() == 0) {
+      // No match found.
+      return #err("Version not found for the given namespace.");
+    } else {
+      // This case should ideally never happen with a unique version number.
+      return #err("Internal consistency error: Multiple records found for the same version.");
     };
   };
-  return Buffer.toArray(out);
-};
 
-/**
+  // --- PRIVATE HELPER: Translates AppStore filters to Registry filters ---
+  private func _translate_filters(filters : [AppStore.AppListingFilter]) : [Service.GetCanisterTypesFilter] {
+    var out = Buffer.Buffer<Service.GetCanisterTypesFilter>(filters.size());
+    for (f in filters.vals()) {
+      switch (f) {
+        case (#namespace(ns)) { out.add(#namespace(ns)) };
+        case (#publisher(pub)) {
+          // Note: The registry doesn't filter by publisher directly.
+          // This is a limitation we accept for now to gain performance.
+          // A future version of the registry could add this capability.
+        };
+        case (#name(_)) {
+          // The registry also doesn't filter by app name.
+        };
+      };
+    };
+    return Buffer.toArray(out);
+  };
+
+  /**
    * Converts a (major, minor, patch) version tuple into a standard "1.2.3" string format.
    */
-private func _format_version_number(version_tuple : (Nat, Nat, Nat)) : Text {
-  let (major, minor, patch) = version_tuple;
-  return Nat.toText(major) # "." # Nat.toText(minor) # "." # Nat.toText(patch);
-};
+  private func _format_version_number(version_tuple : (Nat, Nat, Nat)) : Text {
+    let (major, minor, patch) = version_tuple;
+    return Nat.toText(major) # "." # Nat.toText(minor) # "." # Nat.toText(patch);
+  };
 
-/**
+  /**
    * Fetches the full WASM record for a given hash.
    * This includes the `created` timestamp which is not available in CanisterVersion.
    */
-private func _get_wasm_by_hash(wasm_hash : Blob) : ?Service.Wasm {
-  let results = icrc118wasmregistry().icrc118_get_wasms({
-    filter = ?[#hash(wasm_hash)];
-    prev = null;
-    take = ?1;
-  });
-  if (results.size() == 1) {
-    return ?results[0];
-  };
-  return null;
-};
-
-// --- PRIVATE HELPER: Encapsulates the logic for building a single listing ---
-// This takes a CanisterType and returns a fully formed AppListing, or null if it shouldn't be listed.
-private func _build_listing_for_canister_type(canister_type : ICRC118WasmRegistry.CanisterType) : ?AppStore.AppListing {
-  // 1. Find the latest version for this canister type.
-  if (canister_type.versions.size() == 0) {
-    Debug.print("Canister type " # canister_type.canister_type_namespace # " has no versions.");
-    return null; // No versions, so nothing to list.
-  };
-
-  var latest_version = canister_type.versions[0];
-  var has_any_verified_version = _is_wasm_verified(Base16.encode(latest_version.calculated_hash));
-
-  // Check all versions, updating latest and accumulating verification
-  for (v in canister_type.versions.vals()) {
-    if (ICRC118WasmRegistry.canisterVersionCompare(v, latest_version) == #greater) {
-      latest_version := v;
+  private func _get_wasm_by_hash(wasm_hash : Blob) : ?Service.Wasm {
+    let results = icrc118wasmregistry().icrc118_get_wasms({
+      filter = ?[#hash(wasm_hash)];
+      prev = null;
+      take = ?1;
+    });
+    if (results.size() == 1) {
+      return ?results[0];
     };
-    if (_is_wasm_verified(Base16.encode(v.calculated_hash))) {
-      has_any_verified_version := true;
-    };
-  };
-
-  // If you want to list the app only when at least one version is verified:
-  if (not has_any_verified_version) {
-    Debug.print("Canister type " # canister_type.canister_type_namespace # " has no verified versions.");
     return null;
   };
 
-  // 2. Get the wasm_id and apply the verification gateway check.
-  let wasm_id = Base16.encode(latest_version.calculated_hash);
-  let is_latest_verified = _is_wasm_verified(wasm_id);
+  // --- PRIVATE HELPER: Encapsulates the logic for building a single listing ---
+  // This takes a CanisterType and returns a fully formed AppListing, or null if it shouldn't be listed.
+  private func _build_listing_for_canister_type(canister_type : ICRC118WasmRegistry.CanisterType) : ?AppStore.AppListing {
+    // 1. Find the latest version for this canister type.
+    if (canister_type.versions.size() == 0) {
+      Debug.print("Canister type " # canister_type.canister_type_namespace # " has no versions.");
+      return null; // No versions, so nothing to list.
+    };
 
-  // 3. Determine status (Pending vs. Verified) and build the listing object.
-  let audit_records = _get_audit_records_for_wasm(wasm_id);
-  let completed_audits = AppStore.get_completed_audit_types(audit_records);
+    var latest_version = canister_type.versions[0];
+    var has_any_verified_version = _is_wasm_verified(Base16.encode(latest_version.calculated_hash));
 
-  // Fetch the full WASM record to get the created timestamp
-  let wasm_record_opt = _get_wasm_by_hash(latest_version.calculated_hash);
-  let created_timestamp = switch (wasm_record_opt) {
-    case (?wasm_record) { wasm_record.created };
-    case (null) { 0 }; // Fallback to 0 if not found (shouldn't happen)
-  };
-
-  let verification_request = Map.get(icrc126().state.requests, Map.thash, wasm_id);
-  switch (verification_request) {
-    case (?req) {
-      let meta = req.metadata;
-      let visuals_map = AppStore.getICRC16MapOptional(meta, "visuals");
-
-      return ?{
-        // Stable app identity from the verification request
-        namespace = canister_type.canister_type_namespace;
-        name = AppStore.getICRC16Text(meta, "name");
-        deployment_type = Option.get(AppStore.getICRC16TextOptional(meta, "deployment_type"), "global");
-        description = AppStore.getICRC16Text(meta, "description");
-        category = AppStore.getICRC16Text(meta, "category");
-        tags = AppStore.getICRC16TextArray(meta, "tags");
-        publisher = AppStore.getICRC16Text(meta, "publisher");
-        icon_url = switch (visuals_map) {
-          case (?v) { AppStore.getICRC16Text(v, "icon_url") };
-          case (_) { "" };
-        };
-        banner_url = switch (visuals_map) {
-          case (?v) { AppStore.getICRC16Text(v, "banner_url") };
-          case (_) { "" };
-        };
-
-        // Nested object with version-specific details
-        latest_version = {
-          wasm_id = wasm_id;
-          version_string = _format_version_number(latest_version.version_number);
-          security_tier = AppStore.calculate_security_tier(is_latest_verified, completed_audits);
-          status = if (is_latest_verified) #Verified else #Pending;
-          created = created_timestamp;
-        };
+    // Check all versions, updating latest and accumulating verification
+    for (v in canister_type.versions.vals()) {
+      if (ICRC118WasmRegistry.canisterVersionCompare(v, latest_version) == #greater) {
+        latest_version := v;
+      };
+      if (_is_wasm_verified(Base16.encode(v.calculated_hash))) {
+        has_any_verified_version := true;
       };
     };
-    case (null) {
-      Debug.print("No verification request found for wasm_id " # wasm_id # ". Skipping listing.");
+
+    // If you want to list the app only when at least one version is verified:
+    if (not has_any_verified_version) {
+      Debug.print("Canister type " # canister_type.canister_type_namespace # " has no verified versions.");
       return null;
     };
-  };
-};
 
-// --- THE REFACTORED PUBLIC FUNCTION ---
-public query func get_app_listings(req : AppStore.AppListingRequest) : async AppStore.AppListingResponse {
-  // 1. Translate AppStore filters to the underlying Registry's filter format.
-  let registry_filters = switch (req.filter) {
-    case (?exists) { _translate_filters(exists) };
-    case (null) { [] };
-  };
+    // 2. Get the wasm_id and apply the verification gateway check.
+    let wasm_id = Base16.encode(latest_version.calculated_hash);
+    let is_latest_verified = _is_wasm_verified(wasm_id);
 
-  // 2. Delegate filtering and pagination to the ICRC-118 registry canister.
-  //    This is the core performance improvement. We only fetch the small slice of data we need.
-  let paginated_canister_types = icrc118wasmregistry().icrc118_get_canister_types({
-    filter = registry_filters;
-    prev = req.prev;
-    take = req.take;
-  });
+    // 3. Determine status (Pending vs. Verified) and build the listing object.
+    let audit_records = _get_audit_records_for_wasm(wasm_id);
+    let completed_audits = AppStore.get_completed_audit_types(audit_records);
 
-  // 3. Create a buffer for the final, enriched AppListing objects.
-  //    Its size is bounded by the `take` parameter, preventing large memory allocations.
-  var out = Buffer.Buffer<AppStore.AppListing>(paginated_canister_types.size());
+    // Fetch the full WASM record to get the created timestamp
+    let wasm_record_opt = _get_wasm_by_hash(latest_version.calculated_hash);
+    let created_timestamp = switch (wasm_record_opt) {
+      case (?wasm_record) { wasm_record.created };
+      case (null) { 0 }; // Fallback to 0 if not found (shouldn't happen)
+    };
 
-  // 4. Iterate over the SMALL, pre-filtered list to enrich the data.
-  for (canister_type in paginated_canister_types.vals()) {
-    switch (_build_listing_for_canister_type(canister_type)) {
-      case (?listing) {
-        // The helper function successfully built a listing. Add it to our results.
-        out.add(listing);
+    let verification_request = Map.get(icrc126().state.requests, Map.thash, wasm_id);
+    switch (verification_request) {
+      case (?req) {
+        let meta = req.metadata;
+        let visuals_map = AppStore.getICRC16MapOptional(meta, "visuals");
+
+        return ?{
+          // Stable app identity from the verification request
+          namespace = canister_type.canister_type_namespace;
+          name = AppStore.getICRC16Text(meta, "name");
+          deployment_type = Option.get(AppStore.getICRC16TextOptional(meta, "deployment_type"), "global");
+          description = AppStore.getICRC16Text(meta, "description");
+          category = AppStore.getICRC16Text(meta, "category");
+          tags = AppStore.getICRC16TextArray(meta, "tags");
+          publisher = AppStore.getICRC16Text(meta, "publisher");
+          icon_url = switch (visuals_map) {
+            case (?v) { AppStore.getICRC16Text(v, "icon_url") };
+            case (_) { "" };
+          };
+          banner_url = switch (visuals_map) {
+            case (?v) { AppStore.getICRC16Text(v, "banner_url") };
+            case (_) { "" };
+          };
+
+          // Nested object with version-specific details
+          latest_version = {
+            wasm_id = wasm_id;
+            version_string = _format_version_number(latest_version.version_number);
+            security_tier = AppStore.calculate_security_tier(is_latest_verified, completed_audits);
+            status = if (is_latest_verified) #Verified else #Pending;
+            created = created_timestamp;
+          };
+        };
       };
       case (null) {
-        // The helper returned null (e.g., latest version not verified).
-        // We simply skip it and move to the next one.
+        Debug.print("No verification request found for wasm_id " # wasm_id # ". Skipping listing.");
+        return null;
       };
     };
   };
 
-  // 5. Return the final, enriched list.
-  return #ok(Buffer.toArray(out));
-};
+  // --- THE REFACTORED PUBLIC FUNCTION ---
+  public query func get_app_listings(req : AppStore.AppListingRequest) : async AppStore.AppListingResponse {
+    // 1. Translate AppStore filters to the underlying Registry's filter format.
+    let registry_filters = switch (req.filter) {
+      case (?exists) { _translate_filters(exists) };
+      case (null) { [] };
+    };
 
-// Assembles the BuildInfo object by looking for a build attestation or divergence report.
-private func _build_build_info(records : [ICRC126.AuditRecord]) : AppStore.BuildInfo {
+    // 2. Delegate filtering and pagination to the ICRC-118 registry canister.
+    //    This is the core performance improvement. We only fetch the small slice of data we need.
+    let paginated_canister_types = icrc118wasmregistry().icrc118_get_canister_types({
+      filter = registry_filters;
+      prev = req.prev;
+      take = req.take;
+    });
 
-  let build_att = _find_attestation_by_type(records, "build_reproducibility_v1");
-  switch (build_att) {
-    case (?att) {
-      return {
-        status = "success";
-        git_commit = AppStore.getICRC16TextOptional(att.metadata, "git_commit");
-        repo_url = AppStore.getICRC16TextOptional(att.metadata, "repo_url");
-        failure_reason = null;
+    // 3. Create a buffer for the final, enriched AppListing objects.
+    //    Its size is bounded by the `take` parameter, preventing large memory allocations.
+    var out = Buffer.Buffer<AppStore.AppListing>(paginated_canister_types.size());
+
+    // 4. Iterate over the SMALL, pre-filtered list to enrich the data.
+    for (canister_type in paginated_canister_types.vals()) {
+      switch (_build_listing_for_canister_type(canister_type)) {
+        case (?listing) {
+          // The helper function successfully built a listing. Add it to our results.
+          out.add(listing);
+        };
+        case (null) {
+          // The helper returned null (e.g., latest version not verified).
+          // We simply skip it and move to the next one.
+        };
       };
     };
-    case (null) {
-      /* continue to check for divergence */
+
+    // 5. Return the final, enriched list.
+    return #ok(Buffer.toArray(out));
+  };
+
+  // Assembles the BuildInfo object by looking for a build attestation or divergence report.
+  private func _build_build_info(records : [ICRC126.AuditRecord]) : AppStore.BuildInfo {
+
+    let build_att = _find_attestation_by_type(records, "build_reproducibility_v1");
+    switch (build_att) {
+      case (?att) {
+        return {
+          status = "success";
+          git_commit = AppStore.getICRC16TextOptional(att.metadata, "git_commit");
+          repo_url = AppStore.getICRC16TextOptional(att.metadata, "repo_url");
+          failure_reason = null;
+        };
+      };
+      case (null) {
+        /* continue to check for divergence */
+      };
+    };
+
+    let divergence = Array.find<ICRC126.AuditRecord>(records, func(r) { switch (r) { case (#Divergence(_)) true; case (_) false } });
+    switch (divergence) {
+      case (?exists) {
+        let div = switch (exists) {
+          case (#Divergence(d)) d;
+          case (_) Debug.trap("impossible");
+        };
+        return {
+          status = "failure";
+          git_commit = null;
+          repo_url = null;
+          failure_reason = ?div.report;
+        };
+      };
+      case (null) { /* continue to default return */ };
+    };
+
+    return {
+      status = "unknown";
+      git_commit = null;
+      repo_url = null;
+      failure_reason = null;
     };
   };
 
-  let divergence = Array.find<ICRC126.AuditRecord>(records, func(r) { switch (r) { case (#Divergence(_)) true; case (_) false } });
-  switch (divergence) {
-    case (?exists) {
-      let div = switch (exists) {
-        case (#Divergence(d)) d;
-        case (_) Debug.trap("impossible");
-      };
-      return {
-        status = "failure";
-        git_commit = null;
-        repo_url = null;
-        failure_reason = ?div.report;
-      };
-    };
-    case (null) { /* continue to default return */ };
-  };
-
-  return {
-    status = "unknown";
-    git_commit = null;
-    repo_url = null;
-    failure_reason = null;
-  };
-};
-
-// Extracts the list of tools from the 'tools_v1' attestation.
-private func _get_tools_from_records(records : [ICRC126.AuditRecord]) : [ICRC126.ICRC16Map] {
-  switch (_find_attestation_by_type(records, "tools_v1")) {
-    case (?att) { AppStore.getICRC16ArrayOfMaps(att.metadata, "tools") };
-    case (null) { [] };
-  };
-};
-
-// Extracts and assembles the DataSafetyInfo object.
-private func _get_data_safety_from_records(records : [ICRC126.AuditRecord]) : AppStore.DataSafetyInfo {
-  switch (_find_attestation_by_type(records, "data_safety_v1")) {
-    case (?att) {
-      return {
-        overall_description = AppStore.getICRC16Text(att.metadata, "overall_description");
-        data_points = AppStore.getICRC16ArrayOfMaps(att.metadata, "data_points");
-      };
-    };
-    case (null) {
-      return { overall_description = ""; data_points = [] };
+  // Extracts the list of tools from the 'tools_v1' attestation.
+  private func _get_tools_from_records(records : [ICRC126.AuditRecord]) : [ICRC126.ICRC16Map] {
+    switch (_find_attestation_by_type(records, "tools_v1")) {
+      case (?att) { AppStore.getICRC16ArrayOfMaps(att.metadata, "tools") };
+      case (null) { [] };
     };
   };
-};
 
-// Finds a specific attestation by its type from a list of audit records.
-private func _find_attestation_by_type(records : [ICRC126.AuditRecord], audit_type : Text) : ?ICRC126.AttestationRecord {
-  let found = Array.find<ICRC126.AuditRecord>(
-    records,
-    func(rec) {
-      switch (rec) {
-        case (#Attestation(att)) { att.audit_type == audit_type };
-        case (_) { false };
+  // Extracts and assembles the DataSafetyInfo object.
+  private func _get_data_safety_from_records(records : [ICRC126.AuditRecord]) : AppStore.DataSafetyInfo {
+    switch (_find_attestation_by_type(records, "data_safety_v1")) {
+      case (?att) {
+        return {
+          overall_description = AppStore.getICRC16Text(att.metadata, "overall_description");
+          data_points = AppStore.getICRC16ArrayOfMaps(att.metadata, "data_points");
+        };
       };
-    },
-  );
-  switch (found) {
-    case (?#Attestation(att)) { return ?att };
-    case (_) { return null };
+      case (null) {
+        return { overall_description = ""; data_points = [] };
+      };
+    };
   };
-};
 
-/**
+  // Finds a specific attestation by its type from a list of audit records.
+  private func _find_attestation_by_type(records : [ICRC126.AuditRecord], audit_type : Text) : ?ICRC126.AttestationRecord {
+    let found = Array.find<ICRC126.AuditRecord>(
+      records,
+      func(rec) {
+        switch (rec) {
+          case (#Attestation(att)) { att.audit_type == audit_type };
+          case (_) { false };
+        };
+      },
+    );
+    switch (found) {
+      case (?#Attestation(att)) { return ?att };
+      case (_) { return null };
+    };
+  };
+
+  /**
    * Fetches and assembles all data for an app's detail page using its stable namespace.
    * This is the single, powerful query the frontend needs.
    */
-public query func get_app_details_by_namespace(
-  namespace : Text,
-  opt_wasm_id : ?Text,
-) : async Result.Result<AppStore.AppDetailsResponse, AppStore.AppStoreError> {
+  public query func get_app_details_by_namespace(
+    namespace : Text,
+    opt_wasm_id : ?Text,
+  ) : async Result.Result<AppStore.AppDetailsResponse, AppStore.AppStoreError> {
 
-  // 1. Find the canister type by its namespace.
-  let req : Service.GetCanisterTypesRequest = {
-    filter = [#namespace(namespace)];
-    prev = null;
-    take = ?1; // We only expect one canister type per namespace.
-  };
-  let canister_types = icrc118wasmregistry().icrc118_get_canister_types(req);
-  if (canister_types.size() == 0) {
-    return #err(#NotFound("Canister type not found for the given namespace"));
-  };
-
-  let canister_type = canister_types[0];
-
-  // Define a comparison function for descending order (newest first).
-  func compareVersionsDesc(a : ICRC118WasmRegistry.CanisterVersion, b : ICRC118WasmRegistry.CanisterVersion) : Order.Order {
-    switch (ICRC118WasmRegistry.canisterVersionCompare(a, b)) {
-      case (#less) { #greater }; // a < b, so move a after b
-      case (#greater) { #less }; // a > b, so move a before b
-      case (#equal) { #equal };
+    // 1. Find the canister type by its namespace.
+    let req : Service.GetCanisterTypesRequest = {
+      filter = [#namespace(namespace)];
+      prev = null;
+      take = ?1; // We only expect one canister type per namespace.
     };
-  };
-  var sorted_versions = Array.sort<ICRC118WasmRegistry.CanisterVersion>(canister_type.versions, compareVersionsDesc);
+    let canister_types = icrc118wasmregistry().icrc118_get_canister_types(req);
+    if (canister_types.size() == 0) {
+      return #err(#NotFound("Canister type not found for the given namespace"));
+    };
 
-  // --- 3. THE FIX: Determine which version to load ---
-  let version_to_load_record = switch (opt_wasm_id) {
-    case (?wasm_id_hex) {
-      Debug.print("WASM ID specified in request: " # wasm_id_hex);
-      // A specific version was requested. Find it.
-      let wasm_hash = Base16.decode(wasm_id_hex);
-      let found = Array.find<ICRC118WasmRegistry.CanisterVersion>(
-        sorted_versions,
-        func(v) { ?v.calculated_hash == wasm_hash },
-      );
+    let canister_type = canister_types[0];
 
-      Debug.print("Requested wasm_id: " # wasm_id_hex);
-      switch (found) {
-        case (?v) { v };
-        case (null) {
-          return #err(#NotFound("Specific version hash not found"));
-        };
+    // Define a comparison function for descending order (newest first).
+    func compareVersionsDesc(a : ICRC118WasmRegistry.CanisterVersion, b : ICRC118WasmRegistry.CanisterVersion) : Order.Order {
+      switch (ICRC118WasmRegistry.canisterVersionCompare(a, b)) {
+        case (#less) { #greater }; // a < b, so move a after b
+        case (#greater) { #less }; // a > b, so move a before b
+        case (#equal) { #equal };
       };
     };
-    case (null) {
-      // No specific version was requested. Default to the latest.
-      sorted_versions[0];
+    var sorted_versions = Array.sort<ICRC118WasmRegistry.CanisterVersion>(canister_type.versions, compareVersionsDesc);
+
+    // --- 3. THE FIX: Determine which version to load ---
+    let version_to_load_record = switch (opt_wasm_id) {
+      case (?wasm_id_hex) {
+        Debug.print("WASM ID specified in request: " # wasm_id_hex);
+        // A specific version was requested. Find it.
+        let wasm_hash = Base16.decode(wasm_id_hex);
+        let found = Array.find<ICRC118WasmRegistry.CanisterVersion>(
+          sorted_versions,
+          func(v) { ?v.calculated_hash == wasm_hash },
+        );
+
+        Debug.print("Requested wasm_id: " # wasm_id_hex);
+        switch (found) {
+          case (?v) { v };
+          case (null) {
+            return #err(#NotFound("Specific version hash not found"));
+          };
+        };
+      };
+      case (null) {
+        // No specific version was requested. Default to the latest.
+        sorted_versions[0];
+      };
     };
-  };
 
-  // --- 4. From now on, use `version_to_load_record` instead of `latest_version_record` ---
-  let wasm_id_to_load = Base16.encode(version_to_load_record.calculated_hash);
+    // --- 4. From now on, use `version_to_load_record` instead of `latest_version_record` ---
+    let wasm_id_to_load = Base16.encode(version_to_load_record.calculated_hash);
 
-  // 3. Fetch all data for the LATEST version in parallel.
-  let latest_audit_records = _get_audit_records_for_wasm(wasm_id_to_load);
-  let latest_bounties = _get_bounties_for_wasm(wasm_id_to_load);
+    // 3. Fetch all data for the LATEST version in parallel.
+    let latest_audit_records = _get_audit_records_for_wasm(wasm_id_to_load);
+    let latest_bounties = _get_bounties_for_wasm(wasm_id_to_load);
 
-  // 4. Build the `all_versions` summary list.
-  var all_versions_summary = Buffer.Buffer<AppStore.AppVersionSummary>(canister_type.versions.size());
-  for (version_record in sorted_versions.vals()) {
-    let wasm_id = Base16.encode(version_record.calculated_hash);
-    let is_verified = _is_wasm_verified(wasm_id);
-    if (is_verified) {
-      let records = _get_audit_records_for_wasm(wasm_id);
-      let completed_audits = AppStore.get_completed_audit_types(records);
+    // 4. Build the `all_versions` summary list.
+    var all_versions_summary = Buffer.Buffer<AppStore.AppVersionSummary>(canister_type.versions.size());
+    for (version_record in sorted_versions.vals()) {
+      let wasm_id = Base16.encode(version_record.calculated_hash);
+      let is_verified = _is_wasm_verified(wasm_id);
+      if (is_verified) {
+        let records = _get_audit_records_for_wasm(wasm_id);
+        let completed_audits = AppStore.get_completed_audit_types(records);
 
-      // Fetch the full WASM record to get the created timestamp
-      let wasm_record_opt = _get_wasm_by_hash(version_record.calculated_hash);
-      let created_timestamp = switch (wasm_record_opt) {
-        case (?wasm_record) { wasm_record.created };
-        case (null) { 0 }; // Fallback to 0 if not found (shouldn't happen)
+        // Fetch the full WASM record to get the created timestamp
+        let wasm_record_opt = _get_wasm_by_hash(version_record.calculated_hash);
+        let created_timestamp = switch (wasm_record_opt) {
+          case (?wasm_record) { wasm_record.created };
+          case (null) { 0 }; // Fallback to 0 if not found (shouldn't happen)
+        };
+
+        all_versions_summary.add({
+          wasm_id = wasm_id;
+          version_string = _format_version_number(version_record.version_number);
+          security_tier = AppStore.calculate_security_tier(true, completed_audits);
+          status = #Verified;
+          created = created_timestamp;
+        });
+      };
+    };
+
+    // 5. Assemble the detailed object for the LATEST version.
+    let latest_build_info = _build_build_info(latest_audit_records);
+    let is_verified = _is_wasm_verified(wasm_id_to_load);
+    let status = if (is_verified) { #Verified } else { #Pending };
+
+    // Fetch the full WASM record to get the created timestamp
+    let latest_wasm_record_opt = _get_wasm_by_hash(version_to_load_record.calculated_hash);
+    let latest_created_timestamp = switch (latest_wasm_record_opt) {
+      case (?wasm_record) { wasm_record.created };
+      case (null) { 0 }; // Fallback to 0 if not found (shouldn't happen)
+    };
+
+    let latest_version_details : AppStore.AppVersionDetails = {
+      wasm_id = wasm_id_to_load;
+      version_string = _format_version_number(version_to_load_record.version_number);
+      status = status;
+      security_tier = AppStore.calculate_security_tier(is_verified, AppStore.get_completed_audit_types(latest_audit_records));
+      build_info = latest_build_info;
+      tools = _get_tools_from_records(latest_audit_records);
+      data_safety = _get_data_safety_from_records(latest_audit_records);
+      bounties = latest_bounties;
+      audit_records = latest_audit_records;
+      created = latest_created_timestamp;
+    };
+
+    // 6. Assemble the stable, top-level app information.
+    //    This comes from the  the verification request.
+    Debug.print("Loading app details for namespace " # namespace # " using wasm_id " # wasm_id_to_load);
+
+    let verification_request = _get_verification_request(wasm_id_to_load);
+    switch (verification_request) {
+      case (?req) {
+        let meta = req.metadata;
+        let visuals_map = AppStore.getICRC16MapOptional(meta, "visuals");
+        return #ok({
+          namespace = namespace;
+          name = AppStore.getICRC16Text(meta, "name");
+          deployment_type = Option.get(AppStore.getICRC16TextOptional(meta, "deployment_type"), "global");
+          mcp_path = AppStore.getICRC16Text(meta, "mcp_path");
+          publisher = AppStore.getICRC16Text(meta, "publisher");
+          category = AppStore.getICRC16Text(meta, "category");
+          description = AppStore.getICRC16Text(meta, "description");
+          key_features = AppStore.getICRC16TextArray(meta, "key_features");
+          why_this_app = AppStore.getICRC16Text(meta, "why_this_app");
+          tags = AppStore.getICRC16TextArray(meta, "tags");
+          icon_url = switch (visuals_map) {
+            case (?v) { AppStore.getICRC16Text(v, "icon_url") };
+            case (_) { "" };
+          };
+          banner_url = switch (visuals_map) {
+            case (?v) { AppStore.getICRC16Text(v, "banner_url") };
+            case (_) { "" };
+          };
+          gallery_images = switch (visuals_map) {
+            case (?v) { AppStore.getICRC16TextArray(v, "gallery_images") };
+            case (_) { [] };
+          };
+          latest_version = latest_version_details;
+          all_versions = Buffer.toArray(all_versions_summary);
+        });
+      };
+      case (null) {
+        return #err(#NotFound("Verification request not found for pending app"));
       };
 
-      all_versions_summary.add({
-        wasm_id = wasm_id;
-        version_string = _format_version_number(version_record.version_number);
-        security_tier = AppStore.calculate_security_tier(true, completed_audits);
-        status = #Verified;
-        created = created_timestamp;
-      });
     };
   };
 
-  // 5. Assemble the detailed object for the LATEST version.
-  let latest_build_info = _build_build_info(latest_audit_records);
-  let is_verified = _is_wasm_verified(wasm_id_to_load);
-  let status = if (is_verified) { #Verified } else { #Pending };
-
-  // Fetch the full WASM record to get the created timestamp
-  let latest_wasm_record_opt = _get_wasm_by_hash(version_to_load_record.calculated_hash);
-  let latest_created_timestamp = switch (latest_wasm_record_opt) {
-    case (?wasm_record) { wasm_record.created };
-    case (null) { 0 }; // Fallback to 0 if not found (shouldn't happen)
-  };
-
-  let latest_version_details : AppStore.AppVersionDetails = {
-    wasm_id = wasm_id_to_load;
-    version_string = _format_version_number(version_to_load_record.version_number);
-    status = status;
-    security_tier = AppStore.calculate_security_tier(is_verified, AppStore.get_completed_audit_types(latest_audit_records));
-    build_info = latest_build_info;
-    tools = _get_tools_from_records(latest_audit_records);
-    data_safety = _get_data_safety_from_records(latest_audit_records);
-    bounties = latest_bounties;
-    audit_records = latest_audit_records;
-    created = latest_created_timestamp;
-  };
-
-  // 6. Assemble the stable, top-level app information.
-  //    This comes from the  the verification request.
-  Debug.print("Loading app details for namespace " # namespace # " using wasm_id " # wasm_id_to_load);
-
-  let verification_request = _get_verification_request(wasm_id_to_load);
-  switch (verification_request) {
-    case (?req) {
-      let meta = req.metadata;
-      let visuals_map = AppStore.getICRC16MapOptional(meta, "visuals");
-      return #ok({
-        namespace = namespace;
-        name = AppStore.getICRC16Text(meta, "name");
-        deployment_type = Option.get(AppStore.getICRC16TextOptional(meta, "deployment_type"), "global");
-        mcp_path = AppStore.getICRC16Text(meta, "mcp_path");
-        publisher = AppStore.getICRC16Text(meta, "publisher");
-        category = AppStore.getICRC16Text(meta, "category");
-        description = AppStore.getICRC16Text(meta, "description");
-        key_features = AppStore.getICRC16TextArray(meta, "key_features");
-        why_this_app = AppStore.getICRC16Text(meta, "why_this_app");
-        tags = AppStore.getICRC16TextArray(meta, "tags");
-        icon_url = switch (visuals_map) {
-          case (?v) { AppStore.getICRC16Text(v, "icon_url") };
-          case (_) { "" };
-        };
-        banner_url = switch (visuals_map) {
-          case (?v) { AppStore.getICRC16Text(v, "banner_url") };
-          case (_) { "" };
-        };
-        gallery_images = switch (visuals_map) {
-          case (?v) { AppStore.getICRC16TextArray(v, "gallery_images") };
-          case (_) { [] };
-        };
-        latest_version = latest_version_details;
-        all_versions = Buffer.toArray(all_versions_summary);
-      });
-    };
-    case (null) {
-      return #err(#NotFound("Verification request not found for pending app"));
-    };
-
-  };
-};
-
-/**
+  /**
    * @notice Fetches a paginated and filtered list of all bounties.
    * @param req The request object containing optional filters and pagination cursors.
    * @return A result containing an array of matching `ICRC127.Bounty` records or an error.
    */
-public shared query func list_bounties(req : Bounty.BountyListingRequest) : async Bounty.BountyListingResponse {
-  // 1. Handle optional arguments and set defaults.
-  let filters = switch (req.filter) { case null []; case (?fs) fs };
-  let take = switch (req.take) { case null 20; case (?n) Nat.min(n, 100) };
-  let prev = req.prev;
+  public shared query func list_bounties(req : Bounty.BountyListingRequest) : async Bounty.BountyListingResponse {
+    // 1. Handle optional arguments and set defaults.
+    let filters = switch (req.filter) { case null []; case (?fs) fs };
+    let take = switch (req.take) { case null 20; case (?n) Nat.min(n, 100) };
+    let prev = req.prev;
 
-  // 2. Use BTree iterator instead of converting to array - this is O(n) only for items we check
-  // not O(n) upfront cost of converting entire tree to array
-  let bounties_tree = icrc127().state.bounties;
+    // 2. Use BTree iterator instead of converting to array - this is O(n) only for items we check
+    // not O(n) upfront cost of converting entire tree to array
+    let bounties_tree = icrc127().state.bounties;
 
-  // 3. Define the filtering logic in a helper function.
-  // A bounty must match ALL filters in the request to be included.
-  func matchesAllFilters(bounty : ICRC127.Bounty, filters : [Bounty.BountyFilter]) : Bool {
-    if (filters.size() == 0) return true;
+    // 3. Define the filtering logic in a helper function.
+    // A bounty must match ALL filters in the request to be included.
+    func matchesAllFilters(bounty : ICRC127.Bounty, filters : [Bounty.BountyFilter]) : Bool {
+      if (filters.size() == 0) return true;
 
-    for (f in filters.vals()) {
-      switch (f) {
-        case (#status(statusFilter)) {
-          let is_claimed = bounty.claimed != null;
-          switch (statusFilter) {
-            case (#Open) { if (is_claimed) return false };
-            case (#Claimed) { if (not is_claimed) return false };
+      for (f in filters.vals()) {
+        switch (f) {
+          case (#status(statusFilter)) {
+            let is_claimed = bounty.claimed != null;
+            switch (statusFilter) {
+              case (#Open) { if (is_claimed) return false };
+              case (#Claimed) { if (not is_claimed) return false };
+            };
           };
-        };
-        case (#audit_type(typeFilter)) {
-          switch (bounty.challenge_parameters) {
-            case (#Map(params_map)) {
-              switch (AppStore.getICRC16TextOptional(params_map, "audit_type")) {
-                case (?bountyType) {
-                  if (bountyType != typeFilter) { return false };
-                };
-                case (null) {
-                  return false;
+          case (#audit_type(typeFilter)) {
+            switch (bounty.challenge_parameters) {
+              case (#Map(params_map)) {
+                switch (AppStore.getICRC16TextOptional(params_map, "audit_type")) {
+                  case (?bountyType) {
+                    if (bountyType != typeFilter) { return false };
+                  };
+                  case (null) {
+                    return false;
+                  };
                 };
               };
-            };
-            case (_) {
-              return false;
+              case (_) {
+                return false;
+              };
             };
           };
+          case (#creator(creatorFilter)) {
+            if (bounty.creator != creatorFilter) return false;
+          };
         };
-        case (#creator(creatorFilter)) {
-          if (bounty.creator != creatorFilter) return false;
+      };
+      return true;
+    };
+
+    // 4. Apply pagination and filtering by iterating the BTree
+    // Convert to array but only for matching/pagination, not for storage
+    // This is still better than the old approach since we can exit early
+    var started = prev == null;
+    var count : Nat = 0;
+    let out = Buffer.Buffer<ICRC127.Bounty>(take);
+
+    // Get entries and convert to array for reverse iteration (newest first)
+    let entries = Buffer.fromArray<(Nat, ICRC127.Bounty)>(
+      Iter.toArray(BTree.entries(bounties_tree))
+    );
+
+    // Iterate in reverse order (newest first)
+    var i = entries.size();
+    while (i > 0 and count < take) {
+      i -= 1;
+      let (id, bounty) = entries.get(i);
+
+      if (not started) {
+        switch (prev) {
+          case (?p) {
+            if (bounty.bounty_id == p) {
+              started := true;
+            };
+          };
+          case (null) {};
+        };
+      } else {
+        // We've started collecting
+        if (matchesAllFilters(bounty, filters)) {
+          out.add(bounty);
+          count += 1;
         };
       };
     };
-    return true;
+
+    return #ok(Buffer.toArray(out));
   };
 
-  // 4. Apply pagination and filtering by iterating the BTree
-  // Convert to array but only for matching/pagination, not for storage
-  // This is still better than the old approach since we can exit early
-  var started = prev == null;
-  var count : Nat = 0;
-  let out = Buffer.Buffer<ICRC127.Bounty>(take);
+  // --- DAO-Specific Endpoints ---
 
-  // Get entries and convert to array for reverse iteration (newest first)
-  let entries = Buffer.fromArray<(Nat, ICRC127.Bounty)>(
-    Iter.toArray(BTree.entries(bounties_tree))
-  );
-
-  // Iterate in reverse order (newest first)
-  var i = entries.size();
-  while (i > 0 and count < take) {
-    i -= 1;
-    let (id, bounty) = entries.get(i);
-
-    if (not started) {
-      switch (prev) {
-        case (?p) {
-          if (bounty.bounty_id == p) {
-            started := true;
-          };
-        };
-        case (null) {};
-      };
-    } else {
-      // We've started collecting
-      if (matchesAllFilters(bounty, filters)) {
-        out.add(bounty);
-        count += 1;
-      };
-    };
+  // Define the shape of the data we'll return for the DAO list command.
+  public type PendingSubmission = {
+    wasm_id : Text;
+    repo_url : Text;
+    commit_hash : Blob;
+    attestation_types : [Text]; // A list of all NEW audit types submitted since the last review.
   };
 
-  return #ok(Buffer.toArray(out));
-};
+  // A standard pagination request type.
+  public type PaginationRequest = {
+    take : ?Nat;
+    prev : ?Text; // The wasm_id of the last item from the previous page.
+  };
 
-// --- DAO-Specific Endpoints ---
+  private func _get_verification_request(wasm_id : Text) : ?ICRC126Service.VerificationRequest {
+    let all_requests = icrc126().state.requests;
+    Map.get(all_requests, Map.thash, wasm_id);
+  };
 
-// Define the shape of the data we'll return for the DAO list command.
-public type PendingSubmission = {
-  wasm_id : Text;
-  repo_url : Text;
-  commit_hash : Blob;
-  attestation_types : [Text]; // A list of all NEW audit types submitted since the last review.
-};
-
-// A standard pagination request type.
-public type PaginationRequest = {
-  take : ?Nat;
-  prev : ?Text; // The wasm_id of the last item from the previous page.
-};
-
-private func _get_verification_request(wasm_id : Text) : ?ICRC126Service.VerificationRequest {
-  let all_requests = icrc126().state.requests;
-  Map.get(all_requests, Map.thash, wasm_id);
-};
-
-/**
+  /**
    * @notice Fetches the original verification request metadata for a given WASM ID.
    * @param wasm_id The hex-encoded SHA-256 hash of the WASM.
    * @return The optional `VerificationRequest` record, which contains the repo URL and commit hash.
    *         Returns `null` if no request is found for the given ID.
    */
-public shared query func get_verification_request(wasm_id : Text) : async ?ICRC126Service.VerificationRequest {
-  _get_verification_request(wasm_id);
-};
+  public shared query func get_verification_request(wasm_id : Text) : async ?ICRC126Service.VerificationRequest {
+    _get_verification_request(wasm_id);
+  };
 
-// A new, paginated query to find all verification requests that are waiting for a bounty.
-public shared query func list_pending_verifications(
-  // We can add pagination later if needed. For now, we'll return all.
-) : async [ICRC126.VerificationRecord] {
-  var pending_requests = Buffer.Buffer<ICRC126.VerificationRecord>(0);
-  let all_requests = icrc126().state.requests;
+  // A new, paginated query to find all verification requests that are waiting for a bounty.
+  public shared query func list_pending_verifications(
+    // We can add pagination later if needed. For now, we'll return all.
+  ) : async [ICRC126.VerificationRecord] {
+    var pending_requests = Buffer.Buffer<ICRC126.VerificationRecord>(0);
+    let all_requests = icrc126().state.requests;
 
-  for ((wasm_id, request) in Map.entries(all_requests)) {
-    // Check if the request has been finalized (verified or rejected).
-    let is_finalized = BTree.get(finalization_log, Text.compare, wasm_id) != null;
+    for ((wasm_id, request) in Map.entries(all_requests)) {
+      // Check if the request has been finalized (verified or rejected).
+      let is_finalized = BTree.get(finalization_log, Text.compare, wasm_id) != null;
 
-    // --- UPDATED LOGIC ---
-    // Include the request if it is NOT yet finalized.
-    // This means WASMs with bounties WILL show up as pending until they're verified.
-    // The verifier bot can then claim those bounties when processing them.
-    if (not is_finalized) {
-      pending_requests.add(request);
+      // --- UPDATED LOGIC ---
+      // Include the request if it is NOT yet finalized.
+      // This means WASMs with bounties WILL show up as pending until they're verified.
+      // The verifier bot can then claim those bounties when processing them.
+      if (not is_finalized) {
+        pending_requests.add(request);
+      };
     };
-  };
 
-  var pending_array = Buffer.toArray(pending_requests);
+    var pending_array = Buffer.toArray(pending_requests);
 
-  // --- Step 3: Define a custom comparison function for sorting ---
-  // This function will sort records by their timestamp in descending order (newest first).
-  func compareRecords(a : ICRC126.VerificationRecord, b : ICRC126.VerificationRecord) : Order.Order {
-    if (a.timestamp > b.timestamp) {
-      return #less; // a is newer, so it should come first
-    } else if (a.timestamp < b.timestamp) {
-      return #greater; // b is newer, so it should come first
-    } else {
-      return #equal; // timestamps are equal
+    // --- Step 3: Define a custom comparison function for sorting ---
+    // This function will sort records by their timestamp in descending order (newest first).
+    func compareRecords(a : ICRC126.VerificationRecord, b : ICRC126.VerificationRecord) : Order.Order {
+      if (a.timestamp > b.timestamp) {
+        return #less; // a is newer, so it should come first
+      } else if (a.timestamp < b.timestamp) {
+        return #greater; // b is newer, so it should come first
+      } else {
+        return #equal; // timestamps are equal
+      };
     };
+
+    // --- Step 4: Sort the array in-place using the comparison function ---
+    pending_array := Array.sort<ICRC126.VerificationRecord>(pending_array, compareRecords);
+
+    // --- Step 5: Return the now-sorted array ---
+    return pending_array;
   };
 
-  // --- Step 4: Sort the array in-place using the comparison function ---
-  pending_array := Array.sort<ICRC126.VerificationRecord>(pending_array, compareRecords);
+  private func _get_audit_records_for_wasm(wasm_id : Text) : [ICRC126.AuditRecord] {
+    let all_audits = icrc126().state.audits;
 
-  // --- Step 5: Return the now-sorted array ---
-  return pending_array;
-};
-
-private func _get_audit_records_for_wasm(wasm_id : Text) : [ICRC126.AuditRecord] {
-  let all_audits = icrc126().state.audits;
-
-  // Look up the wasm_id and return the array of records, or an empty array if none exist.
-  let records = switch (Map.get(all_audits, Map.thash, wasm_id)) {
-    case (null) [];
-    case (?rs) rs;
-  };
-
-  return records;
-};
-
-public shared query func get_audit_records_for_wasm(wasm_id : Text) : async [ICRC126.AuditRecord] {
-  _get_audit_records_for_wasm(wasm_id);
-};
-
-// --- NEW: Private helper to notify the search indexer ---
-private func _notify_indexer_of_update(namespace : Text, content : Text) : async () {
-  // 1. Check if the indexer canister ID is configured.
-  let indexer_id = switch (_search_index_canister_id) {
-    case (?id) { id };
-    case (null) {
-      // If not configured, print a warning and do nothing.
-      Debug.print("Warning: Search indexer is not configured. Skipping indexing.");
-      return;
+    // Look up the wasm_id and return the array of records, or an empty array if none exist.
+    let records = switch (Map.get(all_audits, Map.thash, wasm_id)) {
+      case (null) [];
+      case (?rs) rs;
     };
+
+    return records;
   };
 
-  // 2. Make a "fire-and-forget" call to the indexer.
-  // A failure here should be logged but should NOT trap the registry.
-  try {
-    Debug.print("Notifying indexer for namespace: " # namespace);
-    let indexer : SearchIndex.Service = actor (Principal.toText(indexer_id));
-    await indexer.update_index(namespace, content);
-  } catch (e) {
-    Debug.print("Warning: Failed to notify indexer canister: " # Error.message(e));
+  public shared query func get_audit_records_for_wasm(wasm_id : Text) : async [ICRC126.AuditRecord] {
+    _get_audit_records_for_wasm(wasm_id);
   };
-};
 
-// Add this temporary public function to your Registry.mo for testing purposes
-public shared ({ caller }) func test_only_notify_indexer(namespace : Text, content : Text) : async () {
-  // This bypasses the full publish logic and directly calls the indexer
-  // It should be secured or removed for production mainnet deployment.
-  if (caller != _owner) { Debug.trap("Admin only") };
-  try {
+  // --- NEW: Private helper to notify the search indexer ---
+  private func _notify_indexer_of_update(namespace : Text, content : Text) : async () {
+    // 1. Check if the indexer canister ID is configured.
     let indexer_id = switch (_search_index_canister_id) {
       case (?id) { id };
-      case (null) { Debug.trap("Indexer canister not configured") };
+      case (null) {
+        // If not configured, print a warning and do nothing.
+        Debug.print("Warning: Search indexer is not configured. Skipping indexing.");
+        return;
+      };
     };
-    let indexer : SearchIndex.Service = actor (Principal.toText(indexer_id));
-    await indexer.update_index(namespace, content);
-  } catch (e) {
-    Debug.print("Warning: Failed to notify indexer canister: " # Error.message(e));
-  };
-};
 
-/**
+    // 2. Make a "fire-and-forget" call to the indexer.
+    // A failure here should be logged but should NOT trap the registry.
+    try {
+      Debug.print("Notifying indexer for namespace: " # namespace);
+      let indexer : SearchIndex.Service = actor (Principal.toText(indexer_id));
+      await indexer.update_index(namespace, content);
+    } catch (e) {
+      Debug.print("Warning: Failed to notify indexer canister: " # Error.message(e));
+    };
+  };
+
+  // Add this temporary public function to your Registry.mo for testing purposes
+  public shared ({ caller }) func test_only_notify_indexer(namespace : Text, content : Text) : async () {
+    // This bypasses the full publish logic and directly calls the indexer
+    // It should be secured or removed for production mainnet deployment.
+    if (caller != _owner) { Debug.trap("Admin only") };
+    try {
+      let indexer_id = switch (_search_index_canister_id) {
+        case (?id) { id };
+        case (null) { Debug.trap("Indexer canister not configured") };
+      };
+      let indexer : SearchIndex.Service = actor (Principal.toText(indexer_id));
+      await indexer.update_index(namespace, content);
+    } catch (e) {
+      Debug.print("Warning: Failed to notify indexer canister: " # Error.message(e));
+    };
+  };
+
+  /**
    * [OWNER-ONLY] Iterates through all published apps and pushes their data
    * to the search indexer to bootstrap or rebuild the index.
    *
@@ -3304,137 +3301,137 @@ public shared ({ caller }) func test_only_notify_indexer(namespace : Text, conte
    *
    * @returns A status message indicating how many apps were successfully indexed.
    */
-public shared ({ caller }) func bootstrap_search_index() : async Result.Result<Text, Text> {
-  // 1. Security: Ensure only the owner can run this.
-  if (caller != _owner) {
-    return #err("Unauthorized: Only the owner can run the bootstrap process.");
-  };
+  public shared ({ caller }) func bootstrap_search_index() : async Result.Result<Text, Text> {
+    // 1. Security: Ensure only the owner can run this.
+    if (caller != _owner) {
+      return #err("Unauthorized: Only the owner can run the bootstrap process.");
+    };
 
-  // 2. Ensure the indexer is configured.
-  let indexer_id = switch (_search_index_canister_id) {
-    case (?id) { id };
-    case (null) { return #err("Search indexer canister is not configured.") };
-  };
+    // 2. Ensure the indexer is configured.
+    let indexer_id = switch (_search_index_canister_id) {
+      case (?id) { id };
+      case (null) { return #err("Search indexer canister is not configured.") };
+    };
 
-  var indexed_count : Nat = 0;
-  let all_canister_types = icrc118wasmregistry().icrc118_get_canister_types({
-    filter = [];
-    prev = null;
-    take = null;
-  });
+    var indexed_count : Nat = 0;
+    let all_canister_types = icrc118wasmregistry().icrc118_get_canister_types({
+      filter = [];
+      prev = null;
+      take = null;
+    });
 
-  // 3. Loop through every canister type in the registry.
-  for (canister_type in all_canister_types.vals()) {
-    Debug.print("Processing namespace: " # canister_type.canister_type_namespace);
-    // a. Find the latest, verified version with an app_info attestation.
-    // This reuses the exact same logic as your get_app_listings function.
-    let listing_opt = _build_listing_for_canister_type(canister_type);
+    // 3. Loop through every canister type in the registry.
+    for (canister_type in all_canister_types.vals()) {
+      Debug.print("Processing namespace: " # canister_type.canister_type_namespace);
+      // a. Find the latest, verified version with an app_info attestation.
+      // This reuses the exact same logic as your get_app_listings function.
+      let listing_opt = _build_listing_for_canister_type(canister_type);
 
-    Debug.print("Listing found: " # debug_show (Option.isSome(listing_opt)));
+      Debug.print("Listing found: " # debug_show (Option.isSome(listing_opt)));
 
-    switch (listing_opt) {
-      case (?listing) {
-        Debug.print("Found listable app: " # listing.name # " (namespace: " # listing.namespace # ")");
-        // b. We found a valid, listable app. Assemble its searchable text.
-        // We can pull the data directly from the `listing` object.
-        let combined_text = listing.name # " " # listing.description # " " # listing.publisher # " " # Text.join(" ", listing.tags.vals());
+      switch (listing_opt) {
+        case (?listing) {
+          Debug.print("Found listable app: " # listing.name # " (namespace: " # listing.namespace # ")");
+          // b. We found a valid, listable app. Assemble its searchable text.
+          // We can pull the data directly from the `listing` object.
+          let combined_text = listing.name # " " # listing.description # " " # listing.publisher # " " # Text.join(" ", listing.tags.vals());
 
-        // c. Make the "fire-and-forget" call to the indexer.
-        try {
-          let indexer : SearchIndex.Service = actor (Principal.toText(indexer_id));
-          await indexer.update_index(listing.namespace, combined_text);
-          indexed_count += 1;
-        } catch (e) {
-          // Log the error for the specific app but continue the loop.
-          Debug.print(
-            "Warning: Failed to index namespace " # listing.namespace # ": " # Error.message(e)
-          );
+          // c. Make the "fire-and-forget" call to the indexer.
+          try {
+            let indexer : SearchIndex.Service = actor (Principal.toText(indexer_id));
+            await indexer.update_index(listing.namespace, combined_text);
+            indexed_count += 1;
+          } catch (e) {
+            // Log the error for the specific app but continue the loop.
+            Debug.print(
+              "Warning: Failed to index namespace " # listing.namespace # ": " # Error.message(e)
+            );
+          };
+        };
+        case (null) {
+          // This canister_type is not listable (e.g., not verified), so we skip it.
         };
       };
-      case (null) {
-        // This canister_type is not listable (e.g., not verified), so we skip it.
-      };
     };
+
+    return #ok("Bootstrap complete. Successfully indexed " # Nat.toText(indexed_count) # " apps.");
   };
 
-  return #ok("Bootstrap complete. Successfully indexed " # Nat.toText(indexed_count) # " apps.");
-};
+  //------------------- SAMPLE FUNCTION -------------------//
 
-//------------------- SAMPLE FUNCTION -------------------//
-
-public shared func hello() : async Text {
-  "world!";
-};
-
-public type EnvDependency = {
-  key : Text;
-  setter : Text;
-  canister_name : Text;
-  required : Bool;
-  current_value : ?Principal;
-};
-
-public type EnvConfig = {
-  key : Text;
-  setter : Text;
-  value_type : Text;
-  required : Bool;
-  current_value : ?Text;
-};
-
-public query func get_env_requirements() : async {
-  #v1 : {
-    dependencies : [EnvDependency];
-    configuration : [EnvConfig];
+  public shared func hello() : async Text {
+    "world!";
   };
-} {
-  #v1({
-    dependencies = [
-      {
-        key = "_credentials_canister_id";
-        setter = "set_auditor_credentials_canister_id";
-        canister_name = "audit_hub";
-        required = true;
-        current_value = _credentials_canister_id;
-      },
-      {
-        key = "_orchestrator_canister_id";
-        setter = "set_orchestrator_canister_id";
-        canister_name = "mcp_orchestrator";
-        required = true;
-        current_value = _orchestrator_canister_id;
-      },
-      {
-        key = "_usage_tracker_canister_id";
-        setter = "set_usage_tracker_canister_id";
-        canister_name = "usage_tracker";
-        required = true;
-        current_value = _usage_tracker_canister_id;
-      },
-      {
-        key = "_search_index_canister_id";
-        setter = "set_search_index_canister_id";
-        canister_name = "search_index";
-        required = true;
-        current_value = _search_index_canister_id;
-      },
-      {
-        key = "_bounty_sponsor_canister_id";
-        setter = "set_bounty_sponsor_canister_id";
-        canister_name = "bounty_sponsor";
-        required = true;
-        current_value = _bounty_sponsor_canister_id;
-      },
-      {
-        key = "_bounty_reward_token_canister_id";
-        setter = "set_bounty_reward_token_canister_id";
-        canister_name = "usdc_ledger";
-        required = true;
-        current_value = _bounty_reward_token_canister_id;
-      },
-    ];
-    configuration = [];
-  });
-};
+
+  public type EnvDependency = {
+    key : Text;
+    setter : Text;
+    canister_name : Text;
+    required : Bool;
+    current_value : ?Principal;
+  };
+
+  public type EnvConfig = {
+    key : Text;
+    setter : Text;
+    value_type : Text;
+    required : Bool;
+    current_value : ?Text;
+  };
+
+  public query func get_env_requirements() : async {
+    #v1 : {
+      dependencies : [EnvDependency];
+      configuration : [EnvConfig];
+    };
+  } {
+    #v1({
+      dependencies = [
+        {
+          key = "_credentials_canister_id";
+          setter = "set_auditor_credentials_canister_id";
+          canister_name = "audit_hub";
+          required = true;
+          current_value = _credentials_canister_id;
+        },
+        {
+          key = "_orchestrator_canister_id";
+          setter = "set_orchestrator_canister_id";
+          canister_name = "mcp_orchestrator";
+          required = true;
+          current_value = _orchestrator_canister_id;
+        },
+        {
+          key = "_usage_tracker_canister_id";
+          setter = "set_usage_tracker_canister_id";
+          canister_name = "usage_tracker";
+          required = true;
+          current_value = _usage_tracker_canister_id;
+        },
+        {
+          key = "_search_index_canister_id";
+          setter = "set_search_index_canister_id";
+          canister_name = "search_index";
+          required = true;
+          current_value = _search_index_canister_id;
+        },
+        {
+          key = "_bounty_sponsor_canister_id";
+          setter = "set_bounty_sponsor_canister_id";
+          canister_name = "bounty_sponsor";
+          required = true;
+          current_value = _bounty_sponsor_canister_id;
+        },
+        {
+          key = "_bounty_reward_token_canister_id";
+          setter = "set_bounty_reward_token_canister_id";
+          canister_name = "usdc_ledger";
+          required = true;
+          current_value = _bounty_reward_token_canister_id;
+        },
+      ];
+      configuration = [];
+    });
+  };
 
 };

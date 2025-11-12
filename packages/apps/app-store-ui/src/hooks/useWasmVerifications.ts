@@ -67,7 +67,6 @@ export function useGetWasmVerifications(bounties: AuditBounty[] | undefined) {
         return bNewestDate - aNewestDate; // Newest first
       });
     },
-    enabled: !!bounties && bounties.length > 0,
   });
 }
 
@@ -77,9 +76,9 @@ export function useGetWasmVerifications(bounties: AuditBounty[] | undefined) {
  */
 export function useGetSingleWasmVerification(
   wasmId: string | undefined,
-  bounties: AuditBounty[] | undefined,
+  bounties: AuditBounty[],
   options?: {
-    refetchInterval?: number | false;
+    refetchInterval?: number | false | ((query: any) => number | false);
     enabled?: boolean;
     auditType?: string;
   },
@@ -91,30 +90,22 @@ export function useGetSingleWasmVerification(
     'build_reproducibility_v1';
 
   return useQuery({
-    queryKey: ['wasmVerification', wasmId, auditType],
+    queryKey: ['wasmVerification', wasmId, auditType, bounties.length],
     queryFn: async (): Promise<WasmVerification | null> => {
       console.log('Fetching verification progress for', wasmId, auditType);
-      if (!wasmId || !bounties || bounties.length === 0) {
+      if (!wasmId) {
+        console.log('   ❌ No wasmId provided');
         return null;
       }
-
-      // Filter bounties for this specific WASM
-      const wasmBounties = bounties.filter((b) => b.wasmHashHex === wasmId);
-
-      if (wasmBounties.length === 0) {
-        console.log('No bounties found for WASM', wasmId);
-        return null;
-      }
-
-      // Extract audit_type from the first bounty (all bounties in this group should have the same type)
-      const bountyAuditType =
-        wasmBounties[0]?.challengeParameters.audit_type || 'unknown';
 
       try {
         const [attestationIds, divergenceIds] = await Promise.all([
-          getVerificationProgress(wasmId, bountyAuditType),
-          getDivergenceProgress(wasmId, bountyAuditType),
+          getVerificationProgress(wasmId, auditType),
+          getDivergenceProgress(wasmId, auditType),
         ]);
+
+        // Filter bounties for this specific WASM (may be empty initially)
+        const wasmBounties = bounties.filter((b) => b.wasmHashHex === wasmId);
 
         return createWasmVerification(
           wasmId,
@@ -124,14 +115,10 @@ export function useGetSingleWasmVerification(
         );
       } catch (error) {
         console.error(`Error fetching progress for WASM ${wasmId}:`, error);
-        return createWasmVerification(wasmId, wasmBounties, [], []);
+        return createWasmVerification(wasmId, [], [], []);
       }
     },
-    enabled:
-      !!wasmId &&
-      !!bounties &&
-      bounties.length > 0 &&
-      options?.enabled !== false,
+    enabled: !!wasmId && options?.enabled !== false,
     refetchInterval: options?.refetchInterval,
   });
 }
