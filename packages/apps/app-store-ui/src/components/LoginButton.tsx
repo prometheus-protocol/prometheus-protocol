@@ -70,29 +70,10 @@ export function LoginButton() {
   const { data: usdcBalance, isLoading: isBalanceLoading } = useGetTokenBalance(
     Tokens.USDC,
   );
-  const { data: profile, isLoading: isProfileLoading } = useAuditorProfile();
   const usdcBalanceNum = Number(Tokens.USDC.fromAtomic(usdcBalance ?? 0n));
 
   // --- 2. Add state to track copy status ---
   const [isCopied, setIsCopied] = useState(false);
-
-  // 2. Memoize the calculation for aggregated reputation data
-  const aggregatedReputation = useMemo(() => {
-    if (!profile) return [];
-
-    // Simplified: We only track USDC now
-    const available = profile.available_balance_usdc;
-    const staked = profile.staked_balance_usdc;
-    const total = available + staked;
-
-    return [
-      {
-        auditType: 'USDC',
-        available: Number(available),
-        total: Number(total),
-      },
-    ];
-  }, [profile]);
 
   // --- 3. Create a handler function for clarity ---
   const handleCopyPrincipal = (e: React.MouseEvent) => {

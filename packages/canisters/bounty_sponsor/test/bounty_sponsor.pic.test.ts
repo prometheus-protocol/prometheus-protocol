@@ -64,6 +64,31 @@ describe('Bounty Sponsor Canister', () => {
   // Test WASM data
   const TEST_WASM_HASH = new Uint8Array(32).fill(1); // Mock hash
   const TEST_WASM_ID = 'test-wasm-id-123';
+  const TEST_REPO = 'https://github.com/test/repo';
+  const TEST_COMMIT_HASH = 'abc123def456';
+  const TEST_BUILD_CONFIG: [string, any][] = [
+    ['rust_version', { Text: '1.70.0' }],
+    ['optimize_level', { Nat: 3 }],
+  ];
+  const TEST_REQUIRED_VERIFIERS = 5n;
+
+  // Helper function to call sponsor_bounties_for_wasm with default test params
+  const sponsorBounties = (
+    actor: Actor<BountySponsorService>,
+    auditTypes: string[],
+    wasmId = TEST_WASM_ID,
+    wasmHash = TEST_WASM_HASH,
+  ) => {
+    return actor.sponsor_bounties_for_wasm(
+      wasmId,
+      wasmHash,
+      auditTypes,
+      TEST_REPO,
+      TEST_COMMIT_HASH,
+      TEST_BUILD_CONFIG,
+      TEST_REQUIRED_VERIFIERS,
+    );
+  };
 
   beforeEach(async () => {
     const url = inject('PIC_URL');
@@ -297,11 +322,9 @@ describe('Bounty Sponsor Canister', () => {
     });
 
     it('should sponsor bounties for single audit type', async () => {
-      const result = await bountySponsorActor.sponsor_bounties_for_wasm(
-        TEST_WASM_ID,
-        TEST_WASM_HASH,
-        ['build_reproducibility_v1'],
-      );
+      const result = await sponsorBounties(bountySponsorActor, [
+        'build_reproducibility_v1',
+      ]);
 
       if ('err' in result) {
         console.log('Sponsorship error:', result.err);
@@ -314,11 +337,10 @@ describe('Bounty Sponsor Canister', () => {
     });
 
     it('should sponsor bounties for multiple audit types', async () => {
-      const result = await bountySponsorActor.sponsor_bounties_for_wasm(
-        TEST_WASM_ID,
-        TEST_WASM_HASH,
-        ['build_reproducibility_v1', 'tools_v1'],
-      );
+      const result = await sponsorBounties(bountySponsorActor, [
+        'build_reproducibility_v1',
+        'tools_v1',
+      ]);
 
       expect(result).toHaveProperty('ok');
       // @ts-ignore
@@ -328,17 +350,13 @@ describe('Bounty Sponsor Canister', () => {
     });
 
     it('should be idempotent - calling twice returns same bounty IDs', async () => {
-      const result1 = await bountySponsorActor.sponsor_bounties_for_wasm(
-        TEST_WASM_ID,
-        TEST_WASM_HASH,
-        ['build_reproducibility_v1'],
-      );
+      const result1 = await sponsorBounties(bountySponsorActor, [
+        'build_reproducibility_v1',
+      ]);
 
-      const result2 = await bountySponsorActor.sponsor_bounties_for_wasm(
-        TEST_WASM_ID,
-        TEST_WASM_HASH,
-        ['build_reproducibility_v1'],
-      );
+      const result2 = await sponsorBounties(bountySponsorActor, [
+        'build_reproducibility_v1',
+      ]);
 
       expect(result2).toHaveProperty('ok');
       // @ts-ignore
@@ -349,20 +367,14 @@ describe('Bounty Sponsor Canister', () => {
 
     it('should sponsor additional audit types for existing WASM', async () => {
       // First sponsor build_reproducibility_v1
-      const result1 = await bountySponsorActor.sponsor_bounties_for_wasm(
-        TEST_WASM_ID,
-        TEST_WASM_HASH,
-        ['build_reproducibility_v1'],
-      );
+      const result1 = await sponsorBounties(bountySponsorActor, [
+        'build_reproducibility_v1',
+      ]);
       // @ts-ignore
       expect(result1.ok.total_sponsored).toBe(9n);
 
       // Then sponsor tools_v1
-      const result2 = await bountySponsorActor.sponsor_bounties_for_wasm(
-        TEST_WASM_ID,
-        TEST_WASM_HASH,
-        ['tools_v1'],
-      );
+      const result2 = await sponsorBounties(bountySponsorActor, ['tools_v1']);
       // @ts-ignore
       expect(result2.ok.total_sponsored).toBe(9n); // Only new bounties
       // @ts-ignore
@@ -379,6 +391,10 @@ describe('Bounty Sponsor Canister', () => {
         TEST_WASM_ID,
         TEST_WASM_HASH,
         [],
+        TEST_REPO,
+        TEST_COMMIT_HASH,
+        TEST_BUILD_CONFIG,
+        TEST_REQUIRED_VERIFIERS,
       );
 
       expect(result).toHaveProperty('err');
@@ -387,11 +403,10 @@ describe('Bounty Sponsor Canister', () => {
     });
 
     it('should skip audit type without configured reward amount', async () => {
-      const result = await bountySponsorActor.sponsor_bounties_for_wasm(
-        TEST_WASM_ID,
-        TEST_WASM_HASH,
-        ['build_reproducibility_v1', 'unconfigured_audit_type'],
-      );
+      const result = await sponsorBounties(bountySponsorActor, [
+        'build_reproducibility_v1',
+        'unconfigured_audit_type',
+      ]);
 
       expect(result).toHaveProperty('ok');
       // @ts-ignore
@@ -414,11 +429,9 @@ describe('Bounty Sponsor Canister', () => {
         toUSDC(0.25),
       );
 
-      const result = await newSponsorActor.sponsor_bounties_for_wasm(
-        TEST_WASM_ID,
-        TEST_WASM_HASH,
-        ['build_reproducibility_v1'],
-      );
+      const result = await sponsorBounties(newSponsorActor, [
+        'build_reproducibility_v1',
+      ]);
 
       expect(result).toHaveProperty('err');
       // @ts-ignore
@@ -441,11 +454,9 @@ describe('Bounty Sponsor Canister', () => {
         toUSDC(0.25),
       );
 
-      const result = await newSponsorActor.sponsor_bounties_for_wasm(
-        TEST_WASM_ID,
-        TEST_WASM_HASH,
-        ['build_reproducibility_v1'],
-      );
+      const result = await sponsorBounties(newSponsorActor, [
+        'build_reproducibility_v1',
+      ]);
 
       expect(result).toHaveProperty('err');
       // @ts-ignore
@@ -467,11 +478,10 @@ describe('Bounty Sponsor Canister', () => {
         toUSDC(0.5),
       );
 
-      await bountySponsorActor.sponsor_bounties_for_wasm(
-        TEST_WASM_ID,
-        TEST_WASM_HASH,
-        ['build_reproducibility_v1', 'tools_v1'],
-      );
+      await sponsorBounties(bountySponsorActor, [
+        'build_reproducibility_v1',
+        'tools_v1',
+      ]);
     });
 
     it('should return sponsored bounty IDs for WASM', async () => {
@@ -543,7 +553,7 @@ describe('Bounty Sponsor Canister', () => {
 
       expect(requirements).toHaveProperty('v1');
       // @ts-ignore
-      expect(requirements.v1.dependencies.length).toBe(2);
+      expect(requirements.v1.dependencies.length).toBe(3);
 
       // Check registry dependency
       // @ts-ignore
@@ -564,6 +574,16 @@ describe('Bounty Sponsor Canister', () => {
       expect(usdcDep.key).toBe('_reward_token_canister_id');
       expect(usdcDep.setter).toBe('set_reward_token_canister_id');
       expect(usdcDep.required).toBe(true);
+
+      // Check audit_hub dependency
+      // @ts-ignore
+      const auditHubDep = requirements.v1.dependencies.find(
+        (d) => d.canister_name === 'audit_hub',
+      );
+      expect(auditHubDep).toBeDefined();
+      expect(auditHubDep.key).toBe('_audit_hub_canister_id');
+      expect(auditHubDep.setter).toBe('set_audit_hub_canister_id');
+      expect(auditHubDep.required).toBe(true);
     });
   });
 
@@ -589,11 +609,7 @@ describe('Bounty Sponsor Canister', () => {
         subaccount: [],
       });
 
-      await bountySponsorActor.sponsor_bounties_for_wasm(
-        TEST_WASM_ID,
-        TEST_WASM_HASH,
-        ['build_reproducibility_v1'],
-      );
+      await sponsorBounties(bountySponsorActor, ['build_reproducibility_v1']);
 
       const balanceAfter = await usdcLedgerActor.icrc1_balance_of({
         owner: bountySponsorCanisterId,
@@ -624,18 +640,20 @@ describe('Bounty Sponsor Canister', () => {
     });
 
     it('should sponsor multiple WASMs independently', async () => {
-      const result1 = await bountySponsorActor.sponsor_bounties_for_wasm(
+      const result1 = await sponsorBounties(
+        bountySponsorActor,
+        ['build_reproducibility_v1'],
         WASM_ID_1,
         WASM_HASH_1,
-        ['build_reproducibility_v1'],
       );
       // @ts-ignore
       expect(result1.ok.total_sponsored).toBe(9n);
 
-      const result2 = await bountySponsorActor.sponsor_bounties_for_wasm(
+      const result2 = await sponsorBounties(
+        bountySponsorActor,
+        ['build_reproducibility_v1'],
         WASM_ID_2,
         WASM_HASH_2,
-        ['build_reproducibility_v1'],
       );
       // @ts-ignore
       expect(result2.ok.total_sponsored).toBe(9n);

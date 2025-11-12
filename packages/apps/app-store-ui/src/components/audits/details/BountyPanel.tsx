@@ -9,17 +9,21 @@ import {
   Loader2,
 } from 'lucide-react';
 import { ReactNode, useState } from 'react';
-import { AuditBountyWithDetails, Tokens } from '@prometheus-protocol/ic-js';
+import {
+  AuditBountyWithDetails,
+  AuditType,
+  Tokens,
+} from '@prometheus-protocol/ic-js';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import {
   useClaimBounty,
   useReserveAuditBounty,
   useDepositStake,
-  useAuditorProfile,
 } from '@/hooks/useAuditBounties';
 import { useGetTokenBalance } from '@/hooks/usePayment';
 import { StartAuditDialog } from './StartAuditDialog';
 import { ResourcesSection } from './ResourcesSection';
+import { useAvailableBalanceByAuditType } from '@/hooks/useVerifierDashboard';
 
 // The right-hand side panel, which shows the state of the BOUNTY
 export const BountyPanel = ({ audit }: { audit: AuditBountyWithDetails }) => {
@@ -38,8 +42,10 @@ export const BountyPanel = ({ audit }: { audit: AuditBountyWithDetails }) => {
   const stakeAmount = stake; // This is in atomic units (bigint)
   const stakeAmountDisplay = Number(Tokens.USDC.fromAtomic(stake)); // Convert to human-readable
   const getUsdcBalance = useGetTokenBalance(Tokens.USDC);
-  const auditorProfile = useAuditorProfile();
   const reserveAuditBounty = useReserveAuditBounty(audit.id);
+  const getBalanceByAuditType = useAvailableBalanceByAuditType(
+    auditType as AuditType,
+  );
 
   // Get wallet balance
   const walletBalanceAtomic = getUsdcBalance.data ?? 0n;
@@ -48,8 +54,7 @@ export const BountyPanel = ({ audit }: { audit: AuditBountyWithDetails }) => {
   );
 
   // Get audit hub available balance
-  const auditHubBalanceAtomic =
-    auditorProfile.data?.available_balance_usdc ?? 0n;
+  const auditHubBalanceAtomic = getBalanceByAuditType.data ?? 0n;
   const auditHubBalanceDisplay = Number(
     Tokens.USDC.fromAtomic(auditHubBalanceAtomic),
   );

@@ -433,6 +433,9 @@ type ICRC16 =
  };
 type ICRC118WasmRegistryCanister = 
  service {
+   /// * Admin method to manually trigger consensus handling for stuck bounties.
+   ///    * Use this when consensus was reached but payouts didn't happen due to bugs.
+   admin_retrigger_consensus: (wasm_id: text, audit_type: text) -> (Result_4);
    /// * [OWNER-ONLY] Iterates through all published apps and pushes their data
    ///    * to the search indexer to bootstrap or rebuild the index.
    ///    *
@@ -470,6 +473,20 @@ type ICRC118WasmRegistryCanister =
    ///    *         Returns `null` if no request is found for the given ID.
    get_verification_request: (wasm_id: text) ->
     (opt VerificationRequest) query;
+   /// * Check if a specific bounty has already filed an attestation by checking ICRC126 storage directly.
+   ///    * This is the source of truth, not the progress tracking arrays.
+   has_bounty_filed_attestation: (wasm_id: text, bounty_id: nat) ->
+    (bool) query;
+   /// * Check if a verifier has already participated in the verification of a specific WASM.
+   ///    * This prevents a verifier from being assigned to multiple bounties for the same WASM.
+   ///    * Used by audit_hub during bounty reservation to enforce mutual exclusion.
+   ///    *
+   ///    * @param verifier - The principal of the verifier to check
+   ///    * @param wasm_id - The WASM hash to check participation for
+   ///    * @param audit_type - The audit type (e.g., "tools_v1", "build_reproducibility_v1")
+   ///    * @returns true if verifier has filed any audit (attestation or divergence) for this WASM+audit_type
+   has_verifier_participated_in_wasm: (verifier: principal, wasm_id: 
+    text, audit_type: text) -> (bool) query;
    hello: () -> (text);
    icrc10_supported_standards: () -> (vec SupportedStandard) query;
    icrc118_create_canister_type: (reqs: vec CreateCanisterType) ->

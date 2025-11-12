@@ -210,7 +210,8 @@ export async function verifyMcpTools(
       // Check if all required systems are present
       const missingSystems: string[] = [];
       // API key system is only required for private servers
-      if (!isPublicServer && !hasApiKeySystem) missingSystems.push('API key system');
+      if (!isPublicServer && !hasApiKeySystem)
+        missingSystems.push('API key system');
       if (!hasOwnerSystem) missingSystems.push('owner system');
       if (!hasWalletSystem) missingSystems.push('wallet system');
 

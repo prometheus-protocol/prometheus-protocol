@@ -389,6 +389,13 @@ type ICRC120Canister =
    get_cycle_job_status: () -> (Result_5) query;
    /// * Returns the current configuration for the automated cycle top-up feature.
    get_cycle_top_up_config: () -> (CycleTopUpConfig) query;
+   get_env_requirements: () ->
+    (variant {
+       v1:
+        record {
+          configuration: vec EnvConfig;
+          dependencies: vec EnvDependency;
+        };}) query;
    get_latest_reconstitution_trace: () -> (opt ReconstitutionTrace) query;
    /// * [NEW] Get the current orchestrator's cycle balance.
    get_orchestrator_cycles: () -> (Result_4) query;
@@ -485,6 +492,22 @@ type GetArchivesResultItem =
  };
 type GetArchivesResult = vec GetArchivesResultItem;
 type GetArchivesArgs = record {from: opt principal;};
+type EnvDependency = 
+ record {
+   canister_name: text;
+   current_value: opt principal;
+   key: text;
+   required: bool;
+   setter: text;
+ };
+type EnvConfig = 
+ record {
+   current_value: opt text;
+   key: text;
+   required: bool;
+   setter: text;
+   value_type: text;
+ };
 type DeployOrUpgradeRequest = 
  record {
    args: blob;

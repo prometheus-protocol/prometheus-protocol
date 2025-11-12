@@ -305,6 +305,7 @@ export type GetWasmsFilter = { 'canister_type_namespace' : string } |
   { 'version_max' : [bigint, [] | [bigint], [] | [bigint]] } |
   { 'version_min' : [bigint, [] | [bigint], [] | [bigint]] };
 export interface ICRC118WasmRegistryCanister {
+  'admin_retrigger_consensus' : ActorMethod<[string, string], Result_4>,
   'bootstrap_search_index' : ActorMethod<[], Result_4>,
   'can_install_wasm' : ActorMethod<[Principal, string], boolean>,
   'get_app_details_by_namespace' : ActorMethod<
@@ -333,6 +334,11 @@ export interface ICRC118WasmRegistryCanister {
   'get_verification_request' : ActorMethod<
     [string],
     [] | [VerificationRequest]
+  >,
+  'has_bounty_filed_attestation' : ActorMethod<[string, bigint], boolean>,
+  'has_verifier_participated_in_wasm' : ActorMethod<
+    [Principal, string, string],
+    boolean
   >,
   'hello' : ActorMethod<[], string>,
   'icrc10_supported_standards' : ActorMethod<[], Array<SupportedStandard>>,

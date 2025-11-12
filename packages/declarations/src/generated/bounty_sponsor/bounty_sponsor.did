@@ -1,4 +1,10 @@
 type WasmId = text;
+type SponsoredBountyInfo = 
+ record {
+   audit_type: text;
+   timestamp: int;
+   wasm_id: WasmId;
+ };
 type Result_1 = 
  variant {
    err: text;
@@ -11,6 +17,45 @@ type Result =
  variant {
    err: text;
    ok;
+ };
+type ICRC16__1 = 
+ variant {
+   Array: vec ICRC16__1;
+   Blob: blob;
+   Bool: bool;
+   Bytes: vec nat8;
+   Class: vec ICRC16Property;
+   Float: float64;
+   Floats: vec float64;
+   Int: int;
+   Int16: int16;
+   Int32: int32;
+   Int64: int64;
+   Int8: int8;
+   Map: vec record {
+              text;
+              ICRC16__1;
+            };
+   Nat: nat;
+   Nat16: nat16;
+   Nat32: nat32;
+   Nat64: nat64;
+   Nat8: nat8;
+   Nats: vec nat;
+   Option: opt ICRC16__1;
+   Principal: principal;
+   Set: vec ICRC16__1;
+   Text: text;
+   ValueMap: vec record {
+                   ICRC16__1;
+                   ICRC16__1;
+                 };
+ };
+type ICRC16Property = 
+ record {
+   immutable: bool;
+   name: text;
+   value: ICRC16__1;
  };
 type EnvDependency = 
  record {
@@ -28,14 +73,9 @@ type EnvConfig =
    setter: text;
    value_type: text;
  };
-type BountySponsor = 
+type BountySponsorActor = 
  service {
-   get_bounty_info: (bounty_id: BountyId) ->
-    (opt record {
-           audit_type: text;
-           timestamp: int;
-           wasm_id: WasmId;
-         }) query;
+   get_bounty_info: (bounty_id: BountyId) -> (opt SponsoredBountyInfo) query;
    get_config: () ->
     (record {
        registry_canister_id: opt principal;
@@ -61,16 +101,21 @@ type BountySponsor =
    get_sponsored_bounties_for_wasm: (wasm_id: WasmId) -> (vec BountyId) query;
    get_total_sponsored_bounties: () -> (nat) query;
    is_wasm_sponsored: (wasm_id: WasmId) -> (bool) query;
+   set_audit_hub_canister_id: (canister_id: principal) -> (Result);
    set_registry_canister_id: (canister_id: principal) -> (Result);
    set_reward_amount_for_audit_type: (audit_type: text, amount: nat) ->
     (Result);
    set_reward_token_canister_id: (canister_id: principal) -> (Result);
    /// * Sponsor bounties for a WASM verification.
-   ///    * Creates 9 bounties for each specified audit type.
+   ///    * Creates 9 bounties for each specified audit type and registers the job with audit_hub.
    ///    * Idempotent: safe to call multiple times for the same WASM + audit type combination.
    sponsor_bounties_for_wasm: (wasm_id: WasmId, wasm_hash: blob,
-    audit_types_to_sponsor: vec text) -> (Result_1);
+    audit_types_to_sponsor: vec text, repo: text, commit_hash: text,
+    build_config: vec record {
+                        text;
+                        ICRC16__1;
+                      }, required_verifiers: nat) -> (Result_1);
    transfer_ownership: (new_owner: principal) -> (Result);
  };
 type BountyId = nat;
-service : () -> BountySponsor
+service : () -> BountySponsorActor

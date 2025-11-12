@@ -378,16 +378,17 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   };
 
   // Called by the registry after successful verification to return the stake and update reputation.
+  // Can also be called by the owner for administrative purposes.
   public shared (msg) func release_stake(bounty_id : Types.BountyId) : async Result.Result<(), Text> {
-    switch (registry_canister_id) {
-      case (null) {
-        return #err("Registry canister ID not configured.");
-      };
-      case (?registry_id) {
-        if (not Principal.equal(msg.caller, registry_id)) {
-          return #err("Unauthorized: Only the registry canister can call this method.");
-        };
-      };
+    // Check if caller is owner or registry
+    let is_owner = Principal.equal(msg.caller, owner);
+    let is_registry = switch (registry_canister_id) {
+      case (null) { false };
+      case (?registry_id) { Principal.equal(msg.caller, registry_id) };
+    };
+
+    if (not is_owner and not is_registry) {
+      return #err("Unauthorized: Only the owner or registry canister can call this method.");
     };
 
     BountyLock.release_stake(
@@ -402,17 +403,18 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   /**
    * Called by the registry when a verifier was on the losing side of consensus.
    * Slashes their stake and penalizes reputation (they provided incorrect verification).
+   * Can also be called by the owner for administrative purposes.
    */
   public shared (msg) func slash_stake_for_incorrect_consensus(bounty_id : Types.BountyId) : async Result.Result<(), Text> {
-    switch (registry_canister_id) {
-      case (null) {
-        return #err("Registry canister ID not configured.");
-      };
-      case (?registry_id) {
-        if (not Principal.equal(msg.caller, registry_id)) {
-          return #err("Unauthorized: Only the registry canister can call this method.");
-        };
-      };
+    // Check if caller is owner or registry
+    let is_owner = Principal.equal(msg.caller, owner);
+    let is_registry = switch (registry_canister_id) {
+      case (null) { false };
+      case (?registry_id) { Principal.equal(msg.caller, registry_id) };
+    };
+
+    if (not is_owner and not is_registry) {
+      return #err("Unauthorized: Only the owner or registry canister can call this method.");
     };
 
     BountyLock.slash_stake_for_incorrect_consensus(

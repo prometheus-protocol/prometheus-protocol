@@ -166,19 +166,10 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
 
     auditHubActor.setIdentity(daoIdentity);
     // Configure the required stake for the reputation token
-    await auditHubActor.set_payment_token_config(
-      ledgerFixture.canisterId,
-      'USDC',
-      6,
-    );
     await auditHubActor.set_stake_requirement(
+      reputationTokenId, // audit_type
       ledgerFixture.canisterId.toText(), // token_id is the ledger canister ID
       reputationStakeAmount,
-    );
-    // Register the audit_type → token_id mapping
-    await auditHubActor.register_audit_type(
-      reputationTokenId,
-      ledgerFixture.canisterId.toText(),
     );
 
     // 6. Transfer USDC to auditors and have them deposit stake
@@ -290,7 +281,7 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
   it('should REJECT attestation from an auditor who did not reserve the bounty', async () => {
     // The legitimate auditor reserves the bounty
     auditHubActor.setIdentity(auditorIdentity);
-    await auditHubActor.reserve_bounty(bountyId, ledgerCanisterId.toText());
+    await auditHubActor.reserve_bounty(bountyId, reputationTokenId);
 
     // The malicious auditor tries to file the attestation
     registryActor.setIdentity(maliciousAuditorIdentity);
@@ -336,7 +327,7 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
     auditHubActor.setIdentity(auditorIdentity);
     const reserveResult = await auditHubActor.reserve_bounty(
       bountyId,
-      ledgerCanisterId.toText(), // use ledger canister ID
+      reputationTokenId, // audit_type
     );
     expect(reserveResult).toHaveProperty('ok');
 

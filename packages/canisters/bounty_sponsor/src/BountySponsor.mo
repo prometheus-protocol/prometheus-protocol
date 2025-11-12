@@ -12,11 +12,14 @@ import Map "mo:map/Map";
 import Text "mo:base/Text";
 import Error "mo:base/Error";
 import ICRC2 "mo:icrc2-types";
+import ICRC126 "../../../../libs/icrc126/src/lib";
 import ICRC127Service "../../../../libs/icrc127/src/service";
+import ICRC127 "../../../../libs/icrc127/src/lib";
+
 import Types "./Types";
 
 module {
-  type BuildConfig = [(Text, { #Text : Text; #Nat : Nat; #Int : Int; #Blob : Blob; #Bool : Bool; #Array : [Any]; #Map : [Any] })];
+  type BuildConfig = [(Text, ICRC126.ICRC16)];
 
   public func sponsor_bounties_for_wasm<system>(
     state : Types.State,
@@ -134,8 +137,8 @@ module {
     for (audit_type in audit_types_to_create.vals()) {
       switch (Map.get(state.reward_amounts, Map.thash, audit_type)) {
         case (?amount) {
-          let transfer_fee = 1000; // 0.001 USDC fee
-          let approval_fee = 1000; // 0.001 USDC approval fee
+          let transfer_fee = 10000; // 0.01 USDC fee
+          let approval_fee = 10000; // 0.01 USDC approval fee
           let with_fees = amount + transfer_fee + approval_fee;
           total_amount_needed += with_fees * state.required_verifiers;
         };
@@ -255,11 +258,11 @@ module {
         switch (state.audit_hub_canister_id) {
           case (?hub_id) {
             let audit_hub = actor (Principal.toText(hub_id)) : actor {
-              add_verification_job : (Text, Text, Text, BuildConfig, Nat, [Nat]) -> async Result.Result<(), Text>;
+              add_verification_job : (Text, Text, Text, [(Text, ICRC126.ICRC16)], Nat, [Nat]) -> async Result.Result<(), Text>;
             };
 
             // Add audit_type to build_config for this job
-            let build_config_with_audit_type = Buffer.fromArray<(Text, { #Text : Text; #Nat : Nat; #Int : Int; #Blob : Blob; #Bool : Bool; #Array : [Any]; #Map : [Any] })>(build_config);
+            let build_config_with_audit_type = Buffer.fromArray<(Text, ICRC126.ICRC16)>(build_config);
             build_config_with_audit_type.add(("audit_type", #Text(audit_type)));
             let final_build_config = Buffer.toArray(build_config_with_audit_type);
 

@@ -669,6 +669,11 @@ export const idlFactory = ({ IDL }) => {
   });
   const Result = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   const ICRC118WasmRegistryCanister = IDL.Service({
+    'admin_retrigger_consensus' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [Result_4],
+        [],
+      ),
     'bootstrap_search_index' : IDL.Func([], [Result_4], []),
     'can_install_wasm' : IDL.Func(
         [IDL.Principal, IDL.Text],
@@ -726,6 +731,16 @@ export const idlFactory = ({ IDL }) => {
     'get_verification_request' : IDL.Func(
         [IDL.Text],
         [IDL.Opt(VerificationRequest)],
+        ['query'],
+      ),
+    'has_bounty_filed_attestation' : IDL.Func(
+        [IDL.Text, IDL.Nat],
+        [IDL.Bool],
+        ['query'],
+      ),
+    'has_verifier_participated_in_wasm' : IDL.Func(
+        [IDL.Principal, IDL.Text, IDL.Text],
+        [IDL.Bool],
         ['query'],
       ),
     'hello' : IDL.Func([], [IDL.Text], []),

@@ -1588,49 +1588,8 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
                     switch (verification_request_opt) {
                       case (?verification_request) {
                         let sponsor = actor (Principal.toText(sponsor_id)) : actor {
-                          sponsor_bounties_for_wasm : (Text, Blob, [Text], Text, Text, [(Text, { #Text : Text; #Nat : Nat; #Int : Int; #Blob : Blob; #Bool : Bool; #Array : [Any]; #Map : [Any] })], Nat) -> async Result.Result<{ bounty_ids : [Nat]; total_sponsored : Nat }, Text>;
+                          sponsor_bounties_for_wasm : (Text, Blob, [Text], Text, Text, [(Text, ICRC126.ICRC16)], Nat) -> async Result.Result<{ bounty_ids : [Nat]; total_sponsored : Nat }, Text>;
                         };
-
-                        // Convert metadata format
-                        let converted_config : [(
-                          Text,
-                          {
-                            #Text : Text;
-                            #Nat : Nat;
-                            #Int : Int;
-                            #Blob : Blob;
-                            #Bool : Bool;
-                            #Array : [Any];
-                            #Map : [Any];
-                          },
-                        )] = Array.map<(Text, ICRC126Service.ICRC16), (Text, { #Text : Text; #Nat : Nat; #Int : Int; #Blob : Blob; #Bool : Bool; #Array : [Any]; #Map : [Any] })>(
-                          verification_request.metadata,
-                          func(item : (Text, ICRC126Service.ICRC16)) : (
-                            Text,
-                            {
-                              #Text : Text;
-                              #Nat : Nat;
-                              #Int : Int;
-                              #Blob : Blob;
-                              #Bool : Bool;
-                              #Array : [Any];
-                              #Map : [Any];
-                            },
-                          ) {
-                            let (key, val) = item;
-                            let converted_val = switch (val) {
-                              case (#Text(t)) { #Text(t) };
-                              case (#Nat(n)) { #Nat(n) };
-                              case (#Int(i)) { #Int(i) };
-                              case (#Blob(b)) { #Blob(b) };
-                              case (#Bool(b)) { #Bool(b) };
-                              case (#Array(arr)) { #Array([]) };
-                              case (#Map(m)) { #Map([]) };
-                              case (_) { #Text("") };
-                            };
-                            (key, converted_val);
-                          },
-                        );
 
                         Debug.print("🎯 Auto-triggering tools_v1 bounties for verified WASM " # req.wasm_id);
                         ignore sponsor.sponsor_bounties_for_wasm(
@@ -1639,7 +1598,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
                           ["tools_v1"],
                           verification_request.repo,
                           Base16.encode(verification_request.commit_hash),
-                          converted_config,
+                          verification_request.metadata,
                           REQUIRED_VERIFIERS,
                         );
                       };

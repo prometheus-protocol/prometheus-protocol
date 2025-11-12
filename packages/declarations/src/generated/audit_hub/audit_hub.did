@@ -225,6 +225,7 @@ type AuditHub =
     Balance) -> (Result);
    /// * Called by the registry when a verifier was on the losing side of consensus.
    ///    * Slashes their stake and penalizes reputation (they provided incorrect verification).
+   ///    * Can also be called by the owner for administrative purposes.
    slash_stake_for_incorrect_consensus: (bounty_id: BountyId) -> (Result);
    /// * Validate an API key and return the associated verifier principal.
    ///    * Used by the verifier bot to authenticate reserve_bounty requests.

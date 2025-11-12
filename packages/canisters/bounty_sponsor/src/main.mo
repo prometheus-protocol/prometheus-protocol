@@ -3,6 +3,7 @@ import Result "mo:base/Result";
 import Map "mo:map/Map";
 import BTree "mo:stableheapbtreemap/BTree";
 import Blob "mo:base/Blob";
+import ICRC126 "../../../../libs/icrc126/src/lib";
 import Types "./Types";
 import Admin "./Admin";
 import BountySponsor "./BountySponsor";
@@ -68,7 +69,7 @@ shared ({ caller = deployer }) persistent actor class BountySponsorActor() = thi
     audit_types_to_sponsor : [Text],
     repo : Text,
     commit_hash : Text,
-    build_config : [(Text, { #Text : Text; #Nat : Nat; #Int : Int; #Blob : Blob; #Bool : Bool; #Array : [Any]; #Map : [Any] })],
+    build_config : [(Text, ICRC126.ICRC16)],
     required_verifiers : Nat,
   ) : async Result.Result<{ bounty_ids : [Types.BountyId]; total_sponsored : Nat }, Text> {
     await BountySponsor.sponsor_bounties_for_wasm<system>(

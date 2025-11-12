@@ -201,21 +201,21 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     await orchestratorActor.set_mcp_registry_id(registryFixture.canisterId);
 
     auditHub.actor.setIdentity(daoIdentity);
-    // Configure the required stake for the reputation token
-    await auditHub.actor.set_payment_token_config(ledgerCanisterId, 'USDC', 6);
-    await auditHubActor.set_stake_requirement(ledgerCanisterId.toText(), 100n);
-    // Register audit_type → token_id mappings
-    await auditHubActor.register_audit_type(
+    // Register audit types with stake requirements
+    await auditHubActor.set_stake_requirement(
       'build_reproducibility_v1',
       ledgerCanisterId.toText(),
+      100n,
     );
-    await auditHubActor.register_audit_type(
+    await auditHubActor.set_stake_requirement(
       'app_info_v1',
       ledgerCanisterId.toText(),
+      100n,
     );
-    await auditHubActor.register_audit_type(
+    await auditHubActor.set_stake_requirement(
       'quality',
       ledgerCanisterId.toText(),
+      100n,
     );
 
     // Setup bounty_sponsor canister
@@ -504,7 +504,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       auditHubActor.setIdentity(reproAuditors[i]);
       await auditHubActor.reserve_bounty(
         buildBountyIds[i],
-        ledgerCanisterId.toText(),
+        'build_reproducibility_v1', // audit_type
       );
 
       registryActor.setIdentity(reproAuditors[i]);
@@ -524,7 +524,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     auditHubActor.setIdentity(qualityAuditorIdentity);
     await auditHubActor.reserve_bounty(
       qualityBountyResultId,
-      ledgerCanisterId.toText(),
+      'quality', // audit_type
     );
     registryActor.setIdentity(qualityAuditorIdentity);
     await registryActor.icrc126_file_attestation({
@@ -670,7 +670,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       auditHubActor.setIdentity(reproAuditors[i]);
       await auditHubActor.reserve_bounty(
         buildBountyIds[i],
-        ledgerCanisterId.toText(),
+        'build_reproducibility_v1', // audit_type
       );
 
       registryActor.setIdentity(reproAuditors[i]);

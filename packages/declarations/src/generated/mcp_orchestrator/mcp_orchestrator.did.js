@@ -129,6 +129,20 @@ export const idlFactory = ({ IDL }) => {
     'interval_seconds' : IDL.Nat,
     'amount' : IDL.Nat,
   });
+  const EnvDependency = IDL.Record({
+    'key' : IDL.Text,
+    'setter' : IDL.Text,
+    'required' : IDL.Bool,
+    'canister_name' : IDL.Text,
+    'current_value' : IDL.Opt(IDL.Principal),
+  });
+  const EnvConfig = IDL.Record({
+    'key' : IDL.Text,
+    'value_type' : IDL.Text,
+    'setter' : IDL.Text,
+    'required' : IDL.Bool,
+    'current_value' : IDL.Opt(IDL.Text),
+  });
   const ReconstitutionTrace = IDL.Record({
     'errors' : IDL.Vec(IDL.Text),
     'actionsRestored' : IDL.Nat,
@@ -452,6 +466,18 @@ export const idlFactory = ({ IDL }) => {
     'get_canisters' : IDL.Func([IDL.Text], [IDL.Vec(IDL.Principal)], ['query']),
     'get_cycle_job_status' : IDL.Func([], [Result_5], ['query']),
     'get_cycle_top_up_config' : IDL.Func([], [CycleTopUpConfig], ['query']),
+    'get_env_requirements' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'v1' : IDL.Record({
+              'dependencies' : IDL.Vec(EnvDependency),
+              'configuration' : IDL.Vec(EnvConfig),
+            }),
+          }),
+        ],
+        ['query'],
+      ),
     'get_latest_reconstitution_trace' : IDL.Func(
         [],
         [IDL.Opt(ReconstitutionTrace)],

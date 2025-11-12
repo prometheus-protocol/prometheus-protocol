@@ -1,6 +1,6 @@
-import type { Principal } from '@icp-sdk/core/principal';
-import type { ActorMethod } from '@icp-sdk/core/agent';
-import type { IDL } from '@icp-sdk/core/candid';
+import type { Principal } from '@dfinity/principal';
+import type { ActorMethod } from '@dfinity/agent';
+import type { IDL } from '@dfinity/candid';
 
 export type AccountDelegationError = { 'NoSuchDelegation' : null } |
   { 'InternalCanisterError' : string } |
@@ -102,7 +102,10 @@ export interface AuthnMethodSecuritySettings {
 export type AuthnMethodSecuritySettingsReplaceError = {
     'AuthnMethodNotFound' : null
   };
-export interface AuthnMethodSessionInfo { 'name' : [] | [string] }
+export interface AuthnMethodSessionInfo {
+  'name' : [] | [string],
+  'created_at' : [] | [Timestamp],
+}
 export interface BufferedArchiveEntry {
   'sequence_number' : bigint,
   'entry' : Uint8Array | number[],
@@ -181,6 +184,12 @@ export interface DummyAuthConfig { 'prompt_for_index' : boolean }
 export type FrontendHostname = string;
 export type GetAccountsError = { 'InternalCanisterError' : string } |
   { 'Unauthorized' : Principal };
+export type GetDefaultAccountError = {
+    'NoSuchOrigin' : { 'anchor_number' : UserNumber }
+  } |
+  { 'NoSuchAnchor' : null } |
+  { 'InternalCanisterError' : string } |
+  { 'Unauthorized' : Principal };
 export type GetDelegationResponse = { 'no_such_delegation' : null } |
   { 'signed_delegation' : SignedDelegation };
 export type GetIdAliasError = { 'InternalCanisterError' : string } |
@@ -193,7 +202,6 @@ export interface GetIdAliasRequest {
   'relying_party' : FrontendHostname,
   'identity_number' : IdentityNumber,
 }
-export interface GoogleOpenIdConfig { 'client_id' : string }
 export type HeaderField = [string, string];
 export interface HttpRequest {
   'url' : string,
@@ -229,6 +237,7 @@ export type IdRegStartError = { 'InvalidCaller' : null } |
   { 'RateLimitExceeded' : null };
 export interface IdentityAnchorInfo {
   'name' : [] | [string],
+  'created_at' : [] | [Timestamp],
   'devices' : Array<DeviceWithUsage>,
   'openid_credentials' : [] | [Array<OpenIdCredential>],
   'device_registration' : [] | [DeviceRegistrationInfo],
@@ -241,6 +250,7 @@ export interface IdentityInfo {
   'authn_methods' : Array<AuthnMethodData>,
   'metadata' : MetadataMapV2,
   'name' : [] | [string],
+  'created_at' : [] | [Timestamp],
   'authn_method_registration' : [] | [AuthnMethodRegistrationInfo],
   'openid_credentials' : [] | [Array<OpenIdCredential>],
 }
@@ -271,7 +281,6 @@ export type IdentityPropertiesReplaceError = {
   };
 export interface InternetIdentityInit {
   'fetch_root_key' : [] | [boolean],
-  'openid_google' : [] | [[] | [GoogleOpenIdConfig]],
   'is_production' : [] | [boolean],
   'enable_dapps_explorer' : [] | [boolean],
   'assigned_user_number_range' : [] | [[bigint, bigint]],
@@ -279,9 +288,7 @@ export interface InternetIdentityInit {
   'archive_config' : [] | [ArchiveConfig],
   'canister_creation_cycles_cost' : [] | [bigint],
   'analytics_config' : [] | [[] | [AnalyticsConfig]],
-  'feature_flag_enable_generic_open_id_fe' : [] | [boolean],
   'related_origins' : [] | [Array<string>],
-  'feature_flag_continue_from_another_device' : [] | [boolean],
   'openid_configs' : [] | [Array<OpenIdConfig>],
   'captcha_config' : [] | [CaptchaConfig],
   'dummy_auth' : [] | [[] | [DummyAuthConfig]],
@@ -395,6 +402,18 @@ export type RegistrationFlowNextStep = {
 export type RegistrationId = string;
 export type Salt = Uint8Array | number[];
 export type SessionKey = PublicKey;
+export type SetDefaultAccountError = {
+    'NoSuchOrigin' : { 'anchor_number' : UserNumber }
+  } |
+  { 'NoSuchAnchor' : null } |
+  { 'InternalCanisterError' : string } |
+  { 'Unauthorized' : Principal } |
+  {
+    'NoSuchAccount' : {
+      'origin' : FrontendHostname,
+      'anchor_number' : UserNumber,
+    }
+  };
 export interface SignedDelegation {
   'signature' : Uint8Array | number[],
   'delegation' : Delegation,
@@ -523,6 +542,11 @@ export interface _SERVICE {
   >,
   'get_anchor_credentials' : ActorMethod<[UserNumber], AnchorCredentials>,
   'get_anchor_info' : ActorMethod<[UserNumber], IdentityAnchorInfo>,
+  'get_default_account' : ActorMethod<
+    [UserNumber, FrontendHostname],
+    { 'Ok' : AccountInfo } |
+      { 'Err' : GetDefaultAccountError }
+  >,
   'get_delegation' : ActorMethod<
     [UserNumber, FrontendHostname, SessionKey, Timestamp],
     GetDelegationResponse
@@ -625,6 +649,11 @@ export interface _SERVICE {
   >,
   'remove' : ActorMethod<[UserNumber, DeviceKey], undefined>,
   'replace' : ActorMethod<[UserNumber, DeviceKey, DeviceData], undefined>,
+  'set_default_account' : ActorMethod<
+    [UserNumber, FrontendHostname, [] | [AccountNumber]],
+    { 'Ok' : AccountInfo } |
+      { 'Err' : SetDefaultAccountError }
+  >,
   'stats' : ActorMethod<[], InternetIdentityStats>,
   'update' : ActorMethod<[UserNumber, DeviceKey, DeviceData], undefined>,
   'update_account' : ActorMethod<
