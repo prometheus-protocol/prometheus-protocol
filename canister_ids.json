@@ -14,6 +14,9 @@
   "auth_ui": {
     "ic": "bmfnl-jqaaa-aaaai-q32ha-cai"
   },
+  "bounty_sponsor": {
+    "ic": "rg6uu-6qaaa-aaaai-q36wq-cai"
+  },
   "icrc1_ledger": {
     "ic": "dy3i7-mqaaa-aaaai-q32ja-cai"
   },
@@ -35,13 +38,13 @@
   "search_index": {
     "ic": "kst7v-syaaa-aaaai-q33yq-cai"
   },
+  "token_watchlist": {
+    "ic": "ljntu-eaaaa-aaaai-q34bq-cai"
+  },
   "usage_tracker": {
     "ic": "m63pw-fqaaa-aaaai-q33pa-cai"
   },
   "usdc_ledger": {
     "ic": "53nhb-haaaa-aaaar-qbn5q-cai"
-  },
-  "token_watchlist": {
-    "ic": "ljntu-eaaaa-aaaai-q34bq-cai"
   }
 }

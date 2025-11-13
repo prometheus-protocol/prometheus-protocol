@@ -4,6 +4,7 @@ import { thash } "mo:map/Map";
 import BTree "mo:stableheapbtreemap/BTree";
 import Principal "mo:base/Principal";
 import Result "mo:base/Result";
+import ICRC2 "mo:icrc2-types";
 import Time "mo:base/Time";
 import Nat "mo:base/Nat";
 import Int "mo:base/Int";
@@ -24,6 +25,7 @@ import JobQueue "JobQueue";
 import QueryMethods "QueryMethods";
 import Config "Config";
 import JobAssignment "JobAssignment";
+import Treasury "Treasury";
 
 shared ({ caller = deployer }) persistent actor class AuditHub() = this {
 
@@ -89,11 +91,6 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   // Map<WASM_ID, Set<Principal>>
   var wasm_verifier_assignments = Map.new<Text, Map.Map<Principal, Bool>>();
 
-  // Track which verifiers have COMPLETED verification for which WASMs (persists after lock release)
-  // Map<WASM_ID, Set<Principal>> - DEPRECATED: Not currently used, will remove in production
-  // We now check participation status directly from registry (has_verifier_participated_in_wasm)
-  var wasm_verifier_completions = Map.new<Text, Map.Map<Principal, Bool>>();
-
   // ==================================================================================
   // == HELPER FUNCTIONS
   // ==================================================================================
@@ -153,6 +150,16 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     };
     bounty_sponsor_canister_id := ?bounty_sponsor_id;
     return #ok(());
+  };
+
+  /// Withdraw USDC or other ICRC-2 tokens from the audit_hub treasury
+  /// Only the owner can call this function
+  public shared ({ caller }) func withdraw(
+    ledger_id : Principal,
+    amount : Nat,
+    destination : ICRC2.Account,
+  ) : async Result.Result<Nat, Treasury.TreasuryError> {
+    await Treasury.withdraw(caller, owner, ledger_id, amount, destination);
   };
 
   /**

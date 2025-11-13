@@ -34,6 +34,7 @@ import Bounty "Bounty";
 import Orchestrator "Orchestrator";
 import UsageTracker "UsageTracker";
 import SearchIndex "SearchIndex";
+import Treasury "Treasury";
 
 import ICRC118WasmRegistry "../../../../libs/icrc118/src";
 import Service "../../../../libs/icrc118/src/service";
@@ -305,6 +306,16 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     if (caller != _owner) { return #err("Caller is not the owner") };
     _bounty_reward_amount := amount;
     return #ok(());
+  };
+
+  /// Withdraw USDC or other ICRC-2 tokens from the registry treasury
+  /// Only the owner can call this function
+  public shared ({ caller }) func withdraw(
+    ledger_id : Principal,
+    amount : Nat,
+    destination : ICRC2.Account,
+  ) : async Result.Result<Nat, Treasury.TreasuryError> {
+    await Treasury.withdraw(caller, _owner, ledger_id, amount, destination);
   };
 
   stable var icrc126_migration_state : ICRC126.State = ICRC126.initialState();

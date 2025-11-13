@@ -4,10 +4,12 @@ import Map "mo:map/Map";
 import BTree "mo:stableheapbtreemap/BTree";
 import Blob "mo:base/Blob";
 import ICRC126 "../../../../libs/icrc126/src/lib";
+import ICRC2 "mo:icrc2-types";
 import Types "./Types";
 import Admin "./Admin";
 import BountySponsor "./BountySponsor";
 import QueryMethods "./QueryMethods";
+import Treasury "./Treasury";
 
 shared ({ caller = deployer }) persistent actor class BountySponsorActor() = this {
   // State variables
@@ -50,6 +52,16 @@ shared ({ caller = deployer }) persistent actor class BountySponsorActor() = thi
 
   public shared ({ caller }) func set_reward_amount_for_audit_type(audit_type : Text, amount : Nat) : async Result.Result<(), Text> {
     Admin.set_reward_amount_for_audit_type(state, caller, audit_type, amount);
+  };
+
+  /// Withdraw USDC or other ICRC-2 tokens from the bounty_sponsor treasury
+  /// Only the owner can call this function
+  public shared ({ caller }) func withdraw(
+    ledger_id : Principal,
+    amount : Nat,
+    destination : ICRC2.Account,
+  ) : async Result.Result<Nat, Treasury.TreasuryError> {
+    await Treasury.withdraw(caller, state.owner, ledger_id, amount, destination);
   };
 
   public shared ({ caller }) func transfer_ownership(new_owner : Principal) : async Result.Result<(), Text> {
