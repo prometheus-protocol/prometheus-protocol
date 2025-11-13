@@ -6,7 +6,6 @@ import {
   AuditBounty,
   AuditBountyWithDetails,
   getAuditBounty,
-  getReputationBalance,
   getBounty,
   reserveBounty,
   AttestationData,
@@ -21,6 +20,7 @@ import {
   getVerifierProfile,
   listPendingVerifications,
   submitDivergence,
+  depositStake,
 } from '@prometheus-protocol/ic-js';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import useMutation from './useMutation';
@@ -38,6 +38,35 @@ export const useGetAllAuditBounties = () => {
     queryFn: async () => {
       return listBounties({});
     },
+  });
+};
+
+/**
+ * React Query hook to fetch bounties for a specific WASM ID.
+ * More efficient than fetching all bounties when you only need one WASM.
+ */
+export const useGetBountiesForWasm = (
+  wasmId: string | undefined,
+  auditType?: string,
+  options?: { refetchInterval?: number | false },
+) => {
+  return useQuery<AuditBounty[]>({
+    queryKey: ['auditBounties', 'wasm', wasmId, auditType],
+    queryFn: async () => {
+      if (!wasmId) return [];
+      const { getBountiesForWasm } = await import('@prometheus-protocol/ic-js');
+      const bounties = await getBountiesForWasm(wasmId);
+      // Filter by audit type if provided
+      if (auditType) {
+        return bounties.filter(
+          (b) => b.challengeParameters.audit_type === auditType,
+        );
+      }
+      return bounties;
+    },
+    enabled: !!wasmId,
+    refetchInterval: options?.refetchInterval,
+    staleTime: options?.refetchInterval ? 0 : undefined,
   });
 };
 
@@ -69,6 +98,8 @@ export const useGetAuditBountiesInfinite = (
     },
     initialPageParam: undefined as number | undefined,
     refetchInterval: options?.refetchInterval,
+    staleTime: options?.refetchInterval ? 0 : undefined, // Force fresh data when polling
+    refetchOnMount: true,
   });
 };
 
@@ -90,27 +121,6 @@ export const useGetAuditBounty = (bountyId: number | undefined) => {
     },
     // The query should only execute when we have a valid bountyId.
     enabled: !!bountyId && !!identity,
-  });
-};
-
-export const useGetReputationBalance = (tokenId: string | undefined) => {
-  const { identity } = useInternetIdentity();
-  return useQuery<number>({
-    queryKey: [
-      'reputationBalance',
-      identity?.getPrincipal().toString(),
-      tokenId,
-    ],
-    queryFn: async (): Promise<number> => {
-      if (!identity || !tokenId) {
-        return 0;
-      }
-      const balance = await getReputationBalance(identity, tokenId);
-      return Number(balance) || 0;
-    },
-    enabled: !!identity && !!tokenId,
-    // Provide placeholder to prevent undefined issues
-    placeholderData: 0,
   });
 };
 
@@ -144,10 +154,14 @@ export const useReserveAuditBounty = (bountyId?: bigint) => {
         throw new Error('Could not determine audit type from bounty details.');
       }
 
-      // Step 2: Call the canister to reserve the bounty
+      // Step 2: For now, we use USDC as the token for all audit types
+      // In the future, different audit types might use different tokens
+      const tokenId = Tokens.USDC.canisterId.toText();
+
+      // Step 3: Call the canister to reserve the bounty
       await reserveBounty(identity, {
         bounty_id: bountyId,
-        token_id: auditType,
+        token_id: tokenId,
       });
     },
 
@@ -406,6 +420,33 @@ export const useSubmitDivergence = () => {
       ['appStoreListings'],
       ['appDetails'],
       ['balance', identity?.getPrincipal().toText()],
+    ],
+  });
+};
+
+/**
+ * Hook to deposit USDC stake into the verifier's account.
+ * This performs a two-step process:
+ * 1. Approves the Audit Hub to spend USDC
+ * 2. Deposits the stake into the verifier's account
+ */
+export const useDepositStake = () => {
+  const { identity } = useInternetIdentity();
+
+  return useMutation({
+    mutationFn: async (amount: bigint) => {
+      if (!identity) {
+        throw new Error('Must be logged in to deposit stake');
+      }
+
+      await depositStake(identity, amount, Tokens.USDC);
+    },
+
+    successMessage: 'Stake deposited successfully!',
+
+    queryKeysToRefetch: [
+      ['tokenBalance', identity?.getPrincipal().toText()],
+      ['verifierProfile'],
     ],
   });
 };

@@ -41,7 +41,9 @@ export interface WasmVerification {
 }
 
 /**
- * Helper to group bounties by WASM ID
+ * Helper to group bounties by WASM ID and audit type
+ * This ensures build_reproducibility (consensus-based) is separate from
+ * attestation types (single-node) like tools_v1, data_safety_v1
  */
 export function groupBountiesByWasm(
   bounties: AuditBounty[],
@@ -53,10 +55,16 @@ export function groupBountiesByWasm(
     const wasmId = bounty.wasmHashHex || '';
     if (!wasmId) continue; // Skip if no WASM hash available
 
-    if (!grouped.has(wasmId)) {
-      grouped.set(wasmId, []);
+    const auditType = bounty.challengeParameters.audit_type || 'unknown';
+
+    // Create a composite key: wasmId + audit_type
+    // This separates build_reproducibility from attestation types
+    const groupKey = `${wasmId}::${auditType}`;
+
+    if (!grouped.has(groupKey)) {
+      grouped.set(groupKey, []);
     }
-    grouped.get(wasmId)!.push(bounty);
+    grouped.get(groupKey)!.push(bounty);
   }
 
   return grouped;
@@ -80,17 +88,32 @@ export function createWasmVerification(
   ).length;
   const openCount = bounties.length - claimedCount;
 
-  // Determine status based on consensus
+  // Determine status based on audit type
   let status: WasmVerification['status'] = 'pending';
   const attestationCount = attestationIds.length;
   const divergenceCount = divergenceIds.length;
 
-  if (attestationCount >= 5) {
-    status = 'verified'; // Reached majority consensus for verification
-  } else if (divergenceCount >= 5) {
-    status = 'rejected'; // Reached majority consensus for rejection
-  } else if (attestationCount > 0 || divergenceCount > 0) {
-    status = 'in_progress'; // Some attestations filed but no consensus yet
+  const isBuildReproducibility = auditType === 'build_reproducibility_v1';
+
+  if (isBuildReproducibility) {
+    // Build reproducibility: consensus-based (9 verifiers, need 5/9 for consensus)
+    if (attestationCount >= 5) {
+      status = 'verified'; // Reached majority consensus for verification
+    } else if (divergenceCount >= 5) {
+      status = 'rejected'; // Reached majority consensus for rejection
+    } else if (attestationCount > 0 || divergenceCount > 0) {
+      status = 'in_progress'; // Some attestations filed but no consensus yet
+    }
+  } else {
+    // Attestation types (tools_v1, data_safety_v1): single-bounty, completed when attestation exists
+    // These show as "verified" only when the bounty has been completed (attestation filed)
+    // For now, we'll keep them as "in_progress" until claimed
+    // TODO: Check if bounty is actually paid out to show "verified"
+    if (attestationCount > 0) {
+      status = 'verified'; // Attestation filed but may not be claimed yet
+    } else if (divergenceCount > 0) {
+      status = 'rejected';
+    }
   }
 
   return {

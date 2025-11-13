@@ -80,7 +80,7 @@ export const AccessAndBilling = ({
           </h2>
           <p className="text-muted-foreground">
             Create API keys for programmatic access to this app. These keys will
-            use your token allowances managed in the Token Watchlist section.
+            use your token allowances managed in the Token Allowances section.
           </p>
         </div>
 

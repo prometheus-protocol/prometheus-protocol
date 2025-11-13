@@ -5,6 +5,15 @@ type Result =
  };
 type Indexer = 
  service {
+   /// * Returns the environment requirements for this canister.
+   ///    * This enables automated configuration discovery and injection.
+   get_env_requirements: () ->
+    (variant {
+       v1:
+        record {
+          configuration: vec EnvConfig;
+          dependencies: vec EnvDependency;
+        };}) query;
    /// * Performs a search against the inverted index and returns matching app namespaces.
    ///    * @param query_string The user's search string.
    ///    * @returns An array of app namespaces that match ALL keywords in the query.
@@ -15,5 +24,21 @@ type Indexer =
    /// * [SECURE] Updates the index for a given app.
    ///    * This method can ONLY be called by the official Registry canister.
    update_index: (namespace: text, searchable_content: text) -> ();
+ };
+type EnvDependency = 
+ record {
+   canister_name: text;
+   current_value: opt principal;
+   key: text;
+   required: bool;
+   setter: text;
+ };
+type EnvConfig = 
+ record {
+   current_value: opt text;
+   key: text;
+   required: bool;
+   setter: text;
+   value_type: text;
  };
 service : () -> Indexer

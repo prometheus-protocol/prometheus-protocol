@@ -15,7 +15,7 @@ This document outlines the streamlined workflow for publishing a new version usi
 From your project directory (e.g., `/tmp/test`):
 
 ```bash
-app-store-cli release 0.18.0
+app-store-cli release 0.18.0 --network local
 ```
 
 **That's it!** This single command handles the entire workflow automatically.
@@ -95,9 +95,9 @@ Replace `<COMMIT_HASH>` with the hash from step 2. This also commits and pushes 
 ### 4. Build the WASM with GITHUB_TOKEN
 
 ```bash
-cd /tmp/test && \
+cd /tmp/test && git restore . && \
 export GITHUB_TOKEN=$(grep GITHUB_TOKEN /home/jesse/prometheus-protocol/prometheus-protocol/packages/apps/verifier-bot/deployment/.env | cut -d'=' -f2) && \
-app-store-cli build 2>&1 | tail -10
+app-store-cli release 0.1.0 --network local 2>&1 | tail -10
 ```
 
 This builds the WASM file and extracts the hash from the build output.
@@ -148,6 +148,7 @@ This registers the version and creates verification bounties.
 - **Commit hash is auto-updated**: The command ensures `prometheus.yml` always has the correct hash
 - **Safety checks built-in**: The command validates your git state before starting
 - **After updating GITHUB_TOKEN in .env**, recreate the verifier bots:
+
   ```bash
   cd packages/apps/verifier-bot/deployment && docker-compose up -d
   ```
@@ -195,7 +196,14 @@ If publishing to mainnet (`--network ic`), ensure you have ICP in your pp_owner 
 
 ```bash
 cd /tmp/test
-app-store-cli release 0.18.0
+git restore .
+app-store-cli release 0.18.0 --network local
+```
+
+With GITHUB
+
+```bash
+export GITHUB_TOKEN=$(grep GITHUB_TOKEN /home/jesse/prometheus-protocol/prometheus-protocol/packages/apps/verifier-bot/deployment/.env | cut -d'=' -f2) && cd /tmp/test && git restore . && app-store-cli release 0.120.0 --network local
 ```
 
 ### Publishing v0.18.0 (Automated - Script)

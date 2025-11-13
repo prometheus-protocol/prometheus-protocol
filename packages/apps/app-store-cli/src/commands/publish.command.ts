@@ -171,6 +171,7 @@ export function registerPublishCommand(program: Command) {
 
         // --- 5. PUBLISH WASM (Idempotent) ---
         console.log('\n   [4/5] 📦 Registering WASM version...');
+        let wasmAlreadyRegistered = false;
         try {
           await updateWasm(identity, {
             namespace: manifest.namespace,
@@ -182,26 +183,34 @@ export function registerPublishCommand(program: Command) {
           console.log('   ✅ Version registration successful.');
         } catch (error: any) {
           if (error.message?.includes('NonDeprecatedWasmFound')) {
+            wasmAlreadyRegistered = true;
             console.log(
-              '   ℹ️  WASM version already registered. Proceeding to upload chunks...',
+              '   ℹ️  WASM version already registered. Skipping chunk upload...',
             );
           } else {
             throw error;
           }
         }
 
-        console.log('\n   [5/5] 📤 Uploading WASM chunks...');
-        for (let i = 0; i < chunks.length; i++) {
-          console.log(`      Uploading chunk ${i + 1} of ${chunks.length}...`);
-          await uploadWasmChunk(identity, {
-            namespace: manifest.namespace,
-            version: versionTuple,
-            chunk_bytes: chunks[i],
-            chunk_index: BigInt(i),
-            chunk_hash: chunkHashes[i],
-          });
+        // Only upload chunks if WASM was not already registered
+        if (!wasmAlreadyRegistered) {
+          console.log('\n   [5/5] 📤 Uploading WASM chunks...');
+          for (let i = 0; i < chunks.length; i++) {
+            console.log(
+              `      Uploading chunk ${i + 1} of ${chunks.length}...`,
+            );
+            await uploadWasmChunk(identity, {
+              namespace: manifest.namespace,
+              version: versionTuple,
+              chunk_bytes: chunks[i],
+              chunk_index: BigInt(i),
+              chunk_hash: chunkHashes[i],
+            });
+          }
+          console.log('   ✅ All chunks uploaded successfully.');
+        } else {
+          console.log('\n   [5/5] ✅ WASM chunks already uploaded.');
         }
-        console.log('   ✅ All chunks uploaded successfully.');
 
         // --- FINAL SUCCESS MESSAGE ---
         console.log(

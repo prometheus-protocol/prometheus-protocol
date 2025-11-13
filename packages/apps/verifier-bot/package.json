@@ -23,7 +23,11 @@
   "author": "Prometheus Protocol",
   "license": "MIT",
   "dependencies": {
+    "@dfinity/agent": "^3.4.1",
+    "@dfinity/candid": "^3.4.1",
+    "@dfinity/pic": "^0.16.1",
     "@icp-sdk/core": "^4.0.1",
+    "@prometheus-protocol/declarations": "workspace:*",
     "@prometheus-protocol/ic-js": "workspace:*",
     "@prometheus-protocol/reproducible-build": "workspace:*",
     "dotenv": "^17.2.3",

@@ -44,6 +44,18 @@ export const VerificationListItem = ({
   const wasmDisplay =
     verification.wasmId.slice(0, 10) + '...' + verification.wasmId.slice(-4);
 
+  // Show consensus progress for build_reproducibility and tools_v1 audits
+  const isBuildReproducibility =
+    verification.auditType === 'build_reproducibility_v1';
+  const isToolsV1 = verification.auditType === 'tools_v1';
+  const usesConsensus = isBuildReproducibility || isToolsV1;
+
+  // For consensus-based audits, link to the WASM hash page with audit type
+  // For other audits, link to the single bounty
+  const linkTarget = usesConsensus
+    ? `/audit-hub/${verification.wasmId}?auditType=${verification.auditType}`
+    : `/audit-hub/bounty/${verification.bounties[0]?.id}`;
+
   // Calculate progress percentage (5 out of 9 needed for consensus)
   const CONSENSUS_THRESHOLD = 5;
   const TOTAL_VERIFIERS = 9;
@@ -53,23 +65,14 @@ export const VerificationListItem = ({
     verification.attestationCount,
     verification.divergenceCount,
   );
-  const progressPercent = (leadingCount / CONSENSUS_THRESHOLD) * 100;
-
-  // Determine progress bar color based on what's leading
-  const isAttestationLeading =
-    verification.attestationCount > verification.divergenceCount;
-  const progressColor = isAttestationLeading
-    ? 'bg-green-500'
-    : verification.divergenceCount > 0
-      ? 'bg-red-500'
-      : 'bg-primary';
 
   return (
     <div className="bg-card/50 border border-gray-700 rounded-lg hover:border-primary transition-colors">
-      <Link to={`/audit-hub/${verification.wasmId}`}>
+      <Link to={linkTarget}>
         {/* --- DESKTOP VIEW --- */}
         <div className="hidden md:block px-6 py-5">
-          <div className="flex items-center justify-between mb-4">
+          <div
+            className={`flex items-center justify-between ${usesConsensus ? 'mb-4' : ''}`}>
             <div className="flex items-center gap-4">
               {statusConfig.icon}
               <div>
@@ -101,50 +104,53 @@ export const VerificationListItem = ({
             </div>
           </div>
 
-          {/* Consensus Progress Bar */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <div className="flex items-center gap-4">
-                <span className="text-gray-400">
-                  <span className="text-green-400 font-semibold">
-                    {verification.attestationCount}
-                  </span>{' '}
-                  attestations
-                </span>
-                <span className="text-gray-400">
-                  <span className="text-red-400 font-semibold">
-                    {verification.divergenceCount}
-                  </span>{' '}
-                  divergences
+          {/* Consensus Progress Bar - For consensus-based audits */}
+          {usesConsensus && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-4">
+                  <span className="text-gray-400">
+                    <span className="text-green-400 font-semibold">
+                      {verification.attestationCount}
+                    </span>{' '}
+                    attestations
+                  </span>
+                  <span className="text-gray-400">
+                    <span className="text-red-400 font-semibold">
+                      {verification.divergenceCount}
+                    </span>{' '}
+                    divergences
+                  </span>
+                </div>
+                <span className="text-gray-500">
+                  {verification.attestationCount + verification.divergenceCount}
+                  /{TOTAL_VERIFIERS} participated
                 </span>
               </div>
-              <span className="text-gray-500">
-                {verification.attestationCount + verification.divergenceCount}/
-                {TOTAL_VERIFIERS} participated
-              </span>
+              <div className="relative h-3 bg-gray-800 rounded-full overflow-hidden">
+                {/* Green bar from left (attestations) */}
+                <div
+                  className="absolute left-0 top-0 h-full bg-green-500 transition-all duration-300"
+                  style={{
+                    width: `${(verification.attestationCount / TOTAL_VERIFIERS) * 100}%`,
+                  }}
+                />
+                {/* Red bar from right (divergences) */}
+                <div
+                  className="absolute right-0 top-0 h-full bg-red-500 transition-all duration-300"
+                  style={{
+                    width: `${(verification.divergenceCount / TOTAL_VERIFIERS) * 100}%`,
+                  }}
+                />
+              </div>
             </div>
-            <div className="relative h-4 bg-gray-800 rounded-full overflow-hidden">
-              {/* Green bar from left (attestations) */}
-              <div
-                className="absolute left-0 top-0 h-full bg-green-500 transition-all duration-300"
-                style={{
-                  width: `${(verification.attestationCount / TOTAL_VERIFIERS) * 100}%`,
-                }}
-              />
-              {/* Red bar from right (divergences) */}
-              <div
-                className="absolute right-0 top-0 h-full bg-red-500 transition-all duration-300"
-                style={{
-                  width: `${(verification.divergenceCount / TOTAL_VERIFIERS) * 100}%`,
-                }}
-              />
-            </div>
-          </div>
+          )}
         </div>
 
         {/* --- MOBILE VIEW --- */}
         <div className="md:hidden p-4">
-          <div className="flex justify-between items-start mb-4">
+          <div
+            className={`flex justify-between items-start ${usesConsensus ? 'mb-4' : ''}`}>
             <div className="flex items-center gap-3">
               {statusConfig.icon}
               <div>
@@ -161,36 +167,38 @@ export const VerificationListItem = ({
             </span>
           </div>
 
-          {/* Progress Bar */}
-          <div className="space-y-2 mb-4">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-green-400 font-semibold">
-                {verification.attestationCount} ✓
-              </span>
-              <span className="text-gray-500">
-                {leadingCount}/{CONSENSUS_THRESHOLD}
-              </span>
-              <span className="text-red-400 font-semibold">
-                {verification.divergenceCount} ✗
-              </span>
+          {/* Progress Bar - For consensus-based audits */}
+          {usesConsensus && (
+            <div className="space-y-2 mb-4">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-green-400 font-semibold">
+                  {verification.attestationCount} ✓
+                </span>
+                <span className="text-gray-500">
+                  {leadingCount}/{CONSENSUS_THRESHOLD}
+                </span>
+                <span className="text-red-400 font-semibold">
+                  {verification.divergenceCount} ✗
+                </span>
+              </div>
+              <div className="relative h-3 bg-gray-800 rounded-full overflow-hidden">
+                {/* Green bar from left (attestations) */}
+                <div
+                  className="absolute left-0 top-0 h-full bg-green-500 transition-all duration-300"
+                  style={{
+                    width: `${(verification.attestationCount / TOTAL_VERIFIERS) * 100}%`,
+                  }}
+                />
+                {/* Red bar from right (divergences) */}
+                <div
+                  className="absolute right-0 top-0 h-full bg-red-500 transition-all duration-300"
+                  style={{
+                    width: `${(verification.divergenceCount / TOTAL_VERIFIERS) * 100}%`,
+                  }}
+                />
+              </div>
             </div>
-            <div className="relative h-3 bg-gray-800 rounded-full overflow-hidden">
-              {/* Green bar from left (attestations) */}
-              <div
-                className="absolute left-0 top-0 h-full bg-green-500 transition-all duration-300"
-                style={{
-                  width: `${(verification.attestationCount / TOTAL_VERIFIERS) * 100}%`,
-                }}
-              />
-              {/* Red bar from right (divergences) */}
-              <div
-                className="absolute right-0 top-0 h-full bg-red-500 transition-all duration-300"
-                style={{
-                  width: `${(verification.divergenceCount / TOTAL_VERIFIERS) * 100}%`,
-                }}
-              />
-            </div>
-          </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>

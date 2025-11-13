@@ -9,15 +9,21 @@ import {
   Loader2,
 } from 'lucide-react';
 import { ReactNode, useState } from 'react';
-import { AuditBountyWithDetails, Tokens } from '@prometheus-protocol/ic-js';
+import {
+  AuditBountyWithDetails,
+  AuditType,
+  Tokens,
+} from '@prometheus-protocol/ic-js';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import {
   useClaimBounty,
-  useGetReputationBalance,
   useReserveAuditBounty,
+  useDepositStake,
 } from '@/hooks/useAuditBounties';
+import { useGetTokenBalance } from '@/hooks/usePayment';
 import { StartAuditDialog } from './StartAuditDialog';
 import { ResourcesSection } from './ResourcesSection';
+import { useAvailableBalanceByAuditType } from '@/hooks/useVerifierDashboard';
 
 // The right-hand side panel, which shows the state of the BOUNTY
 export const BountyPanel = ({ audit }: { audit: AuditBountyWithDetails }) => {
@@ -33,11 +39,35 @@ export const BountyPanel = ({ audit }: { audit: AuditBountyWithDetails }) => {
     lockExpiresAt,
   } = audit;
   const rewardAmount = Tokens.USDC.fromAtomic(reward);
-  const stakeAmount = stake;
-  const getReputationBalance = useGetReputationBalance(audit.auditType);
+  const stakeAmount = stake; // This is in atomic units (bigint)
+  const stakeAmountDisplay = Number(Tokens.USDC.fromAtomic(stake)); // Convert to human-readable
+  const getUsdcBalance = useGetTokenBalance(Tokens.USDC);
   const reserveAuditBounty = useReserveAuditBounty(audit.id);
-  const auditorBalance = getReputationBalance.data ?? 0;
+  const getBalanceByAuditType = useAvailableBalanceByAuditType(
+    auditType as AuditType,
+  );
+
+  // Get wallet balance
+  const walletBalanceAtomic = getUsdcBalance.data ?? 0n;
+  const walletBalanceDisplay = Number(
+    Tokens.USDC.fromAtomic(walletBalanceAtomic),
+  );
+
+  // Get audit hub available balance
+  const auditHubBalanceAtomic = getBalanceByAuditType.data ?? 0n;
+  const auditHubBalanceDisplay = Number(
+    Tokens.USDC.fromAtomic(auditHubBalanceAtomic),
+  );
+
+  // Check if user has enough in their wallet to cover the deficit
+  const neededStake =
+    stakeAmount > auditHubBalanceAtomic
+      ? stakeAmount - auditHubBalanceAtomic
+      : 0n;
+  const hasEnoughInWallet = walletBalanceAtomic >= neededStake;
+
   const { mutate: claimBounty, isPending: isClaiming } = useClaimBounty();
+  const { mutateAsync: depositStakeMutation } = useDepositStake();
 
   const handleClaimBounty = () => {
     claimBounty({
@@ -56,8 +86,14 @@ export const BountyPanel = ({ audit }: { audit: AuditBountyWithDetails }) => {
   };
 
   const handleConfirmClaim = async () => {
+    // Only deposit if we need more stake in the audit hub
+    if (neededStake > 0n) {
+      await depositStakeMutation(neededStake);
+    }
+
+    // Reserve the bounty (stake is now available in audit hub)
     await reserveAuditBounty.mutateAsync();
-    console.log('Bounty claimed successfully!');
+    console.log('Stake deposited (if needed) and bounty claimed successfully!');
     setIsDialogOpen(false);
   };
 
@@ -160,7 +196,7 @@ export const BountyPanel = ({ audit }: { audit: AuditBountyWithDetails }) => {
               ${Number(rewardAmount).toLocaleString()} USDC
             </InfoPanelItem>
             <InfoPanelItem icon={<ShieldQuestion />} label="Stake Required">
-              {Number(stakeAmount).toLocaleString()} {auditType}
+              ${stakeAmountDisplay.toLocaleString()} USDC
             </InfoPanelItem>
             <InfoPanelItem icon={<Clock />} label="Complete Within">
               72 Hours
@@ -185,7 +221,10 @@ export const BountyPanel = ({ audit }: { audit: AuditBountyWithDetails }) => {
         isOpen={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         audit={audit}
-        auditorBalance={auditorBalance}
+        walletBalance={walletBalanceDisplay}
+        auditHubBalance={auditHubBalanceDisplay}
+        neededStake={Number(Tokens.USDC.fromAtomic(neededStake))}
+        hasEnoughInWallet={hasEnoughInWallet}
         onConfirm={handleConfirmClaim}
       />
     </div>

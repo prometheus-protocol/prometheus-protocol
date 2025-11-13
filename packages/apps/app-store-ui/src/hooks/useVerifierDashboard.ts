@@ -4,10 +4,15 @@ import {
   depositStake,
   withdrawStake,
   getVerifierProfile,
+  getAvailableBalanceByAuditType,
+  getStakedBalance,
+  getStakeRequirement,
   generateApiKey,
   revokeApiKey,
   listApiKeys,
   Tokens,
+  getAllAuditTypes,
+  type AuditType,
 } from '@prometheus-protocol/ic-js';
 import { AuditHub } from '@prometheus-protocol/declarations';
 import useMutation from './useMutation';
@@ -29,8 +34,8 @@ export const usePaymentToken = () => {
 };
 
 /**
- * Hook to fetch the verifier's profile including available balance, staked balance,
- * total verifications, and reputation score.
+ * Hook to fetch the verifier's profile including total verifications, reputation, and earnings.
+ * Note: Balances are fetched separately per audit type.
  */
 export const useVerifierProfile = () => {
   const { identity } = useInternetIdentity();
@@ -60,6 +65,116 @@ export const useVerifierProfile = () => {
 };
 
 /**
+ * Hook to fetch available balance for a specific audit type.
+ */
+export const useAvailableBalanceByAuditType = (auditType: AuditType) => {
+  const { identity } = useInternetIdentity();
+  const principal = identity?.getPrincipal();
+
+  return useQuery({
+    queryKey: ['availableBalance', principal?.toString(), auditType],
+    queryFn: async () => {
+      if (!identity) {
+        throw new Error('User is not authenticated.');
+      }
+      return await getAvailableBalanceByAuditType(identity, auditType);
+    },
+    enabled: !!principal,
+  });
+};
+
+/**
+ * Hook to fetch the total available balance across all audit types.
+ * Since balances are shared per token, we just fetch one audit type's balance.
+ */
+export const useAvailableBalance = () => {
+  const { identity } = useInternetIdentity();
+  const principal = identity?.getPrincipal();
+  // Just use the first audit type since they all share the same token pool
+  const auditType = getAllAuditTypes()[0];
+
+  return useQuery({
+    queryKey: ['availableBalance', principal?.toString()],
+    queryFn: async () => {
+      if (!identity) {
+        throw new Error('User is not authenticated.');
+      }
+      return await getAvailableBalanceByAuditType(identity, auditType);
+    },
+    enabled: !!principal,
+  });
+};
+
+/**
+ * Hook to fetch the stake requirement for a specific audit type.
+ */
+export const useStakeRequirement = (auditType: AuditType) => {
+  return useQuery({
+    queryKey: ['stakeRequirement', auditType],
+    queryFn: async () => {
+      return await getStakeRequirement(auditType);
+    },
+  });
+};
+
+/**
+ * Hook to fetch staked balance for a specific token.
+ */
+export const useStakedBalance = (tokenId?: string) => {
+  const { identity } = useInternetIdentity();
+  const principal = identity?.getPrincipal();
+
+  return useQuery({
+    queryKey: ['stakedBalance', principal?.toString(), tokenId],
+    queryFn: async () => {
+      if (!identity) {
+        throw new Error('User is not authenticated.');
+      }
+      if (!tokenId) {
+        throw new Error('Token ID is required.');
+      }
+      return await getStakedBalance(identity, tokenId);
+    },
+    enabled: !!principal && !!tokenId,
+  });
+};
+
+/**
+ * Hook to fetch available balances for all audit types.
+ * Returns a map of audit type to available balance.
+ */
+export const useAllAvailableBalances = () => {
+  const { identity } = useInternetIdentity();
+  const principal = identity?.getPrincipal();
+  const auditTypes = getAllAuditTypes();
+
+  return useQuery({
+    queryKey: ['allAvailableBalances', principal?.toString()],
+    queryFn: async () => {
+      if (!identity) {
+        throw new Error('User is not authenticated.');
+      }
+
+      const balances: Record<string, bigint> = {};
+
+      // Fetch balances for all audit types in parallel
+      const results = await Promise.all(
+        auditTypes.map((auditType) =>
+          getAvailableBalanceByAuditType(identity, auditType),
+        ),
+      );
+
+      auditTypes.forEach((auditType, index) => {
+        balances[auditType] = results[index];
+      });
+
+      return balances;
+    },
+    enabled: !!principal,
+  });
+};
+
+/**
  * Mutation hook to deposit USDC stake to the verifier's account.
  * This automatically handles the ICRC-2 approval step before depositing.
  */
@@ -67,18 +182,25 @@ export const useDepositStake = () => {
   const { identity } = useInternetIdentity();
   const { data: paymentToken } = usePaymentToken();
 
-  return useMutation<{ amount: bigint }, void>({
-    mutationFn: async ({ amount }) => {
+  return useMutation<{ amount: bigint; auditType: AuditType }, void>({
+    mutationFn: async ({ amount, auditType }) => {
       if (!identity) {
         throw new Error('You must be logged in to deposit stake.');
       }
       if (!paymentToken) {
         throw new Error('Payment token configuration not available.');
       }
+      // TODO: Update depositStake to accept auditType parameter
       await depositStake(identity, amount, paymentToken);
     },
     successMessage: 'Stake deposited successfully!',
-    queryKeysToRefetch: [['verifierProfile'], ['tokenBalance']],
+    queryKeysToRefetch: [
+      ['verifierProfile'],
+      ['tokenBalance'],
+      ['allAvailableBalances'],
+      ['availableBalance'],
+      ['stakedBalance'],
+    ],
   });
 };
 
@@ -100,7 +222,13 @@ export const useWithdrawStake = () => {
       await withdrawStake(identity, amount, paymentToken.canisterId.toText());
     },
     successMessage: 'Stake withdrawn successfully!',
-    queryKeysToRefetch: [['verifierProfile'], ['tokenBalance']],
+    queryKeysToRefetch: [
+      ['verifierProfile'],
+      ['tokenBalance'],
+      ['allAvailableBalances'],
+      ['availableBalance'],
+      ['stakedBalance'],
+    ],
   });
 };
 

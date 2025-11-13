@@ -1,6 +1,6 @@
-import type { Principal } from '@icp-sdk/core/principal';
-import type { ActorMethod } from '@icp-sdk/core/agent';
-import type { IDL } from '@icp-sdk/core/candid';
+import type { Principal } from '@dfinity/principal';
+import type { ActorMethod } from '@dfinity/agent';
+import type { IDL } from '@dfinity/candid';
 
 export interface AppMetrics {
   'authenticated_unique_users' : bigint,
@@ -12,6 +12,20 @@ export interface CallerActivity {
   'call_count' : bigint,
   'tool_id' : string,
   'caller' : Principal,
+}
+export interface EnvConfig {
+  'key' : string,
+  'value_type' : string,
+  'setter' : string,
+  'required' : boolean,
+  'current_value' : [] | [string],
+}
+export interface EnvDependency {
+  'key' : string,
+  'setter' : string,
+  'required' : boolean,
+  'canister_name' : string,
+  'current_value' : [] | [Principal],
 }
 export interface LogEntry {
   'canister_id' : Principal,
@@ -64,6 +78,15 @@ export interface UsageTracker {
   >,
   'get_and_clear_logs' : ActorMethod<[], Result_2>,
   'get_app_metrics' : ActorMethod<[Principal], [] | [AppMetrics]>,
+  'get_env_requirements' : ActorMethod<
+    [],
+    {
+        'v1' : {
+          'dependencies' : Array<EnvDependency>,
+          'configuration' : Array<EnvConfig>,
+        }
+      }
+  >,
   'get_metrics_for_server' : ActorMethod<[string], [] | [ServerMetricsShared]>,
   'get_namespace_metrics' : ActorMethod<[string], [] | [NamespaceMetrics]>,
   'get_namespace_metrics_detailed' : ActorMethod<

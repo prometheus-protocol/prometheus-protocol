@@ -17,9 +17,9 @@ export default function AuditHubPage() {
           Audit Hub
         </h1>
         <p className="mt-4 text-lg text-gray-400 max-w-3xl">
-          Track build verifications and consensus progress. Bounties are
-          automatically created for all published apps and distributed when
-          9-of-9 verifiers participate.
+          Track verifications and consensus progress for build reproducibility
+          and MCP tools. Bounties are automatically created for all published
+          apps and distributed when 9-of-9 verifiers participate.
         </p>
       </header>
 

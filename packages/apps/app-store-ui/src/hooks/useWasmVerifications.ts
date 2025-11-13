@@ -22,30 +22,38 @@ export function useGetWasmVerifications(bounties: AuditBounty[] | undefined) {
         return [];
       }
 
-      // Group bounties by WASM ID
+      // Group bounties by WASM ID and audit type
       const groupedMap = groupBountiesByWasm(bounties);
 
-      // For each WASM, fetch progress data
+      // For each WASM+audit_type group, fetch progress data
       const verifications = await Promise.all(
-        Array.from(groupedMap.entries()).map(async ([wasmId, wasmBounties]) => {
-          try {
-            const [attestationIds, divergenceIds] = await Promise.all([
-              getVerificationProgress(wasmId),
-              getDivergenceProgress(wasmId),
-            ]);
+        Array.from(groupedMap.entries()).map(
+          async ([groupKey, wasmBounties]) => {
+            // Extract wasmId and auditType from the composite key (format: "wasmId::auditType")
+            const [wasmId, auditType] = groupKey.split('::');
 
-            return createWasmVerification(
-              wasmId,
-              wasmBounties,
-              attestationIds,
-              divergenceIds,
-            );
-          } catch (error) {
-            console.error(`Error fetching progress for WASM ${wasmId}:`, error);
-            // Return verification with zero progress on error
-            return createWasmVerification(wasmId, wasmBounties, [], []);
-          }
-        }),
+            try {
+              const [attestationIds, divergenceIds] = await Promise.all([
+                getVerificationProgress(wasmId, auditType),
+                getDivergenceProgress(wasmId, auditType),
+              ]);
+
+              return createWasmVerification(
+                wasmId,
+                wasmBounties,
+                attestationIds,
+                divergenceIds,
+              );
+            } catch (error) {
+              console.error(
+                `Error fetching progress for WASM ${wasmId} (${auditType}):`,
+                error,
+              );
+              // Return verification with zero progress on error
+              return createWasmVerification(wasmId, wasmBounties, [], []);
+            }
+          },
+        ),
       );
 
       // Sort by most recent bounty creation date (newest first)
@@ -59,7 +67,6 @@ export function useGetWasmVerifications(bounties: AuditBounty[] | undefined) {
         return bNewestDate - aNewestDate; // Newest first
       });
     },
-    enabled: !!bounties && bounties.length > 0,
   });
 }
 
@@ -69,29 +76,36 @@ export function useGetWasmVerifications(bounties: AuditBounty[] | undefined) {
  */
 export function useGetSingleWasmVerification(
   wasmId: string | undefined,
-  bounties: AuditBounty[] | undefined,
-  options?: { refetchInterval?: number | false },
+  bounties: AuditBounty[],
+  options?: {
+    refetchInterval?: number | false | ((query: any) => number | false);
+    enabled?: boolean;
+    auditType?: string;
+  },
 ) {
+  // Use audit type from options (URL params) or fall back to first bounty
+  const auditType =
+    options?.auditType ||
+    bounties?.[0]?.challengeParameters.audit_type ||
+    'build_reproducibility_v1';
+
   return useQuery({
-    queryKey: ['wasmVerification', wasmId],
+    queryKey: ['wasmVerification', wasmId, auditType, bounties.length],
     queryFn: async (): Promise<WasmVerification | null> => {
-      console.log('Fetching verification progress for', wasmId);
-      if (!wasmId || !bounties || bounties.length === 0) {
-        return null;
-      }
-
-      // Filter bounties for this specific WASM
-      const wasmBounties = bounties.filter((b) => b.wasmHashHex === wasmId);
-
-      if (wasmBounties.length === 0) {
+      console.log('Fetching verification progress for', wasmId, auditType);
+      if (!wasmId) {
+        console.log('   ❌ No wasmId provided');
         return null;
       }
 
       try {
         const [attestationIds, divergenceIds] = await Promise.all([
-          getVerificationProgress(wasmId),
-          getDivergenceProgress(wasmId),
+          getVerificationProgress(wasmId, auditType),
+          getDivergenceProgress(wasmId, auditType),
         ]);
+
+        // Filter bounties for this specific WASM (may be empty initially)
+        const wasmBounties = bounties.filter((b) => b.wasmHashHex === wasmId);
 
         return createWasmVerification(
           wasmId,
@@ -101,30 +115,10 @@ export function useGetSingleWasmVerification(
         );
       } catch (error) {
         console.error(`Error fetching progress for WASM ${wasmId}:`, error);
-        return createWasmVerification(wasmId, wasmBounties, [], []);
+        return createWasmVerification(wasmId, [], [], []);
       }
     },
-    enabled: !!wasmId && !!bounties && bounties.length > 0,
-    refetchInterval: (query) => {
-      const data = query.state.data as WasmVerification | null;
-
-      // Stop refetching only if:
-      // 1. Consensus has been reached (verified/rejected) AND
-      // 2. All 9 verifiers have participated (filed attestation or divergence)
-      if (data) {
-        const isConsensusReached =
-          data.status === 'verified' || data.status === 'rejected';
-        const totalParticipated =
-          data.attestationBountyIds.length + data.divergenceBountyIds.length;
-        const allVerifiersParticipated = totalParticipated >= 9;
-
-        if (isConsensusReached && allVerifiersParticipated) {
-          return false; // Stop polling
-        }
-      }
-
-      return options?.refetchInterval ?? false;
-    },
-    refetchIntervalInBackground: true,
+    enabled: !!wasmId && options?.enabled !== false,
+    refetchInterval: options?.refetchInterval,
   });
 }

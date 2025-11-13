@@ -8,6 +8,13 @@ type UsageTracker =
          }) query;
    get_and_clear_logs: () -> (Result_2);
    get_app_metrics: (canister_id: principal) -> (opt AppMetrics) query;
+   get_env_requirements: () ->
+    (variant {
+       v1:
+        record {
+          configuration: vec EnvConfig;
+          dependencies: vec EnvDependency;
+        };}) query;
    get_metrics_for_server: (wasm_id: text) -> (opt ServerMetricsShared) query;
    get_namespace_metrics: (namespace: text) -> (opt NamespaceMetrics) query;
    /// * Get detailed namespace metrics including per-tool invocation counts.
@@ -117,6 +124,22 @@ type LogEntry =
    stats: UsageStats;
    timestamp: Time;
    wasm_id: text;
+ };
+type EnvDependency = 
+ record {
+   canister_name: text;
+   current_value: opt principal;
+   key: text;
+   required: bool;
+   setter: text;
+ };
+type EnvConfig = 
+ record {
+   current_value: opt text;
+   key: text;
+   required: bool;
+   setter: text;
+   value_type: text;
  };
 type CallerActivity = 
  record {

@@ -78,12 +78,10 @@ export const updateWasm = async (
     previous: [],
   });
 
-  console.log(result);
-
   if ('Error' in result) {
-    throw new Error(
-      `Failed to publish version: ${JSON.stringify(result.Error)}`,
-    );
+    // Extract the error type for cleaner error messages
+    const errorType = Object.keys(result.Error)[0];
+    throw new Error(`Failed to publish version: ${errorType}`);
   }
 };
 
@@ -110,11 +108,19 @@ export const uploadWasmChunk = async (
     expected_chunk_hash: chunk_hash,
   });
 
-  // The canister returns total_chunks = 0 on error.
+  // The canister returns total_chunks = 0 on error OR if chunks already exist.
+  // We distinguish by checking if it's the first chunk or not.
+  // If total_chunks is 0 and it's not chunk 0, it might already be uploaded.
   if (result.total_chunks === 0n) {
-    throw new Error(
-      `Failed to upload chunk ${chunk_index}. The canister rejected the chunk (hash mismatch or out of bounds).`,
+    // This could mean either:
+    // 1. The chunk was already uploaded (idempotent case)
+    // 2. There was an actual error (hash mismatch, out of bounds, etc.)
+    // We'll throw an error and let the caller decide how to handle it
+    const error = new Error(
+      `Chunk ${chunk_index} was not accepted. This may indicate the chunk is already uploaded or there was a hash mismatch.`,
     );
+    (error as any).code = 'CHUNK_NOT_ACCEPTED';
+    throw error;
   }
 };
 
@@ -639,4 +645,81 @@ export const getAppDetailsByNamespace = async (
     console.error(`Error calling get_app_details_by_namespace:`, error);
     return null;
   }
+};
+
+/**
+ * Downloads a complete WASM file by its hash from the registry.
+ * Fetches all chunks and assembles them into a complete binary.
+ *
+ * @param wasmHash The hex string hash of the WASM to download
+ * @returns The complete WASM binary as a Uint8Array
+ */
+export const downloadWasmByHash = async (
+  wasmHash: string,
+): Promise<Uint8Array> => {
+  const registryActor = getRegistryActor();
+
+  // Convert hex hash to Uint8Array
+  const hashBytes = new Uint8Array(
+    wasmHash.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16)),
+  );
+
+  // Query for the WASM metadata by hash
+  const wasms = await registryActor.icrc118_get_wasms({
+    filter: [[{ hash: hashBytes }]],
+    prev: [],
+    take: [BigInt(1)],
+  });
+
+  if (wasms.length === 0) {
+    throw new Error(`WASM with hash ${wasmHash} not found in registry`);
+  }
+
+  const wasmMetadata = wasms[0];
+  const namespace = wasmMetadata.canister_type_namespace;
+  const version = wasmMetadata.version_number;
+  const totalChunks = Number(wasmMetadata.chunkCount);
+
+  console.log(
+    `   📦 Downloading ${totalChunks} chunks from ${namespace} v${version.join('.')}...`,
+  );
+
+  // Download all chunks in parallel
+  const chunkPromises = Array.from({ length: totalChunks }, (_, i) =>
+    registryActor.icrc118_get_wasm_chunk({
+      canister_type_namespace: namespace,
+      version_number: version,
+      hash: hashBytes,
+      chunk_id: BigInt(i),
+    }),
+  );
+
+  const chunkResults = await Promise.all(chunkPromises);
+
+  // Validate and assemble chunks
+  const chunks: Uint8Array[] = [];
+  for (let i = 0; i < chunkResults.length; i++) {
+    const result = chunkResults[i];
+    if ('Err' in result) {
+      throw new Error(`Failed to download chunk ${i}: ${result.Err}`);
+    }
+    const chunkData = result.Ok.wasm_chunk;
+    chunks.push(
+      chunkData instanceof Uint8Array ? chunkData : new Uint8Array(chunkData),
+    );
+  }
+
+  // Calculate total size and assemble
+  const totalSize = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const completeWasm = new Uint8Array(totalSize);
+
+  let offset = 0;
+  for (const chunk of chunks) {
+    completeWasm.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  console.log(`   ✅ Downloaded complete WASM (${totalSize} bytes)`);
+
+  return completeWasm;
 };

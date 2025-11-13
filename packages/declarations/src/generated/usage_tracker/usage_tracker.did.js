@@ -29,6 +29,20 @@ export const idlFactory = ({ IDL }) => {
     'anonymous_invocations' : IDL.Nat,
     'total_tools' : IDL.Nat,
   });
+  const EnvDependency = IDL.Record({
+    'key' : IDL.Text,
+    'setter' : IDL.Text,
+    'required' : IDL.Bool,
+    'canister_name' : IDL.Text,
+    'current_value' : IDL.Opt(IDL.Principal),
+  });
+  const EnvConfig = IDL.Record({
+    'key' : IDL.Text,
+    'value_type' : IDL.Text,
+    'setter' : IDL.Text,
+    'required' : IDL.Bool,
+    'current_value' : IDL.Opt(IDL.Text),
+  });
   const NamespaceMetrics = IDL.Record({
     'authenticated_unique_users' : IDL.Nat,
     'total_invocations' : IDL.Nat,
@@ -61,6 +75,18 @@ export const idlFactory = ({ IDL }) => {
     'get_app_metrics' : IDL.Func(
         [IDL.Principal],
         [IDL.Opt(AppMetrics)],
+        ['query'],
+      ),
+    'get_env_requirements' : IDL.Func(
+        [],
+        [
+          IDL.Variant({
+            'v1' : IDL.Record({
+              'dependencies' : IDL.Vec(EnvDependency),
+              'configuration' : IDL.Vec(EnvConfig),
+            }),
+          }),
+        ],
         ['query'],
       ),
     'get_metrics_for_server' : IDL.Func(

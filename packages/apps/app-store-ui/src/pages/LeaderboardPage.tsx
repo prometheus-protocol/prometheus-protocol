@@ -131,7 +131,7 @@ const LeaderboardList = ({
       const truncatedId =
         type === 'user' ? truncatePrincipal(id) : truncateHash(id);
 
-      const avatarType = type === 'user' ? 'adventurer' : 'bottts';
+      const avatarType = type === 'user' ? 'adventurer' : 'bottts-neutral';
       return (
         <div
           key={entry.rank}
@@ -160,7 +160,7 @@ const LeaderboardList = ({
 );
 
 const LeaderboardCtaBanner = () => (
-  <section className="bg-primary/80 rounded-4xl p-8 md:p-12 my-16 relative flex flex-col md:flex-row items-center justify-between gap-8">
+  <section className="bg-primary/80 rounded-[54px] p-8 md:p-12 my-16 relative flex flex-col md:flex-row items-center justify-between gap-8">
     <div className="text-center md:text-left">
       <h2 className="text-3xl font-bold tracking-tight text-neutral-900">
         The Genesis Program is complete.
@@ -205,8 +205,8 @@ const LeaderboardError = ({ onRetry }: { onRetry: () => void }) => (
 );
 
 // --- MAIN PAGE COMPONENT ---
-const INITIAL_VISIBLE_COUNT = 25;
-const LOAD_MORE_INCREMENT = 25;
+const INITIAL_VISIBLE_COUNT = 10;
+const LOAD_MORE_INCREMENT = 10;
 
 export default function LeaderboardPage() {
   const [activeTab, setActiveTab] = useState<'users' | 'servers'>('users');

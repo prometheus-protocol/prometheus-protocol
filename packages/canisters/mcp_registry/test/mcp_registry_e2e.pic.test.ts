@@ -36,6 +36,8 @@ import {
   init as indexerInit,
 } from '@declarations/search_index/search_index.did.js';
 import type { _SERVICE as IndexerService } from '@declarations/search_index/search_index.did.js';
+import { idlFactory as bountySponsorIdlFactory } from '@declarations/bounty_sponsor/bounty_sponsor.did.js';
+import type { _SERVICE as BountySponsorService } from '@declarations/bounty_sponsor/bounty_sponsor.did';
 
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -71,6 +73,11 @@ const INDEXER_WASM_PATH = path.resolve(
   '../../../../',
   '.dfx/local/canisters/search_index/search_index.wasm',
 );
+const BOUNTY_SPONSOR_WASM_PATH = path.resolve(
+  __dirname,
+  '../../../../',
+  '.dfx/local/canisters/bounty_sponsor/bounty_sponsor.wasm',
+);
 
 // --- Identities ---
 const daoIdentity = createIdentity('dao-principal'); // Also the canister owner
@@ -95,6 +102,8 @@ describe('MCP Registry Full E2E Lifecycle', () => {
   let ledgerCanisterId: Principal;
   let indexerActor: Actor<IndexerService>;
   let indexerCanisterId: Principal;
+  let bountySponsorActor: Actor<BountySponsorService>;
+  let bountySponsorCanisterId: Principal;
 
   beforeAll(async () => {
     const url = inject('PIC_URL');
@@ -192,28 +201,58 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     await orchestratorActor.set_mcp_registry_id(registryFixture.canisterId);
 
     auditHub.actor.setIdentity(daoIdentity);
-    // Configure the required stake for the reputation token
-    await auditHub.actor.set_payment_token_config(ledgerCanisterId, 'USDC', 6);
-    await auditHubActor.set_stake_requirement(ledgerCanisterId.toText(), 100n);
-    // Register audit_type → token_id mappings
-    await auditHubActor.register_audit_type(
+    // Register audit types with stake requirements
+    await auditHubActor.set_stake_requirement(
       'build_reproducibility_v1',
       ledgerCanisterId.toText(),
+      100n,
     );
-    await auditHubActor.register_audit_type(
+    await auditHubActor.set_stake_requirement(
       'app_info_v1',
       ledgerCanisterId.toText(),
+      100n,
     );
-    await auditHubActor.register_audit_type(
+    await auditHubActor.set_stake_requirement(
       'quality',
       ledgerCanisterId.toText(),
+      100n,
     );
 
-    // Fund registry with USDC for auto-bounty creation (no approval needed - uses direct transfer)
+    // Setup bounty_sponsor canister
+    const bountySponsorFixture = await pic.setupCanister<BountySponsorService>({
+      idlFactory: bountySponsorIdlFactory,
+      wasm: BOUNTY_SPONSOR_WASM_PATH,
+      sender: daoIdentity.getPrincipal(),
+    });
+    bountySponsorActor = bountySponsorFixture.actor;
+    bountySponsorCanisterId = bountySponsorFixture.canisterId;
+
+    // Configure bounty_sponsor
+    bountySponsorActor.setIdentity(daoIdentity);
+    await bountySponsorActor.set_registry_canister_id(registryCanisterId);
+    await bountySponsorActor.set_reward_token_canister_id(ledgerCanisterId);
+    await bountySponsorActor.set_reward_amount_for_audit_type(
+      'build_reproducibility_v1',
+      250_000n,
+    );
+    await bountySponsorActor.set_reward_amount_for_audit_type(
+      'app_info_v1',
+      250_000n,
+    );
+    await bountySponsorActor.set_reward_amount_for_audit_type(
+      'quality',
+      250_000n,
+    );
+
+    // Tell registry where bounty_sponsor is (so it can auto-trigger bounties)
+    registryActor.setIdentity(daoIdentity);
+    await registryActor.set_bounty_sponsor_canister_id(bountySponsorCanisterId);
+
+    // Fund bounty_sponsor with USDC
     ledgerActor.setIdentity(daoIdentity);
     await ledgerActor.icrc1_transfer({
-      to: { owner: registryFixture.canisterId, subaccount: [] },
-      amount: 5_000_000n, // Enough for multiple verification requests
+      to: { owner: bountySponsorCanisterId, subaccount: [] },
+      amount: 10_000_000n, // Enough for multiple verification requests
       fee: [],
       memo: [],
       created_at_time: [],
@@ -465,7 +504,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       auditHubActor.setIdentity(reproAuditors[i]);
       await auditHubActor.reserve_bounty(
         buildBountyIds[i],
-        ledgerCanisterId.toText(),
+        'build_reproducibility_v1', // audit_type
       );
 
       registryActor.setIdentity(reproAuditors[i]);
@@ -485,7 +524,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     auditHubActor.setIdentity(qualityAuditorIdentity);
     await auditHubActor.reserve_bounty(
       qualityBountyResultId,
-      ledgerCanisterId.toText(),
+      'quality', // audit_type
     );
     registryActor.setIdentity(qualityAuditorIdentity);
     await registryActor.icrc126_file_attestation({
@@ -604,7 +643,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       chunk_id: 0n,
       wasm_chunk: wasmBytes,
     });
-    // Submit the verification request - this auto-creates 9 bounties
+    // Submit the verification request
     await registryActor.icrc126_verification_request({
       wasm_hash: wasmHash,
       repo: 'https://github.com/auto/deploy',
@@ -631,7 +670,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       auditHubActor.setIdentity(reproAuditors[i]);
       await auditHubActor.reserve_bounty(
         buildBountyIds[i],
-        ledgerCanisterId.toText(),
+        'build_reproducibility_v1', // audit_type
       );
 
       registryActor.setIdentity(reproAuditors[i]);

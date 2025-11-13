@@ -33,6 +33,10 @@
     "setup:local": "zx ./scripts/setup-local-dev.ts",
     "register:dev-verifiers": "zx ./scripts/register-dev-verifiers.ts",
     "register:dev-verifiers:ic": "zx ./scripts/register-dev-verifiers.ts --network ic",
+    "check:verifier-balances": "zx ./scripts/check-verifier-balances.ts",
+    "check:verifier-balances:ic": "zx ./scripts/check-verifier-balances.ts --network ic",
+    "topup:verifiers": "zx ./scripts/topup-verifiers.ts",
+    "topup:verifiers:ic": "zx ./scripts/topup-verifiers.ts --network ic",
     "list:api-keys": "zx ./scripts/list-dev-api-keys.ts",
     "list:api-keys:ic": "zx ./scripts/list-dev-api-keys.ts --network ic",
     "generate:verifier-env": "zx ./scripts/generate-verifier-env.ts",
@@ -44,7 +48,8 @@
     "config:check": "zx ./scripts/configure-canisters.ts --check",
     "config:inject": "zx ./scripts/configure-canisters.ts --inject",
     "config:status": "zx ./scripts/configure-canisters.ts --status",
-    "sync:wasms": "tsx ./scripts/sync-historical-wasms.ts"
+    "sync:wasms": "tsx ./scripts/sync-historical-wasms.ts",
+    "release:test-app": "tsx ./scripts/release-test-app.ts"
   },
   "devDependencies": {
     "@anolilab/semantic-release-pnpm": "^2.0.3",

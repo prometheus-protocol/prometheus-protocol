@@ -9,11 +9,26 @@ export interface ApiCredential {
   'is_active' : boolean,
   'verifier_principal' : Principal,
 }
+export interface AssignedJob {
+  'verifier' : Principal,
+  'assigned_at' : Timestamp,
+  'wasm_id' : string,
+  'bounty_id' : BountyId,
+  'expires_at' : Timestamp,
+}
 export interface AuditHub {
+  'add_verification_job' : ActorMethod<
+    [string, string, string, ICRC16Map, bigint, Array<BountyId>],
+    Result
+  >,
+  'admin_add_bounties_to_job' : ActorMethod<
+    [string, string, Array<bigint>],
+    Result
+  >,
   'cleanup_expired_lock' : ActorMethod<[BountyId], Result>,
+  'debug_get_bounty' : ActorMethod<[bigint], string>,
   'deposit_stake' : ActorMethod<[TokenId, Balance], Result>,
-  'generate_api_key' : ActorMethod<[], Result_2>,
-  'get_available_balance' : ActorMethod<[Principal, TokenId], Balance>,
+  'generate_api_key' : ActorMethod<[], Result_3>,
   'get_available_balance_by_audit_type' : ActorMethod<
     [Principal, string],
     Balance
@@ -29,34 +44,32 @@ export interface AuditHub {
       }
   >,
   'get_owner' : ActorMethod<[], Principal>,
-  'get_payment_token_config' : ActorMethod<
-    [],
-    { 'decimals' : number, 'ledger_id' : [] | [Principal], 'symbol' : string }
-  >,
-  'get_registry_canister_id' : ActorMethod<[], [] | [Principal]>,
-  'get_stake_requirement' : ActorMethod<[TokenId], [] | [Balance]>,
+  'get_stake_requirement' : ActorMethod<[string], [] | [[TokenId, Balance]]>,
   'get_staked_balance' : ActorMethod<[Principal, TokenId], Balance>,
   'get_verifier_profile' : ActorMethod<[Principal, TokenId], VerifierProfile>,
+  'has_active_bounty_lock' : ActorMethod<[Principal], boolean>,
   'is_bounty_ready_for_collection' : ActorMethod<
     [BountyId, Principal],
     boolean
   >,
   'list_api_keys' : ActorMethod<[], Array<ApiCredential>>,
-  'register_audit_type' : ActorMethod<[string, TokenId], Result>,
+  'list_assigned_jobs' : ActorMethod<[], Array<[BountyId, AssignedJob]>>,
+  'list_pending_jobs' : ActorMethod<[], Array<[string, VerificationJob]>>,
+  'mark_verification_complete' : ActorMethod<[string, string], Result>,
+  'release_job_assignment' : ActorMethod<[BountyId], Result>,
   'release_stake' : ActorMethod<[BountyId], Result>,
-  'reserve_bounty' : ActorMethod<[BountyId, TokenId], Result>,
+  'request_verification_job_with_api_key' : ActorMethod<[string], Result_2>,
+  'reserve_bounty' : ActorMethod<[BountyId, string], Result>,
   'reserve_bounty_with_api_key' : ActorMethod<
-    [string, BountyId, TokenId],
+    [string, BountyId, string],
     Result
   >,
   'revoke_api_key' : ActorMethod<[string], Result>,
-  'set_dashboard_canister_id' : ActorMethod<[Principal], Result>,
-  'set_payment_token_config' : ActorMethod<[Principal, string, number], Result>,
+  'set_bounty_sponsor_canister_id' : ActorMethod<[Principal], Result>,
+  'set_owner' : ActorMethod<[Principal], Result>,
   'set_registry_canister_id' : ActorMethod<[Principal], Result>,
-  'set_stake_requirement' : ActorMethod<[TokenId, Balance], Result>,
-  'set_usdc_ledger_id' : ActorMethod<[Principal], Result>,
+  'set_stake_requirement' : ActorMethod<[string, TokenId, Balance], Result>,
   'slash_stake_for_incorrect_consensus' : ActorMethod<[BountyId], Result>,
-  'transfer_ownership' : ActorMethod<[Principal], Result>,
   'validate_api_key' : ActorMethod<[string], Result_1>,
   'withdraw_stake' : ActorMethod<[TokenId, Balance], Result>,
 }
@@ -82,17 +95,65 @@ export interface EnvDependency {
   'canister_name' : string,
   'current_value' : [] | [Principal],
 }
+export type ICRC16 = { 'Int' : bigint } |
+  { 'Map' : Array<[string, ICRC16]> } |
+  { 'Nat' : bigint } |
+  { 'Set' : Array<ICRC16> } |
+  { 'Nat16' : number } |
+  { 'Nat32' : number } |
+  { 'Nat64' : bigint } |
+  { 'Blob' : Uint8Array | number[] } |
+  { 'Bool' : boolean } |
+  { 'Int8' : number } |
+  { 'Nat8' : number } |
+  { 'Nats' : Array<bigint> } |
+  { 'Text' : string } |
+  { 'Bytes' : Uint8Array | number[] } |
+  { 'Int16' : number } |
+  { 'Int32' : number } |
+  { 'Int64' : bigint } |
+  { 'Option' : [] | [ICRC16] } |
+  { 'Floats' : Array<number> } |
+  { 'Float' : number } |
+  { 'Principal' : Principal } |
+  { 'Array' : Array<ICRC16> } |
+  { 'ValueMap' : Array<[ICRC16, ICRC16]> } |
+  { 'Class' : Array<ICRC16Property> };
+export type ICRC16Map = Array<[string, ICRC16]>;
+export interface ICRC16Property {
+  'value' : ICRC16,
+  'name' : string,
+  'immutable' : boolean,
+}
 export type Result = { 'ok' : null } |
   { 'err' : string };
 export type Result_1 = { 'ok' : Principal } |
   { 'err' : string };
-export type Result_2 = { 'ok' : string } |
+export type Result_2 = { 'ok' : VerificationJobAssignment } |
+  { 'err' : string };
+export type Result_3 = { 'ok' : string } |
   { 'err' : string };
 export type Timestamp = bigint;
 export type TokenId = string;
+export interface VerificationJob {
+  'repo' : string,
+  'bounty_ids' : Array<BountyId>,
+  'created_at' : Timestamp,
+  'build_config' : ICRC16Map,
+  'assigned_count' : bigint,
+  'wasm_id' : string,
+  'required_verifiers' : bigint,
+  'commit_hash' : string,
+}
+export interface VerificationJobAssignment {
+  'repo' : string,
+  'build_config' : ICRC16Map,
+  'wasm_id' : string,
+  'bounty_id' : BountyId,
+  'commit_hash' : string,
+  'expires_at' : Timestamp,
+}
 export interface VerifierProfile {
-  'staked_balance_usdc' : Balance,
-  'available_balance_usdc' : Balance,
   'reputation_score' : bigint,
   'total_verifications' : bigint,
   'total_earnings' : Balance,

@@ -18,9 +18,21 @@ type Result =
  };
 type Leaderboard = 
  service {
+   get_env_requirements: () ->
+    (variant {
+       v1:
+        record {
+          configuration: vec EnvConfig;
+          dependencies: vec EnvDependency;
+        };}) query;
    get_last_updated: () -> (Time) query;
    get_owner: () -> (principal) query;
    get_server_leaderboard: () -> (vec ServerLeaderboardEntry) query;
+   get_timer_status: () ->
+    (record {
+       is_running: bool;
+       update_interval_minutes: nat;
+     }) query;
    /// * Retrieves the invocation counts for each tool of a specific server.
    ///    * Data is sourced from the last cached update.
    ///    * @param server_id The Principal of the server canister.
@@ -32,7 +44,26 @@ type Leaderboard =
          }) query;
    get_user_leaderboard: () -> (vec UserLeaderboardEntry) query;
    init: (canister_id: principal) -> ();
+   restart_timer: () -> (Result);
+   start_timer: () -> (Result);
+   stop_timer: () -> (Result);
    trigger_manual_update: () -> (Result);
+ };
+type EnvDependency = 
+ record {
+   canister_name: text;
+   current_value: opt principal;
+   key: text;
+   required: bool;
+   setter: text;
+ };
+type EnvConfig = 
+ record {
+   current_value: opt text;
+   key: text;
+   required: bool;
+   setter: text;
+   value_type: text;
  };
 /// * The Leaderboard canister serves as a read-optimized cache for ecosystem rankings.
 ///  * It periodically pulls raw data from the UsageTracker canister, computes the "Top Users" and

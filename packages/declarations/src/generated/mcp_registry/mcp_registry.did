@@ -433,6 +433,9 @@ type ICRC16 =
  };
 type ICRC118WasmRegistryCanister = 
  service {
+   /// * Admin method to manually trigger consensus handling for stuck bounties.
+   ///    * Use this when consensus was reached but payouts didn't happen due to bugs.
+   admin_retrigger_consensus: (wasm_id: text, audit_type: text) -> (Result_4);
    /// * [OWNER-ONLY] Iterates through all published apps and pushes their data
    ///    * to the search indexer to bootstrap or rebuild the index.
    ///    *
@@ -452,7 +455,8 @@ type ICRC118WasmRegistryCanister =
    get_bounties_for_wasm: (wasm_id: text) -> (vec Bounty) query;
    get_canister_type_version: (req: GetCanisterTypeVersionRequest) ->
     (Result_2) query;
-   get_divergence_progress: (wasm_id: text) -> (vec nat) query;
+   get_divergence_progress: (wasm_id: text, audit_type: text) ->
+    (vec nat) query;
    get_env_requirements: () ->
     (variant {
        v1:
@@ -461,13 +465,28 @@ type ICRC118WasmRegistryCanister =
           dependencies: vec EnvDependency;
         };}) query;
    get_tip: () -> (Tip) query;
-   get_verification_progress: (wasm_id: text) -> (vec nat) query;
+   get_verification_progress: (wasm_id: text, audit_type: text) ->
+    (vec nat) query;
    /// * @notice Fetches the original verification request metadata for a given WASM ID.
    ///    * @param wasm_id The hex-encoded SHA-256 hash of the WASM.
    ///    * @return The optional `VerificationRequest` record, which contains the repo URL and commit hash.
    ///    *         Returns `null` if no request is found for the given ID.
    get_verification_request: (wasm_id: text) ->
     (opt VerificationRequest) query;
+   /// * Check if a specific bounty has already filed an attestation by checking ICRC126 storage directly.
+   ///    * This is the source of truth, not the progress tracking arrays.
+   has_bounty_filed_attestation: (wasm_id: text, bounty_id: nat) ->
+    (bool) query;
+   /// * Check if a verifier has already participated in the verification of a specific WASM.
+   ///    * This prevents a verifier from being assigned to multiple bounties for the same WASM.
+   ///    * Used by audit_hub during bounty reservation to enforce mutual exclusion.
+   ///    *
+   ///    * @param verifier - The principal of the verifier to check
+   ///    * @param wasm_id - The WASM hash to check participation for
+   ///    * @param audit_type - The audit type (e.g., "tools_v1", "build_reproducibility_v1")
+   ///    * @returns true if verifier has filed any audit (attestation or divergence) for this WASM+audit_type
+   has_verifier_participated_in_wasm: (verifier: principal, wasm_id: 
+    text, audit_type: text) -> (bool) query;
    hello: () -> (text);
    icrc10_supported_standards: () -> (vec SupportedStandard) query;
    icrc118_create_canister_type: (reqs: vec CreateCanisterType) ->
@@ -497,7 +516,7 @@ type ICRC118WasmRegistryCanister =
    icrc126_file_divergence: (req: DivergenceReportRequest) ->
     (DivergenceResult);
    /// * File a divergence report using an API key instead of caller identity.
-   ///    * This allows verifier bots to authenticate without managing identities.
+   ///  * This allows verifier bots to authenticate without managing identities.
    icrc126_file_divergence_with_api_key: (api_key: text, req:
     DivergenceReportRequest) -> (DivergenceResult);
    icrc126_verification_request: (req: VerificationRequest) -> (nat);
@@ -534,6 +553,7 @@ type ICRC118WasmRegistryCanister =
    set_auditor_credentials_canister_id: (canister_id: principal) -> (Result);
    set_bounty_reward_amount: (amount: nat) -> (Result);
    set_bounty_reward_token_canister_id: (canister_id: principal) -> (Result);
+   set_bounty_sponsor_canister_id: (canister_id: principal) -> (Result);
    set_orchestrator_canister_id: (canister_id: principal) -> (Result);
    set_search_index_canister_id: (canister_id: principal) -> (Result);
    set_usage_tracker_canister_id: (canister_id: principal) -> (Result);

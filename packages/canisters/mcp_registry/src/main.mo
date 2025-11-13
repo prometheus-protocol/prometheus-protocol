@@ -34,6 +34,7 @@ import Bounty "Bounty";
 import Orchestrator "Orchestrator";
 import UsageTracker "UsageTracker";
 import SearchIndex "SearchIndex";
+import Treasury "Treasury";
 
 import ICRC118WasmRegistry "../../../../libs/icrc118/src";
 import Service "../../../../libs/icrc118/src/service";
@@ -59,6 +60,8 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   stable var _orchestrator_canister_id : ?Principal = null;
   stable var _usage_tracker_canister_id : ?Principal = null;
   stable var _search_index_canister_id : ?Principal = null;
+  stable var _audit_hub_canister_id : ?Principal = null; // DEPRECATED: No longer used, audit_hub is now called by bounty_sponsor
+  stable var _bounty_sponsor_canister_id : ?Principal = null;
   stable var _bounty_reward_token_canister_id : ?Principal = null;
   stable var _bounty_reward_amount : Nat = 250_000; // Default: $0.25 in 6-decimal token
 
@@ -82,6 +85,12 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   // Constants for majority consensus
   let REQUIRED_VERIFIERS : Nat = 9; // Total verifiers needed
   let MAJORITY_THRESHOLD : Nat = 5; // Minimum successful verifications (5 of 9)
+
+  // Helper function to create composite key for verification/divergence progress
+  // Separates build_reproducibility_v1 from tools_v1 attestations for the same WASM
+  private func _make_progress_key(wasm_id : Text, audit_type : Text) : Text {
+    wasm_id # "::" # audit_type;
+  };
 
   let initManager = ClassPlus.ClassPlusInitializationManager(_owner, thisPrincipal, true);
   let icrc118wasmregistryInitArgs = do ? { args!.icrc118wasmregistryArgs! };
@@ -281,6 +290,12 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     return #ok(());
   };
 
+  public shared ({ caller }) func set_bounty_sponsor_canister_id(canister_id : Principal) : async Result.Result<(), Text> {
+    if (caller != _owner) { return #err("Caller is not the owner") };
+    _bounty_sponsor_canister_id := ?canister_id;
+    return #ok(());
+  };
+
   public shared ({ caller }) func set_bounty_reward_token_canister_id(canister_id : Principal) : async Result.Result<(), Text> {
     if (caller != _owner) { return #err("Caller is not the owner") };
     _bounty_reward_token_canister_id := ?canister_id;
@@ -291,6 +306,16 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     if (caller != _owner) { return #err("Caller is not the owner") };
     _bounty_reward_amount := amount;
     return #ok(());
+  };
+
+  /// Withdraw USDC or other ICRC-2 tokens from the registry treasury
+  /// Only the owner can call this function
+  public shared ({ caller }) func withdraw(
+    ledger_id : Principal,
+    amount : Nat,
+    destination : ICRC2.Account,
+  ) : async Result.Result<Nat, Treasury.TreasuryError> {
+    await Treasury.withdraw(caller, _owner, ledger_id, amount, destination);
   };
 
   stable var icrc126_migration_state : ICRC126.State = ICRC126.initialState();
@@ -782,13 +807,85 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
 
   // --- ICRC126 Endpoints ---
   public shared (msg) func icrc126_verification_request(req : ICRC126Service.VerificationRequest) : async Nat {
-    let trx_id = await icrc126().icrc126_verification_request(msg.caller, req);
-
-    // Auto-create 9 bounties for this verification request
-    // Registry uses custom environment hook to transfer funds directly (icrc1_transfer)
-    // instead of delegation (icrc2_transfer_from) to avoid minter account limitations
     let wasm_id = Base16.encode(req.wasm_hash);
-    await _create_bounties_for_verification(wasm_id, req.wasm_hash);
+
+    // Auto-trigger build_reproducibility_v1 bounties and verification job registration
+    // This happens asynchronously and doesn't block the verification request
+    ignore async {
+      switch (_bounty_sponsor_canister_id) {
+        case (?sponsor_id) {
+          // Convert ICRC126 metadata format to the format expected by bounty_sponsor/audit_hub
+          let converted_config : [(
+            Text,
+            {
+              #Text : Text;
+              #Nat : Nat;
+              #Int : Int;
+              #Blob : Blob;
+              #Bool : Bool;
+              #Array : [Any];
+              #Map : [Any];
+            },
+          )] = Array.map<(Text, ICRC126Service.ICRC16), (Text, { #Text : Text; #Nat : Nat; #Int : Int; #Blob : Blob; #Bool : Bool; #Array : [Any]; #Map : [Any] })>(
+            req.metadata,
+            func(item : (Text, ICRC126Service.ICRC16)) : (
+              Text,
+              {
+                #Text : Text;
+                #Nat : Nat;
+                #Int : Int;
+                #Blob : Blob;
+                #Bool : Bool;
+                #Array : [Any];
+                #Map : [Any];
+              },
+            ) {
+              let (key, val) = item;
+              let converted_val = switch (val) {
+                case (#Text(t)) { #Text(t) };
+                case (#Nat(n)) { #Nat(n) };
+                case (#Int(i)) { #Int(i) };
+                case (#Blob(b)) { #Blob(b) };
+                case (#Bool(b)) { #Bool(b) };
+                case (#Array(arr)) { #Array([]) }; // Simplified for now
+                case (#Map(m)) { #Map([]) }; // Simplified for now
+                case (_) { #Text("") }; // Fallback
+              };
+              (key, converted_val);
+            },
+          );
+
+          let sponsor = actor (Principal.toText(sponsor_id)) : actor {
+            sponsor_bounties_for_wasm : (Text, Blob, [Text], Text, Text, [(Text, { #Text : Text; #Nat : Nat; #Int : Int; #Blob : Blob; #Bool : Bool; #Array : [Any]; #Map : [Any] })], Nat) -> async Result.Result<{ bounty_ids : [Nat]; total_sponsored : Nat }, Text>;
+          };
+
+          // Bounty sponsor will create bounties AND register the job with audit_hub
+          switch (
+            await sponsor.sponsor_bounties_for_wasm(
+              wasm_id,
+              req.wasm_hash,
+              ["build_reproducibility_v1"],
+              req.repo,
+              Base16.encode(req.commit_hash),
+              converted_config,
+              REQUIRED_VERIFIERS,
+            )
+          ) {
+            case (#ok(result)) {
+              Debug.print("Successfully created " # debug_show (result.bounty_ids.size()) # " bounties and registered job with audit hub for WASM " # wasm_id);
+            };
+            case (#err(msg)) {
+              // Log error but don't fail the verification request
+              Debug.print("Error creating bounties/registering job: " # msg);
+            };
+          };
+        };
+        case (null) { /* Bounty sponsor not configured */ };
+      };
+    };
+
+    // Register the verification request and return transaction ID
+    let trx_id = await icrc126().icrc126_verification_request(msg.caller, req);
 
     // Note: Indexing now happens in icrc118_update_wasm when the WASM is registered
 
@@ -796,68 +893,55 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   };
 
   /**
-   * Automatically create 9 separate bounties for a verification request.
-   * This enables majority consensus (5 of 9) for build verification.
+   * Helper function to check if an auditor has already filed any audit (attestation OR divergence)
+   * for a given wasm_id and audit_type. This prevents race conditions in mutual exclusion.
+   *
+   * Returns: #Ok if no prior audit found for this audit_type, #Error if auditor already filed something
    */
-  private func _create_bounties_for_verification(wasm_id : Text, wasm_hash : Blob) : async () {
-    // Check if bounties already exist for this WASM
-    let existing_bounties = _get_bounties_for_wasm(wasm_id);
-    if (existing_bounties.size() > 0) {
-      Debug.print("Bounties already exist for wasm_id " # wasm_id # ". Skipping creation.");
-      return;
+  private func _check_auditor_has_not_filed(wasm_id : Text, auditor : Principal, audit_type : Text) : {
+    #Ok;
+    #Error : Text;
+  } {
+    let existing_audits = switch (Map.get(icrc126().state.audits, Map.thash, wasm_id)) {
+      case (null) { return #Ok }; // No audits yet, safe to proceed
+      case (?audits) { audits };
     };
 
-    Debug.print("Creating " # Nat.toText(REQUIRED_VERIFIERS) # " bounties for wasm_id " # wasm_id);
-
-    // Get reward token configuration
-    let reward_token_id = switch (_bounty_reward_token_canister_id) {
-      case (?id) { id };
-      case (null) {
-        Debug.print("Warning: Bounty reward token not configured. Bounties created without reward token.");
-        Principal.fromText("aaaaa-aa"); // Placeholder - bounties won't be claimable without proper config
-      };
-    };
-
-    // Create 9 separate bounties
-    var i = 0;
-    while (i < REQUIRED_VERIFIERS) {
-      let bounty_request : ICRC127Service.CreateBountyRequest = {
-        challenge_parameters = #Map([
-          ("wasm_hash", #Blob(wasm_hash)),
-          ("audit_type", #Text("build_reproducibility_v1")),
-        ]);
-        timeout_date = Int.abs(Time.now() + (7 * 24 * 60 * 60 * 1_000_000_000)); // 7 days
-        start_date = null;
-        bounty_id = null;
-        validation_canister_id = thisPrincipal;
-        bounty_metadata = [
-          ("icrc127:reward_canister", #Principal(reward_token_id)),
-          ("icrc127:reward_amount", #Nat(_bounty_reward_amount)),
-        ];
-      };
-
-      try {
-        // Use registry canister as caller so funds come from registry's balance
-        let result = await icrc127().icrc127_create_bounty<system>(thisPrincipal, bounty_request);
-        switch (result) {
-          case (#Ok(bounty_result)) {
-            Debug.print("Created bounty #" # Nat.toText(bounty_result.bounty_id) # " for wasm_id " # wasm_id);
-
-            // Add to reverse index for fast lookup
-            let existing_bounties = Option.get(BTree.get(wasm_to_bounties_map, Text.compare, wasm_id), []);
-            let updated_bounties = Array.append(existing_bounties, [bounty_result.bounty_id]);
-            ignore BTree.insert(wasm_to_bounties_map, Text.compare, wasm_id, updated_bounties);
+    // Check if this auditor has already filed an attestation for THIS audit_type
+    let found_attestation = Array.find<ICRC126.AuditRecord>(
+      existing_audits,
+      func(record) {
+        switch (record) {
+          case (#Attestation(att)) {
+            att.auditor == auditor and att.audit_type == audit_type
           };
-          case (#Error(err)) {
-            Debug.print("Error creating bounty: " # debug_show (err));
-          };
+          case (#Divergence(_)) { false };
         };
-      } catch (e) {
-        Debug.print("Exception creating bounty: " # Error.message(e));
-      };
+      },
+    );
 
-      i += 1;
+    if (Option.isSome(found_attestation)) {
+      return #Error("Auditor has already filed an attestation for this WASM and audit type");
     };
+
+    // Check if this auditor has already filed a divergence for THIS audit_type
+    // Note: Divergences don't have audit_type directly, they're associated with the verification request
+    // For now, we check if they filed ANY divergence for this WASM (divergences are less common)
+    let found_divergence = Array.find<ICRC126.AuditRecord>(
+      existing_audits,
+      func(record) {
+        switch (record) {
+          case (#Attestation(_)) { false };
+          case (#Divergence(div)) { div.reporter == auditor };
+        };
+      },
+    );
+
+    if (Option.isSome(found_divergence)) {
+      return #Error("Auditor has already filed a divergence report for this WASM");
+    };
+
+    #Ok;
   };
 
   public shared (msg) func icrc126_file_attestation(req : ICRC126Service.AttestationRequest) : async ICRC126Service.AttestationResult {
@@ -868,16 +952,50 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       case (?id) { id };
     };
 
-    // --- NEW: Check if caller has already participated in this WASM verification ---
+    // Extract audit_type early so we can use it for progress tracking
+    let audit_type = switch (AppStore.getICRC16TextOptional(req.metadata, "126:audit_type")) {
+      case (?t) { t };
+      case (null) {
+        return #Error(#Generic("Attestation metadata must include '126:audit_type'."));
+      };
+    };
+
+    // Create composite key for progress tracking (wasm_id::audit_type)
+    let progress_key = _make_progress_key(req.wasm_id, audit_type);
+
+    // --- CRITICAL: Check auditor hasn't already filed BEFORE any async calls ---
+    switch (_check_auditor_has_not_filed(req.wasm_id, msg.caller, audit_type)) {
+      case (#Error(err)) {
+        Debug.print("🚫 Mutual exclusion check failed: " # err);
+        return #Error(#Generic(err));
+      };
+      case (#Ok) {};
+    };
+
+    // --- CRITICAL: Check if THIS SPECIFIC BOUNTY already filed anything ---
+    // This prevents race conditions where same bounty submits attestation+divergence concurrently
     let existing_attestations = Option.get(
-      BTree.get(verification_progress, Text.compare, req.wasm_id),
+      BTree.get(verification_progress, Text.compare, progress_key),
       [],
     );
     let existing_divergences = Option.get(
-      BTree.get(divergence_progress, Text.compare, req.wasm_id),
+      BTree.get(divergence_progress, Text.compare, progress_key),
       [],
     );
 
+    let bounty_in_attestations = Array.find<Nat>(existing_attestations, func(id) { id == bounty_id });
+    let bounty_in_divergences = Array.find<Nat>(existing_divergences, func(id) { id == bounty_id });
+
+    if (Option.isSome(bounty_in_attestations)) {
+      Debug.print("ERROR: Bounty " # Nat.toText(bounty_id) # " already filed attestation");
+      return #Error(#Generic("This bounty has already filed an attestation"));
+    };
+    if (Option.isSome(bounty_in_divergences)) {
+      Debug.print("ERROR: Bounty " # Nat.toText(bounty_id) # " already filed divergence");
+      return #Error(#Generic("This bounty has already filed a divergence - cannot file attestation"));
+    };
+
+    // --- NEW: Check if caller has already participated in this WASM verification ---
     // Check if caller already has a bounty recorded for this WASM (excluding current bounty)
     let all_recorded_bounties = Array.append(existing_attestations, existing_divergences);
     for (recorded_bounty_id in all_recorded_bounties.vals()) {
@@ -915,15 +1033,21 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       };
     };
 
-    // --- Check if this attestation finalizes a verification ---
-    // Extract the audit_type from the metadata.
-    let audit_type = AppStore.getICRC16TextOptional(req.metadata, "126:audit_type");
+    // --- FILE THE ATTESTATION (after all checks pass) ---
+    let attestation_result = await icrc126().icrc126_file_attestation(msg.caller, req);
 
-    if (audit_type == ?"build_reproducibility_v1") {
+    // Only proceed with consensus tracking if attestation was successful
+    switch (attestation_result) {
+      case (#Error(e)) { return attestation_result };
+      case (#Ok(_)) {};
+    };
+
+    // --- NOW track progress for majority consensus ---
+    if (audit_type == "build_reproducibility_v1") {
       // --- NEW: Majority Consensus Logic (5 of 9) ---
-      // Re-read verification progress AFTER all awaits to get latest state
+      // Re-read verification progress AFTER await to get latest state
       let latest_attestations = Option.get(
-        BTree.get(verification_progress, Text.compare, req.wasm_id),
+        BTree.get(verification_progress, Text.compare, progress_key),
         [],
       );
 
@@ -933,7 +1057,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       if (Option.isNull(already_counted)) {
         // Add this bounty_id to the list of successful attestations
         let updated_attestations = Array.append(latest_attestations, [bounty_id]);
-        ignore BTree.insert(verification_progress, Text.compare, req.wasm_id, updated_attestations);
+        ignore BTree.insert(verification_progress, Text.compare, progress_key, updated_attestations);
 
         Debug.print(
           "WASM " # req.wasm_id # " now has " #
@@ -952,6 +1076,76 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
             ("verification_method", #Text("majority_consensus_5_of_9")),
           ];
           ignore await _finalize_verification(req.wasm_id, #Verified, finalization_meta);
+
+          // Auto-trigger tools_v1 bounties now that build is verified
+          switch (_bounty_sponsor_canister_id) {
+            case (?sponsor_id) {
+              // Get the original verification request to extract repo and metadata
+              let verification_request_opt = _get_verification_request(req.wasm_id);
+              switch (verification_request_opt) {
+                case (?verification_request) {
+                  let sponsor = actor (Principal.toText(sponsor_id)) : actor {
+                    sponsor_bounties_for_wasm : (Text, Blob, [Text], Text, Text, [(Text, { #Text : Text; #Nat : Nat; #Int : Int; #Blob : Blob; #Bool : Bool; #Array : [Any]; #Map : [Any] })], Nat) -> async Result.Result<{ bounty_ids : [Nat]; total_sponsored : Nat }, Text>;
+                  };
+
+                  // Convert metadata format
+                  let converted_config : [(
+                    Text,
+                    {
+                      #Text : Text;
+                      #Nat : Nat;
+                      #Int : Int;
+                      #Blob : Blob;
+                      #Bool : Bool;
+                      #Array : [Any];
+                      #Map : [Any];
+                    },
+                  )] = Array.map<(Text, ICRC126Service.ICRC16), (Text, { #Text : Text; #Nat : Nat; #Int : Int; #Blob : Blob; #Bool : Bool; #Array : [Any]; #Map : [Any] })>(
+                    verification_request.metadata,
+                    func(item : (Text, ICRC126Service.ICRC16)) : (
+                      Text,
+                      {
+                        #Text : Text;
+                        #Nat : Nat;
+                        #Int : Int;
+                        #Blob : Blob;
+                        #Bool : Bool;
+                        #Array : [Any];
+                        #Map : [Any];
+                      },
+                    ) {
+                      let (key, val) = item;
+                      let converted_val = switch (val) {
+                        case (#Text(t)) { #Text(t) };
+                        case (#Nat(n)) { #Nat(n) };
+                        case (#Int(i)) { #Int(i) };
+                        case (#Blob(b)) { #Blob(b) };
+                        case (#Bool(b)) { #Bool(b) };
+                        case (#Array(arr)) { #Array([]) };
+                        case (#Map(m)) { #Map([]) };
+                        case (_) { #Text("") };
+                      };
+                      (key, converted_val);
+                    },
+                  );
+
+                  ignore sponsor.sponsor_bounties_for_wasm(
+                    req.wasm_id,
+                    verification_request.wasm_hash,
+                    ["tools_v1"],
+                    verification_request.repo,
+                    Base16.encode(verification_request.commit_hash),
+                    converted_config,
+                    REQUIRED_VERIFIERS,
+                  );
+                };
+                case (null) {
+                  Debug.print("Cannot create tools_v1 bounties: verification request not found for " # req.wasm_id);
+                };
+              };
+            };
+            case (null) { /* No bounty sponsor configured */ };
+          };
         };
       } else {
         Debug.print("Bounty " # Nat.toText(bounty_id) # " already counted for wasm_id " # req.wasm_id);
@@ -959,9 +1153,46 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
 
     // Check if this attestation is for tools:
-    if (audit_type == ?"tools_v1") {
-      // 3. This is a tools verification!
-      // If tools are verified, we can whitelist the WASM to use the usage tracker canister.
+    if (audit_type == "tools_v1") {
+      // --- NEW: Majority Consensus Logic for tools_v1 (same as build_reproducibility_v1) ---
+      // Re-read verification progress AFTER await to get latest state
+      let latest_attestations = Option.get(
+        BTree.get(verification_progress, Text.compare, progress_key),
+        [],
+      );
+
+      // Check if this bounty_id is already recorded
+      let already_counted = Array.find<Nat>(latest_attestations, func(id) { id == bounty_id });
+
+      if (Option.isNull(already_counted)) {
+        // Add this bounty_id to the list of successful attestations
+        let updated_attestations = Array.append(latest_attestations, [bounty_id]);
+        ignore BTree.insert(verification_progress, Text.compare, progress_key, updated_attestations);
+
+        Debug.print(
+          "WASM " # req.wasm_id # " (tools_v1) now has " #
+          Nat.toText(updated_attestations.size()) # " of " #
+          Nat.toText(REQUIRED_VERIFIERS) # " successful verifications"
+        );
+
+        // Check if we've reached majority threshold (5 of 9)
+        if (updated_attestations.size() >= MAJORITY_THRESHOLD) {
+          Debug.print("Majority consensus reached for tools_v1! Finalizing WASM " # req.wasm_id);
+
+          let finalization_meta : ICRC126.ICRC16Map = [
+            ("auditor", #Principal(msg.caller)),
+            ("bounty_id", #Nat(bounty_id)),
+            ("total_verifications", #Nat(updated_attestations.size())),
+            ("verification_method", #Text("majority_consensus_5_of_9")),
+            ("audit_type", #Text("tools_v1")),
+          ];
+          ignore await _finalize_verification(req.wasm_id, #Verified, finalization_meta);
+        };
+      } else {
+        Debug.print("Bounty " # Nat.toText(bounty_id) # " already counted for wasm_id " # req.wasm_id # " (tools_v1)");
+      };
+
+      // 3. Whitelist the WASM to use the usage tracker canister
       switch (_usage_tracker_canister_id) {
         case (null) { Debug.trap("Usage Tracker canister is not configured.") };
         case (?id) {
@@ -972,7 +1203,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
     // --- END NEW LOGIC ---
 
-    await icrc126().icrc126_file_attestation(msg.caller, req);
+    return attestation_result;
   };
 
   public shared (msg) func icrc126_file_divergence(req : ICRC126Service.DivergenceReportRequest) : async ICRC126Service.DivergenceResult {
@@ -985,15 +1216,49 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       case (?id) { id };
     };
 
+    // Extract audit_type early so we can use it for progress tracking
+    let audit_type = switch (AppStore.getICRC16TextOptional(metadata, "126:audit_type")) {
+      case (?t) { t };
+      case (null) {
+        return #Error(#Generic("Divergence metadata must include '126:audit_type'."));
+      };
+    };
+
+    // --- CRITICAL: Check auditor hasn't already filed BEFORE any async calls ---
+    switch (_check_auditor_has_not_filed(req.wasm_id, msg.caller, audit_type)) {
+      case (#Error(err)) {
+        Debug.print("🚫 Mutual exclusion check failed: " # err);
+        return #Error(#Generic(err));
+      };
+      case (#Ok) {};
+    };
+
+    // Create composite key for progress tracking (wasm_id::audit_type)
+    let progress_key = _make_progress_key(req.wasm_id, audit_type);
+
     // --- NEW: Check if caller has already participated in this WASM verification ---
     let existing_attestations = Option.get(
-      BTree.get(verification_progress, Text.compare, req.wasm_id),
+      BTree.get(verification_progress, Text.compare, progress_key),
       [],
     );
     let existing_divergences = Option.get(
-      BTree.get(divergence_progress, Text.compare, req.wasm_id),
+      BTree.get(divergence_progress, Text.compare, progress_key),
       [],
     );
+
+    // --- CRITICAL: Check if THIS SPECIFIC BOUNTY already filed anything ---
+    // This prevents race conditions where same bounty submits attestation+divergence concurrently
+    let bounty_in_attestations = Array.find<Nat>(existing_attestations, func(id) { id == bounty_id });
+    let bounty_in_divergences = Array.find<Nat>(existing_divergences, func(id) { id == bounty_id });
+
+    if (Option.isSome(bounty_in_attestations)) {
+      Debug.print("ERROR: Bounty " # Nat.toText(bounty_id) # " already filed attestation");
+      return #Error(#Generic("This bounty has already filed an attestation - cannot file divergence"));
+    };
+    if (Option.isSome(bounty_in_divergences)) {
+      Debug.print("ERROR: Bounty " # Nat.toText(bounty_id) # " already filed divergence");
+      return #Error(#Generic("This bounty has already filed a divergence"));
+    };
 
     // Check if caller already has a bounty recorded for this WASM (excluding current bounty)
     let all_recorded_bounties = Array.append(existing_attestations, existing_divergences);
@@ -1037,10 +1302,16 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     // 1. Let the library file the divergence report.
     let result = await icrc126().icrc126_file_divergence(msg.caller, req);
 
+    // Only proceed with consensus tracking if divergence was successful
+    switch (result) {
+      case (#Error(e)) { return result };
+      case (#Ok(_)) {};
+    };
+
     // --- NEW LOGIC: Majority Consensus for Divergence Reports (5 of 9) ---
     // Re-read divergence progress AFTER await to get latest state
     let latest_divergences = Option.get(
-      BTree.get(divergence_progress, Text.compare, req.wasm_id),
+      BTree.get(divergence_progress, Text.compare, progress_key),
       [],
     );
 
@@ -1050,7 +1321,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     if (Option.isNull(already_counted)) {
       // Add this bounty_id to the list of divergence reports
       let updated_divergences = Array.append(latest_divergences, [bounty_id]);
-      ignore BTree.insert(divergence_progress, Text.compare, req.wasm_id, updated_divergences);
+      ignore BTree.insert(divergence_progress, Text.compare, progress_key, updated_divergences);
 
       Debug.print(
         "WASM " # req.wasm_id # " now has " #
@@ -1113,33 +1384,19 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           case (?id) { id };
         };
 
-        // 3. Check if verifier has already participated (excluding current bounty)
-        let existing_attestations = Option.get(
-          BTree.get(verification_progress, Text.compare, req.wasm_id),
-          [],
-        );
-        let existing_divergences = Option.get(
-          BTree.get(divergence_progress, Text.compare, req.wasm_id),
-          [],
-        );
-
-        let all_recorded_bounties = Array.append(existing_attestations, existing_divergences);
-        for (recorded_bounty_id in all_recorded_bounties.vals()) {
-          // Skip checking the current bounty - verifier is allowed to file for their own reservation
-          if (recorded_bounty_id != bounty_id) {
-            let lock_opt = await auditHub.get_bounty_lock(recorded_bounty_id);
-            switch (lock_opt) {
-              case (?lock) {
-                if (Principal.equal(lock.claimant, verifier_principal)) {
-                  return #Error(#Generic("You have already participated in the verification of this WASM. Each verifier can only submit one attestation per WASM."));
-                };
-              };
-              case (null) {};
-            };
+        // 2.5. Extract audit_type early
+        let audit_type = switch (AppStore.getICRC16TextOptional(req.metadata, "126:audit_type")) {
+          case (?t) { t };
+          case (null) {
+            return #Error(#Generic("Attestation metadata must include '126:audit_type'."));
           };
         };
 
-        // 4. Check authorization
+        // Create composite key for progress tracking (wasm_id::audit_type)
+        let progress_key = _make_progress_key(req.wasm_id, audit_type);
+
+        // 3. Check authorization FIRST (before checking participation)
+        // This ensures we check the LATEST state after async calls
         Debug.print("🔐 [mcp_registry] Checking authorization for API key attestation:");
         Debug.print("   bounty_id: " # debug_show (bounty_id));
         Debug.print("   verifier_principal: " # debug_show (verifier_principal));
@@ -1156,7 +1413,109 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
 
         Debug.print("   ✅ Authorization successful - proceeding with attestation");
 
-        // 5. Check if WASM has already been finalized
+        // 4. Check ICRC126 storage directly - this is the source of truth
+        let state = icrc126().state;
+        let audit_records = Option.get(Map.get(state.audits, Map.thash, req.wasm_id), []);
+
+        // 4.1 Check if this specific bounty has already filed an attestation
+        let has_actual_attestation = Array.find<ICRC126.AuditRecord>(
+          audit_records,
+          func(record) {
+            switch (record) {
+              case (#Attestation(att)) {
+                let att_bounty_id = AuditHub.get_bounty_id_from_metadata(att.metadata);
+                Option.isSome(att_bounty_id) and att_bounty_id == ?bounty_id;
+              };
+              case (_) { false };
+            };
+          },
+        );
+        if (Option.isSome(has_actual_attestation)) {
+          Debug.print("   ❌ Bounty " # Nat.toText(bounty_id) # " already has attestation in ICRC126 storage");
+          return #Error(#Generic("This bounty has already filed an attestation for this WASM."));
+        };
+
+        // 4.2 Check if this specific bounty has already filed a divergence
+        let has_actual_divergence = Array.find<ICRC126.AuditRecord>(
+          audit_records,
+          func(record) {
+            switch (record) {
+              case (#Divergence(div)) {
+                switch (div.metadata) {
+                  case (?meta) {
+                    let div_bounty_id = AuditHub.get_bounty_id_from_metadata(meta);
+                    Option.isSome(div_bounty_id) and div_bounty_id == ?bounty_id;
+                  };
+                  case (null) { false };
+                };
+              };
+              case (_) { false };
+            };
+          },
+        );
+        if (Option.isSome(has_actual_divergence)) {
+          Debug.print("   ❌ Bounty " # Nat.toText(bounty_id) # " already has divergence in ICRC126 storage");
+          return #Error(#Generic("This bounty has already filed a divergence for this WASM."));
+        };
+
+        // 4.3 Check if THIS VERIFIER has already participated with a DIFFERENT bounty (mutual exclusion)
+        // Scan actual ICRC126 storage to find all work filed by this verifier for this WASM+audit_type
+        let verifier_already_participated = Array.find<ICRC126.AuditRecord>(
+          audit_records,
+          func(record) {
+            switch (record) {
+              case (#Attestation(att)) {
+                // Check if this attestation is from the same verifier and same audit type
+                if (Principal.equal(att.auditor, verifier_principal) and att.audit_type == audit_type) {
+                  // Get the bounty_id from this attestation
+                  let att_bounty_id = AuditHub.get_bounty_id_from_metadata(att.metadata);
+                  // If it's a different bounty than the current one, they already participated
+                  switch (att_bounty_id) {
+                    case (?bid) { bid != bounty_id };
+                    case (null) { false };
+                  };
+                } else {
+                  false;
+                };
+              };
+              case (#Divergence(div)) {
+                // Check if this divergence is from the same verifier
+                if (Principal.equal(div.reporter, verifier_principal)) {
+                  // Get the bounty_id from this divergence
+                  switch (div.metadata) {
+                    case (?meta) {
+                      let div_bounty_id = AuditHub.get_bounty_id_from_metadata(meta);
+                      switch (div_bounty_id) {
+                        case (?bid) { bid != bounty_id };
+                        case (null) { false };
+                      };
+                    };
+                    case (null) { false };
+                  };
+                } else {
+                  false;
+                };
+              };
+            };
+          },
+        );
+        if (Option.isSome(verifier_already_participated)) {
+          Debug.print("   ❌ Verifier " # Principal.toText(verifier_principal) # " already participated in this WASM verification");
+          return #Error(#Generic("You have already participated in the verification of this WASM. Each verifier can only submit one attestation per WASM."));
+        };
+
+        // 5. CRITICAL: Check verifier hasn't already filed BEFORE any further async calls
+        switch (_check_auditor_has_not_filed(req.wasm_id, verifier_principal, audit_type)) {
+          case (#Error(err)) {
+            Debug.print("   🚫 Mutual exclusion check failed: " # err);
+            return #Error(#Generic(err));
+          };
+          case (#Ok) {
+            Debug.print("   ✅ Mutual exclusion check passed");
+          };
+        };
+
+        // 6. Check if WASM has already been finalized
         // NOTE: We still allow attestations after finalization so verifiers can complete
         // their work and unlock their stakes. We just don't count them toward consensus.
         let is_finalized = Option.isSome(BTree.get(finalization_log, Text.compare, req.wasm_id));
@@ -1164,12 +1523,12 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           Debug.print("   ℹ️  WASM " # req.wasm_id # " already finalized - accepting attestation but not counting toward consensus");
         };
 
-        // 6. File the attestation with the verifier principal
+        // 7. File the attestation with the verifier principal
         let result = await icrc126().icrc126_file_attestation(verifier_principal, req);
 
         Debug.print("   📝 icrc126_file_attestation result: " # debug_show (result));
 
-        // 7. Only track progress if attestation was successfully recorded
+        // 8. Only track progress if attestation was successfully recorded
         switch (result) {
           case (#Error(e)) {
             Debug.print("   ❌ Failed to record attestation in ICRC126: " # debug_show (e));
@@ -1180,17 +1539,40 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           };
         };
 
-        // 8. Track progress and check for consensus (only if not already finalized)
+        // 8.5. IMMEDIATELY pay bounty (reward for doing the work)
+        // NOTE: We do NOT release the stake yet - that waits for consensus outcome
+        Debug.print("💰 Immediately paying bounty " # Nat.toText(bounty_id) # " (stake remains locked)");
+
+        // Trigger the bounty payout through ICRC-127
+        let submission_req : ICRC127Service.BountySubmissionRequest = {
+          bounty_id = bounty_id;
+          submission = #Text("Attestation filed successfully");
+          account = ?{ owner = verifier_principal; subaccount = null };
+        };
+
+        let payout_result = await icrc127().icrc127_submit_bounty(verifier_principal, submission_req);
+        switch (payout_result) {
+          case (#Ok(_)) {
+            Debug.print("   ✅ Bounty payout completed for bounty " # Nat.toText(bounty_id));
+          };
+          case (#Error(e)) {
+            Debug.print("   ⚠️  Error paying bounty " # Nat.toText(bounty_id) # ": " # debug_show (e));
+            // Continue anyway - we've recorded the attestation
+          };
+        };
+
+        // 9. Track progress and check for consensus (only if not already finalized)
         if (not is_finalized) {
           // Re-read existing attestations AFTER await to get latest state
           let latest_attestations = Option.get(
-            BTree.get(verification_progress, Text.compare, req.wasm_id),
+            BTree.get(verification_progress, Text.compare, progress_key),
             [],
           );
+
           let already_counted = Array.find<Nat>(latest_attestations, func(id) { id == bounty_id });
           if (Option.isNull(already_counted)) {
             let updated_attestations = Array.append(latest_attestations, [bounty_id]);
-            ignore BTree.insert(verification_progress, Text.compare, req.wasm_id, updated_attestations);
+            ignore BTree.insert(verification_progress, Text.compare, progress_key, updated_attestations);
 
             Debug.print(
               "WASM " # req.wasm_id # " now has " #
@@ -1206,25 +1588,79 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
                 ("total_attestations", #Nat(updated_attestations.size())),
               ];
               let _ = await _finalize_verification(req.wasm_id, #Verified, finalization_meta);
+
+              // Auto-trigger tools_v1 bounties now that build is verified
+              // ONLY for build_reproducibility_v1, not for tools_v1 itself
+              if (audit_type == "build_reproducibility_v1") {
+                switch (_bounty_sponsor_canister_id) {
+                  case (?sponsor_id) {
+                    // Get the original verification request to extract repo and metadata
+                    let verification_request_opt = _get_verification_request(req.wasm_id);
+                    switch (verification_request_opt) {
+                      case (?verification_request) {
+                        let sponsor = actor (Principal.toText(sponsor_id)) : actor {
+                          sponsor_bounties_for_wasm : (Text, Blob, [Text], Text, Text, [(Text, ICRC126.ICRC16)], Nat) -> async Result.Result<{ bounty_ids : [Nat]; total_sponsored : Nat }, Text>;
+                        };
+
+                        Debug.print("🎯 Auto-triggering tools_v1 bounties for verified WASM " # req.wasm_id);
+                        ignore sponsor.sponsor_bounties_for_wasm(
+                          req.wasm_id,
+                          verification_request.wasm_hash,
+                          ["tools_v1"],
+                          verification_request.repo,
+                          Base16.encode(verification_request.commit_hash),
+                          verification_request.metadata,
+                          REQUIRED_VERIFIERS,
+                        );
+                      };
+                      case (null) {
+                        Debug.print("Cannot create tools_v1 bounties: verification request not found for " # req.wasm_id);
+                      };
+                    };
+                  };
+                  case (null) {
+                    Debug.print("Cannot create tools_v1 bounties: bounty_sponsor not configured");
+                  };
+                };
+              }; // End audit_type == "build_reproducibility_v1" check
             };
           };
         } else {
           // WASM is finalized, but we need to track this late attestation for participation counting
           // Add it to verification_progress even though it didn't affect the outcome
           let latest_attestations = Option.get(
-            BTree.get(verification_progress, Text.compare, req.wasm_id),
+            BTree.get(verification_progress, Text.compare, progress_key),
             [],
           );
           let already_counted = Array.find<Nat>(latest_attestations, func(id) { id == bounty_id });
           if (Option.isNull(already_counted)) {
             let updated_attestations = Array.append(latest_attestations, [bounty_id]);
-            ignore BTree.insert(verification_progress, Text.compare, req.wasm_id, updated_attestations);
+            ignore BTree.insert(verification_progress, Text.compare, progress_key, updated_attestations);
             Debug.print("   📊 Late attestation tracked. Total attestations: " # Nat.toText(updated_attestations.size()));
           };
 
-          // Check if all verifiers have now participated
+          // Check if tools_v1 audit is now complete (in late attestation path)
+          let current_attestations = Option.get(
+            BTree.get(verification_progress, Text.compare, progress_key),
+            [],
+          );
+          if (audit_type == "tools_v1" and current_attestations.size() >= REQUIRED_VERIFIERS) {
+            Debug.print("🎉 tools_v1 audit complete (" # Nat.toText(current_attestations.size()) # "/" # Nat.toText(REQUIRED_VERIFIERS) # "). Marking job as complete.");
+            switch (_credentials_canister_id) {
+              case (?audit_hub_id) {
+                let auditHub : AuditHub.Service = actor (Principal.toText(audit_hub_id));
+                let mark_result = await auditHub.mark_verification_complete(req.wasm_id, audit_type);
+                Debug.print("   ✅ Job cleanup result: " # debug_show (mark_result));
+              };
+              case (null) {
+                Debug.print("⚠️ Cannot mark tools_v1 complete: audit_hub not configured");
+              };
+            };
+          };
+
+          // Check if all verifiers have now participated to trigger stake slashing
           let latest_divergences = Option.get(
-            BTree.get(divergence_progress, Text.compare, req.wasm_id),
+            BTree.get(divergence_progress, Text.compare, progress_key),
             [],
           );
           let total_participated = latest_attestations.size() + latest_divergences.size() + 1; // +1 for current submission
@@ -1232,12 +1668,12 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           Debug.print("   📊 Total participated: " # Nat.toText(total_participated) # " of " # Nat.toText(REQUIRED_VERIFIERS));
 
           if (total_participated >= REQUIRED_VERIFIERS) {
-            Debug.print("🎉 All " # Nat.toText(REQUIRED_VERIFIERS) # " verifiers have now participated! Triggering payouts...");
+            Debug.print("🎉 All " # Nat.toText(REQUIRED_VERIFIERS) # " verifiers have now participated! Processing stakes...");
             // Get the outcome from finalization log
             let finalization_record = BTree.get(finalization_log, Text.compare, req.wasm_id);
             switch (finalization_record) {
               case (?record) {
-                ignore await _handle_consensus_outcome(req.wasm_id, record.outcome);
+                ignore await _handle_consensus_outcome(req.wasm_id, record.outcome, audit_type);
               };
               case (null) { /* Should not happen */ };
             };
@@ -1282,13 +1718,24 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           case (?id) { id };
         };
 
+        // 2.5. Extract audit_type early
+        let audit_type = switch (AppStore.getICRC16TextOptional(metadata, "126:audit_type")) {
+          case (?t) { t };
+          case (null) {
+            return #Error(#Generic("Divergence metadata must include '126:audit_type'."));
+          };
+        };
+
+        // Create composite key for progress tracking (wasm_id::audit_type)
+        let progress_key = _make_progress_key(req.wasm_id, audit_type);
+
         // 3. Check if verifier has already participated (excluding current bounty)
         let existing_attestations = Option.get(
-          BTree.get(verification_progress, Text.compare, req.wasm_id),
+          BTree.get(verification_progress, Text.compare, progress_key),
           [],
         );
         let existing_divergences = Option.get(
-          BTree.get(divergence_progress, Text.compare, req.wasm_id),
+          BTree.get(divergence_progress, Text.compare, progress_key),
           [],
         );
 
@@ -1305,6 +1752,61 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
               };
               case (null) {};
             };
+          };
+        };
+
+        // 3.5 CRITICAL: Check if this specific bounty has already SUCCESSFULLY filed attestation OR divergence
+        // This prevents race conditions where concurrent calls both pass the auditor check
+        // We check the actual ICRC126 storage, not just the progress tracking array
+        let bounty_in_attestations = Array.find<Nat>(existing_attestations, func(id) { id == bounty_id });
+        if (Option.isSome(bounty_in_attestations)) {
+          // Verify the attestation actually exists in ICRC126 storage
+          let state = icrc126().state;
+          let audit_records = Option.get(Map.get(state.audits, Map.thash, req.wasm_id), []);
+          let has_actual_attestation = Array.find<ICRC126.AuditRecord>(
+            audit_records,
+            func(record) {
+              switch (record) {
+                case (#Attestation(att)) {
+                  let att_bounty_id = AuditHub.get_bounty_id_from_metadata(att.metadata);
+                  Option.isSome(att_bounty_id) and att_bounty_id == ?bounty_id;
+                };
+                case (_) { false };
+              };
+            },
+          );
+          if (Option.isSome(has_actual_attestation)) {
+            return #Error(#Generic("This bounty has already filed an attestation for this WASM."));
+          } else {
+            Debug.print("   ⚠️  Bounty " # Nat.toText(bounty_id) # " in progress tracking but no actual attestation found - allowing retry");
+          };
+        };
+        let bounty_in_divergences = Array.find<Nat>(existing_divergences, func(id) { id == bounty_id });
+        if (Option.isSome(bounty_in_divergences)) {
+          // Verify the divergence actually exists in ICRC126 storage
+          let state = icrc126().state;
+          let audit_records = Option.get(Map.get(state.audits, Map.thash, req.wasm_id), []);
+          let has_actual_divergence = Array.find<ICRC126.AuditRecord>(
+            audit_records,
+            func(record) {
+              switch (record) {
+                case (#Divergence(div)) {
+                  switch (div.metadata) {
+                    case (?meta) {
+                      let div_bounty_id = AuditHub.get_bounty_id_from_metadata(meta);
+                      Option.isSome(div_bounty_id) and div_bounty_id == ?bounty_id;
+                    };
+                    case (null) { false };
+                  };
+                };
+                case (_) { false };
+              };
+            },
+          );
+          if (Option.isSome(has_actual_divergence)) {
+            return #Error(#Generic("This bounty has already filed a divergence for this WASM."));
+          } else {
+            Debug.print("   ⚠️  Bounty " # Nat.toText(bounty_id) # " in divergence tracking but no actual divergence found - allowing retry");
           };
         };
 
@@ -1325,7 +1827,18 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
 
         Debug.print("   ✅ Authorization successful - proceeding with divergence report");
 
-        // 5. Check if WASM has already been finalized
+        // 5. CRITICAL: Check verifier hasn't already filed BEFORE any further async calls
+        switch (_check_auditor_has_not_filed(req.wasm_id, verifier_principal, audit_type)) {
+          case (#Error(err)) {
+            Debug.print("   🚫 Mutual exclusion check failed: " # err);
+            return #Error(#Generic(err));
+          };
+          case (#Ok) {
+            Debug.print("   ✅ Mutual exclusion check passed");
+          };
+        };
+
+        // 6. Check if WASM has already been finalized
         // NOTE: We still allow divergences after finalization so verifiers can complete
         // their work and unlock their stakes. We just don't count them toward consensus.
         let is_finalized = Option.isSome(BTree.get(finalization_log, Text.compare, req.wasm_id));
@@ -1333,12 +1846,12 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           Debug.print("   ℹ️  WASM " # req.wasm_id # " already finalized - accepting divergence but not counting toward consensus");
         };
 
-        // 6. File the divergence with the verifier principal
+        // 7. File the divergence with the verifier principal
         let result = await icrc126().icrc126_file_divergence(verifier_principal, req);
 
         Debug.print("   📝 icrc126_file_divergence result: " # debug_show (result));
 
-        // 7. Only track progress if divergence was successfully recorded
+        // 8. Only track progress if divergence was successfully recorded
         switch (result) {
           case (#Error(e)) {
             Debug.print("   ❌ Failed to record divergence in ICRC126: " # debug_show (e));
@@ -1349,17 +1862,40 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           };
         };
 
-        // 8. Track progress and check for consensus (only if not already finalized)
+        // 8.5. IMMEDIATELY pay bounty (reward for doing the work)
+        // NOTE: We do NOT release the stake yet - that waits for consensus outcome
+        Debug.print("💰 Immediately paying bounty " # Nat.toText(bounty_id) # " (stake remains locked)");
+
+        // Trigger the bounty payout through ICRC-127
+        let submission_req : ICRC127Service.BountySubmissionRequest = {
+          bounty_id = bounty_id;
+          submission = #Text("Divergence report filed successfully");
+          account = ?{ owner = verifier_principal; subaccount = null };
+        };
+
+        let payout_result = await icrc127().icrc127_submit_bounty(verifier_principal, submission_req);
+        switch (payout_result) {
+          case (#Ok(_)) {
+            Debug.print("   ✅ Bounty payout completed for bounty " # Nat.toText(bounty_id));
+          };
+          case (#Error(e)) {
+            Debug.print("   ⚠️  Error paying bounty " # Nat.toText(bounty_id) # ": " # debug_show (e));
+            // Continue anyway - we've recorded the divergence
+          };
+        };
+
+        // 9. Track progress and check for consensus (only if not already finalized)
         if (not is_finalized) {
           // Re-read existing divergences AFTER await to get latest state
           let latest_divergences = Option.get(
-            BTree.get(divergence_progress, Text.compare, req.wasm_id),
+            BTree.get(divergence_progress, Text.compare, progress_key),
             [],
           );
+
           let already_counted = Array.find<Nat>(latest_divergences, func(id) { id == bounty_id });
           if (Option.isNull(already_counted)) {
             let updated_divergences = Array.append(latest_divergences, [bounty_id]);
-            ignore BTree.insert(divergence_progress, Text.compare, req.wasm_id, updated_divergences);
+            ignore BTree.insert(divergence_progress, Text.compare, progress_key, updated_divergences);
 
             Debug.print(
               "WASM " # req.wasm_id # " now has " #
@@ -1383,19 +1919,19 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           // WASM is finalized, but we need to track this late divergence for participation counting
           // Add it to divergence_progress even though it didn't affect the outcome
           let latest_divergences = Option.get(
-            BTree.get(divergence_progress, Text.compare, req.wasm_id),
+            BTree.get(divergence_progress, Text.compare, progress_key),
             [],
           );
           let already_counted = Array.find<Nat>(latest_divergences, func(id) { id == bounty_id });
           if (Option.isNull(already_counted)) {
             let updated_divergences = Array.append(latest_divergences, [bounty_id]);
-            ignore BTree.insert(divergence_progress, Text.compare, req.wasm_id, updated_divergences);
+            ignore BTree.insert(divergence_progress, Text.compare, progress_key, updated_divergences);
             Debug.print("   📊 Late divergence tracked. Total divergences: " # Nat.toText(updated_divergences.size()));
           };
 
-          // Check if all verifiers have now participated
+          // Check if all verifiers have now participated to trigger stake slashing
           let latest_attestations = Option.get(
-            BTree.get(verification_progress, Text.compare, req.wasm_id),
+            BTree.get(verification_progress, Text.compare, progress_key),
             [],
           );
           let total_participated = latest_attestations.size() + latest_divergences.size() + 1; // +1 for current submission
@@ -1403,12 +1939,12 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           Debug.print("   📊 Total participated: " # Nat.toText(total_participated) # " of " # Nat.toText(REQUIRED_VERIFIERS));
 
           if (total_participated >= REQUIRED_VERIFIERS) {
-            Debug.print("🎉 All " # Nat.toText(REQUIRED_VERIFIERS) # " verifiers have now participated! Triggering payouts...");
+            Debug.print("🎉 All " # Nat.toText(REQUIRED_VERIFIERS) # " verifiers have now participated! Processing stakes...");
             // Get the outcome from finalization log
             let finalization_record = BTree.get(finalization_log, Text.compare, req.wasm_id);
             switch (finalization_record) {
               case (?record) {
-                ignore await _handle_consensus_outcome(req.wasm_id, record.outcome);
+                ignore await _handle_consensus_outcome(req.wasm_id, record.outcome, audit_type);
               };
               case (null) { /* Should not happen */ };
             };
@@ -1424,16 +1960,94 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   // Expose the recorded attestations and divergences for a given WASM so we can
   // verify that attestations were actually recorded. These are read-only helper
   // methods intended for debugging and tests.
-  public query func get_verification_progress(wasm_id : Text) : async [Nat] {
-    let arr = Option.get(BTree.get(verification_progress, Text.compare, wasm_id), []);
-    Debug.print("Query get_verification_progress for " # wasm_id # " -> " # debug_show (arr));
+  public query func get_verification_progress(wasm_id : Text, audit_type : Text) : async [Nat] {
+    let progress_key = _make_progress_key(wasm_id, audit_type);
+    let arr = Option.get(BTree.get(verification_progress, Text.compare, progress_key), []);
+    Debug.print("Query get_verification_progress for " # progress_key # " -> " # debug_show (arr));
     arr;
   };
 
-  public query func get_divergence_progress(wasm_id : Text) : async [Nat] {
-    let arr = Option.get(BTree.get(divergence_progress, Text.compare, wasm_id), []);
-    Debug.print("Query get_divergence_progress for " # wasm_id # " -> " # debug_show (arr));
+  public query func get_divergence_progress(wasm_id : Text, audit_type : Text) : async [Nat] {
+    let progress_key = _make_progress_key(wasm_id, audit_type);
+    let arr = Option.get(BTree.get(divergence_progress, Text.compare, progress_key), []);
+    Debug.print("Query get_divergence_progress for " # progress_key # " -> " # debug_show (arr));
     arr;
+  };
+
+  /**
+   * Check if a specific bounty has already filed an attestation by checking ICRC126 storage directly.
+   * This is the source of truth, not the progress tracking arrays.
+   */
+  public query func has_bounty_filed_attestation(wasm_id : Text, bounty_id : Nat) : async Bool {
+    let state = icrc126().state;
+    let audit_records = Option.get(Map.get(state.audits, Map.thash, wasm_id), []);
+
+    let has_attestation = Array.find<ICRC126.AuditRecord>(
+      audit_records,
+      func(record) {
+        switch (record) {
+          case (#Attestation(att)) {
+            let att_bounty_id = AuditHub.get_bounty_id_from_metadata(att.metadata);
+            Option.isSome(att_bounty_id) and att_bounty_id == ?bounty_id;
+          };
+          case (_) { false };
+        };
+      },
+    );
+
+    Option.isSome(has_attestation);
+  };
+
+  /**
+   * Check if a verifier has already participated in the verification of a specific WASM.
+   * This prevents a verifier from being assigned to multiple bounties for the same WASM.
+   * Used by audit_hub during bounty reservation to enforce mutual exclusion.
+   *
+   * @param verifier - The principal of the verifier to check
+   * @param wasm_id - The WASM hash to check participation for
+   * @param audit_type - The audit type (e.g., "tools_v1", "build_reproducibility_v1")
+   * @returns true if verifier has filed any audit (attestation or divergence) for this WASM+audit_type
+   */
+  public query func has_verifier_participated_in_wasm(
+    verifier : Principal,
+    wasm_id : Text,
+    audit_type : Text,
+  ) : async Bool {
+    let state = icrc126().state;
+    let audit_records = Option.get(Map.get(state.audits, Map.thash, wasm_id), []);
+
+    // Check if verifier has filed an attestation for this audit_type
+    let has_attestation = Array.find<ICRC126.AuditRecord>(
+      audit_records,
+      func(record) {
+        switch (record) {
+          case (#Attestation(att)) {
+            Principal.equal(att.auditor, verifier) and att.audit_type == audit_type;
+          };
+          case (_) { false };
+        };
+      },
+    );
+
+    if (Option.isSome(has_attestation)) {
+      return true;
+    };
+
+    // Check if verifier has filed a divergence for this WASM
+    // Note: Divergences don't have audit_type directly, so we check any divergence
+    let has_divergence = Array.find<ICRC126.AuditRecord>(
+      audit_records,
+      func(record) {
+        switch (record) {
+          case (#Divergence(div)) {
+            Principal.equal(div.reporter, verifier);
+          };
+          case (_) { false };
+        };
+      },
+    );
+
+    return Option.isSome(has_divergence);
   };
 
   // --- ICRC127 Endpoints ---
@@ -1442,14 +2056,70 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   };
   public shared (msg) func icrc127_submit_bounty(req : ICRC127Service.BountySubmissionRequest) : async ICRC127Service.BountySubmissionResult {
     // ==========================================================================
-    // == CONSENSUS-BASED SYSTEM: Manual bounty claims are disabled.
-    // == Bounties are automatically distributed by the registry after reaching
+    // == CONSENSUS-BASED SYSTEM: Manual bounty claims are disabled for build_reproducibility.
+    // == Build reproducibility bounties are automatically distributed by the registry after reaching
     // == 5-of-9 majority consensus. This prevents:
     // == - Verifiers on the losing side from claiming rewards before slashing
     // == - Early claims that bypass consensus outcome handling
     // == - Gaming the system by claiming before final verification
+    // ==
+    // == For other audit types (tools_v1, data_safety_v1, etc.), manual claims are allowed
+    // == since they are single-node attestations, not consensus-based.
     // ==========================================================================
-    return #Error(#Generic("Manual bounty claims are disabled. Bounties are automatically distributed after reaching 5-of-9 consensus."));
+
+    // Get the bounty to check its audit type
+    let ?bounty = icrc127().icrc127_get_bounty(req.bounty_id) else {
+      return #Error(#Generic("Bounty not found"));
+    };
+
+    // Extract audit_type from challenge_parameters
+    let audit_type = switch (bounty.challenge_parameters) {
+      case (#Map(params_map)) {
+        switch (Array.find<(Text, ICRC127.ICRC16)>(params_map, func((key, _)) { key == "audit_type" })) {
+          case (?("audit_type", #Text(t))) { t };
+          case (_) { "" };
+        };
+      };
+      case (_) { "" };
+    };
+
+    // Only block manual claims for build_reproducibility_v1
+    if (audit_type == "build_reproducibility_v1") {
+      return #Error(#Generic("Manual bounty claims are disabled for build reproducibility audits. Bounties are automatically distributed after reaching 5-of-9 consensus."));
+    };
+
+    // Allow manual claims for other audit types
+    let submission_result = await icrc127().icrc127_submit_bounty<system>(msg.caller, req);
+
+    // If submission was successful, release the verifier's stake
+    switch (submission_result) {
+      case (#Ok(_)) {
+        // Release the stake for successful manual claims
+        switch (_credentials_canister_id) {
+          case (?audit_hub_id) {
+            let auditHub : AuditHub.Service = actor (Principal.toText(audit_hub_id));
+            let release_result = await auditHub.release_stake(req.bounty_id);
+            switch (release_result) {
+              case (#ok(_)) {
+                Debug.print("Released stake for manual bounty claim " # Nat.toText(req.bounty_id));
+              };
+              case (#err(e)) {
+                Debug.print("Warning: Failed to release stake for bounty " # Nat.toText(req.bounty_id) # ": " # e);
+                // Don't fail the submission if stake release fails - the submission already succeeded
+              };
+            };
+          };
+          case (null) {
+            Debug.print("Warning: Cannot release stake - Audit Hub not configured");
+          };
+        };
+      };
+      case (#Error(_)) {
+        // Submission failed, don't release stake
+      };
+    };
+
+    return submission_result;
   };
   public query func icrc127_get_bounty(bounty_id : Nat) : async ?ICRC127.Bounty {
     icrc127().icrc127_get_bounty(bounty_id);
@@ -1528,50 +2198,130 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   };
 
   /**
+   * Admin method to manually trigger consensus handling for stuck bounties.
+   * Use this when consensus was reached but payouts didn't happen due to bugs.
+   */
+  public shared (msg) func admin_retrigger_consensus(wasm_id : Text, audit_type : Text) : async Result.Result<Text, Text> {
+    // Check if caller is owner
+    if (not Principal.equal(msg.caller, _owner)) {
+      return #err("Only the owner can retrigger consensus");
+    };
+
+    // Get the finalization record to see what the outcome was
+    let finalization_opt = BTree.get(finalization_log, Text.compare, wasm_id);
+    switch (finalization_opt) {
+      case (null) {
+        return #err("No finalization record found for WASM: " # wasm_id);
+      };
+      case (?record) {
+        Debug.print("Retriggering consensus for WASM " # wasm_id # " with outcome " # debug_show (record.outcome));
+
+        // Retrigger the consensus outcome handling
+        await _handle_consensus_outcome(wasm_id, record.outcome, audit_type);
+
+        return #ok("Consensus retriggered successfully for " # wasm_id);
+      };
+    };
+  };
+
+  /**
+   * Find the verifier principal who filed work for a given bounty.
+   * Checks attestation and divergence records to find which verifier worked on this bounty.
+   */
+  private func _find_verifier_for_bounty(bounty_id : Nat, wasm_id : Text, audit_type : Text) : async ?Principal {
+    // Get all audit records for this WASM from ICRC126 state
+    let state = icrc126().state;
+    let all_audit_records = switch (Map.get(state.audits, Map.thash, wasm_id)) {
+      case (null) { return null };
+      case (?records) { records };
+    };
+
+    // Search through all audit records to find one matching this bounty_id
+    for (record in all_audit_records.vals()) {
+      switch (record) {
+        case (#Attestation(attestation)) {
+          // Extract bounty_id from metadata
+          switch (AuditHub.get_bounty_id_from_metadata(attestation.metadata)) {
+            case (?bid) {
+              if (bid == bounty_id) {
+                return ?attestation.auditor;
+              };
+            };
+            case (null) {};
+          };
+        };
+        case (#Divergence(divergence)) {
+          // Extract bounty_id from metadata if it exists
+          switch (divergence.metadata) {
+            case (?meta) {
+              switch (AuditHub.get_bounty_id_from_metadata(meta)) {
+                case (?bid) {
+                  if (bid == bounty_id) {
+                    return ?divergence.reporter;
+                  };
+                };
+                case (null) {};
+              };
+            };
+            case (null) {};
+          };
+        };
+      };
+    };
+
+    return null;
+  };
+
+  /**
    * Handle consensus outcome by releasing stakes for winners and slashing stakes for losers.
    * Winners: Verifiers who voted with the majority consensus
    * Losers: Verifiers who voted against the majority consensus
    */
-  private func _handle_consensus_outcome(wasm_id : Text, outcome : VerificationOutcome) : async () {
+  private func _handle_consensus_outcome(wasm_id : Text, outcome : VerificationOutcome, audit_type : Text) : async () {
     // Get all bounties for this WASM
     let all_bounties = _get_bounties_for_wasm(wasm_id);
+
+    // Create composite key for progress tracking (wasm_id::audit_type)
+    let progress_key = _make_progress_key(wasm_id, audit_type);
 
     // Get the winning and losing attestation lists
     let winning_attestations = switch (outcome) {
       case (#Verified) {
-        Option.get(BTree.get(verification_progress, Text.compare, wasm_id), []);
+        Option.get(BTree.get(verification_progress, Text.compare, progress_key), []);
       };
       case (#Rejected) {
-        Option.get(BTree.get(divergence_progress, Text.compare, wasm_id), []);
+        Option.get(BTree.get(divergence_progress, Text.compare, progress_key), []);
       };
     };
 
     let losing_attestations = switch (outcome) {
       case (#Verified) {
         // If verified, divergence reports are the losers
-        Option.get(BTree.get(divergence_progress, Text.compare, wasm_id), []);
+        Option.get(BTree.get(divergence_progress, Text.compare, progress_key), []);
       };
       case (#Rejected) {
         // If rejected, success attestations are the losers
-        Option.get(BTree.get(verification_progress, Text.compare, wasm_id), []);
+        Option.get(BTree.get(verification_progress, Text.compare, progress_key), []);
       };
     };
 
-    // Check if all 9 verifiers have participated before paying out bounties
+    // Check if all 9 verifiers have participated before processing stakes
+    // NOTE: Bounties are paid immediately when submitted, but stakes remain locked
+    // until all verifiers participate so we can properly slash the losers
     let total_participated = winning_attestations.size() + losing_attestations.size();
     if (total_participated < REQUIRED_VERIFIERS) {
       Debug.print(
         "⏳ Consensus reached but only " # Nat.toText(total_participated) # " of " #
         Nat.toText(REQUIRED_VERIFIERS) # " verifiers have participated. " #
         "Waiting for remaining " # Nat.toText(REQUIRED_VERIFIERS - total_participated) #
-        " verifiers before releasing stakes and paying bounties."
+        " verifiers before releasing/slashing stakes."
       );
-      return; // Exit early - don't process payouts yet
+      return; // Exit early - don't process stakes yet
     };
 
     Debug.print(
       "✅ All " # Nat.toText(REQUIRED_VERIFIERS) # " verifiers have participated. " #
-      "Processing stake releases and bounty payouts..."
+      "Processing stake releases for winners and slashing for losers..."
     );
 
     // Get audit hub reference
@@ -1586,13 +2336,9 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
         return;
       };
       case (?hub) {
-        // Release stakes for winners and trigger bounty payouts
+        // Release stakes for winners (bounties were already paid when they submitted)
         for (bounty_id in winning_attestations.vals()) {
           try {
-            // 1. Get the bounty lock FIRST (before releasing stake which clears the lock)
-            let lock_opt = await hub.get_bounty_lock(bounty_id);
-
-            // 2. Release their stake back to available balance
             let release_result = await hub.release_stake(bounty_id);
             switch (release_result) {
               case (#ok(_)) {
@@ -1602,34 +2348,8 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
                 Debug.print("Error releasing stake for bounty " # Nat.toText(bounty_id) # ": " # e);
               };
             };
-
-            // 3. Trigger the bounty payout through ICRC-127
-            switch (lock_opt) {
-              case (?lock) {
-                // Submit the bounty on behalf of the winning verifier
-                // The submission is just confirmation - validation already passed via attestation
-                let submission_req : ICRC127Service.BountySubmissionRequest = {
-                  bounty_id = bounty_id;
-                  submission = #Text("Consensus reached: 5-of-9 verifiers confirmed");
-                  account = ?{ owner = lock.claimant; subaccount = null };
-                };
-
-                let payout_result = await icrc127().icrc127_submit_bounty(lock.claimant, submission_req);
-                switch (payout_result) {
-                  case (#Ok(_)) {
-                    Debug.print("Bounty payout completed for winner " # Nat.toText(bounty_id));
-                  };
-                  case (#Error(e)) {
-                    Debug.print("Error paying bounty " # Nat.toText(bounty_id) # ": " # debug_show (e));
-                  };
-                };
-              };
-              case (null) {
-                Debug.print("Warning: No lock found for bounty " # Nat.toText(bounty_id) # " - cannot trigger payout");
-              };
-            };
           } catch (e) {
-            Debug.print("Exception handling winning bounty " # Nat.toText(bounty_id) # ": " # Error.message(e));
+            Debug.print("Exception releasing stake for bounty " # Nat.toText(bounty_id) # ": " # Error.message(e));
           };
         };
 
@@ -1660,6 +2380,12 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   ) : async Nat {
     // 1. Authorization check is no longer needed as this is an internal function.
 
+    // Extract audit_type from metadata for consensus handling
+    let audit_type = switch (AppStore.getICRC16TextOptional(metadata, "audit_type")) {
+      case (?t) { t };
+      case (null) { "build_reproducibility_v1" }; // Default for legacy
+    };
+
     // 2. Create and store the finalization record.
     let record : FinalizationRecord = {
       outcome = outcome;
@@ -1669,7 +2395,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     ignore BTree.insert(finalization_log, Text.compare, wasm_id, record);
 
     // 2.5. Handle consensus penalties - slash stakes of verifiers on the losing side
-    ignore await _handle_consensus_outcome(wasm_id, outcome);
+    ignore await _handle_consensus_outcome(wasm_id, outcome, audit_type);
 
     // 3. Log the official ICRC-3 block.
     let btype = switch (outcome) {
@@ -1763,6 +2489,31 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
         case (null) {
           Debug.print("WASM " # wasm_id # " verified, but no orchestrator is configured.");
         };
+      };
+    };
+
+    // Notify audit hub that verification is complete for this specific audit type
+    switch (_credentials_canister_id) {
+      case (?audit_hub_id) {
+        let auditHub : AuditHub.Service = actor (Principal.toText(audit_hub_id));
+
+        try {
+          let result = await auditHub.mark_verification_complete(wasm_id, audit_type);
+
+          switch (result) {
+            case (#ok()) {
+              Debug.print("Successfully marked " # audit_type # " verification complete in audit hub for " # wasm_id);
+            };
+            case (#err(e)) {
+              Debug.print("Warning: Failed to mark verification complete in audit hub: " # e);
+            };
+          };
+        } catch (e) {
+          Debug.print("Exception notifying audit hub of completion: " # Error.message(e));
+        };
+      };
+      case (null) {
+        Debug.print("Audit hub not configured - skipping completion notification");
       };
     };
 
@@ -2633,6 +3384,13 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           canister_name = "search_index";
           required = true;
           current_value = _search_index_canister_id;
+        },
+        {
+          key = "_bounty_sponsor_canister_id";
+          setter = "set_bounty_sponsor_canister_id";
+          canister_name = "bounty_sponsor";
+          required = true;
+          current_value = _bounty_sponsor_canister_id;
         },
         {
           key = "_bounty_reward_token_canister_id";

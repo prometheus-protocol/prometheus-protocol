@@ -91,6 +91,20 @@ export interface DeployOrUpgradeRequest {
   'timeout' : bigint,
   'namespace' : string,
 }
+export interface EnvConfig {
+  'key' : string,
+  'value_type' : string,
+  'setter' : string,
+  'required' : boolean,
+  'current_value' : [] | [string],
+}
+export interface EnvDependency {
+  'key' : string,
+  'setter' : string,
+  'required' : boolean,
+  'canister_name' : string,
+  'current_value' : [] | [Principal],
+}
 export interface GetArchivesArgs { 'from' : [] | [Principal] }
 export type GetArchivesResult = Array<GetArchivesResultItem>;
 export interface GetArchivesResultItem {
@@ -146,6 +160,15 @@ export interface ICRC120Canister {
   'get_canisters' : ActorMethod<[string], Array<Principal>>,
   'get_cycle_job_status' : ActorMethod<[], Result_5>,
   'get_cycle_top_up_config' : ActorMethod<[], CycleTopUpConfig>,
+  'get_env_requirements' : ActorMethod<
+    [],
+    {
+        'v1' : {
+          'dependencies' : Array<EnvDependency>,
+          'configuration' : Array<EnvConfig>,
+        }
+      }
+  >,
   'get_latest_reconstitution_trace' : ActorMethod<
     [],
     [] | [ReconstitutionTrace]

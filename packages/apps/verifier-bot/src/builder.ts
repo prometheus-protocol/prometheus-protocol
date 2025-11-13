@@ -8,6 +8,7 @@ import {
   getMocVersionFromMopsToml,
   validateMotokoProject,
 } from '@prometheus-protocol/reproducible-build';
+import { downloadWasmByHash as downloadWasmFromRegistry } from '@prometheus-protocol/ic-js';
 
 /**
  * Retry a function with exponential backoff
@@ -64,6 +65,9 @@ export async function verifyBuild(
 ): Promise<BuildResult> {
   const startTime = Date.now();
   const workDir = `/tmp/verify-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+  // Generate unique container name for this build (used in try and finally blocks)
+  const containerName = `verify-container-${Date.now()}-${Math.random().toString(36).slice(2, 9)}-${process.pid}`;
 
   try {
     console.log(`📦 Cloning ${repo}...`);
@@ -168,9 +172,8 @@ export async function verifyBuild(
 
     console.log(`🔨 Running build in Docker...`);
     // Use --rm to auto-remove container after build completes
-    // Use a unique container name combining timestamp, random string, and process ID
+    // Use a unique container name (defined at function scope for cleanup access)
     // Network is configured in docker-compose.yml to use shared network
-    const containerName = `verify-container-${Date.now()}-${Math.random().toString(36).slice(2, 9)}-${process.pid}`;
     const buildLog = await retryWithBackoff(
       () => {
         return execSync(
@@ -208,9 +211,11 @@ export async function verifyBuild(
 
     if (actualHash === expectedWasmHash) {
       console.log(`✅ Hash match! Build verified.`);
+      const wasmPath = path.join(canisterPath, 'out', 'out_Linux_x86_64.wasm');
       return {
         success: true,
         wasmHash: actualHash,
+        wasmPath,
         buildLog: buildLog.slice(-1000), // Keep last 1KB
         duration,
       };
@@ -263,10 +268,11 @@ export async function verifyBuild(
         }
       }
 
-      // Clean up any leftover containers
+      // Clean up THIS SPECIFIC container only (if it still exists)
+      // IMPORTANT: Only clean up our container, not others that might be running concurrently
       try {
         const containers = execSync(
-          `docker ps -a -q -f name=verify-container`,
+          `docker ps -a -q -f name=${containerName}`,
           { encoding: 'utf-8', timeout: 5_000 },
         )
           .trim()
@@ -274,9 +280,7 @@ export async function verifyBuild(
           .filter(Boolean);
 
         if (containers.length > 0) {
-          console.log(
-            `🐳 Removing ${containers.length} Docker container(s)...`,
-          );
+          console.log(`🐳 Removing this build's container: ${containerName}`);
           for (const containerId of containers) {
             execSync(`docker rm -f ${containerId}`, {
               timeout: 10_000,
@@ -467,4 +471,47 @@ moc = "${mocVersion}"
 
   fs.writeFileSync(path.join(canisterPath, 'mops.toml'), mopsToml);
   console.log(`✅ Generated mops.toml with moc version ${mocVersion}`);
+}
+
+/**
+ * Downloads a WASM from the registry by its hash and saves it to a temporary location.
+ * This is used for tools_v1 verification to skip rebuilding when we already have
+ * consensus that the build is reproducible.
+ *
+ * @param wasmHash The hex hash of the WASM to download
+ * @returns Path to the downloaded WASM file
+ */
+export async function downloadWasmByHash(
+  wasmHash: string,
+): Promise<{ wasmPath: string }> {
+  const startTime = Date.now();
+
+  try {
+    console.log(`📥 Downloading WASM from registry...`);
+    console.log(`   Hash: ${wasmHash}`);
+
+    // Download the complete WASM from the registry
+    const wasmBytes = await downloadWasmFromRegistry(wasmHash);
+
+    // Create a temporary directory for this WASM
+    const workDir = `/tmp/wasm-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    fs.mkdirSync(workDir, { recursive: true });
+
+    // Save WASM to disk
+    const wasmPath = path.join(workDir, 'downloaded.wasm');
+    fs.writeFileSync(wasmPath, wasmBytes);
+
+    const duration = Math.floor((Date.now() - startTime) / 1000);
+    console.log(`✅ WASM downloaded successfully (${duration}s)`);
+    console.log(`   Path: ${wasmPath}`);
+    console.log(`   Size: ${wasmBytes.length} bytes`);
+
+    return { wasmPath };
+  } catch (error) {
+    const duration = Math.floor((Date.now() - startTime) / 1000);
+    console.error(`❌ Failed to download WASM:`, error);
+    throw new Error(
+      `Failed to download WASM after ${duration}s: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }

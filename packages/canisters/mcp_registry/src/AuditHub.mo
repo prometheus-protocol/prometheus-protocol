@@ -26,6 +26,50 @@ module AuditHub {
 
   public type CallResult = Result.Result<(), Text>;
 
+  // Job Queue Types
+  public type ICRC16Value = (
+    Text,
+    {
+      #Text : Text;
+      #Nat : Nat;
+      #Int : Int;
+      #Blob : Blob;
+      #Bool : Bool;
+      #Array : [ICRC16Value];
+      #Map : [ICRC16Value];
+    },
+  );
+
+  public type ICRC16Map = [ICRC16Value];
+
+  public type VerificationJob = {
+    wasm_id : Text;
+    repo : Text;
+    commit_hash : Text;
+    build_config : ICRC16Map;
+    created_at : Timestamp;
+    required_verifiers : Nat;
+    assigned_count : Nat;
+    bounty_ids : [BountyId];
+  };
+
+  public type AssignedJob = {
+    wasm_id : Text;
+    verifier : Principal;
+    bounty_id : BountyId;
+    assigned_at : Timestamp;
+    expires_at : Timestamp;
+  };
+
+  public type VerificationJobAssignment = {
+    bounty_id : BountyId;
+    wasm_id : Text;
+    repo : Text;
+    commit_hash : Text;
+    build_config : ICRC16Map;
+    expires_at : Timestamp;
+  };
+
   // Helper function to safely extract bounty_id from ICRC-16 metadata
   public func get_bounty_id_from_metadata(metadata : ICRC126.ICRC16Map) : ?BountyId {
     for ((key, val) in metadata.vals()) {
@@ -58,7 +102,6 @@ module AuditHub {
 
     // == PUBLIC QUERY & VERIFICATION METHODS ==
     is_bounty_ready_for_collection : query (bounty_id : BountyId, potential_claimant : Principal) -> async Bool;
-    get_available_balance : query (auditor : Principal, token_id : TokenId) -> async Balance;
     get_available_balance_by_audit_type : query (auditor : Principal, audit_type : Text) -> async Balance;
     get_staked_balance : query (auditor : Principal, token_id : TokenId) -> async Balance;
     get_bounty_lock : query (bounty_id : BountyId) -> async ?BountyLock;
@@ -66,5 +109,13 @@ module AuditHub {
 
     // == API KEY AUTHENTICATION ==
     validate_api_key : query (api_key : Text) -> async Result.Result<Principal, Text>;
+
+    // == JOB QUEUE MANAGEMENT ==
+    add_verification_job : (wasm_id : Text, repo : Text, commit_hash : Text, build_config : ICRC16Map, required_verifiers : Nat, bounty_ids : [BountyId]) -> async Result.Result<(), Text>;
+    mark_verification_complete : (wasm_id : Text, audit_type : Text) -> async Result.Result<(), Text>;
+    request_verification_job_with_api_key : (api_key : Text) -> async Result.Result<VerificationJobAssignment, Text>;
+    release_job_assignment : (bounty_id : BountyId) -> async Result.Result<(), Text>;
+    list_pending_jobs : query () -> async [(Text, VerificationJob)];
+    list_assigned_jobs : query () -> async [(BountyId, AssignedJob)];
   };
 };

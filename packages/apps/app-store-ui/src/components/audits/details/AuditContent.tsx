@@ -13,6 +13,7 @@ import {
   BuildReproducibilityAttestationData,
   DataSafetyAttestationData,
   ToolsAttestationData,
+  Tokens,
 } from '@prometheus-protocol/ic-js';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import { AppInfoAttestation } from './results/AppInfoAttestation';
@@ -21,7 +22,7 @@ import { ToolsAttestation } from './results/ToolsAttestation';
 import { BuildReproducibilityAttestation } from './results/BuildReproducibilityAttestation';
 import { ToolsAttestationForm } from './forms/ToolsAttestationForm';
 import { Section } from '@/components/Section';
-import { useGetReputationBalance } from '@/hooks/useAuditBounties';
+import { useGetTokenBalance } from '@/hooks/usePayment';
 import { AppInfoAttestationForm } from './forms/AppInfoAttestationForm';
 import { BuildReproducibilityAttestationForm } from './forms/BuildReproducibilityAttestationForm';
 import { DivergenceReport } from './results/DivergenceReport';
@@ -75,7 +76,7 @@ const InstructionsSection = ({ hasStake }: { hasStake: boolean }) => {
             )
           }
           title="Step 2: Obtain Stake">
-          This audit requires a stake of reputation tokens to begin. Ensure your
+          This audit requires a stake of USDC tokens to begin. Ensure your
           account has the required balance.
           <a
             href="https://docs.prometheusprotocol.org/guides/auditors/overview"
@@ -117,9 +118,9 @@ const AttestationForm = ({ audit }: { audit: AuditBountyWithDetails }) => {
 // --- 2. RESTRUCTURE THE MAIN AuditContent COMPONENT ---
 export const AuditContent = ({ audit }: { audit: AuditBountyWithDetails }) => {
   const { identity } = useInternetIdentity();
-  const getReputationBalance = useGetReputationBalance(audit.auditType);
-  const currentBalance = getReputationBalance.data ?? 0;
-  const hasStake = currentBalance > audit.stake;
+  const getUsdcBalance = useGetTokenBalance(Tokens.USDC);
+  const currentBalanceAtomic = getUsdcBalance.data ?? 0n;
+  const hasStake = currentBalanceAtomic >= audit.stake;
 
   // --- REFACTORED LOGIC ---
 

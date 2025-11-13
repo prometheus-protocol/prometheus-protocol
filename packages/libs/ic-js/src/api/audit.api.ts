@@ -479,7 +479,12 @@ export const getStakeRequirement = async (
 ): Promise<bigint | undefined> => {
   const auditHubActor = getAuditHubActor();
   const result = await auditHubActor.get_stake_requirement(audit_type);
-  return fromNullable(result);
+  const tuple = fromNullable(result);
+  // Result is [TokenId, Balance] tuple - we want the Balance (second element)
+  if (tuple && Array.isArray(tuple) && tuple.length === 2) {
+    return tuple[1];
+  }
+  return undefined;
 };
 
 export interface ReserveBountyArgs {
@@ -769,28 +774,9 @@ export const listBounties = async (
   }
 };
 
-/** Fetches the reputation token balance for the caller's identity.
- * @param identity The identity of the caller.
- * @param token_id The ID of the reputation token (e.g., "app_info_v1").
- * @returns The available balance of the specified reputation token.
- */
-export const getReputationBalance = async (
-  identity: Identity,
-  token_id: string,
-): Promise<bigint> => {
-  const auditHubActor = getAuditHubActor(identity);
-  const result = await auditHubActor.get_available_balance(
-    identity.getPrincipal(),
-    token_id,
-  );
-  return result;
-};
-
 // 1. Define the new, complete, and ergonomic interface.
 //    We use Maps for easy lookups in the frontend.
 export interface VerifierProfile {
-  available_balance_usdc: bigint;
-  staked_balance_usdc: bigint;
   total_verifications: bigint;
   reputation_score: bigint;
   total_earnings: bigint;
@@ -801,15 +787,6 @@ export interface PaymentTokenConfig {
   symbol: string;
   decimals: number;
 }
-
-/**
- * Fetches the payment token configuration from the Audit Hub.
- * Returns the token symbol, decimals, and ledger canister ID.
- */
-export const getPaymentTokenConfig = async (): Promise<PaymentTokenConfig> => {
-  const auditHubActor = getAuditHubActor();
-  return await auditHubActor.get_payment_token_config();
-};
 
 /**
  * Fetches the complete profile for the current user's principal from the Audit Hub.
@@ -830,6 +807,47 @@ export const getVerifierProfile = async (
   return profile;
 };
 
+/**
+ * Fetches the available balance for a specific audit type.
+ *
+ * @param identity The user's identity.
+ * @param auditType The audit type (e.g., "build_reproducibility_v1", "tools_v1").
+ * @returns The available balance in atomic units.
+ */
+export const getAvailableBalanceByAuditType = async (
+  identity: Identity,
+  auditType: string,
+): Promise<bigint> => {
+  const auditHubActor = getAuditHubActor(identity);
+  const principal = identity.getPrincipal();
+
+  const balance = await auditHubActor.get_available_balance_by_audit_type(
+    principal,
+    auditType,
+  );
+
+  return balance;
+};
+
+/**
+ * Fetches the staked balance for a specific token.
+ *
+ * @param identity The user's identity.
+ * @param tokenId The token ID (ledger canister principal).
+ * @returns The staked balance in atomic units.
+ */
+export const getStakedBalance = async (
+  identity: Identity,
+  tokenId: string,
+): Promise<bigint> => {
+  const auditHubActor = getAuditHubActor(identity);
+  const principal = identity.getPrincipal();
+
+  const balance = await auditHubActor.get_staked_balance(principal, tokenId);
+
+  return balance;
+};
+
 /** Fetches a list of all pending verification requests from the registry.
  * Each request is fully processed and deserialized for easy consumption.
  * @returns An array of processed verification requests.
@@ -848,6 +866,7 @@ export interface SubmitDivergenceArgs {
   bountyId: bigint;
   wasmId: string;
   reason: string;
+  auditType?: string;
 }
 
 /**
@@ -857,12 +876,16 @@ export interface SubmitDivergenceArgs {
  */
 export const submitDivergence = async (
   identity: Identity,
-  { bountyId, wasmId, reason }: SubmitDivergenceArgs,
+  { bountyId, wasmId, reason, auditType }: SubmitDivergenceArgs,
 ) => {
   const actor = getRegistryActor(identity);
 
-  // The canister requires the bounty_id in the metadata for authorization.
+  // The canister requires the bounty_id and audit_type in the metadata for authorization.
   const metadata: ICRC16Map = [['bounty_id', { Nat: bountyId }]];
+
+  if (auditType) {
+    metadata.push(['126:audit_type', { Text: auditType }]);
+  }
 
   const result = await actor.icrc126_file_divergence({
     wasm_id: wasmId,
@@ -888,11 +911,15 @@ export const submitDivergence = async (
  */
 export const submitDivergenceWithApiKey = async (
   apiKey: string,
-  { bountyId, wasmId, reason }: SubmitDivergenceArgs,
+  { bountyId, wasmId, reason, auditType }: SubmitDivergenceArgs,
 ) => {
   const actor = getRegistryActor();
 
   const metadata: ICRC16Map = [['bounty_id', { Nat: bountyId }]];
+
+  if (auditType) {
+    metadata.push(['126:audit_type', { Text: auditType }]);
+  }
 
   const result = await actor.icrc126_file_divergence_with_api_key(apiKey, {
     wasm_id: wasmId,
@@ -1083,25 +1110,27 @@ export const getLockedBountyForVerifier = async (
 };
 
 /**
- * Gets the verification progress (attestation count) for a specific WASM.
+ * Gets the verification progress (attestation count) for a specific WASM and audit type.
  * Returns array of bounty IDs that have filed successful attestations.
  */
 export const getVerificationProgress = async (
   wasmId: string,
+  auditType: string,
 ): Promise<bigint[]> => {
   const registryActor = getRegistryActor();
-  return await registryActor.get_verification_progress(wasmId);
+  return await registryActor.get_verification_progress(wasmId, auditType);
 };
 
 /**
- * Gets the divergence progress (divergence report count) for a specific WASM.
+ * Gets the divergence progress (divergence report count) for a specific WASM and audit type.
  * Returns array of bounty IDs that have filed divergence reports.
  */
 export const getDivergenceProgress = async (
   wasmId: string,
+  auditType: string,
 ): Promise<bigint[]> => {
   const registryActor = getRegistryActor();
-  return await registryActor.get_divergence_progress(wasmId);
+  return await registryActor.get_divergence_progress(wasmId, auditType);
 };
 
 /**
@@ -1240,4 +1269,66 @@ export const listApiKeys = async (
 ): Promise<AuditHub.ApiCredential[]> => {
   const auditHubActor = getAuditHubActor(identity);
   return await auditHubActor.list_api_keys();
+};
+
+/**
+ * Requests a verification job assignment from the audit hub job queue.
+ * This is the new request-based flow that eliminates race conditions.
+ * The audit hub atomically assigns a unique job to this verifier.
+ *
+ * @param apiKey The verifier's API key
+ * @returns Verification job assignment with bounty_id, wasm_id, repo, commit, etc.
+ * @throws Error if no jobs available or verifier already has an active assignment
+ */
+export interface VerificationJobAssignment {
+  bounty_id: bigint;
+  wasm_id: string;
+  repo: string;
+  commit_hash: string;
+  build_config: Array<[string, any]>;
+  expires_at: bigint;
+}
+
+export const requestVerificationJob = async (
+  apiKey: string,
+): Promise<VerificationJobAssignment | null> => {
+  const auditHubActor = getAuditHubActor();
+  const result =
+    await auditHubActor.request_verification_job_with_api_key(apiKey);
+
+  if ('err' in result) {
+    // No jobs available is expected, not an error
+    if (result.err.includes('No verification jobs available')) {
+      return null;
+    }
+    throw new Error(`Failed to request verification job: ${result.err}`);
+  }
+
+  const job = result.ok;
+  return {
+    bounty_id: job.bounty_id,
+    wasm_id: job.wasm_id,
+    repo: job.repo,
+    commit_hash: job.commit_hash,
+    build_config: job.build_config,
+    expires_at: job.expires_at,
+  };
+};
+
+/**
+ * Releases a job assignment when verification is complete or expired.
+ *
+ * @param apiKey The verifier's API key
+ * @param bountyId The bounty ID to release
+ */
+export const releaseJobAssignment = async (
+  apiKey: string,
+  bountyId: bigint,
+): Promise<void> => {
+  const auditHubActor = getAuditHubActor();
+  const result = await auditHubActor.release_job_assignment(bountyId);
+
+  if ('err' in result) {
+    throw new Error(`Failed to release job assignment: ${result.err}`);
+  }
 };

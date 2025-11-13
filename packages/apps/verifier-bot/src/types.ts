@@ -1,6 +1,7 @@
 export interface BuildResult {
   success: boolean;
   wasmHash?: string;
+  wasmPath?: string; // Path to the built WASM file
   buildLog?: string;
   error?: string;
   duration: number; // seconds
