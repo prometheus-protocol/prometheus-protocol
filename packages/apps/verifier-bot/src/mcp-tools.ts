@@ -17,6 +17,7 @@ export interface McpToolsResult {
   hasApiKeySystem?: boolean;
   hasOwnerSystem?: boolean;
   hasWalletSystem?: boolean;
+  hasIcrc120System?: boolean;
   error?: string;
   duration: number;
 }
@@ -207,6 +208,35 @@ export async function verifyMcpTools(
         }
       }
 
+      // Check for ICRC-120 upgrade system
+      let hasIcrc120System = false;
+      try {
+        console.log(`   🔄 Checking for ICRC-120 upgrade methods...`);
+        // @ts-ignore - Method may not be in type definition but could exist on canister
+        const result = await serverActor.icrc120_upgrade_finished();
+        if (
+          result &&
+          ('Success' in result || 'InProgress' in result || 'Failed' in result)
+        ) {
+          console.log(
+            `   ✅ ICRC-120 system verified (upgrade status check returned valid result)`,
+          );
+          hasIcrc120System = true;
+        }
+      } catch (icrc120Error: any) {
+        const errorMsg = icrc120Error?.message || String(icrc120Error);
+        if (
+          errorMsg.includes('has no query method') ||
+          errorMsg.includes('has no update method')
+        ) {
+          console.log(
+            `   ❌ ICRC-120 system not found: icrc120_upgrade_finished method does not exist`,
+          );
+        } else {
+          console.log(`   ⚠️  ICRC-120 system check failed: ${errorMsg}`);
+        }
+      }
+
       // Check if all required systems are present
       const missingSystems: string[] = [];
       // API key system is only required for private servers
@@ -214,6 +244,7 @@ export async function verifyMcpTools(
         missingSystems.push('API key system');
       if (!hasOwnerSystem) missingSystems.push('owner system');
       if (!hasWalletSystem) missingSystems.push('wallet system');
+      if (!hasIcrc120System) missingSystems.push('ICRC-120 upgrade system');
 
       // Clean up
       await pic.tearDown();
@@ -233,6 +264,7 @@ export async function verifyMcpTools(
           hasApiKeySystem,
           hasOwnerSystem,
           hasWalletSystem,
+          hasIcrc120System,
           duration,
         };
       }
@@ -250,6 +282,7 @@ export async function verifyMcpTools(
         hasApiKeySystem,
         hasOwnerSystem,
         hasWalletSystem,
+        hasIcrc120System,
         duration,
       };
     } catch (error) {
