@@ -42,6 +42,13 @@ jobs:
         # Assumes you have a root build script that builds all workspaces
         run: pnpm build
 
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run Semantic Release for Monorepo
         env:
           # The GITHUB_TOKEN is automatically provided by GitHub Actions
@@ -50,4 +57,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           # NPM TOKEN
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # Docker registry credentials for semantic-release-docker
+          DOCKER_REGISTRY_USER: ${{ github.actor }}
+          DOCKER_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm -r --workspace-concurrency=1 exec -- npx --no-install semantic-release -e semantic-release-monorepo

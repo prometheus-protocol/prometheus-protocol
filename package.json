@@ -58,6 +58,7 @@
     "@dfinity/utils": "^3.2.0",
     "@icp-sdk/core": "^4.0.1",
     "@faker-js/faker": "^10.0.0",
+    "@codedependant/semantic-release-docker": "^5.1.1",
     "@semantic-release/commit-analyzer": "^13.0.1",
     "@semantic-release/github": "^11.0.4",
     "@semantic-release/npm": "^12.0.2",

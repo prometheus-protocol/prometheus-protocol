@@ -1,0 +1,28 @@
+{
+  "branches": ["main"],
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/release-notes-generator",
+    [
+      "@codedependant/semantic-release-docker",
+      {
+        "dockerImage": "verifier-bot",
+        "dockerRegistry": "ghcr.io",
+        "dockerProject": "prometheus-protocol",
+        "dockerFile": "Dockerfile",
+        "dockerTags": [
+          "latest",
+          "{{version}}",
+          "{{major}}-latest",
+          "{{major}}.{{minor}}"
+        ],
+        "dockerLogin": true,
+        "dockerArgs": {
+          "GIT_SHA": "{{git_sha}}",
+          "VERSION": "{{version}}"
+        }
+      }
+    ],
+    "@semantic-release/github"
+  ]
+}
