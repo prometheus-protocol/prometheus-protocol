@@ -97,7 +97,7 @@ Replace `<COMMIT_HASH>` with the hash from step 2. This also commits and pushes 
 ```bash
 cd /tmp/test && git restore . && \
 export GITHUB_TOKEN=$(grep GITHUB_TOKEN /home/jesse/prometheus-protocol/prometheus-protocol/packages/apps/verifier-bot/deployment/.env | cut -d'=' -f2) && \
-app-store-cli release 0.1.19 --network local 2>&1 | tail -10
+app-store-cli release 0.1.0 --network local 2>&1 | tail -10
 ```
 
 This builds the WASM file and extracts the hash from the build output.
