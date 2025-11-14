@@ -2,6 +2,7 @@ import { execSync } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import yaml from 'js-yaml';
 import type { BuildResult } from './types.js';
 import {
   bootstrapBuildFiles,
@@ -88,8 +89,8 @@ export async function verifyBuild(
       stdio: 'pipe',
     });
 
-    // Auto-detect canister name from dfx.json
-    const canisterName = extractCanisterNameFromDfx(workDir);
+    // Auto-detect canister name from prometheus.yml (for monorepos) or dfx.json
+    const canisterName = extractCanisterName(workDir);
     console.log(`📦 Detected canister: ${canisterName}`);
 
     // Locate the canister directory
@@ -296,7 +297,7 @@ export async function verifyBuild(
       try {
         const canisterPath = findCanisterPath(
           workDir,
-          extractCanisterNameFromDfx(workDir),
+          extractCanisterName(workDir),
         );
         execSync(`docker-compose down`, {
           cwd: canisterPath,
@@ -320,6 +321,63 @@ export async function verifyBuild(
  * Extracts the canister name from dfx.json by finding which canister
  * has src/main.mo as its main file.
  */
+/**
+ * Extracts canister name by checking prometheus.yml first (for monorepos),
+ * then falling back to dfx.json detection.
+ */
+function extractCanisterName(repoPath: string): string {
+  // First, try to find and read prometheus.yml
+  try {
+    const prometheusYmlPath = findPrometheusYml(repoPath);
+    if (prometheusYmlPath) {
+      const prometheusYml = yaml.load(
+        fs.readFileSync(prometheusYmlPath, 'utf8'),
+      ) as any;
+      
+      // Extract canister name from namespace (e.g., "prometheus-protocol/token_watchlist" -> "token_watchlist")
+      if (prometheusYml.namespace) {
+        const parts = prometheusYml.namespace.split('/');
+        const canisterName = parts[parts.length - 1];
+        console.log(`   📋 Found canister name from prometheus.yml: ${canisterName}`);
+        return canisterName;
+      }
+    }
+  } catch (error) {
+    console.log(`   ⚠️  Could not read prometheus.yml, falling back to dfx.json`);
+  }
+  
+  // Fallback to dfx.json detection
+  return extractCanisterNameFromDfx(repoPath);
+}
+
+/**
+ * Finds prometheus.yml by walking up from repo root or searching common locations
+ */
+function findPrometheusYml(startPath: string): string | null {
+  // Check repo root first
+  const rootPrometheusYml = path.join(startPath, 'prometheus.yml');
+  if (fs.existsSync(rootPrometheusYml)) {
+    return rootPrometheusYml;
+  }
+  
+  // Search in packages/canisters/*
+  const packagesPath = path.join(startPath, 'packages', 'canisters');
+  if (fs.existsSync(packagesPath)) {
+    const canisterDirs = fs.readdirSync(packagesPath, { withFileTypes: true })
+      .filter(dirent => dirent.isDirectory())
+      .map(dirent => dirent.name);
+    
+    for (const dir of canisterDirs) {
+      const prometheusYml = path.join(packagesPath, dir, 'prometheus.yml');
+      if (fs.existsSync(prometheusYml)) {
+        return prometheusYml;
+      }
+    }
+  }
+  
+  return null;
+}
+
 function extractCanisterNameFromDfx(repoPath: string): string {
   try {
     const dfxJsonPath = path.join(repoPath, 'dfx.json');

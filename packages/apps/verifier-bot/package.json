@@ -31,6 +31,7 @@
     "@prometheus-protocol/ic-js": "workspace:*",
     "@prometheus-protocol/reproducible-build": "workspace:*",
     "dotenv": "^17.2.3",
+    "js-yaml": "^4.1.0",
     "pem-file": "^1.0.1"
   },
   "devDependencies": {
