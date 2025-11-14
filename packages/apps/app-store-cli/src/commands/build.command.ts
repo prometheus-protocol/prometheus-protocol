@@ -193,18 +193,19 @@ export function registerBuildCommand(program: Command) {
           console.log('📁 Created output directory: ./out\n');
         }
 
-        // For monorepos, create a symlink from project root to canister src if needed
+        // For monorepos, copy canister src to project root if needed
         const srcInRoot = path.join(projectRoot, 'src');
         const srcInCanister = path.join(canisterPath, 'src');
-        let createdSymlink = false;
+        let copiedSrc = false;
 
         if (canisterPath !== projectRoot && !fs.existsSync(srcInRoot)) {
           try {
-            fs.symlinkSync(srcInCanister, srcInRoot, 'dir');
-            createdSymlink = true;
-            console.log('🔗 Created symlink: src -> ' + path.relative(projectRoot, srcInCanister) + '\n');
+            // Copy the src directory
+            fs.cpSync(srcInCanister, srcInRoot, { recursive: true });
+            copiedSrc = true;
+            console.log('📦 Copied src from ' + path.relative(projectRoot, srcInCanister) + '\n');
           } catch (error) {
-            console.error('❌ Error creating symlink:', error);
+            console.error('❌ Error copying src directory:', error);
             process.exit(1);
           }
         }
@@ -232,13 +233,13 @@ export function registerBuildCommand(program: Command) {
           }
           throw error;
         } finally {
-          // Clean up symlink if we created it
-          if (createdSymlink && fs.existsSync(srcInRoot)) {
+          // Clean up copied src if we created it
+          if (copiedSrc && fs.existsSync(srcInRoot)) {
             try {
-              fs.unlinkSync(srcInRoot);
-              console.log('🧹 Cleaned up symlink\n');
+              fs.rmSync(srcInRoot, { recursive: true, force: true });
+              console.log('🧹 Cleaned up copied src directory\n');
             } catch (error) {
-              console.warn('⚠️  Warning: Could not remove symlink');
+              console.warn('⚠️  Warning: Could not remove copied src directory');
             }
           }
         }
