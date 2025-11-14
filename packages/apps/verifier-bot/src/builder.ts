@@ -73,13 +73,13 @@ export async function verifyBuild(
   try {
     console.log(`📦 Cloning ${repo}...`);
     execSync(`git clone --depth 1 ${repo} ${workDir}`, {
-      timeout: 120_000,
+      timeout: 300_000, // 5 minutes for large monorepos
       stdio: 'pipe',
     });
 
     console.log(`🔀 Fetching commit ${commitHash.slice(0, 8)}...`);
     execSync(`git -C ${workDir} fetch origin ${commitHash}`, {
-      timeout: 60_000,
+      timeout: 120_000, // 2 minutes for fetch
       stdio: 'pipe',
     });
 
