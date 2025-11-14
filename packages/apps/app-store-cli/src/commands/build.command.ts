@@ -244,6 +244,23 @@ export function registerBuildCommand(program: Command) {
           }
         }
 
+        // For monorepos, copy the WASM from project root to canister directory
+        if (canisterPath !== projectRoot) {
+          const wasmInRoot = path.join(projectRoot, 'out', 'out_Linux_x86_64.wasm');
+          const canisterOutDir = path.join(canisterPath, 'out');
+          const wasmInCanister = path.join(canisterOutDir, 'out_Linux_x86_64.wasm');
+
+          if (fs.existsSync(wasmInRoot)) {
+            // Create out directory in canister path if it doesn't exist
+            if (!fs.existsSync(canisterOutDir)) {
+              fs.mkdirSync(canisterOutDir, { recursive: true });
+            }
+            // Copy WASM to canister directory
+            fs.copyFileSync(wasmInRoot, wasmInCanister);
+            console.log('📦 Copied WASM to ' + path.relative(projectRoot, wasmInCanister) + '\n');
+          }
+        }
+
         // Clean up if requested
         if (options.clean) {
           console.log('\n🧹 Cleaning up Docker images...');
