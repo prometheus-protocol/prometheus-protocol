@@ -105,7 +105,10 @@ export async function verifyMcpTools(
 
       // Check response status
       // 200 = success, 401 = auth required (need to create API key)
-      if (httpResponse.status_code !== 200 && httpResponse.status_code !== 401) {
+      if (
+        httpResponse.status_code !== 200 &&
+        httpResponse.status_code !== 401
+      ) {
         throw new Error(
           `HTTP request failed with status ${httpResponse.status_code}`,
         );
@@ -119,14 +122,17 @@ export async function verifyMcpTools(
       if (httpResponse.status_code === 401) {
         console.log(`   🔐 MCP endpoint requires authentication`);
         console.log(`   📋 Creating test API key...`);
-        
+
         try {
           // Create a test identity
           const testIdentity = createIdentity('test-api-key-user');
           serverActor.setIdentity(testIdentity);
 
           // @ts-ignore - Method may not be in type definition but could exist on canister
-          const apiKey = await serverActor.create_my_api_key('verifier-test-key', []);
+          const apiKey = await serverActor.create_my_api_key(
+            'verifier-test-key',
+            [],
+          );
           if (typeof apiKey === 'string' && apiKey.length > 0) {
             console.log(`   ✅ API key created: ${apiKey.substring(0, 10)}...`);
             hasApiKeySystem = true;
@@ -158,8 +164,12 @@ export async function verifyMcpTools(
             throw new Error('create_my_api_key did not return a valid API key');
           }
         } catch (apiKeyError: any) {
-          console.log(`   ❌ Failed to create/use API key: ${apiKeyError?.message || apiKeyError}`);
-          throw new Error(`Server requires auth but API key system failed: ${apiKeyError?.message || apiKeyError}`);
+          console.log(
+            `   ❌ Failed to create/use API key: ${apiKeyError?.message || apiKeyError}`,
+          );
+          throw new Error(
+            `Server requires auth but API key system failed: ${apiKeyError?.message || apiKeyError}`,
+          );
         }
       } else {
         // Status is 200, parse the response
@@ -168,7 +178,9 @@ export async function verifyMcpTools(
         );
         console.log(`   ✅ Response parsed successfully`);
         isPublicServer = true; // Got 200 without auth, so it's public
-        console.log(`   ℹ️  Server is public (allows anonymous tool discovery)`);
+        console.log(
+          `   ℹ️  Server is public (allows anonymous tool discovery)`,
+        );
       }
 
       // Check for JSON-RPC error
@@ -214,7 +226,9 @@ export async function verifyMcpTools(
           }
         }
       } else {
-        console.log(`   ✅ API key system already verified during authentication`);
+        console.log(
+          `   ✅ API key system already verified during authentication`,
+        );
       }
 
       // Check for owner system

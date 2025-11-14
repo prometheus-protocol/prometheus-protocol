@@ -15,10 +15,8 @@ submission:
     watchlist and help you manage them.
   key_features:
     - Add and remove tokens from your personal watchlist via AI or UI
-    - Automatic token metadata caching (symbol, name, decimals, fee)
     - Stored on-chain - access from any device
     - Syncs with AI agents through MCP
-    - Pre-configured with popular tokens (USDC, ckBTC, ICP)
     - Integrated with Prometheus Protocol
   tags:
     - watchlist

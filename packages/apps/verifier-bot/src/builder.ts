@@ -333,25 +333,31 @@ function extractCanisterName(repoPath: string, commitHash: string): string {
       const prometheusYml = yaml.load(
         fs.readFileSync(prometheusYmlPath, 'utf8'),
       ) as any;
-      
+
       // Check for explicit canister_name field first
       if (prometheusYml.canister_name) {
-        console.log(`   📋 Found canister_name in prometheus.yml: ${prometheusYml.canister_name}`);
+        console.log(
+          `   📋 Found canister_name in prometheus.yml: ${prometheusYml.canister_name}`,
+        );
         return prometheusYml.canister_name;
       }
-      
+
       // Fallback: extract canister name from namespace (e.g., "org.example/canister_name" -> "canister_name")
       if (prometheusYml.namespace) {
         const parts = prometheusYml.namespace.split('/');
         const canisterName = parts[parts.length - 1];
-        console.log(`   📋 Extracted canister name from namespace: ${canisterName}`);
+        console.log(
+          `   📋 Extracted canister name from namespace: ${canisterName}`,
+        );
         return canisterName;
       }
     }
   } catch (error) {
-    console.log(`   ⚠️  Could not read prometheus.yml, falling back to dfx.json`);
+    console.log(
+      `   ⚠️  Could not read prometheus.yml, falling back to dfx.json`,
+    );
   }
-  
+
   // Fallback to dfx.json detection
   return extractCanisterNameFromDfx(repoPath);
 }
@@ -365,20 +371,23 @@ function findPrometheusYml(repoPath: string): string | null {
   if (fs.existsSync(rootPrometheusYml)) {
     return rootPrometheusYml;
   }
-  
+
   // Search in packages/canisters/* (monorepo structure)
   const packagesPath = path.join(repoPath, 'packages', 'canisters');
   if (fs.existsSync(packagesPath)) {
-    const canisterDirs = fs.readdirSync(packagesPath, { withFileTypes: true })
-      .filter(dirent => dirent.isDirectory())
-      .map(dirent => dirent.name);
-    
+    const canisterDirs = fs
+      .readdirSync(packagesPath, { withFileTypes: true })
+      .filter((dirent) => dirent.isDirectory())
+      .map((dirent) => dirent.name);
+
     for (const dir of canisterDirs) {
       const prometheusYml = path.join(packagesPath, dir, 'prometheus.yml');
       if (fs.existsSync(prometheusYml)) {
         // Read and check if it has canister_name field
         try {
-          const content = yaml.load(fs.readFileSync(prometheusYml, 'utf8')) as any;
+          const content = yaml.load(
+            fs.readFileSync(prometheusYml, 'utf8'),
+          ) as any;
           if (content.canister_name) {
             return prometheusYml;
           }
@@ -388,7 +397,7 @@ function findPrometheusYml(repoPath: string): string | null {
       }
     }
   }
-  
+
   return null;
 }
 
@@ -475,7 +484,7 @@ async function setupReproducibleBuild(
   // For monorepos, check repo root for mops.toml first, then canister path
   let mocVersion: string | null = null;
   let mopsPath = path.join(repoRoot, 'mops.toml');
-  
+
   if (fs.existsSync(mopsPath)) {
     console.log(`📦 Found mops.toml at repo root`);
     mocVersion = getMocVersionFromMopsToml(repoRoot);
@@ -486,29 +495,42 @@ async function setupReproducibleBuild(
       mocVersion = getMocVersionFromMopsToml(canisterPath);
     }
   }
-  
+
   mocVersion = mocVersion || '0.16.0';
   console.log(`📦 Using moc version: ${mocVersion}`);
 
   // If mops.toml doesn't exist anywhere, create it in canister path
-  if (!fs.existsSync(path.join(repoRoot, 'mops.toml')) && !fs.existsSync(path.join(canisterPath, 'mops.toml'))) {
+  if (
+    !fs.existsSync(path.join(repoRoot, 'mops.toml')) &&
+    !fs.existsSync(path.join(canisterPath, 'mops.toml'))
+  ) {
     console.log(`📝 Generating mops.toml with moc version ${mocVersion}...`);
     await generateMopsToml(canisterPath, canisterName, repoRoot, mocVersion);
   }
-  
+
   // For monorepos: if mops.toml is at repo root, copy it to canister path for Docker
   const repoMopsPath = path.join(repoRoot, 'mops.toml');
   const canisterMopsPath = path.join(canisterPath, 'mops.toml');
-  if (fs.existsSync(repoMopsPath) && !fs.existsSync(canisterMopsPath) && repoRoot !== canisterPath) {
+  if (
+    fs.existsSync(repoMopsPath) &&
+    !fs.existsSync(canisterMopsPath) &&
+    repoRoot !== canisterPath
+  ) {
     console.log(`📋 Copying mops.toml from repo root to canister directory`);
     fs.copyFileSync(repoMopsPath, canisterMopsPath);
   }
-  
+
   // Also copy .mops directory if it exists at repo root (contains downloaded packages)
   const repoMopsDir = path.join(repoRoot, '.mops');
   const canisterMopsDir = path.join(canisterPath, '.mops');
-  if (fs.existsSync(repoMopsDir) && !fs.existsSync(canisterMopsDir) && repoRoot !== canisterPath) {
-    console.log(`📋 Copying .mops directory from repo root to canister directory`);
+  if (
+    fs.existsSync(repoMopsDir) &&
+    !fs.existsSync(canisterMopsDir) &&
+    repoRoot !== canisterPath
+  ) {
+    console.log(
+      `📋 Copying .mops directory from repo root to canister directory`,
+    );
     fs.cpSync(repoMopsDir, canisterMopsDir, { recursive: true });
   }
 

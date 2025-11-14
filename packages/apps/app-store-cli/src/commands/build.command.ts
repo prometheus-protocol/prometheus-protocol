@@ -203,7 +203,11 @@ export function registerBuildCommand(program: Command) {
             // Copy the src directory
             fs.cpSync(srcInCanister, srcInRoot, { recursive: true });
             copiedSrc = true;
-            console.log('📦 Copied src from ' + path.relative(projectRoot, srcInCanister) + '\n');
+            console.log(
+              '📦 Copied src from ' +
+                path.relative(projectRoot, srcInCanister) +
+                '\n',
+            );
           } catch (error) {
             console.error('❌ Error copying src directory:', error);
             process.exit(1);
@@ -239,16 +243,25 @@ export function registerBuildCommand(program: Command) {
               fs.rmSync(srcInRoot, { recursive: true, force: true });
               console.log('🧹 Cleaned up copied src directory\n');
             } catch (error) {
-              console.warn('⚠️  Warning: Could not remove copied src directory');
+              console.warn(
+                '⚠️  Warning: Could not remove copied src directory',
+              );
             }
           }
         }
 
         // For monorepos, copy the WASM from project root to canister directory
         if (canisterPath !== projectRoot) {
-          const wasmInRoot = path.join(projectRoot, 'out', 'out_Linux_x86_64.wasm');
+          const wasmInRoot = path.join(
+            projectRoot,
+            'out',
+            'out_Linux_x86_64.wasm',
+          );
           const canisterOutDir = path.join(canisterPath, 'out');
-          const wasmInCanister = path.join(canisterOutDir, 'out_Linux_x86_64.wasm');
+          const wasmInCanister = path.join(
+            canisterOutDir,
+            'out_Linux_x86_64.wasm',
+          );
 
           if (fs.existsSync(wasmInRoot)) {
             // Create out directory in canister path if it doesn't exist
@@ -257,7 +270,11 @@ export function registerBuildCommand(program: Command) {
             }
             // Copy WASM to canister directory
             fs.copyFileSync(wasmInRoot, wasmInCanister);
-            console.log('📦 Copied WASM to ' + path.relative(projectRoot, wasmInCanister) + '\n');
+            console.log(
+              '📦 Copied WASM to ' +
+                path.relative(projectRoot, wasmInCanister) +
+                '\n',
+            );
           }
         }
 
