@@ -33,5 +33,5 @@ submission:
     gallery_images:
       - >-
         https://github.com/prometheus-protocol/prometheus-protocol/releases/download/v1.0.0-assets/banner-token-watchlist.webp
-  git_commit: 6acbe3d7405a5b3acdca5b07547e54c3421feefd
+  git_commit: f832cca335c5c30694e7efd52bdf2a57f7c8802c
   wasm_path: ./out/out_Linux_x86_64.wasm
