@@ -90,7 +90,7 @@ export async function verifyBuild(
     });
 
     // Auto-detect canister name from prometheus.yml (for monorepos) or dfx.json
-    const canisterName = extractCanisterName(workDir);
+    const canisterName = extractCanisterName(workDir, commitHash);
     console.log(`📦 Detected canister: ${canisterName}`);
 
     // Locate the canister directory
@@ -297,7 +297,7 @@ export async function verifyBuild(
       try {
         const canisterPath = findCanisterPath(
           workDir,
-          extractCanisterName(workDir),
+          extractCanisterName(workDir, commitHash),
         );
         execSync(`docker-compose down`, {
           cwd: canisterPath,
@@ -325,7 +325,7 @@ export async function verifyBuild(
  * Extracts canister name by checking prometheus.yml first (for monorepos),
  * then falling back to dfx.json detection.
  */
-function extractCanisterName(repoPath: string): string {
+function extractCanisterName(repoPath: string, commitHash: string): string {
   // First, try to find and read prometheus.yml
   try {
     const prometheusYmlPath = findPrometheusYml(repoPath);
@@ -334,11 +334,17 @@ function extractCanisterName(repoPath: string): string {
         fs.readFileSync(prometheusYmlPath, 'utf8'),
       ) as any;
       
-      // Extract canister name from namespace (e.g., "prometheus-protocol/token_watchlist" -> "token_watchlist")
+      // Check for explicit canister_name field first
+      if (prometheusYml.canister_name) {
+        console.log(`   📋 Found canister_name in prometheus.yml: ${prometheusYml.canister_name}`);
+        return prometheusYml.canister_name;
+      }
+      
+      // Fallback: extract canister name from namespace (e.g., "org.example/canister_name" -> "canister_name")
       if (prometheusYml.namespace) {
         const parts = prometheusYml.namespace.split('/');
         const canisterName = parts[parts.length - 1];
-        console.log(`   📋 Found canister name from prometheus.yml: ${canisterName}`);
+        console.log(`   📋 Extracted canister name from namespace: ${canisterName}`);
         return canisterName;
       }
     }
@@ -351,17 +357,17 @@ function extractCanisterName(repoPath: string): string {
 }
 
 /**
- * Finds prometheus.yml by walking up from repo root or searching common locations
+ * Finds prometheus.yml by searching common locations in the repo
  */
-function findPrometheusYml(startPath: string): string | null {
+function findPrometheusYml(repoPath: string): string | null {
   // Check repo root first
-  const rootPrometheusYml = path.join(startPath, 'prometheus.yml');
+  const rootPrometheusYml = path.join(repoPath, 'prometheus.yml');
   if (fs.existsSync(rootPrometheusYml)) {
     return rootPrometheusYml;
   }
   
-  // Search in packages/canisters/*
-  const packagesPath = path.join(startPath, 'packages', 'canisters');
+  // Search in packages/canisters/* (monorepo structure)
+  const packagesPath = path.join(repoPath, 'packages', 'canisters');
   if (fs.existsSync(packagesPath)) {
     const canisterDirs = fs.readdirSync(packagesPath, { withFileTypes: true })
       .filter(dirent => dirent.isDirectory())
@@ -370,7 +376,15 @@ function findPrometheusYml(startPath: string): string | null {
     for (const dir of canisterDirs) {
       const prometheusYml = path.join(packagesPath, dir, 'prometheus.yml');
       if (fs.existsSync(prometheusYml)) {
-        return prometheusYml;
+        // Read and check if it has canister_name field
+        try {
+          const content = yaml.load(fs.readFileSync(prometheusYml, 'utf8')) as any;
+          if (content.canister_name) {
+            return prometheusYml;
+          }
+        } catch (e) {
+          // Continue searching
+        }
       }
     }
   }
