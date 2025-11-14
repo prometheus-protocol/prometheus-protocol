@@ -48,31 +48,35 @@ export function registerBuildCommand(program: Command) {
 
         // If canister name is provided, find its path from dfx.json
         let canisterPath = projectRoot;
-        
+
         if (canisterName) {
           const dfxJsonPath = path.join(projectRoot, 'dfx.json');
           const dfxJson = JSON.parse(fs.readFileSync(dfxJsonPath, 'utf-8'));
-          
+
           const canisterConfig = dfxJson.canisters?.[canisterName];
           if (!canisterConfig) {
-            console.error(`❌ Error: Canister '${canisterName}' not found in dfx.json`);
+            console.error(
+              `❌ Error: Canister '${canisterName}' not found in dfx.json`,
+            );
             process.exit(1);
           }
-          
+
           // Get the main file path
           const mainFile = canisterConfig.main;
           if (!mainFile) {
-            console.error(`❌ Error: Canister '${canisterName}' has no 'main' field in dfx.json`);
+            console.error(
+              `❌ Error: Canister '${canisterName}' has no 'main' field in dfx.json`,
+            );
             process.exit(1);
           }
-          
+
           // Resolve the full path to the main file
           const mainFilePath = path.join(projectRoot, mainFile);
-          
+
           // Walk up from the main file to find prometheus.yml
           let currentDir = path.dirname(mainFilePath);
           let foundPrometheusYml = false;
-          
+
           while (currentDir !== projectRoot && currentDir !== '/') {
             if (fs.existsSync(path.join(currentDir, 'prometheus.yml'))) {
               canisterPath = currentDir;
@@ -81,19 +85,26 @@ export function registerBuildCommand(program: Command) {
             }
             currentDir = path.dirname(currentDir);
           }
-          
+
           // Check project root as well
-          if (!foundPrometheusYml && fs.existsSync(path.join(projectRoot, 'prometheus.yml'))) {
+          if (
+            !foundPrometheusYml &&
+            fs.existsSync(path.join(projectRoot, 'prometheus.yml'))
+          ) {
             canisterPath = projectRoot;
             foundPrometheusYml = true;
           }
-          
+
           if (!foundPrometheusYml) {
-            console.error(`❌ Error: prometheus.yml not found for canister '${canisterName}'`);
-            console.error(`   Searched from ${path.dirname(mainFilePath)} up to ${projectRoot}`);
+            console.error(
+              `❌ Error: prometheus.yml not found for canister '${canisterName}'`,
+            );
+            console.error(
+              `   Searched from ${path.dirname(mainFilePath)} up to ${projectRoot}`,
+            );
             process.exit(1);
           }
-          
+
           console.log(`📦 Canister: ${canisterName}`);
           console.log(`📁 Canister path: ${canisterPath}`);
         } else {
