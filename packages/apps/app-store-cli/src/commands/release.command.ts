@@ -284,7 +284,10 @@ export function registerReleaseCommand(program: Command) {
                   });
                 } catch {
                   console.log(`🏗️  Building base image: ${baseImageName}`);
-                  execSync('docker-compose build base', { stdio: 'inherit' });
+                  execSync('docker-compose build base', {
+                    stdio: 'inherit',
+                    cwd: projectRoot,
+                  });
                 }
               }
             }
