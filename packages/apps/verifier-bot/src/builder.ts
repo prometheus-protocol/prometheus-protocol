@@ -424,12 +424,20 @@ async function setupReproducibleBuild(
     await generateMopsToml(canisterPath, canisterName, repoRoot, mocVersion);
   }
   
-  // For monorepos: if mops.toml is at repo root, symlink it to canister path
+  // For monorepos: if mops.toml is at repo root, copy it to canister path for Docker
   const repoMopsPath = path.join(repoRoot, 'mops.toml');
   const canisterMopsPath = path.join(canisterPath, 'mops.toml');
   if (fs.existsSync(repoMopsPath) && !fs.existsSync(canisterMopsPath) && repoRoot !== canisterPath) {
-    console.log(`🔗 Symlinking mops.toml from repo root to canister directory`);
-    fs.symlinkSync(repoMopsPath, canisterMopsPath);
+    console.log(`📋 Copying mops.toml from repo root to canister directory`);
+    fs.copyFileSync(repoMopsPath, canisterMopsPath);
+  }
+  
+  // Also copy .mops directory if it exists at repo root (contains downloaded packages)
+  const repoMopsDir = path.join(repoRoot, '.mops');
+  const canisterMopsDir = path.join(canisterPath, '.mops');
+  if (fs.existsSync(repoMopsDir) && !fs.existsSync(canisterMopsDir) && repoRoot !== canisterPath) {
+    console.log(`📋 Copying .mops directory from repo root to canister directory`);
+    fs.cpSync(repoMopsDir, canisterMopsDir, { recursive: true });
   }
 
   // Validate project structure
