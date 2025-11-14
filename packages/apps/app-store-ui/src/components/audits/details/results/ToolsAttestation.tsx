@@ -13,15 +13,31 @@ export const ToolsAttestation = ({
   data: ToolsAttestationData;
   audit?: AuditBountyWithDetails;
 }) => {
-  // Extract build info from audit metadata if available
-  const buildTimestamp = audit?.results?.data?.build_timestamp;
-  const buildDuration = audit?.results?.data?.build_duration_seconds;
+  // Extract build info from audit metadata if available (only for success results)
+  const buildTimestamp =
+    audit?.results?.type === 'success'
+      ? audit.results.data?.build_timestamp
+      : undefined;
+  const buildDuration =
+    audit?.results?.type === 'success'
+      ? audit.results.data?.build_duration_seconds
+      : undefined;
   const gitCommit = audit?.commitHash;
   const repoUrl = audit?.repo;
-  const auditor = audit?.results?.auditor;
-  const buildLogExcerpt = audit?.results?.data?.build_log_excerpt;
-  const verifierVersion = audit?.results?.data?.verifier_version;
-  const bountyId = audit?.results?.data?.bounty_id;
+  const auditor =
+    audit?.results?.type === 'success' ? audit.results.auditor : undefined;
+  const buildLogExcerpt =
+    audit?.results?.type === 'success'
+      ? audit.results.data?.build_log_excerpt
+      : undefined;
+  const verifierVersion =
+    audit?.results?.type === 'success'
+      ? audit.results.data?.verifier_version
+      : undefined;
+  const bountyId =
+    audit?.results?.type === 'success'
+      ? audit.results.data?.bounty_id
+      : undefined;
 
   const buildDate = buildTimestamp
     ? new Date(Number(buildTimestamp) / 1_000_000)
