@@ -400,15 +400,36 @@ async function setupReproducibleBuild(
 ): Promise<void> {
   console.log(`📝 Setting up reproducible build...`);
 
-  // Read moc version from project's mops.toml
-  let mocVersion = getMocVersionFromMopsToml(canisterPath) || '0.16.0';
-  console.log(`� Using moc version: ${mocVersion}`);
+  // For monorepos, check repo root for mops.toml first, then canister path
+  let mocVersion: string | null = null;
+  let mopsPath = path.join(repoRoot, 'mops.toml');
+  
+  if (fs.existsSync(mopsPath)) {
+    console.log(`📦 Found mops.toml at repo root`);
+    mocVersion = getMocVersionFromMopsToml(repoRoot);
+  } else {
+    mopsPath = path.join(canisterPath, 'mops.toml');
+    if (fs.existsSync(mopsPath)) {
+      console.log(`📦 Found mops.toml in canister directory`);
+      mocVersion = getMocVersionFromMopsToml(canisterPath);
+    }
+  }
+  
+  mocVersion = mocVersion || '0.16.0';
+  console.log(`📦 Using moc version: ${mocVersion}`);
 
-  // If mops.toml doesn't exist, create it
-  const mopsPath = path.join(canisterPath, 'mops.toml');
-  if (!fs.existsSync(mopsPath)) {
+  // If mops.toml doesn't exist anywhere, create it in canister path
+  if (!fs.existsSync(path.join(repoRoot, 'mops.toml')) && !fs.existsSync(path.join(canisterPath, 'mops.toml'))) {
     console.log(`📝 Generating mops.toml with moc version ${mocVersion}...`);
     await generateMopsToml(canisterPath, canisterName, repoRoot, mocVersion);
+  }
+  
+  // For monorepos: if mops.toml is at repo root, symlink it to canister path
+  const repoMopsPath = path.join(repoRoot, 'mops.toml');
+  const canisterMopsPath = path.join(canisterPath, 'mops.toml');
+  if (fs.existsSync(repoMopsPath) && !fs.existsSync(canisterMopsPath) && repoRoot !== canisterPath) {
+    console.log(`🔗 Symlinking mops.toml from repo root to canister directory`);
+    fs.symlinkSync(repoMopsPath, canisterMopsPath);
   }
 
   // Validate project structure
