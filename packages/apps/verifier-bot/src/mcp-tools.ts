@@ -138,7 +138,7 @@ export async function verifyMcpTools(
               url: '/mcp',
               headers: [
                 ['Content-Type', 'application/json'],
-                ['Authorization', `Bearer ${apiKey}`],
+                ['x-api-key', apiKey],
               ],
               body,
               certificate_version: [],
