@@ -261,12 +261,14 @@ export function bootstrapBuildFiles(config: BuildConfig): void {
 
 /**
  * Validate project has required Motoko files
+ * For monorepos, this checks the canister directory for src folder
+ * (mops.toml is expected at the project root, not here)
  */
 export function validateMotokoProject(projectPath: string): {
   valid: boolean;
   missing: string[];
 } {
-  const required = ['mops.toml', 'src'];
+  const required = ['src'];
   const missing: string[] = [];
 
   for (const file of required) {

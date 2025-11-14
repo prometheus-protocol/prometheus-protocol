@@ -18,7 +18,7 @@ interface Manifest {
 
 export function registerReleaseCommand(program: Command) {
   program
-    .command('release <version>')
+    .command('release <version> [canister]')
     .description(
       'Automated workflow to update version, commit, build, and publish',
     )
@@ -28,15 +28,77 @@ export function registerReleaseCommand(program: Command) {
       false,
     )
     .option('--skip-build', 'Skip building the WASM (use existing)', false)
-    .action(async (version: string, options: any, thisCommand: Command) => {
+    .action(async (version: string, canisterName: string | undefined, options: any, thisCommand: Command) => {
       console.log(`\n🚀 Starting release workflow for version ${version}...\n`);
 
-      const configPath = path.join(process.cwd(), 'prometheus.yml');
+      // Find project root and canister path (same logic as build command)
+      let projectRoot = process.cwd();
+      let foundRoot = false;
+
+      while (projectRoot !== '/') {
+        if (fs.existsSync(path.join(projectRoot, 'dfx.json'))) {
+          foundRoot = true;
+          break;
+        }
+        projectRoot = path.dirname(projectRoot);
+      }
+
+      if (!foundRoot) {
+        console.error('❌ Error: dfx.json not found. Please run this command from your IC project directory.');
+        return process.exit(1);
+      }
+
+      let canisterPath = projectRoot;
+      
+      if (canisterName) {
+        const dfxJsonPath = path.join(projectRoot, 'dfx.json');
+        const dfxJson = JSON.parse(fs.readFileSync(dfxJsonPath, 'utf-8'));
+        
+        const canisterConfig = dfxJson.canisters?.[canisterName];
+        if (!canisterConfig) {
+          console.error(`❌ Error: Canister '${canisterName}' not found in dfx.json`);
+          return process.exit(1);
+        }
+        
+        const mainFile = canisterConfig.main;
+        if (!mainFile) {
+          console.error(`❌ Error: Canister '${canisterName}' has no 'main' field in dfx.json`);
+          return process.exit(1);
+        }
+        
+        const mainFilePath = path.join(projectRoot, mainFile);
+        let currentDir = path.dirname(mainFilePath);
+        let foundPrometheusYml = false;
+        
+        while (currentDir !== projectRoot && currentDir !== '/') {
+          if (fs.existsSync(path.join(currentDir, 'prometheus.yml'))) {
+            canisterPath = currentDir;
+            foundPrometheusYml = true;
+            break;
+          }
+          currentDir = path.dirname(currentDir);
+        }
+        
+        if (!foundPrometheusYml && fs.existsSync(path.join(projectRoot, 'prometheus.yml'))) {
+          canisterPath = projectRoot;
+          foundPrometheusYml = true;
+        }
+        
+        if (!foundPrometheusYml) {
+          console.error(`❌ Error: prometheus.yml not found for canister '${canisterName}'`);
+          return process.exit(1);
+        }
+        
+        console.log(`📦 Canister: ${canisterName}`);
+        console.log(`📁 Canister path: ${canisterPath}`);
+      }
+
+      const configPath = path.join(canisterPath, 'prometheus.yml');
       if (!fs.existsSync(configPath)) {
         console.error(
-          '❌ Error: `prometheus.yml` not found in current directory.',
+          '❌ Error: `prometheus.yml` not found.',
         );
-        console.error('   Run this command from your project root.');
+        console.error(`   Expected at: ${configPath}`);
         return process.exit(1);
       }
 
@@ -61,7 +123,7 @@ export function registerReleaseCommand(program: Command) {
         }
 
         // Step 1: Update version in main.mo if it exists
-        const mainMoPath = path.join(process.cwd(), 'src', 'main.mo');
+        const mainMoPath = path.join(canisterPath, 'src', 'main.mo');
         if (fs.existsSync(mainMoPath)) {
           console.log('📝 Step 1: Updating version in src/main.mo...');
           const mainMoContent = fs.readFileSync(mainMoPath, 'utf-8');
@@ -155,19 +217,23 @@ export function registerReleaseCommand(program: Command) {
             'docker-compose.yml',
           ];
           const missingDockerFiles = dockerFiles.filter(
-            (file) => !fs.existsSync(path.join(process.cwd(), file)),
+            (file) => !fs.existsSync(path.join(projectRoot, file)),
           );
 
           if (missingDockerFiles.length > 0) {
             console.log('🔧 Bootstrapping Docker build files...');
             const network = thisCommand.parent?.opts().network || 'ic';
-            execSync(`app-store-cli build --bootstrap --network ${network}`, {
+            const bootstrapCmd = canisterName
+              ? `app-store-cli build ${canisterName} --bootstrap --network ${network}`
+              : `app-store-cli build --bootstrap --network ${network}`;
+            execSync(bootstrapCmd, {
               stdio: 'inherit',
+              cwd: projectRoot,
             });
           }
 
           // Check if base image exists, build it if needed
-          const mopsTomlPath = path.join(process.cwd(), 'mops.toml');
+          const mopsTomlPath = path.join(projectRoot, 'mops.toml');
           if (fs.existsSync(mopsTomlPath)) {
             const mopsContent = fs.readFileSync(mopsTomlPath, 'utf-8');
             const mocVersionMatch = mopsContent.match(/moc\s*=\s*"([^"]+)"/);
@@ -188,8 +254,12 @@ export function registerReleaseCommand(program: Command) {
 
           // Get network from parent command and pass it to build
           const network = thisCommand.parent?.opts().network || 'ic';
-          execSync(`app-store-cli build --network ${network}`, {
+          const buildCmd = canisterName 
+            ? `app-store-cli build ${canisterName} --network ${network}`
+            : `app-store-cli build --network ${network}`;
+          execSync(buildCmd, {
             stdio: 'inherit',
+            cwd: projectRoot,
           });
         } else {
           console.log('\n⏭️  Step 4: Skipping build (using existing WASM)');
@@ -201,6 +271,7 @@ export function registerReleaseCommand(program: Command) {
         const network = thisCommand.parent?.opts().network || 'ic';
         execSync(`app-store-cli publish ${version} --network ${network}`, {
           stdio: 'inherit',
+          cwd: canisterPath,
         });
 
         console.log('\n✅ Successfully released version ' + version + '!');
