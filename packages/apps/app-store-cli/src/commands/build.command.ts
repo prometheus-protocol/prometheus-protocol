@@ -141,12 +141,18 @@ export function registerBuildCommand(program: Command) {
         const mocVersion = mocVersionMatch[1];
         console.log(`📦 Detected Motoko compiler version: ${mocVersion}\n`);
 
-        // Change to project root for build operations
-        process.chdir(projectRoot);
+        // Use .prometheus directory for build files
+        const buildDir = path.join(projectRoot, '.prometheus');
+        if (!fs.existsSync(buildDir)) {
+          fs.mkdirSync(buildDir, { recursive: true });
+        }
 
-        // Check if reproducible build files exist in project root
+        // Change to build directory for Docker operations
+        process.chdir(buildDir);
+
+        // Check if reproducible build files exist in build directory
         const missingFiles = REQUIRED_FILES.filter(
-          (file) => !fs.existsSync(path.join(projectRoot, file)),
+          (file) => !fs.existsSync(path.join(buildDir, file)),
         );
 
         if (missingFiles.length > 0) {
@@ -162,7 +168,7 @@ export function registerBuildCommand(program: Command) {
               process.exit(1);
             }
 
-            bootstrapBuildFiles({ projectPath: projectRoot });
+            bootstrapBuildFiles({ projectPath: buildDir });
             console.log('✅ Setup complete!\n');
           } else {
             console.log('⚠️  Reproducible build files missing:');
@@ -174,7 +180,7 @@ export function registerBuildCommand(program: Command) {
         }
 
         // Update docker-compose.yml with current moc version from mops.toml
-        updateDockerComposeVersion(mocVersion);
+        updateDockerComposeVersion(mocVersion, buildDir);
 
         // Check if Docker is available
         try {
@@ -187,31 +193,38 @@ export function registerBuildCommand(program: Command) {
           process.exit(1);
         }
 
-        // Create output directory if it doesn't exist
-        if (!fs.existsSync('out')) {
-          fs.mkdirSync('out', { recursive: true });
+        // Create output directory in project root if it doesn't exist
+        const outDir = path.join(projectRoot, 'out');
+        if (!fs.existsSync(outDir)) {
+          fs.mkdirSync(outDir, { recursive: true });
           console.log('📁 Created output directory: ./out\n');
         }
 
-        // For monorepos, copy canister src to project root if needed
-        const srcInRoot = path.join(projectRoot, 'src');
-        const srcInCanister = path.join(canisterPath, 'src');
-        let copiedSrc = false;
+        // Copy mops.toml to build directory
+        const mopsSource = path.join(projectRoot, 'mops.toml');
+        const mopsDest = path.join(buildDir, 'mops.toml');
+        fs.copyFileSync(mopsSource, mopsDest);
 
-        if (canisterPath !== projectRoot && !fs.existsSync(srcInRoot)) {
-          try {
-            // Copy the src directory
-            fs.cpSync(srcInCanister, srcInRoot, { recursive: true });
-            copiedSrc = true;
-            console.log(
-              '📦 Copied src from ' +
-                path.relative(projectRoot, srcInCanister) +
-                '\n',
-            );
-          } catch (error) {
-            console.error('❌ Error copying src directory:', error);
-            process.exit(1);
-          }
+        // Copy canister src to build directory (always refresh for latest changes)
+        const srcInBuildDir = path.join(buildDir, 'src');
+        const srcInCanister = path.join(canisterPath, 'src');
+
+        // Remove old src if exists to ensure fresh copy
+        if (fs.existsSync(srcInBuildDir)) {
+          fs.rmSync(srcInBuildDir, { recursive: true, force: true });
+        }
+
+        try {
+          // Copy the src directory to build context
+          fs.cpSync(srcInCanister, srcInBuildDir, { recursive: true });
+          console.log(
+            '📦 Copied src to build context: ' +
+              path.relative(projectRoot, srcInCanister) +
+              '\n',
+          );
+        } catch (error) {
+          console.error('❌ Error copying src directory:', error);
+          process.exit(1);
         }
 
         // Run the build
@@ -221,15 +234,24 @@ export function registerBuildCommand(program: Command) {
         );
 
         try {
-          // Build the Docker image without cache to ensure fresh build
+          // Update docker-compose to mount project root's out directory
+          const composeFile = path.join(buildDir, 'docker-compose.yml');
+          let composeContent = fs.readFileSync(composeFile, 'utf-8');
+          composeContent = composeContent.replace(
+            /- \.\/out:\/project\/out/g,
+            `- ${outDir}:/project/out`
+          );
+          fs.writeFileSync(composeFile, composeContent);
+
+          // Build the Docker image with cache for faster local builds
           // Pass GITHUB_TOKEN if available to avoid rate limiting
           const buildCmd = process.env.GITHUB_TOKEN
-            ? `docker-compose build --no-cache --build-arg GITHUB_TOKEN=${process.env.GITHUB_TOKEN}`
-            : 'docker-compose build --no-cache';
-          execSync(buildCmd, { stdio: 'inherit' });
+            ? `docker-compose build --build-arg GITHUB_TOKEN=${process.env.GITHUB_TOKEN}`
+            : 'docker-compose build';
+          execSync(buildCmd, { stdio: 'inherit', cwd: buildDir });
 
           // Run the build
-          execSync('docker-compose run --rm wasm', { stdio: 'inherit' });
+          execSync('docker-compose run --rm wasm', { stdio: 'inherit', cwd: buildDir });
         } catch (error: any) {
           if (error.status === 130) {
             // User cancelled with Ctrl+C
@@ -237,17 +259,8 @@ export function registerBuildCommand(program: Command) {
           }
           throw error;
         } finally {
-          // Clean up copied src if we created it
-          if (copiedSrc && fs.existsSync(srcInRoot)) {
-            try {
-              fs.rmSync(srcInRoot, { recursive: true, force: true });
-              console.log('🧹 Cleaned up copied src directory\n');
-            } catch (error) {
-              console.warn(
-                '⚠️  Warning: Could not remove copied src directory',
-              );
-            }
-          }
+          // Return to project root
+          process.chdir(projectRoot);
         }
 
         // For monorepos, copy the WASM from project root to canister directory
@@ -299,10 +312,11 @@ export function registerBuildCommand(program: Command) {
     });
 }
 
-function updateDockerComposeVersion(mocVersion: string) {
-  if (!fs.existsSync('docker-compose.yml')) return;
+function updateDockerComposeVersion(mocVersion: string, buildDir: string) {
+  const dockerComposePath = path.join(buildDir, 'docker-compose.yml');
+  if (!fs.existsSync(dockerComposePath)) return;
 
-  let dockerCompose = fs.readFileSync('docker-compose.yml', 'utf-8');
+  let dockerCompose = fs.readFileSync(dockerComposePath, 'utf-8');
 
   // Update the moc version in the x-base-image section
   const currentVersion = dockerCompose.match(/moc:\s*&moc\s+([^\s\n]+)/)?.[1];
@@ -317,7 +331,7 @@ function updateDockerComposeVersion(mocVersion: string) {
       /name:\s*&base_name\s+'[^']+'/,
       `name: &base_name 'motoko-build-base:moc-${mocVersion}'`,
     );
-    fs.writeFileSync('docker-compose.yml', dockerCompose);
+    fs.writeFileSync(dockerComposePath, dockerCompose);
     console.log(
       `📝 Updated docker-compose.yml MOC_VERSION: ${currentVersion} → ${mocVersion}\n`,
     );

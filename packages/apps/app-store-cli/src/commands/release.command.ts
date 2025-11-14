@@ -247,14 +247,15 @@ export function registerReleaseCommand(program: Command) {
               });
             }
 
-            // Bootstrap if Docker files are missing
+            // Bootstrap if Docker files are missing in .prometheus directory
+            const buildDir = path.join(projectRoot, '.prometheus');
             const dockerFiles = [
               'Dockerfile',
               'Dockerfile.base',
               'docker-compose.yml',
             ];
             const missingDockerFiles = dockerFiles.filter(
-              (file) => !fs.existsSync(path.join(projectRoot, file)),
+              (file) => !fs.existsSync(path.join(buildDir, file)),
             );
 
             if (missingDockerFiles.length > 0) {
@@ -286,7 +287,7 @@ export function registerReleaseCommand(program: Command) {
                   console.log(`🏗️  Building base image: ${baseImageName}`);
                   execSync('docker-compose build base', {
                     stdio: 'inherit',
-                    cwd: projectRoot,
+                    cwd: buildDir,
                   });
                 }
               }
