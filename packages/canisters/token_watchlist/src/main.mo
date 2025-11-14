@@ -88,8 +88,6 @@ shared ({ caller = deployer }) persistent actor class WatchlistCanister(
 
   // Default token canister IDs (set via env config)
   var _usdc_ledger_id : ?Principal = null;
-  var _ckbtc_ledger_id : ?Principal = null;
-  var _icp_ledger_id : ?Principal = null;
 
   // State for certified HTTP assets (like /.well-known/...)
   var stable_http_assets : HttpAssets.StableEntries = [];
@@ -117,18 +115,6 @@ shared ({ caller = deployer }) persistent actor class WatchlistCanister(
     #ok(());
   };
 
-  public shared ({ caller }) func set_ckbtc_ledger_id(canister_id : Principal) : async Result.Result<(), Text> {
-    if (caller != owner) { return #err("Only owner can set default tokens") };
-    _ckbtc_ledger_id := ?canister_id;
-    #ok(());
-  };
-
-  public shared ({ caller }) func set_icp_ledger_id(canister_id : Principal) : async Result.Result<(), Text> {
-    if (caller != owner) { return #err("Only owner can set default tokens") };
-    _icp_ledger_id := ?canister_id;
-    #ok(());
-  };
-
   /**
    * Returns the environment requirements for this canister.
    * This enables automated configuration discovery and injection.
@@ -147,20 +133,6 @@ shared ({ caller = deployer }) persistent actor class WatchlistCanister(
           canister_name = "usdc_ledger";
           required = false;
           current_value = _usdc_ledger_id;
-        },
-        {
-          key = "_ckbtc_ledger_id";
-          setter = "set_ckbtc_ledger_id";
-          canister_name = "ckbtc_ledger";
-          required = false;
-          current_value = _ckbtc_ledger_id;
-        },
-        {
-          key = "_icp_ledger_id";
-          setter = "set_icp_ledger_id";
-          canister_name = "icp_ledger";
-          required = false;
-          current_value = _icp_ledger_id;
         },
       ];
       configuration = [];
@@ -464,8 +436,6 @@ shared ({ caller = deployer }) persistent actor class WatchlistCanister(
     
     let defaultTokens : [(Text, ?Principal)] = [
       ("USDC", _usdc_ledger_id),
-      ("ckBTC", _ckbtc_ledger_id),
-      ("ICP", _icp_ledger_id),
     ];
 
     for ((name, canisterId) in defaultTokens.vals()) {
