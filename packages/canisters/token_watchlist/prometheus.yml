@@ -7,8 +7,7 @@ submission:
   publisher: Prometheus Protocol
   category: Utilities
   deployment_type: global
-  repo_url: >-
-    https://github.com/prometheus-protocol/prometheus-protocol/tree/main/packages/canisters/token_watchlist
+  repo_url: https://github.com/prometheus-protocol/prometheus-protocol
   mcp_path: /mcp
   why_this_app: >-
     Keep track of the tokens you care about. Your AI agent can see your
