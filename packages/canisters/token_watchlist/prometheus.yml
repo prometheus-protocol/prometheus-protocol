@@ -8,7 +8,7 @@ submission:
   name: Token Watchlist
   description: Manage your favorite tokens. Your watchlist syncs between the Prometheus app and AI agents automatically.
   publisher: Prometheus Protocol
-  category: Finance
+  category: Utilities
   deployment_type: global
 
   # --- Technical & Marketing Details ---
@@ -16,9 +16,11 @@ submission:
   mcp_path: /mcp
   why_this_app: Keep track of the tokens you care about. Your AI agent can see your watchlist and help you manage them.
   key_features:
-    - 'Add and remove tokens from your personal watchlist'
+    - 'Add and remove tokens from your personal watchlist via AI or UI'
+    - 'Automatic token metadata caching (symbol, name, decimals, fee)'
     - 'Stored on-chain - access from any device'
     - 'Syncs with AI agents through MCP'
+    - 'Pre-configured with popular tokens (USDC, ckBTC, ICP)'
     - 'Integrated with Prometheus Protocol'
   tags:
     - watchlist
