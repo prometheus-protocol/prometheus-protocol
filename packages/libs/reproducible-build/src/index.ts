@@ -109,8 +109,18 @@ COPY --from=build /install/bin/* /usr/local/bin/
 
   'build.sh': `#!/bin/bash
 
+# Get moc version
+MOC_VERSION=$(moc --version 2>&1 | grep -oP 'moc \\K[0-9]+\\.[0-9]+\\.[0-9]+' || echo "0.0.0")
+
+# Add --enhanced-orthogonal-persistence only for moc 0.14.4
+# (earlier versions don't support it, 0.15.0+ has it as default)
+PERSISTENCE_FLAG=""
+if dpkg --compare-versions "$MOC_VERSION" ge "0.14.4" && dpkg --compare-versions "$MOC_VERSION" lt "0.15.0"; then
+    PERSISTENCE_FLAG="--enhanced-orthogonal-persistence"
+fi
+
 MOC_GC_FLAGS="" ## place any additional flags like compacting-gc, incremental-gc here
-MOC_FLAGS="$MOC_GC_FLAGS -no-check-ir --release --public-metadata candid:service --public-metadata candid:args"
+MOC_FLAGS="$MOC_GC_FLAGS $PERSISTENCE_FLAG -no-check-ir --release --public-metadata candid:service --public-metadata candid:args"
 OUT=out/out_$(uname -s)_$(uname -m).wasm
 mops-cli build --lock --name out src/main.mo -- $MOC_FLAGS
 cp target/out/out.wasm $OUT
