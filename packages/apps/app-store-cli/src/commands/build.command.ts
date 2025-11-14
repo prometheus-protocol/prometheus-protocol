@@ -239,7 +239,7 @@ export function registerBuildCommand(program: Command) {
           let composeContent = fs.readFileSync(composeFile, 'utf-8');
           composeContent = composeContent.replace(
             /- \.\/out:\/project\/out/g,
-            `- ${outDir}:/project/out`
+            `- ${outDir}:/project/out`,
           );
           fs.writeFileSync(composeFile, composeContent);
 
@@ -251,7 +251,10 @@ export function registerBuildCommand(program: Command) {
           execSync(buildCmd, { stdio: 'inherit', cwd: buildDir });
 
           // Run the build
-          execSync('docker-compose run --rm wasm', { stdio: 'inherit', cwd: buildDir });
+          execSync('docker-compose run --rm wasm', {
+            stdio: 'inherit',
+            cwd: buildDir,
+          });
         } catch (error: any) {
           if (error.status === 130) {
             // User cancelled with Ctrl+C

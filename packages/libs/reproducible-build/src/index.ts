@@ -76,7 +76,7 @@ CMD ["/bin/bash"]
   'Dockerfile.base': `ARG PLATFORM=linux/amd64
 FROM --platform=\${PLATFORM} alpine:latest AS build
 
-RUN apk add --no-cache curl ca-certificates tar \\
+RUN apk add --no-cache curl ca-certificates tar bash \\
     && update-ca-certificates
 
 RUN mkdir -p /install/bin
@@ -92,12 +92,16 @@ ARG MOPS_CLI_VERSION
 RUN curl -L https://github.com/prometheus-protocol/mops-cli/releases/download/v\${MOPS_CLI_VERSION}/mops-cli-linux64 -o mops-cli \\
     && install mops-cli /install/bin
 
-# Install moc
+# Install moc (use version-aware URL)
 ARG MOC_VERSION
-RUN if dpkg --compare-versions "\${MOC_VERSION}" lt "0.9.5"; then \\
-      curl -L https://github.com/dfinity/motoko/releases/download/\${MOC_VERSION}/motoko-linux64-\${MOC_VERSION}.tar.gz -o motoko.tgz; \\
-    else \\
+RUN version_compare() { \\
+      [ "\$1" = "\$2" ] && return 1; \\
+      [ "\$(printf '%s\\n' "\$1" "\$2" | sort -V | head -n1)" != "\$1" ]; \\
+    }; \\
+    if version_compare "\${MOC_VERSION}" "0.9.5"; then \\
       curl -L https://github.com/dfinity/motoko/releases/download/\${MOC_VERSION}/motoko-Linux-x86_64-\${MOC_VERSION}.tar.gz -o motoko.tgz; \\
+    else \\
+      curl -L https://github.com/dfinity/motoko/releases/download/\${MOC_VERSION}/motoko-linux64-\${MOC_VERSION}.tar.gz -o motoko.tgz; \\
     fi \\
     && tar xzf motoko.tgz \\
     && install moc /install/bin 
@@ -109,13 +113,24 @@ COPY --from=build /install/bin/* /usr/local/bin/
 
   'build.sh': `#!/bin/bash
 
-# Get moc version
-MOC_VERSION=$(moc --version 2>&1 | grep -oP 'moc \\K[0-9]+\\.[0-9]+\\.[0-9]+' || echo "0.0.0")
+# Get moc version (extract X.Y.Z format)
+MOC_VERSION=$(moc --version 2>&1 | grep -o '[0-9]\\+\\.[0-9]\\+\\.[0-9]\\+' | head -n1)
+
+# Version comparison function for Alpine (uses sort -V)
+version_gte() {
+  [ "$1" = "$2" ] && return 0
+  [ "$(printf '%s\\n' "$1" "$2" | sort -V | head -n1)" != "$1" ]
+}
+
+version_lt() {
+  [ "$1" = "$2" ] && return 1
+  [ "$(printf '%s\\n' "$1" "$2" | sort -V | head -n1)" = "$1" ]
+}
 
 # Add --enhanced-orthogonal-persistence only for moc 0.14.4
 # (earlier versions don't support it, 0.15.0+ has it as default)
 PERSISTENCE_FLAG=""
-if dpkg --compare-versions "$MOC_VERSION" ge "0.14.4" && dpkg --compare-versions "$MOC_VERSION" lt "0.15.0"; then
+if version_gte "$MOC_VERSION" "0.14.4" && version_lt "$MOC_VERSION" "0.15.0"; then
     PERSISTENCE_FLAG="--enhanced-orthogonal-persistence"
 fi
 
