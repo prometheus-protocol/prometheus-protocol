@@ -156,7 +156,11 @@ export function registerReleaseCommand(program: Command) {
             fs.writeFileSync(mainMoPath, updatedContent);
 
             if (!options.skipGit) {
-              execSync('git add src/main.mo', { stdio: 'inherit' });
+              const mainMoRelativePath = path.relative(projectRoot, mainMoPath);
+              execSync(`git add ${mainMoRelativePath}`, {
+                stdio: 'inherit',
+                cwd: projectRoot,
+              });
             }
           } else {
             console.log(
@@ -206,11 +210,19 @@ export function registerReleaseCommand(program: Command) {
           console.log(`   ✅ Set wasm_path to ${wasmPath}`);
 
           if (!options.skipGit) {
-            execSync('git add prometheus.yml', { stdio: 'inherit' });
+            const prometheusYmlRelativePath = path.relative(
+              projectRoot,
+              configPath,
+            );
+            execSync(`git add ${prometheusYmlRelativePath}`, {
+              stdio: 'inherit',
+              cwd: projectRoot,
+            });
             execSync(`git commit -m "Update git_commit hash for v${version}"`, {
               stdio: 'inherit',
+              cwd: projectRoot,
             });
-            execSync('git push', { stdio: 'inherit' });
+            execSync('git push', { stdio: 'inherit', cwd: projectRoot });
             console.log('   ✅ Committed and pushed');
           }
 
