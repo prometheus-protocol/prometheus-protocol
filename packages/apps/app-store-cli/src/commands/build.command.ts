@@ -193,6 +193,22 @@ export function registerBuildCommand(program: Command) {
           console.log('📁 Created output directory: ./out\n');
         }
 
+        // For monorepos, create a symlink from project root to canister src if needed
+        const srcInRoot = path.join(projectRoot, 'src');
+        const srcInCanister = path.join(canisterPath, 'src');
+        let createdSymlink = false;
+
+        if (canisterPath !== projectRoot && !fs.existsSync(srcInRoot)) {
+          try {
+            fs.symlinkSync(srcInCanister, srcInRoot, 'dir');
+            createdSymlink = true;
+            console.log('🔗 Created symlink: src -> ' + path.relative(projectRoot, srcInCanister) + '\n');
+          } catch (error) {
+            console.error('❌ Error creating symlink:', error);
+            process.exit(1);
+          }
+        }
+
         // Run the build
         console.log('🐳 Starting Docker build...');
         console.log(
@@ -213,9 +229,18 @@ export function registerBuildCommand(program: Command) {
           if (error.status === 130) {
             // User cancelled with Ctrl+C
             console.log('\n⚠️  Build cancelled by user');
-            process.exit(0);
           }
           throw error;
+        } finally {
+          // Clean up symlink if we created it
+          if (createdSymlink && fs.existsSync(srcInRoot)) {
+            try {
+              fs.unlinkSync(srcInRoot);
+              console.log('🧹 Cleaned up symlink\n');
+            } catch (error) {
+              console.warn('⚠️  Warning: Could not remove symlink');
+            }
+          }
         }
 
         // Clean up if requested
