@@ -23,5 +23,3 @@ export {
   UsageTracker,
   TokenWatchlist,
 };
-
-// Bump version number

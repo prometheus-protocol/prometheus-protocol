@@ -146,3 +146,5 @@ registerLeaderboardCommands(program);
 
 // Parse the command line arguments
 await program.parseAsync(process.argv);
+
+// Bump version number
