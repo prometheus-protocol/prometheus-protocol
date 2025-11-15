@@ -1,6 +1,6 @@
 {
   "name": "@prometheus-protocol/reproducible-build",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "Shared templates and utilities for reproducible Motoko builds",
   "type": "module",
   "main": "./dist/index.js",
