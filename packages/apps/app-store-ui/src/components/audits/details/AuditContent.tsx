@@ -147,7 +147,12 @@ export const AuditContent = ({ audit }: { audit: AuditBountyWithDetails }) => {
               <DataSafetyAttestation data={data as DataSafetyAttestationData} />
             );
           case 'tools_v1':
-            return <ToolsAttestation data={data as ToolsAttestationData} />;
+            return (
+              <ToolsAttestation
+                data={data as ToolsAttestationData}
+                audit={audit}
+              />
+            );
           case 'build_reproducibility_v1':
             return (
               <BuildReproducibilityAttestation

@@ -114,13 +114,15 @@ export const useGetAuditBounty = (bountyId: number | undefined) => {
     // The query key includes the specific ID to ensure uniqueness per bounty.
     queryKey: ['auditBounties', bountyId, identity?.getPrincipal().toText()],
     queryFn: async (): Promise<AuditBountyWithDetails | null> => {
-      if (bountyId === undefined || !identity) {
+      if (bountyId === undefined) {
         return null;
       }
+      // Pass identity (which can be undefined) - the API handles it
       return getAuditBounty(identity, BigInt(bountyId));
     },
     // The query should only execute when we have a valid bountyId.
-    enabled: !!bountyId && !!identity,
+    // Remove identity requirement so logged-out users can view bounties
+    enabled: !!bountyId,
   });
 };
 

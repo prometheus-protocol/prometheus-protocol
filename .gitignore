@@ -15,8 +15,14 @@
 node_modules/
 dist/
 
+# wasms
+out/
+
 .mops
 *.env
+
+# Build artifacts
+.prometheus/
 
 # Playwright
 /test-results/

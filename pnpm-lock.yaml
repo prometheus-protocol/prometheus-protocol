@@ -580,6 +580,9 @@ importers:
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
+      js-yaml:
+        specifier: ^4.1.0
+        version: 4.1.0
       pem-file:
         specifier: ^1.0.1
         version: 1.0.1

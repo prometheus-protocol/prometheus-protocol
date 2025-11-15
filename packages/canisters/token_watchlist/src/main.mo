@@ -15,7 +15,6 @@ import Error "mo:base/Error";
 
 import HttpTypes "mo:http-types";
 import Map "mo:map/Map";
-import Json "mo:json";
 
 import AuthCleanup "mo:mcp-motoko-sdk/auth/Cleanup";
 import AuthState "mo:mcp-motoko-sdk/auth/State";
@@ -33,6 +32,11 @@ import ApiKey "mo:mcp-motoko-sdk/auth/ApiKey";
 import SrvTypes "mo:mcp-motoko-sdk/server/Types";
 
 import IC "mo:ic";
+
+// Import tool modules
+import GetMyWatchlist "./tools/GetMyWatchlist";
+import AddToWatchlist "./tools/AddToWatchlist";
+import RemoveFromWatchlist "./tools/RemoveFromWatchlist";
 
 shared ({ caller = deployer }) persistent actor class WatchlistCanister(
   args : ?{
@@ -62,8 +66,28 @@ shared ({ caller = deployer }) persistent actor class WatchlistCanister(
     icrc1_metadata : shared query () -> async [(Text, Value)];
   };
 
+  // Environment config types
+  public type EnvDependency = {
+    key : Text;
+    setter : Text;
+    canister_name : Text;
+    required : Bool;
+    current_value : ?Principal;
+  };
+
+  public type EnvConfig = {
+    key : Text;
+    setter : Text;
+    value_type : Text;
+    required : Bool;
+    current_value : ?Text;
+  };
+
   // The canister owner, who can manage treasury funds.
   var owner : Principal = Option.get(do ? { args!.owner! }, deployer);
+
+  // Default token canister IDs (set via env config)
+  var _usdc_ledger_id : ?Principal = null;
 
   // State for certified HTTP assets (like /.well-known/...)
   var stable_http_assets : HttpAssets.StableEntries = [];
@@ -80,6 +104,40 @@ shared ({ caller = deployer }) persistent actor class WatchlistCanister(
   // Per-user watchlists: just store canister IDs, not full metadata
   // The full TokenInfo is looked up from token_metadata_cache
   var user_watchlists : Map.Map<Principal, [Principal]> = Map.new<Principal, [Principal]>();
+
+  // =================================================================================
+  // --- ENV CONFIG SETTERS ---
+  // =================================================================================
+
+  public shared ({ caller }) func set_usdc_ledger_id(canister_id : Principal) : async Result.Result<(), Text> {
+    if (caller != owner) { return #err("Only owner can set default tokens") };
+    _usdc_ledger_id := ?canister_id;
+    #ok(());
+  };
+
+  /**
+   * Returns the environment requirements for this canister.
+   * This enables automated configuration discovery and injection.
+   */
+  public query func get_env_requirements() : async {
+    #v1 : {
+      dependencies : [EnvDependency];
+      configuration : [EnvConfig];
+    };
+  } {
+    #v1({
+      dependencies = [
+        {
+          key = "_usdc_ledger_id";
+          setter = "set_usdc_ledger_id";
+          canister_name = "usdc_ledger";
+          required = false;
+          current_value = _usdc_ledger_id;
+        },
+      ];
+      configuration = [];
+    });
+  };
 
   // =================================================================================
   // --- HELPER FUNCTIONS ---
@@ -365,71 +423,114 @@ shared ({ caller = deployer }) persistent actor class WatchlistCanister(
     },
   );
 
+  // =================================================================================
+  // --- DEFAULT TOKENS INITIALIZATION ---
+  // =================================================================================
+
+  /**
+   * Initializes default tokens in the cache if they're configured.
+   * This should be called after deployment/upgrade.
+   */
+  private func initializeDefaultTokens() : async () {
+    Debug.print("Initializing default tokens...");
+    
+    let defaultTokens : [(Text, ?Principal)] = [
+      ("USDC", _usdc_ledger_id),
+    ];
+
+    for ((name, canisterId) in defaultTokens.vals()) {
+      switch (canisterId) {
+        case (?id) {
+          // Check if already cached
+          switch (Map.get(token_metadata_cache, Map.phash, id)) {
+            case (?_) {
+              Debug.print("Default token " # name # " already in cache");
+            };
+            case (null) {
+              Debug.print("Fetching metadata for default token " # name # "...");
+              try {
+                let result = await fetchTokenMetadata(id);
+                switch (result) {
+                  case (#ok(tokenInfo)) {
+                    Map.set(token_metadata_cache, Map.phash, id, tokenInfo);
+                    Debug.print("Successfully cached default token " # name);
+                  };
+                  case (#err(errorMsg)) {
+                    Debug.print("Failed to fetch default token " # name # ": " # errorMsg);
+                  };
+                };
+              } catch (error) {
+                Debug.print("Error fetching default token " # name # ": " # Error.message(error));
+              };
+            };
+          };
+        };
+        case (null) {
+          Debug.print("Default token " # name # " not configured");
+        };
+      };
+    };
+
+    Debug.print("Default tokens initialization complete");
+  };
+
+  // Initialize default tokens on first run
+  // Note: This timer runs once, shortly after deployment/upgrade
+  ignore Timer.setTimer<system>(
+    #seconds(5),
+    func() : async () {
+      await initializeDefaultTokens();
+    },
+  );
+
   // --- 1. DEFINE YOUR TOOLS ---
   transient let tools : [McpTypes.Tool] = [
-    {
-      name = "get_my_watchlist";
-      title = ?"Get My Watchlist";
-      description = ?"Returns the list of tokens with full metadata that the authenticated user is currently tracking. The agent should use this list to scope its observations and actions.";
-      inputSchema = Json.obj([
-        ("type", Json.str("object")),
-        ("properties", Json.obj([])),
-      ]);
-      outputSchema = ?Json.obj([
-        ("type", Json.str("object")),
-        ("properties", Json.obj([("watchlist", Json.obj([("type", Json.str("array")), ("items", Json.obj([("type", Json.str("object")), ("properties", Json.obj([("canisterId", Json.obj([("type", Json.str("string"))])), ("symbol", Json.obj([("type", Json.str("string"))])), ("name", Json.obj([("type", Json.str("string"))])), ("decimals", Json.obj([("type", Json.str("number"))])), ("lastRefreshed", Json.obj([("type", Json.str("string")), ("description", Json.str("Nanosecond timestamp"))]))])), ("required", Json.arr([Json.str("canisterId"), Json.str("symbol"), Json.str("name"), Json.str("decimals"), Json.str("lastRefreshed")]))]))]))])),
-        ("required", Json.arr([Json.str("watchlist")])),
-      ]);
-      payment = null;
-    },
+    GetMyWatchlist.getToolDefinition(),
+    AddToWatchlist.getToolDefinition(),
+    RemoveFromWatchlist.getToolDefinition(),
   ];
 
   // --- 2. DEFINE YOUR TOOL LOGIC ---
 
-  private func _returnError(message : Text, cb : (Result.Result<McpTypes.CallToolResult, McpTypes.HandlerError>) -> ()) {
-    cb(#ok({ content = [#text({ text = message })]; isError = true; structuredContent = null }));
+  // Create dependencies for tools
+  func getToolDependencies() : {
+    user_watchlists : Map.Map<Principal, [Principal]>;
+    token_metadata_cache : Map.Map<Principal, TokenInfo>;
+    fetchTokenMetadata : (Principal) -> async Result.Result<TokenInfo, Text>;
+  } {
+    {
+      user_watchlists = user_watchlists;
+      token_metadata_cache = token_metadata_cache;
+      fetchTokenMetadata = fetchTokenMetadata;
+    };
   };
 
-  // Logic for getting the user's watchlist via MCP tool
+  // Wrapper functions for tool implementations
   func getMyWatchlistTool(args : McpTypes.JsonValue, auth : ?AuthTypes.AuthInfo, cb : (Result.Result<McpTypes.CallToolResult, McpTypes.HandlerError>) -> ()) : async () {
-    let caller = switch (auth) {
-      case (?authInfo) { authInfo.principal };
-      case (null) {
-        return _returnError("Authentication required to access watchlist.", cb);
-      };
-    };
-
-    let canisterIds = switch (Map.get(user_watchlists, Map.phash, caller)) {
-      case (?list) { list };
-      case (null) { [] };
-    };
-
-    // Look up metadata for each canister ID
-    let tokenInfos = Array.mapFilter<Principal, TokenInfo>(
-      canisterIds,
-      func(canisterId : Principal) : ?TokenInfo {
-        Map.get(token_metadata_cache, Map.phash, canisterId);
+    await GetMyWatchlist.execute(
+      {
+        user_watchlists = user_watchlists;
+        token_metadata_cache = token_metadata_cache;
       },
+      args,
+      auth,
+      cb,
     );
+  };
 
-    // Convert the watchlist to JSON array of TokenInfo objects
-    let watchlist_json = Array.map<TokenInfo, McpTypes.JsonValue>(
-      tokenInfos,
-      func(tokenInfo : TokenInfo) : McpTypes.JsonValue {
-        Json.obj([
-          ("canisterId", Json.str(Principal.toText(tokenInfo.canisterId))),
-          ("symbol", Json.str(tokenInfo.symbol)),
-          ("name", Json.str(tokenInfo.name)),
-          ("decimals", Json.int(Nat8.toNat(tokenInfo.decimals))),
-          ("fee", Json.str(Nat.toText(tokenInfo.fee))),
-          ("lastRefreshed", Json.str(Nat64.toText(tokenInfo.lastRefreshed))),
-        ]);
+  func addToWatchlistTool(args : McpTypes.JsonValue, auth : ?AuthTypes.AuthInfo, cb : (Result.Result<McpTypes.CallToolResult, McpTypes.HandlerError>) -> ()) : async () {
+    await AddToWatchlist.execute(getToolDependencies(), args, auth, cb);
+  };
+
+  func removeFromWatchlistTool(args : McpTypes.JsonValue, auth : ?AuthTypes.AuthInfo, cb : (Result.Result<McpTypes.CallToolResult, McpTypes.HandlerError>) -> ()) : async () {
+    await RemoveFromWatchlist.execute(
+      {
+        user_watchlists = user_watchlists;
       },
+      args,
+      auth,
+      cb,
     );
-
-    let structuredPayload = Json.obj([("watchlist", Json.arr(watchlist_json))]);
-
-    cb(#ok({ content = [#text({ text = Json.stringify(structuredPayload, null) })]; isError = false; structuredContent = ?structuredPayload }));
   };
 
   // --- 3. CONFIGURE THE SDK ---
@@ -439,13 +540,15 @@ shared ({ caller = deployer }) persistent actor class WatchlistCanister(
     serverInfo = {
       name = "org.prometheusprotocol.token-watchlist";
       title = "Token Watchlist";
-      version = "0.1.3";
+      version = "0.1.14";
     };
     resources = []; // No static resources for this app
     resourceReader = func(_) { null };
     tools = tools;
     toolImplementations = [
       ("get_my_watchlist", getMyWatchlistTool),
+      ("add_to_watchlist", addToWatchlistTool),
+      ("remove_from_watchlist", removeFromWatchlistTool),
     ];
     beacon = beaconContext;
   };

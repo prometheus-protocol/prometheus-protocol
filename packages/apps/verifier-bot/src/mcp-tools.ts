@@ -104,17 +104,84 @@ export async function verifyMcpTools(
       console.log(`   ✅ HTTP response received: ${httpResponse.status_code}`);
 
       // Check response status
-      if (httpResponse.status_code !== 200) {
+      // 200 = success, 401 = auth required (need to create API key)
+      if (
+        httpResponse.status_code !== 200 &&
+        httpResponse.status_code !== 401
+      ) {
         throw new Error(
           `HTTP request failed with status ${httpResponse.status_code}`,
         );
       }
 
-      // Parse response
-      const responseBody = JSON.parse(
-        new TextDecoder().decode(httpResponse.body as Uint8Array),
-      );
-      console.log(`   ✅ Response parsed successfully`);
+      let responseBody: any;
+      let hasApiKeySystem = false;
+      let isPublicServer = false;
+
+      // If 401, create an API key and retry with authentication
+      if (httpResponse.status_code === 401) {
+        console.log(`   🔐 MCP endpoint requires authentication`);
+        console.log(`   📋 Creating test API key...`);
+
+        try {
+          // Create a test identity
+          const testIdentity = createIdentity('test-api-key-user');
+          serverActor.setIdentity(testIdentity);
+
+          // @ts-ignore - Method may not be in type definition but could exist on canister
+          const apiKey = await serverActor.create_my_api_key(
+            'verifier-test-key',
+            [],
+          );
+          if (typeof apiKey === 'string' && apiKey.length > 0) {
+            console.log(`   ✅ API key created: ${apiKey.substring(0, 10)}...`);
+            hasApiKeySystem = true;
+
+            // Retry the tools/list request with the API key
+            console.log(`   📡 Retrying tools/list with API key...`);
+            const authHttpResponse = await serverActor.http_request_update({
+              method: 'POST',
+              url: '/mcp',
+              headers: [
+                ['Content-Type', 'application/json'],
+                ['x-api-key', apiKey],
+              ],
+              body,
+              certificate_version: [],
+            });
+
+            if (authHttpResponse.status_code !== 200) {
+              throw new Error(
+                `Authenticated request failed with status ${authHttpResponse.status_code}`,
+              );
+            }
+
+            responseBody = JSON.parse(
+              new TextDecoder().decode(authHttpResponse.body as Uint8Array),
+            );
+            console.log(`   ✅ Authenticated response received`);
+          } else {
+            throw new Error('create_my_api_key did not return a valid API key');
+          }
+        } catch (apiKeyError: any) {
+          console.log(
+            `   ❌ Failed to create/use API key: ${apiKeyError?.message || apiKeyError}`,
+          );
+          throw new Error(
+            `Server requires auth but API key system failed: ${apiKeyError?.message || apiKeyError}`,
+          );
+        }
+      } else {
+        // Status is 200, parse the response
+        responseBody = JSON.parse(
+          new TextDecoder().decode(httpResponse.body as Uint8Array),
+        );
+        console.log(`   ✅ Response parsed successfully`);
+        isPublicServer = true; // Got 200 without auth, so it's public
+        console.log(
+          `   ℹ️  Server is public (allows anonymous tool discovery)`,
+        );
+      }
 
       // Check for JSON-RPC error
       if (responseBody.error) {
@@ -128,39 +195,40 @@ export async function verifyMcpTools(
       console.log(`   ✅ Discovered ${toolsList.length} tools`);
 
       // ===================================================================
-      // Check for API key system, owner system, and wallet system
+      // Check for owner system and wallet system
       // ===================================================================
       console.log(`🔍 Checking for MCP server features...`);
 
-      // Since we successfully discovered tools with AnonymousIdentity,
-      // this is a public server. API key system is optional for public servers.
-      const isPublicServer = true;
-      console.log(`   ℹ️  Server is public (allows anonymous tool discovery)`);
+      // If we didn't already verify API key system (because we got 200 initially),
+      // check for it now as an optional feature
+      if (!hasApiKeySystem) {
+        try {
+          console.log(`   📋 Checking for API key methods...`);
+          const testIdentity = createIdentity('test-api-key-user');
+          serverActor.setIdentity(testIdentity);
 
-      // Check for API key system (optional for public servers)
-      let hasApiKeySystem = false;
-      try {
-        console.log(`   📋 Checking for API key methods...`);
-        const testIdentity = createIdentity('test-api-key-user');
-        serverActor.setIdentity(testIdentity);
-
-        // @ts-ignore - Method may not be in type definition but could exist on canister
-        const apiKey = await serverActor.create_my_api_key('test-key', []);
-        if (typeof apiKey === 'string' && apiKey.length > 0) {
-          console.log(
-            `   ✅ API key system verified (created test key: ${apiKey.substring(0, 10)}...)`,
-          );
-          hasApiKeySystem = true;
+          // @ts-ignore - Method may not be in type definition but could exist on canister
+          const apiKey = await serverActor.create_my_api_key('test-key', []);
+          if (typeof apiKey === 'string' && apiKey.length > 0) {
+            console.log(
+              `   ✅ API key system verified (created test key: ${apiKey.substring(0, 10)}...)`,
+            );
+            hasApiKeySystem = true;
+          }
+        } catch (apiKeyError: any) {
+          const errorMsg = apiKeyError?.message || String(apiKeyError);
+          if (errorMsg.includes('has no update method')) {
+            console.log(
+              `   ℹ️  API key system not found (optional for public servers)`,
+            );
+          } else {
+            console.log(`   ⚠️  API key system check failed: ${errorMsg}`);
+          }
         }
-      } catch (apiKeyError: any) {
-        const errorMsg = apiKeyError?.message || String(apiKeyError);
-        if (errorMsg.includes('has no update method')) {
-          console.log(
-            `   ℹ️  API key system not found (optional for public servers)`,
-          );
-        } else {
-          console.log(`   ⚠️  API key system check failed: ${errorMsg}`);
-        }
+      } else {
+        console.log(
+          `   ✅ API key system already verified during authentication`,
+        );
       }
 
       // Check for owner system

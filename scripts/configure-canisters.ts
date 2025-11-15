@@ -59,6 +59,8 @@ interface CanisterStatus {
 // List of canisters to check (in dependency order)
 const CANISTER_NAMES = [
   'usdc_ledger',
+  'ckbtc_ledger',
+  'icp_ledger',
   'auth_server',
   'audit_hub',
   'bounty_sponsor',
@@ -67,6 +69,7 @@ const CANISTER_NAMES = [
   'mcp_orchestrator',
   'search_index',
   'mcp_registry',
+  'token_watchlist',
 ];
 
 /**
