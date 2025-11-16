@@ -9,6 +9,7 @@ import { Command } from 'commander';
 import { registerInitCommand } from './commands/init.command.js';
 import { registerStatusCommand } from './commands/status.command.js';
 import { registerPublishCommand } from './commands/publish.command.js';
+import { registerUpdateCommand } from './commands/update.command.js';
 import { registerReleaseCommand } from './commands/release.command.js';
 import { registerDiscoverCommand } from './commands/discover.js';
 import { registerBuildCommand } from './commands/build.command.js';
@@ -125,6 +126,7 @@ registerInitCommand(program);
 registerBuildCommand(program);
 registerStatusCommand(program);
 registerPublishCommand(program);
+registerUpdateCommand(program); // Update app store metadata for existing versions
 registerReleaseCommand(program); // Automated workflow combining build + publish
 registerDiscoverCommand(program);
 

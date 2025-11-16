@@ -87,15 +87,12 @@ shared (deployer) actor class ICRC120Canister<system>(
   private func reportTTError(errInfo : TT.ErrorReport) : ?Nat {
     D.print("CANISTER: TimerTool Error: " # debug_show (errInfo));
 
-    // Handle recurring cycle top-up job errors - reschedule anyway
+    // Handle recurring cycle top-up job errors - DO NOT reschedule on error
+    // The job will be rescheduled by the successful execution handler
     let (actionId, action) = errInfo.action;
     if (action.actionType == CYCLE_JOB_ACTION_TYPE) {
-      D.print("Cycle top-up job failed. Rescheduling anyway...");
+      D.print("Cycle top-up job failed. Will NOT reschedule to prevent infinite loop.");
       _cycle_job_action_id := null; // Clear the old action ID
-
-      // Reschedule for the next interval
-      let next_time = Time.now() + Int.abs(_cycle_check_interval_seconds * 1_000_000_000);
-      return ?Int.abs(next_time);
     };
 
     return null;
