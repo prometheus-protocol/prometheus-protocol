@@ -21,6 +21,8 @@ import {
   listPendingVerifications,
   submitDivergence,
   depositStake,
+  sponsorBountiesForWasm,
+  ProcessedVerificationRecord,
 } from '@prometheus-protocol/ic-js';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import useMutation from './useMutation';
@@ -263,77 +265,40 @@ export const useClaimBounty = () => {
 // Define the arguments for our new hook
 interface SponsorBountyArgs {
   wasmId: string;
-  auditType: string;
-  paymentToken: Token;
-  amount: number | string; // Human-readable amount
+  auditTypes: string[];
+  verificationRequest: ProcessedVerificationRecord;
 }
 
 // Define the possible states for the multi-step mutation
-type SponsorStatus =
-  | 'Idle'
-  | 'Checking allowance...'
-  | 'Approving...'
-  | 'Creating bounty...';
+type SponsorStatus = 'Idle' | 'Sponsoring bounties...';
 
 /**
- * A comprehensive mutation hook to handle the full bounty sponsorship flow.
- * It orchestrates checking allowance, approving, and creating the bounty.
+ * A React Query mutation hook for sponsoring audit bounties via the bounty_sponsor canister.
+ * The bounty_sponsor canister will create 9 bounties (one for each verifier) for each audit type.
  */
 export const useSponsorBounty = () => {
   const { identity } = useInternetIdentity();
   const [status, setStatus] = useState<SponsorStatus>('Idle');
 
-  const mutation = useMutation<SponsorBountyArgs, bigint>({
-    mutationFn: async ({ wasmId, auditType, paymentToken, amount }) => {
+  const mutation = useMutation<
+    SponsorBountyArgs,
+    { bounty_ids: bigint[]; total_sponsored: number }
+  >({
+    mutationFn: async ({ wasmId, auditTypes, verificationRequest }) => {
       if (!identity)
-        throw new Error('You must be logged in to sponsor a bounty.');
+        throw new Error('You must be logged in to sponsor bounties.');
 
-      const registryPrincipal = Principal.fromText(
-        getCanisterId('MCP_REGISTRY'),
-      );
-
-      // Calculate the required amounts in atomic units
-      const bountyAtomic = paymentToken.toAtomic(amount);
-      const payoutFee = paymentToken.fee; // The fee for the final payout
-      const amountToApprove =
-        bountyAtomic + BigInt(paymentToken.fee) + BigInt(payoutFee);
-
-      // 1. Check current allowance
-      setStatus('Checking allowance...');
-      const currentAllowance = await getAllowance(
-        identity,
-        paymentToken,
-        registryPrincipal,
-      );
-
-      // 2. Approve if the current allowance is insufficient
-      if (currentAllowance < amountToApprove) {
-        setStatus('Approving...');
-        await approveAllowance(
-          identity,
-          paymentToken,
-          registryPrincipal,
-          paymentToken.fromAtomic(amountToApprove),
-        );
-      }
-
-      // 3. Create the bounty
-      setStatus('Creating bounty...');
-      const bountyId = await createBounty(identity, {
+      setStatus('Sponsoring bounties...');
+      const result = await sponsorBountiesForWasm(identity, {
         wasm_id: wasmId,
-        audit_type: auditType,
-        amount: bountyAtomic, // The bounty itself is just the net amount
-        token: paymentToken,
-        // These would be passed in or configured elsewhere
-        timeout_date:
-          BigInt(Date.now() + 30 * 24 * 60 * 60 * 1000) * 1_000_000n,
-        validation_canister_id: registryPrincipal,
+        audit_types: auditTypes,
+        verification_request: verificationRequest,
       });
       setStatus('Idle');
 
-      return bountyId;
+      return result;
     },
-    successMessage: 'Bounty sponsored successfully!',
+    successMessage: 'Bounties sponsored successfully!',
     queryKeysToRefetch: [
       ['auditBounties'],
       ['appDetails'],

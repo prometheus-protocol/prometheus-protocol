@@ -26,12 +26,12 @@ interface Manifest {
 
 /**
  * Registers the 'update' command.
- * 
+ *
  * This command allows developers to update their app's metadata on the app store
  * by resubmitting a verification request with updated information. Since verification
  * requests are idempotent (they overwrite the previous request for the same WASM hash),
  * this is a safe operation with no side effects beyond updating the displayed metadata.
- * 
+ *
  * The app store displays information based on the verification request metadata, so
  * updating the request will immediately reflect in the app store listing.
  */

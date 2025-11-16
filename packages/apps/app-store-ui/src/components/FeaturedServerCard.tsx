@@ -10,12 +10,12 @@ interface FeaturedServerCardProps {
 }
 
 const statusMap: Record<string, string> = {
-  Unranked: 'Coming Soon',
+  Unranked: 'New Release',
   Gold: 'Recommended',
 };
 
 export function FeaturedServerCard({ server }: FeaturedServerCardProps) {
-  // This logic is fine, an "Unranked" tier can be considered "Coming Soon" in terms of full certification.
+  // Unranked tier apps are shown as "New Releases" - they have passed build certification but not yet achieved ranked security tiers.
   const status = server.latestVersion.securityTier;
 
   return (

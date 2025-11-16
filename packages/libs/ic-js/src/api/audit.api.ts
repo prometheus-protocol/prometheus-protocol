@@ -6,7 +6,14 @@
  */
 
 import { Identity } from '@icp-sdk/core/agent';
-import { getAuditHubActor, getRegistryActor } from '../actors.js';
+import {
+  getRegistryActor,
+  getAuditHubActor,
+  getAppBountiesActor,
+  getLeaderboardActor,
+  getIcrcActor,
+  getBountySponsorActor,
+} from '../actors.js';
 import { AuditHub, Registry } from '@prometheus-protocol/declarations';
 import { Principal } from '@icp-sdk/core/principal';
 import {
@@ -245,6 +252,65 @@ export const createBounty = async (
   }
 
   return result.Ok.bounty_id;
+};
+
+export interface SponsorBountiesArgs {
+  wasm_id: string;
+  audit_types: string[];
+  verification_request: ProcessedVerificationRecord;
+}
+
+/**
+ * Sponsors bounties for a WASM using the bounty_sponsor canister.
+ * This will create 9 bounties (one for each verifier) for each audit type specified.
+ * The bounty_sponsor canister holds the funds and manages the sponsorship.
+ *
+ * @returns The result containing bounty IDs and total sponsored count
+ */
+export const sponsorBountiesForWasm = async (
+  identity: Identity,
+  args: SponsorBountiesArgs,
+): Promise<{ bounty_ids: bigint[]; total_sponsored: number }> => {
+  const { wasm_id, audit_types, verification_request } = args;
+
+  // Convert hex wasm_id to Blob
+  const wasm_hash_blob = hexToUint8Array(wasm_id);
+
+  // Convert metadata to ICRC126 format
+  const build_config: [string, any][] = [];
+
+  if (verification_request.metadata) {
+    for (const [key, value] of Object.entries(verification_request.metadata)) {
+      if (typeof value === 'string') {
+        build_config.push([key, { Text: value }]);
+      } else if (typeof value === 'number' || typeof value === 'bigint') {
+        build_config.push([key, { Nat: BigInt(value) }]);
+      } else if (Array.isArray(value)) {
+        build_config.push([key, { Array: value }]);
+      }
+    }
+  }
+
+  const bountySponsorActor = getBountySponsorActor(identity);
+
+  const result = await bountySponsorActor.sponsor_bounties_for_wasm(
+    wasm_id,
+    wasm_hash_blob,
+    audit_types,
+    verification_request.repo,
+    verification_request.commit_hash,
+    build_config,
+    BigInt(9), // required_verifiers - hardcoded to 9 for now
+  );
+
+  if ('Err' in result) {
+    throw new Error(`Failed to sponsor bounties: ${result.Err}`);
+  }
+
+  return {
+    bounty_ids: result.Ok.bounty_ids,
+    total_sponsored: Number(result.Ok.total_sponsored),
+  };
 };
 
 export interface AppInfoAttestationData {

@@ -177,22 +177,26 @@ export function PendingVerificationsTab() {
       </div>
 
       {/* --- 5. Render the dialog, controlled by our state --- */}
-      <CreateBountyDialog
-        isOpen={!!sponsoringWasmId} // Dialog is open if sponsoringWasmId is not null
-        onOpenChange={(open) => {
-          if (!open) {
-            setSponsoringWasmId(null); // Close the dialog by resetting the state
+      {sponsoringWasmId && (
+        <CreateBountyDialog
+          isOpen={true}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSponsoringWasmId(null); // Close the dialog by resetting the state
+            }
+          }}
+          wasmId={sponsoringWasmId}
+          auditType="build_reproducibility_v1" // This is always the audit type for this tab
+          verificationRequest={
+            verifications?.find((v) => v.wasm_hash === sponsoringWasmId)!
           }
-        }}
-        wasmId={sponsoringWasmId ?? ''} // Pass the selected wasm_id as the appId
-        auditType="build_reproducibility_v1" // This is always the audit type for this tab
-        paymentToken={Tokens.USDC} // Assuming a default payment token
-        onSuccess={() => {
-          if (sponsoringWasmId) {
-            handleSponsorSuccess(sponsoringWasmId);
-          }
-        }}
-      />
+          onSuccess={() => {
+            if (sponsoringWasmId) {
+              handleSponsorSuccess(sponsoringWasmId);
+            }
+          }}
+        />
+      )}
     </>
   );
 }

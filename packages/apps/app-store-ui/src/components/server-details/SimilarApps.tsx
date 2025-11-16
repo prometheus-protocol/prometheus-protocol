@@ -61,7 +61,7 @@ export function SimilarApps({ currentServerNamespace }: SimilarAppsProps) {
           app.category === currentApp.category &&
           app.namespace !== currentServerNamespace, // Exclude the current app itself
       )
-      .slice(0, 3); // Take the top 3 matches.
+      .slice(0, 6); // Take up to 6 similar apps.
   }, [allApps, currentServerNamespace]);
 
   if (isLoading) {
