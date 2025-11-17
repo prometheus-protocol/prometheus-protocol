@@ -32,6 +32,10 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   // The duration a lock is valid before it expires (10 mins for automated builds).
   let LOCK_DURATION_NS : Int = 10 * 60 * 1_000_000_000; // 10 minutes in nanoseconds
 
+  // Maximum number of pending jobs to check per verifier request
+  // This prevents excessive inter-canister calls when many jobs are pending
+  let MAX_JOBS_TO_CHECK : Nat = 20;
+
   // ==================================================================================
   // == STATE
   // ==================================================================================
@@ -781,15 +785,23 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
 
     // 3. Build a participation cache by collecting all wasm_id + audit_type pairs
     // and checking them in ONE batch to avoid N registry calls
+    // OPTIMIZATION: Only check up to MAX_JOBS_TO_CHECK to limit inter-canister calls
     var participation_cache = Map.new<Text, Bool>(); // Map<wasm_id::audit_type, has_participated>
+    var jobs_checked : Nat = 0;
 
     switch (registry_canister_id) {
       case (?reg_id) {
         let registry = actor (Principal.toText(reg_id)) : McpRegistry.Service;
 
         // Collect unique wasm_id::audit_type pairs from jobs that need verifiers
-        for ((queue_key, job) in BTree.entries(pending_audits)) {
+        label job_loop for ((queue_key, job) in BTree.entries(pending_audits)) {
+          if (jobs_checked >= MAX_JOBS_TO_CHECK) {
+            Debug.print("Reached maximum jobs to check (" # Nat.toText(MAX_JOBS_TO_CHECK) # "), stopping participation cache build");
+            break job_loop;
+          };
+          
           if (job.assigned_count < job.required_verifiers) {
+            jobs_checked += 1;
             let audit_type = switch (JobQueue.get_audit_type_from_metadata(job.build_config)) {
               case (?at) { at };
               case (null) { "build_reproducibility_v1" };
@@ -816,15 +828,31 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     };
 
     // 4. Search for available jobs using the participation cache
-    for ((queue_key, job) in BTree.entries(pending_audits)) {
+    // OPTIMIZATION: Limit job processing and exit early on first successful assignment
+    jobs_checked := 0;
+    label assignment_loop for ((queue_key, job) in BTree.entries(pending_audits)) {
+      if (jobs_checked >= MAX_JOBS_TO_CHECK) {
+        Debug.print("Reached maximum jobs to check (" # Nat.toText(MAX_JOBS_TO_CHECK) # "), stopping job search");
+        break assignment_loop;
+      };
+      
+      if (job.assigned_count < job.required_verifiers) {
+        jobs_checked += 1;
+      };
+      
       switch (await _process_audit_job_with_cache(queue_key, job, verifier, current_time, participation_cache)) {
-        case (?result) { return result };
+        case (?result) { 
+          // CRITICAL OPTIMIZATION: Exit immediately on successful assignment
+          // This prevents checking remaining jobs unnecessarily
+          Debug.print("Job assigned successfully, stopping search");
+          return result;
+        };
         case (null) { /* Continue to next job */ };
       };
     };
 
     // No jobs available
-    Debug.print("No verification jobs available");
+    Debug.print("No verification jobs available after checking " # Nat.toText(jobs_checked) # " jobs");
     #err("No verification jobs available");
   };
 
