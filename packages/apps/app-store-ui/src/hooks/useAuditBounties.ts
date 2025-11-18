@@ -19,8 +19,17 @@ import {
   approveAllowance,
   getVerifierProfile,
   listPendingVerifications,
+  listAllVerificationRequests,
+  listPendingJobs,
   submitDivergence,
   depositStake,
+  sponsorBountiesForWasm,
+  ProcessedVerificationRecord,
+  getSponsoredAuditTypes,
+  getCompletedAuditTypes,
+  getBountiesForWasm,
+  getBountiesForJob,
+  getBountiesWithLocksForJob,
 } from '@prometheus-protocol/ic-js';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import useMutation from './useMutation';
@@ -43,63 +52,55 @@ export const useGetAllAuditBounties = () => {
 
 /**
  * React Query hook to fetch bounties for a specific WASM ID.
- * More efficient than fetching all bounties when you only need one WASM.
+ * When jobKey is provided, returns both bounties and locks in a single efficient query.
  */
 export const useGetBountiesForWasm = (
   wasmId: string | undefined,
   auditType?: string,
+  jobKey?: string | null,
   options?: { refetchInterval?: number | false },
 ) => {
   return useQuery<AuditBounty[]>({
-    queryKey: ['auditBounties', 'wasm', wasmId, auditType],
+    queryKey: ['auditBounties', 'wasm', wasmId, auditType, jobKey],
     queryFn: async () => {
-      if (!wasmId) return [];
-      const { getBountiesForWasm } = await import('@prometheus-protocol/ic-js');
-      const bounties = await getBountiesForWasm(wasmId);
-      // Filter by audit type if provided
-      if (auditType) {
-        return bounties.filter(
-          (b) => b.challengeParameters.audit_type === auditType,
-        );
+      // If jobKey is provided, use the optimized single-query function
+      if (jobKey) {
+        const { bounties } = await getBountiesWithLocksForJob(jobKey);
+        return bounties;
       }
-      return bounties;
+
+      // Otherwise fall back to filtering by WASM ID and audit type
+      if (!wasmId) return [];
+      const bounties = await getBountiesForWasm(wasmId);
+
+      // Filter by audit type if provided
+      return auditType
+        ? bounties.filter((b) => b.challengeParameters.audit_type === auditType)
+        : bounties;
     },
-    enabled: !!wasmId,
+    enabled: !!wasmId || !!jobKey,
+    staleTime: 0, // Always fetch fresh data
     refetchInterval: options?.refetchInterval,
-    staleTime: options?.refetchInterval ? 0 : undefined,
   });
 };
 
 /**
- * React Query infinite hook to fetch paginated bounties.
- * This enables efficient infinite scrolling without fetching all bounties at once.
+ * React Query hook to fetch bounties with their locks for a specific job.
+ * Single efficient query that returns both bounties and locks.
  */
-export const useGetAuditBountiesInfinite = (
-  pageSize: number = 20,
-  options?: { refetchInterval?: number },
+export const useGetBountiesWithLocksForJob = (
+  jobKey: string | null,
+  options?: { refetchInterval?: number | false },
 ) => {
-  return useInfiniteQuery({
-    queryKey: ['auditBounties', 'infinite', pageSize],
-    queryFn: async ({ pageParam }: { pageParam?: number }) => {
-      console.log('Fetching bounties page...');
-      return listBounties({
-        take: BigInt(pageSize),
-        prev: pageParam ? BigInt(pageParam) : undefined,
-      });
+  return useQuery({
+    queryKey: ['bountiesWithLocks', 'job', jobKey],
+    queryFn: async () => {
+      if (!jobKey) return { bounties: [], locks: new Map() };
+      return getBountiesWithLocksForJob(jobKey);
     },
-    getNextPageParam: (lastPage: AuditBounty[]) => {
-      // If we got a full page, there might be more
-      // Return the ID of the last bounty as the cursor for the next page
-      if (lastPage.length === pageSize && lastPage.length > 0) {
-        const lastBounty = lastPage[lastPage.length - 1];
-        return Number(lastBounty.id);
-      }
-      return undefined; // No more pages
-    },
-    initialPageParam: undefined as number | undefined,
+    enabled: !!jobKey,
+    staleTime: 0, // Always fetch fresh data
     refetchInterval: options?.refetchInterval,
-    staleTime: options?.refetchInterval ? 0 : undefined, // Force fresh data when polling
-    refetchOnMount: true,
   });
 };
 
@@ -263,77 +264,40 @@ export const useClaimBounty = () => {
 // Define the arguments for our new hook
 interface SponsorBountyArgs {
   wasmId: string;
-  auditType: string;
-  paymentToken: Token;
-  amount: number | string; // Human-readable amount
+  auditTypes: string[];
+  verificationRequest: ProcessedVerificationRecord;
 }
 
 // Define the possible states for the multi-step mutation
-type SponsorStatus =
-  | 'Idle'
-  | 'Checking allowance...'
-  | 'Approving...'
-  | 'Creating bounty...';
+type SponsorStatus = 'Idle' | 'Sponsoring bounties...';
 
 /**
- * A comprehensive mutation hook to handle the full bounty sponsorship flow.
- * It orchestrates checking allowance, approving, and creating the bounty.
+ * A React Query mutation hook for sponsoring audit bounties via the bounty_sponsor canister.
+ * The bounty_sponsor canister will create 9 bounties (one for each verifier) for each audit type.
  */
 export const useSponsorBounty = () => {
   const { identity } = useInternetIdentity();
   const [status, setStatus] = useState<SponsorStatus>('Idle');
 
-  const mutation = useMutation<SponsorBountyArgs, bigint>({
-    mutationFn: async ({ wasmId, auditType, paymentToken, amount }) => {
+  const mutation = useMutation<
+    SponsorBountyArgs,
+    { bounty_ids: bigint[]; total_sponsored: number }
+  >({
+    mutationFn: async ({ wasmId, auditTypes, verificationRequest }) => {
       if (!identity)
-        throw new Error('You must be logged in to sponsor a bounty.');
+        throw new Error('You must be logged in to sponsor bounties.');
 
-      const registryPrincipal = Principal.fromText(
-        getCanisterId('MCP_REGISTRY'),
-      );
-
-      // Calculate the required amounts in atomic units
-      const bountyAtomic = paymentToken.toAtomic(amount);
-      const payoutFee = paymentToken.fee; // The fee for the final payout
-      const amountToApprove =
-        bountyAtomic + BigInt(paymentToken.fee) + BigInt(payoutFee);
-
-      // 1. Check current allowance
-      setStatus('Checking allowance...');
-      const currentAllowance = await getAllowance(
-        identity,
-        paymentToken,
-        registryPrincipal,
-      );
-
-      // 2. Approve if the current allowance is insufficient
-      if (currentAllowance < amountToApprove) {
-        setStatus('Approving...');
-        await approveAllowance(
-          identity,
-          paymentToken,
-          registryPrincipal,
-          paymentToken.fromAtomic(amountToApprove),
-        );
-      }
-
-      // 3. Create the bounty
-      setStatus('Creating bounty...');
-      const bountyId = await createBounty(identity, {
+      setStatus('Sponsoring bounties...');
+      const result = await sponsorBountiesForWasm(identity, {
         wasm_id: wasmId,
-        audit_type: auditType,
-        amount: bountyAtomic, // The bounty itself is just the net amount
-        token: paymentToken,
-        // These would be passed in or configured elsewhere
-        timeout_date:
-          BigInt(Date.now() + 30 * 24 * 60 * 60 * 1000) * 1_000_000n,
-        validation_canister_id: registryPrincipal,
+        audit_types: auditTypes,
+        verification_request: verificationRequest,
       });
       setStatus('Idle');
 
-      return bountyId;
+      return result;
     },
-    successMessage: 'Bounty sponsored successfully!',
+    successMessage: 'Bounties sponsored successfully!',
     queryKeysToRefetch: [
       ['auditBounties'],
       ['appDetails'],
@@ -376,6 +340,55 @@ export const useListPendingVerifications = () => {
   return useQuery({
     queryKey: ['pendingVerifications'],
     queryFn: listPendingVerifications,
+    refetchInterval: 10000, // Refresh every 10 seconds
+  });
+};
+
+/**
+ * Hook to fetch all verification requests with optional pagination
+ */
+export const useListAllVerificationRequests = (
+  offset?: number,
+  limit?: number,
+) => {
+  return useQuery({
+    queryKey: ['allVerificationRequests', offset, limit],
+    queryFn: () => listAllVerificationRequests(offset, limit),
+  });
+};
+
+export const useListPendingJobs = (offset?: number, limit?: number) => {
+  return useQuery({
+    queryKey: ['pendingJobs', offset, limit],
+    queryFn: () => listPendingJobs(offset, limit),
+    refetchInterval: 10000, // Auto-refresh every 10 seconds
+  });
+};
+
+/**
+ * Hook to fetch audit types that have been sponsored by the bounty_sponsor canister.
+ * The bounty_sponsor pays for the first round of bounties.
+ * Any subsequent sponsorships must be paid by users.
+ */
+export const useSponsoredAuditTypes = (wasmId: string) => {
+  return useQuery({
+    queryKey: ['sponsoredAuditTypes', wasmId],
+    queryFn: () => getSponsoredAuditTypes(wasmId),
+    enabled: !!wasmId,
+    refetchOnMount: true, // Always refetch when component mounts
+  });
+};
+
+/**
+ * Hook to fetch audit types that have been completed (reached consensus) for a WASM.
+ * An audit type is completed when it has enough successful attestations.
+ */
+export const useCompletedAuditTypes = (wasmId: string) => {
+  return useQuery({
+    queryKey: ['completedAuditTypes', wasmId],
+    queryFn: () => getCompletedAuditTypes(wasmId),
+    enabled: !!wasmId,
+    staleTime: 0,
   });
 };
 

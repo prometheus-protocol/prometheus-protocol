@@ -119,6 +119,7 @@ export function useGetSingleWasmVerification(
       }
     },
     enabled: !!wasmId && options?.enabled !== false,
+    staleTime: 0, // Always fetch fresh data
     refetchInterval: options?.refetchInterval,
   });
 }

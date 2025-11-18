@@ -1,6 +1,9 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { useGetBountiesForWasm } from '@/hooks/useAuditBounties';
+import {
+  useGetBountiesForWasm,
+  useGetBountiesWithLocksForJob,
+} from '@/hooks/useAuditBounties';
 import { useGetSingleWasmVerification } from '@/hooks/useWasmVerifications';
 import { VerificationDetailsSkeleton } from '@/components/audits/VerificationDetailsSkeleton';
 import { AuditHubError } from '@/components/audits/AuditHubError';
@@ -13,10 +16,10 @@ import {
   ExternalLink,
   Lock,
 } from 'lucide-react';
-import { Tokens, getBountyLock } from '@prometheus-protocol/ic-js';
+import { Tokens } from '@prometheus-protocol/ic-js';
 import Token from '@/components/Token';
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { getAuditTypeInfo } from '@/lib/get-audit-type-info';
 
 const CONSENSUS_THRESHOLD = 5;
 const TOTAL_VERIFIERS = 9;
@@ -25,16 +28,40 @@ export default function VerificationDetailsPage() {
   const { wasmId } = useParams<{ wasmId: string }>();
   const [searchParams] = useSearchParams();
   const auditType = searchParams.get('auditType') || 'build_reproducibility_v1';
+  const jobKey = searchParams.get('jobKey'); // Get the specific job key
 
-  // Fetch only bounties for this specific WASM and audit type
+  // Fetch bounties and locks together in a single query (when jobKey is provided)
   const {
-    data: allBounties = [],
-    isLoading: isBountiesLoading,
-    isError: isBountiesError,
-    refetch,
-  } = useGetBountiesForWasm(wasmId, auditType, {
-    refetchInterval: 10000, // Poll every 10 seconds
+    data: bountiesWithLocks,
+    isLoading: isBountiesWithLocksLoading,
+    isError: isBountiesWithLocksError,
+    refetch: refetchBountiesWithLocks,
+  } = useGetBountiesWithLocksForJob(jobKey, {
+    refetchInterval: 10000,
   });
+
+  // Fallback to regular bounty fetching (when no jobKey)
+  const {
+    data: fallbackBounties = [],
+    isLoading: isFallbackBountiesLoading,
+    isError: isFallbackBountiesError,
+    refetch: refetchFallbackBounties,
+  } = useGetBountiesForWasm(wasmId, auditType, null, {
+    refetchInterval: 10000,
+  });
+
+  // Use the appropriate data source
+  const allBounties = jobKey
+    ? (bountiesWithLocks?.bounties ?? [])
+    : fallbackBounties;
+  const locks = jobKey ? bountiesWithLocks?.locks : undefined;
+  const isBountiesLoading = jobKey
+    ? isBountiesWithLocksLoading
+    : isFallbackBountiesLoading;
+  const isBountiesError = jobKey
+    ? isBountiesWithLocksError
+    : isFallbackBountiesError;
+  const refetch = jobKey ? refetchBountiesWithLocks : refetchFallbackBounties;
 
   // Get verification data for this specific WASM only
   const {
@@ -44,21 +71,6 @@ export default function VerificationDetailsPage() {
   } = useGetSingleWasmVerification(wasmId, allBounties, {
     refetchInterval: 10000, // Auto-refetch progress every 10 seconds (stops when verified/rejected)
     auditType, // Pass audit type from URL params for stable cache key
-  });
-
-  // Fetch locks for all bounties in this verification
-  const { data: locks } = useQuery({
-    queryKey: ['bountyLocks', wasmId],
-    queryFn: async () => {
-      if (!verification) return new Map();
-      const lockPromises = verification.bounties.map(async (bounty) => {
-        const lock = await getBountyLock(bounty.id);
-        return [bounty.id.toString(), lock] as const;
-      });
-      const lockEntries = await Promise.all(lockPromises);
-      return new Map(lockEntries);
-    },
-    refetchInterval: 10000,
   });
 
   // Count active verifiers: bounties that are locked OR claimed OR have completed work (attestation/divergence)
@@ -78,6 +90,12 @@ export default function VerificationDetailsPage() {
       return hasLock || isClaimed || hasAttestation || hasDivergence;
     }).length;
   }, [verification, locks]);
+
+  // Calculate average individual bounty amount from actual bounties
+  const averageBountyAmount = useMemo(() => {
+    if (!verification || verification.bounties.length === 0) return 0n;
+    return verification.totalReward / BigInt(verification.bounties.length);
+  }, [verification]);
 
   // Show loading skeleton while either bounties are loading OR verification is loading
   const isLoading = isBountiesLoading || isVerificationLoading;
@@ -113,13 +131,8 @@ export default function VerificationDetailsPage() {
     (verification?.attestationCount || 0) >=
     (verification?.divergenceCount || 0);
 
-  // Determine title based on audit type
-  const verificationTitle =
-    verification?.auditType === 'build_reproducibility_v1'
-      ? 'Build Verification'
-      : verification?.auditType === 'tools_v1'
-        ? 'MCP Tools Verification'
-        : 'Verification';
+  // Get audit type info from URL params (always available)
+  const auditTypeInfo = getAuditTypeInfo(auditType);
 
   // Determine status config based on current state
   // Use dynamic leading side color until finalized, then use final status
@@ -167,7 +180,7 @@ export default function VerificationDetailsPage() {
         <div className="flex items-center gap-4 mb-4">
           {statusConfig.icon}
           <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
-            {verificationTitle}
+            {auditTypeInfo.title}
           </h1>
         </div>
         <div className="flex items-center gap-3 mb-2">
@@ -176,7 +189,7 @@ export default function VerificationDetailsPage() {
           </span>
           <span className="text-gray-500">•</span>
           <span className="text-xl text-primary font-semibold">
-            {verification?.auditType || 'Unknown Audit Type'}
+            {auditType}
           </span>
         </div>
         <div className="font-mono text-sm text-gray-400 bg-gray-900/50 px-4 py-2 rounded-lg inline-block">
@@ -270,10 +283,7 @@ export default function VerificationDetailsPage() {
           <div className="text-right">
             <div className="text-sm text-gray-400 mb-1">Individual Bounty</div>
             <div className="flex items-center justify-end gap-2 text-xl font-mono text-white">
-              $
-              {Tokens.USDC.fromAtomic(
-                (verification?.totalReward || 0n) / BigInt(TOTAL_VERIFIERS),
-              )}
+              ${Tokens.USDC.fromAtomic(averageBountyAmount)}
               <Token className="h-6" />
             </div>
           </div>

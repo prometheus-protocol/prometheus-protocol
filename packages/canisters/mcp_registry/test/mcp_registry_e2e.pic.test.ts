@@ -100,6 +100,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
   let auditHubActor: Actor<CredentialService>;
   let registryCanisterId: Principal;
   let ledgerCanisterId: Principal;
+  let auditHubCanisterId: Principal;
   let indexerActor: Actor<IndexerService>;
   let indexerCanisterId: Principal;
   let bountySponsorActor: Actor<BountySponsorService>;
@@ -116,6 +117,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       sender: daoIdentity.getPrincipal(),
     });
     auditHubActor = auditHub.actor;
+    auditHubCanisterId = auditHub.canisterId;
 
     const ledgerFixture = await pic.setupCanister<LedgerService>({
       idlFactory: ledgerIdlFactory,
@@ -230,6 +232,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     // Configure bounty_sponsor
     bountySponsorActor.setIdentity(daoIdentity);
     await bountySponsorActor.set_registry_canister_id(registryCanisterId);
+    await bountySponsorActor.set_audit_hub_canister_id(auditHubCanisterId); // NEW: Point to audit_hub for bounty creation
     await bountySponsorActor.set_reward_token_canister_id(ledgerCanisterId);
     await bountySponsorActor.set_reward_amount_for_audit_type(
       'build_reproducibility_v1',
@@ -357,7 +360,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     });
     ledgerActor.setIdentity(bountyCreatorIdentity);
     await ledgerActor.icrc2_approve({
-      spender: { owner: registryCanisterId, subaccount: [] },
+      spender: { owner: auditHubCanisterId, subaccount: [] }, // Approve audit_hub for bounty creation
       amount: 3000000n,
       fee: [],
       memo: [],
@@ -424,8 +427,9 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     expect(await registryActor.is_wasm_verified(wasmId)).toBe(false);
 
     // === PHASE 2: A sponsor creates bounties to incentivize audits ===
-    registryActor.setIdentity(bountyCreatorIdentity);
-    const buildBountyResult = await registryActor.icrc127_create_bounty({
+    // Create bounties on AUDIT HUB (new architecture)
+    auditHubActor.setIdentity(bountyCreatorIdentity);
+    const buildBountyResult = await auditHubActor.icrc127_create_bounty({
       challenge_parameters: {
         Map: [
           ['wasm_hash', { Blob: wasmHash }],
@@ -439,9 +443,9 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       timeout_date: BigInt(Date.now() + 8.64e10) * 1000000n, // 24 hours from now
       start_date: [],
       bounty_id: [],
-      validation_canister_id: registryCanisterId,
+      validation_canister_id: auditHubCanisterId, // Audit hub validates submissions
     });
-    const qualityBountyResult = await registryActor.icrc127_create_bounty({
+    const qualityBountyResult = await auditHubActor.icrc127_create_bounty({
       challenge_parameters: {
         Map: [
           ['wasm_hash', { Blob: wasmHash }],
@@ -455,7 +459,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
       timeout_date: BigInt(Date.now() + 8.64e10) * 1000000n, // 24 hours from now
       start_date: [],
       bounty_id: [],
-      validation_canister_id: registryCanisterId,
+      validation_canister_id: auditHubCanisterId, // Audit hub validates submissions
     });
     const buildBountyId =
       ('Ok' in buildBountyResult && buildBountyResult.Ok.bounty_id) || 0n;
@@ -467,8 +471,8 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     const buildBountyIds: bigint[] = [buildBountyId];
 
     for (let i = 0; i < 4; i++) {
-      registryActor.setIdentity(bountyCreatorIdentity);
-      const additionalBountyResult = await registryActor.icrc127_create_bounty({
+      auditHubActor.setIdentity(bountyCreatorIdentity);
+      const additionalBountyResult = await auditHubActor.icrc127_create_bounty({
         challenge_parameters: {
           Map: [
             ['wasm_hash', { Blob: wasmHash }],
@@ -482,7 +486,7 @@ describe('MCP Registry Full E2E Lifecycle', () => {
         timeout_date: BigInt(Date.now() + 8.64e10) * 1000000n,
         start_date: [],
         bounty_id: [],
-        validation_canister_id: registryCanisterId,
+        validation_canister_id: auditHubCanisterId, // Audit hub validates submissions
       });
       const additionalBountyId =
         ('Ok' in additionalBountyResult &&
@@ -652,10 +656,21 @@ describe('MCP Registry Full E2E Lifecycle', () => {
     });
     console.log('Verification request submitted for WASM ID:', wasmId);
 
-    // === PHASE 2: Get the auto-created bounties for this WASM ===
-    const allBounties = await registryActor.get_bounties_for_wasm(wasmId);
-    expect(allBounties.length).toBeGreaterThanOrEqual(5);
-    const buildBountyIds = allBounties.slice(0, 5).map((b: any) => b.bounty_id);
+    // === PHASE 2: Manually create bounties via bounty_sponsor ===
+    bountySponsorActor.setIdentity(daoIdentity);
+    await bountySponsorActor.sponsor_bounties_for_wasm(
+      wasmId,
+      wasmHash,
+      ['build_reproducibility_v1'],
+      'https://github.com/auto/deploy',
+      '02',
+      [],
+      9, // Create 9 bounties (need at least 5)
+    );
+
+    const buildBountyIds =
+      await bountySponsorActor.get_sponsored_bounties_for_wasm(wasmId);
+    expect(buildBountyIds.length).toBeGreaterThanOrEqual(5);
 
     // === PHASE 3: All 5 Build Auditors file successful attestations (THE TRIGGER) ===
     const reproAuditors = [

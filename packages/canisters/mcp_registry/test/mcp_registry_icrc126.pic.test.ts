@@ -261,8 +261,9 @@ describe('MCP Registry ICRC-126 Integration', () => {
       });
 
       wasmId = Buffer.from(wasmHash).toString('hex');
-      registryActor.setIdentity(bountyCreatorIdentity);
-      const createResult = await registryActor.icrc127_create_bounty({
+      // Create bounty on AUDIT HUB (new architecture)
+      auditHubActor.setIdentity(bountyCreatorIdentity);
+      const createResult = await auditHubActor.icrc127_create_bounty({
         challenge_parameters: {
           Map: [
             ['wasm_hash', { Blob: wasmHash }],
@@ -416,6 +417,9 @@ describe('MCP Registry ICRC-126 Integration', () => {
       // Configure bounty_sponsor
       bountySponsorActor.setIdentity(daoIdentity);
       await bountySponsorActor.set_registry_canister_id(registryCanisterId);
+      await bountySponsorActor.set_audit_hub_canister_id(
+        auditHubFixture.canisterId,
+      ); // NEW: Point to audit_hub for bounty creation
       await bountySponsorActor.set_reward_token_canister_id(ledgerCanisterId);
       await bountySponsorActor.set_reward_amount_for_audit_type(
         buildReproTokenId,
@@ -481,7 +485,7 @@ describe('MCP Registry ICRC-126 Integration', () => {
       }
     });
 
-    it('should automatically create 9 bounties when a verification request is submitted', async () => {
+    it('should create 9 bounties via bounty_sponsor when sponsor_bounties_for_wasm is called', async () => {
       registryActor.setIdentity(developerIdentity);
       await registryActor.icrc126_verification_request({
         wasm_hash: wasmHash,
@@ -490,11 +494,25 @@ describe('MCP Registry ICRC-126 Integration', () => {
         metadata: [],
       });
 
-      const bounties = await registryActor.get_bounties_for_wasm(wasmId);
-      expect(bounties.length).toBe(9);
+      // Manually trigger bounty creation via bounty_sponsor
+      bountySponsorActor.setIdentity(daoIdentity);
+      await bountySponsorActor.sponsor_bounties_for_wasm(
+        wasmId,
+        wasmHash,
+        ['build_reproducibility_v1'],
+        'https://github.com/test/repo',
+        '01',
+        [],
+        9, // Create 9 bounties
+      );
+
+      // Bounties are now created by bounty_sponsor on audit_hub
+      const bountyIds =
+        await bountySponsorActor.get_sponsored_bounties_for_wasm(wasmId);
+      expect(bountyIds.length).toBe(9);
     });
 
-    it('should automatically finalize as #Verified after auto-bounties are created and 5 successful attestations are submitted', async () => {
+    it('should finalize as #Verified after bounties are created and 5 successful attestations are submitted', async () => {
       // Step 1: Developer submits verification request
       registryActor.setIdentity(developerIdentity);
       await registryActor.icrc126_verification_request({
@@ -505,12 +523,24 @@ describe('MCP Registry ICRC-126 Integration', () => {
       });
       expect(await registryActor.is_wasm_verified(wasmId)).toBe(false);
 
-      // Step 2: Get the auto-created bounties
-      const allBounties = await registryActor.get_bounties_for_wasm(wasmId);
-      expect(allBounties.length).toBe(9);
-      const bountyIds = allBounties.slice(0, 5).map((b: any) => b.bounty_id);
+      // Step 1.5: Create bounties via bounty_sponsor
+      bountySponsorActor.setIdentity(daoIdentity);
+      await bountySponsorActor.sponsor_bounties_for_wasm(
+        wasmId,
+        wasmHash,
+        ['build_reproducibility_v1'],
+        'https://github.com/test/repo',
+        '01',
+        [],
+        9,
+      );
 
-      // Step 3: All 5 auditors reserve their bounties and submit successful attestations
+      // Step 2: Get the created bounties from bounty_sponsor
+      const bountyIds =
+        await bountySponsorActor.get_sponsored_bounties_for_wasm(wasmId);
+      expect(bountyIds.length).toBe(9);
+
+      // Step 3: All 5 auditors reserve their bounties and submit divergence reports
       const auditors = [
         auditor1Identity,
         auditor2Identity,
@@ -540,7 +570,7 @@ describe('MCP Registry ICRC-126 Integration', () => {
       expect(await registryActor.is_wasm_verified(wasmId)).toBe(true);
     });
 
-    it('should automatically finalize as #Rejected after auto-bounties are created and 5 divergence reports are submitted', async () => {
+    it('should finalize as #Rejected after bounties are created and 5 divergence reports are submitted', async () => {
       // Step 1: Developer submits verification request
       registryActor.setIdentity(developerIdentity);
       await registryActor.icrc126_verification_request({
@@ -551,10 +581,22 @@ describe('MCP Registry ICRC-126 Integration', () => {
       });
       expect(await registryActor.is_wasm_verified(wasmId)).toBe(false);
 
-      // Step 2: Get the auto-created bounties
-      const allBounties = await registryActor.get_bounties_for_wasm(wasmId);
-      expect(allBounties.length).toBe(9);
-      const bountyIds = allBounties.slice(0, 5).map((b: any) => b.bounty_id);
+      // Step 1.5: Create bounties via bounty_sponsor
+      bountySponsorActor.setIdentity(daoIdentity);
+      await bountySponsorActor.sponsor_bounties_for_wasm(
+        wasmId,
+        wasmHash,
+        ['build_reproducibility_v1'],
+        'https://github.com/test/repo',
+        '01',
+        [],
+        9,
+      );
+
+      // Step 2: Get the created bounties from bounty_sponsor
+      const bountyIds =
+        await bountySponsorActor.get_sponsored_bounties_for_wasm(wasmId);
+      expect(bountyIds.length).toBe(9);
 
       // Step 3: All 5 auditors reserve their bounties and submit divergence reports
       const auditors = [

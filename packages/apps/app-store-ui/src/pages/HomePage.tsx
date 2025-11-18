@@ -101,7 +101,7 @@ function HomePage() {
       <WinnerBanner />
 
       {comingSoonApps.length > 0 && (
-        <ServerGrid title="Coming Soon" servers={comingSoonApps} />
+        <ServerGrid title="New Releases" servers={comingSoonApps} />
       )}
 
       {/* Dynamically render a grid for each category */}

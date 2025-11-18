@@ -234,6 +234,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
 
     // Configure bounty_sponsor for automated bounty creation
     bountySponsorActor.setIdentity(daoIdentity);
+    await bountySponsorActor.set_audit_hub_canister_id(env.auditHubCanisterId);
     await bountySponsorActor.set_registry_canister_id(registryCanisterId);
     await bountySponsorActor.set_reward_token_canister_id(ledgerCanisterId);
     await bountySponsorActor.set_reward_amount_for_audit_type(
@@ -427,12 +428,13 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       9, // required_verifiers
     );
 
-    // 2. Fetch the auto-created bounties for this WASM
-    const wasmBounties = await registryActor.get_bounties_for_wasm(wasmId);
-    expect(wasmBounties.length).toBeGreaterThanOrEqual(5);
+    // 2. Fetch the bounties created by bounty_sponsor for this WASM
+    const bountyIds =
+      await bountySponsorActor.get_sponsored_bounties_for_wasm(wasmId);
+    expect(bountyIds.length).toBeGreaterThanOrEqual(5);
 
     // 3. Take first 5 bounties for 5-of-9 consensus
-    const bountyIds = wasmBounties.slice(0, 5).map((b: any) => b.bounty_id);
+    const firstFiveBountyIds = bountyIds.slice(0, 5);
 
     // 4. All 5 auditors reserve and attest
     const auditors = [
@@ -445,7 +447,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
     for (let i = 0; i < 5; i++) {
       auditHubActor.setIdentity(auditors[i]);
       await auditHubActor.reserve_bounty(
-        bountyIds[i],
+        firstFiveBountyIds[i],
         buildReproTokenId, // audit_type, not token_id
       );
 
@@ -454,7 +456,7 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
         wasm_id: wasmId,
         metadata: [
           ['126:audit_type', { Text: buildReproTokenId }],
-          ['bounty_id', { Nat: bountyIds[i] }],
+          ['bounty_id', { Nat: firstFiveBountyIds[i] }],
         ],
       });
       if (i === 0) {
@@ -491,9 +493,10 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
         9, // required_verifiers
       );
 
-      // Fetch the auto-created bounties for this WASM
-      const wasmBounties = await registryActor.get_bounties_for_wasm(wasmId);
-      const bountyIds = wasmBounties.slice(0, 5).map((b: any) => b.bounty_id);
+      // Fetch the bounties created by bounty_sponsor for this WASM
+      const allBountyIds =
+        await bountySponsorActor.get_sponsored_bounties_for_wasm(wasmId);
+      const bountyIds = allBountyIds.slice(0, 5);
 
       // All 5 auditors reserve and attest
       const auditors = [
@@ -620,6 +623,9 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
 
       // Configure bounty_sponsor for automated bounty creation
       bountySponsorActor.setIdentity(daoIdentity);
+      await bountySponsorActor.set_audit_hub_canister_id(
+        env.auditHubCanisterId,
+      );
       await bountySponsorActor.set_registry_canister_id(registryCanisterId);
       await bountySponsorActor.set_reward_token_canister_id(ledgerCanisterId);
       await bountySponsorActor.set_reward_amount_for_audit_type(
@@ -791,9 +797,10 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
         9, // required_verifiers
       );
 
-      // Get auto-created bounties and have 5 auditors attest
-      const wasmBounties = await registryActor.get_bounties_for_wasm(wasmId);
-      const bountyIds = wasmBounties.slice(0, 5).map((b: any) => b.bounty_id);
+      // Get bounties created by bounty_sponsor and have 5 auditors attest
+      const allBountyIds =
+        await bountySponsorActor.get_sponsored_bounties_for_wasm(wasmId);
+      const bountyIds = allBountyIds.slice(0, 5);
 
       for (let i = 0; i < 5; i++) {
         const auditorIdentities = [
@@ -1027,6 +1034,9 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
 
       // Configure bounty_sponsor for automated bounty creation
       bountySponsorActor.setIdentity(daoIdentity);
+      await bountySponsorActor.set_audit_hub_canister_id(
+        env.auditHubCanisterId,
+      );
       await bountySponsorActor.set_registry_canister_id(registryCanisterId);
       await bountySponsorActor.set_reward_token_canister_id(ledgerCanisterId);
       await bountySponsorActor.set_reward_amount_for_audit_type(
@@ -1312,11 +1322,12 @@ describe('MCP Orchestrator Secure Upgrade Flow', () => {
       9, // required_verifiers
     );
 
-    // Fetch the auto-created bounties for this WASM
-    const wasmBounties = await registryActor.get_bounties_for_wasm(wasmId);
+    // Fetch the bounties created by bounty_sponsor for this WASM
+    const allBountyIds =
+      await bountySponsorActor.get_sponsored_bounties_for_wasm(wasmId);
 
     // Take first 5 bounties for 5-of-9 consensus
-    const bountyIds = wasmBounties.slice(0, 5).map((b: any) => b.bounty_id);
+    const bountyIds = allBountyIds.slice(0, 5);
 
     // All 5 auditors reserve and attest
     const auditors = [

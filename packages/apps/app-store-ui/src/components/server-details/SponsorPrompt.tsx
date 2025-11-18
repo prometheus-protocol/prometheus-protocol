@@ -110,13 +110,13 @@ export function SponsorPrompt({
         )}
       </section>
 
-      <CreateBountyDialog
+      {/* <CreateBountyDialog
         isOpen={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         wasmId={wasmId}
         auditType={auditType}
         paymentToken={paymentToken}
-      />
+      /> */}
     </>
   );
 }

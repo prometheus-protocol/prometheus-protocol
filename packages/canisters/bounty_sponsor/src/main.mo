@@ -127,15 +127,6 @@ shared ({ caller = deployer }) persistent actor class BountySponsorActor() = thi
     QueryMethods.get_total_sponsored_bounties(state);
   };
 
-  public shared query func get_config() : async {
-    registry_canister_id : ?Principal;
-    reward_token_canister_id : ?Principal;
-    reward_amounts : [(Text, Nat)];
-    required_verifiers : Nat;
-  } {
-    QueryMethods.get_config(state);
-  };
-
   // --- Environment Configuration Standard ---
 
   /**

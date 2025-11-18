@@ -37,7 +37,10 @@ module {
           created_at = existing.created_at;
           required_verifiers = existing.required_verifiers;
           assigned_count = existing.assigned_count;
+          completed_count = existing.completed_count;
           bounty_ids = Buffer.toArray(merged);
+          audit_type = existing.audit_type;
+          creator = existing.creator;
         };
 
         ignore BTree.insert(pending_audits, Text.compare, pending_audit_key, updated_job);

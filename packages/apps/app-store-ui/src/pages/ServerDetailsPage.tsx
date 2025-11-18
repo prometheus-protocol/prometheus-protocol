@@ -581,37 +581,15 @@ export default function ServerDetailsPage() {
             <AboutSection server={server} />
 
             {/* Conditional rendering now correctly checks the nested status. */}
-            {hasToolsInfo ? (
+            {hasToolsInfo && (
               <ToolsAndResources
                 tools={latestVersion.tools}
                 namespace={server.namespace}
               />
-            ) : (
-              <SponsorPrompt
-                icon={Wrench}
-                title="Tools and Resources"
-                description="Sponsor the Tools & Resources audit to see what developer tools and APIs this app provides."
-                auditType="tools_v1"
-                bounty={toolsBounty}
-                paymentToken={Tokens.USDC}
-                wasmId={server.latestVersion.wasmId}
-                isArchived={isViewingArchivedVersion}
-              />
             )}
 
-            {hasDataSafetyInfo ? (
+            {hasDataSafetyInfo && (
               <DataSafetySection safetyInfo={latestVersion.dataSafety!} />
-            ) : (
-              <SponsorPrompt
-                icon={ShieldCheck} // Assuming ShieldCheck for Data Safety
-                title="Data Safety"
-                description="Sponsor the Data Safety audit to understand how this application handles your data."
-                auditType="data_safety_v1"
-                bounty={dataSafetyBounty}
-                paymentToken={Tokens.USDC}
-                wasmId={server.latestVersion.wasmId}
-                isArchived={isViewingArchivedVersion}
-              />
             )}
 
             <AccessAndBilling
@@ -659,13 +637,13 @@ export default function ServerDetailsPage() {
       </div>
 
       {/* Dialogs now receive the correct, version-specific wasmId. */}
-      <CreateBountyDialog
+      {/* <CreateBountyDialog
         isOpen={isBountyDialogOpen}
         onOpenChange={setIsBountyDialogOpen}
         wasmId={latestVersion.wasmId}
         auditType="app_info_v1"
         paymentToken={Tokens.USDC}
-      />
+      /> */}
 
       {/* InstallDialog takes the whole object and will need to be updated internally. */}
       {canisterId && (

@@ -89,13 +89,13 @@ export function ReviewsSection({
       </section>
 
       {/* 3. Render the dialog, controlled by the component's state */}
-      <CreateBountyDialog
+      {/* <CreateBountyDialog
         isOpen={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         wasmId={wasmId}
         auditType={auditType}
         paymentToken={paymentToken}
-      />
+      /> */}
     </>
   );
 }

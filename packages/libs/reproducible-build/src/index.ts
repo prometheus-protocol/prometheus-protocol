@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import toml from 'toml';
 
+// Bump version number
+
 /**
  * Template files for reproducible Motoko builds
  * Updated for npm publish compatibility

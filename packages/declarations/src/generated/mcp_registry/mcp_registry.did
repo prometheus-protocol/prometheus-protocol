@@ -17,7 +17,7 @@ type Wasm =
    deprecated: bool;
    description: text;
    hash: blob;
-   metadata: ICRC16Map__5;
+   metadata: ICRC16Map__2;
    previous: opt CanisterVersion;
    repo: text;
    version_number: record {
@@ -29,7 +29,7 @@ type Wasm =
 type VerificationRequest = 
  record {
    commit_hash: blob;
-   metadata: ICRC16Map__4;
+   metadata: ICRC16Map__1;
    repo: text;
    wasm_hash: blob;
  };
@@ -86,7 +86,7 @@ type UpdateWasmRequest =
    description: text;
    expected_chunks: vec blob;
    expected_hash: blob;
-   metadata: ICRC16Map__5;
+   metadata: ICRC16Map__2;
    previous: opt CanisterVersion;
    repo: text;
    version_number: record {
@@ -94,6 +94,12 @@ type UpdateWasmRequest =
                      nat;
                      nat;
                    };
+ };
+type TreasuryError = 
+ variant {
+   LedgerTrap: text;
+   NotOwner;
+   TransferFailed: TransferError;
  };
 type TransferError = 
  variant {
@@ -128,6 +134,7 @@ type SupportedStandard =
    name: text;
    url: text;
  };
+type Subaccount = blob;
 type SecurityTier = 
  variant {
    Bronze;
@@ -135,48 +142,44 @@ type SecurityTier =
    Silver;
    Unranked;
  };
-type RunBountyResult__1 = 
- record {
-   metadata: ICRC16__2;
-   result: variant {
-             Invalid;
-             Valid;
-           };
-   trx_id: opt nat;
- };
 type RunBountyResult = 
  record {
-   metadata: ICRC16__1;
+   metadata: ICRC16__3;
    result: variant {
              Invalid;
              Valid;
            };
    trx_id: opt nat;
  };
-type Result_4 = 
+type Result_5 = 
  variant {
    err: text;
    ok: text;
  };
-type Result_3 = 
+type Result_4 = 
  variant {
    err: AppStoreError;
    ok: AppDetailsResponse;
  };
-type Result_2 = 
+type Result_3 = 
  variant {
    err: text;
    ok: Wasm;
  };
-type Result_1 = 
+type Result_2 = 
  variant {
    err: text;
    ok: bool;
  };
-type Result = 
+type Result_1 = 
  variant {
    err: text;
    ok;
+ };
+type Result = 
+ variant {
+   err: TreasuryError;
+   ok: nat;
  };
 type ManageControllerResult = 
  variant {
@@ -196,15 +199,6 @@ type ManageControllerRequest =
          Remove;
        };
  };
-type ListBountiesFilter = 
- variant {
-   claimed: bool;
-   claimed_by: Account;
-   created_after: nat;
-   created_before: nat;
-   metadata: ICRC16Map__2;
-   validation_canister: principal;
- };
 type InitArgs = record {};
 type InitArgList = 
  record {
@@ -220,36 +214,6 @@ type InitArgList =
    nextActionId: nat;
    nextCycleActionId: opt nat;
  };
-type ICRC16__4 = 
- variant {
-   Array: vec ICRC16__4;
-   Blob: blob;
-   Bool: bool;
-   Bytes: vec nat8;
-   Class: vec ICRC16Property__4;
-   Float: float64;
-   Floats: vec float64;
-   Int: int;
-   Int16: int16;
-   Int32: int32;
-   Int64: int64;
-   Int8: int8;
-   Map: ICRC16Map__5;
-   Nat: nat;
-   Nat16: nat16;
-   Nat32: nat32;
-   Nat64: nat64;
-   Nat8: nat8;
-   Nats: vec nat;
-   Option: opt ICRC16__4;
-   Principal: principal;
-   Set: vec ICRC16__4;
-   Text: text;
-   ValueMap: vec record {
-                   ICRC16__4;
-                   ICRC16__4;
-                 };
- };
 type ICRC16__3 = 
  variant {
    Array: vec ICRC16__3;
@@ -264,7 +228,10 @@ type ICRC16__3 =
    Int32: int32;
    Int64: int64;
    Int8: int8;
-   Map: ICRC16Map__4;
+   Map: vec record {
+              text;
+              ICRC16__3;
+            };
    Nat: nat;
    Nat16: nat16;
    Nat32: nat32;
@@ -324,10 +291,7 @@ type ICRC16__1 =
    Int32: int32;
    Int64: int64;
    Int8: int8;
-   Map: vec record {
-              text;
-              ICRC16__1;
-            };
+   Map: ICRC16Map__1;
    Nat: nat;
    Nat16: nat16;
    Nat32: nat32;
@@ -342,12 +306,6 @@ type ICRC16__1 =
                    ICRC16__1;
                    ICRC16__1;
                  };
- };
-type ICRC16Property__4 = 
- record {
-   immutable: bool;
-   name: text;
-   value: ICRC16__4;
  };
 type ICRC16Property__3 = 
  record {
@@ -373,12 +331,7 @@ type ICRC16Property =
    name: text;
    value: ICRC16;
  };
-type ICRC16Map__5 = 
- vec record {
-       text;
-       ICRC16__4;
-     };
-type ICRC16Map__4 = 
+type ICRC16Map__3 = 
  vec record {
        text;
        ICRC16__3;
@@ -435,7 +388,7 @@ type ICRC118WasmRegistryCanister =
  service {
    /// * Admin method to manually trigger consensus handling for stuck bounties.
    ///    * Use this when consensus was reached but payouts didn't happen due to bugs.
-   admin_retrigger_consensus: (wasm_id: text, audit_type: text) -> (Result_4);
+   admin_retrigger_consensus: (wasm_id: text, audit_type: text) -> (Result_5);
    /// * [OWNER-ONLY] Iterates through all published apps and pushes their data
    ///    * to the search indexer to bootstrap or rebuild the index.
    ///    *
@@ -444,17 +397,16 @@ type ICRC118WasmRegistryCanister =
    ///    * instruction limit and trap.
    ///    *
    ///    * @returns A status message indicating how many apps were successfully indexed.
-   bootstrap_search_index: () -> (Result_4);
+   bootstrap_search_index: () -> (Result_5);
    can_install_wasm: (caller: principal, wasm_id: text) -> (bool) query;
    /// * Fetches and assembles all data for an app's detail page using its stable namespace.
    ///    * This is the single, powerful query the frontend needs.
    get_app_details_by_namespace: (namespace: text, opt_wasm_id: opt text) ->
-    (Result_3) query;
+    (Result_4) query;
    get_app_listings: (req: AppListingRequest) -> (AppListingResponse) query;
    get_audit_records_for_wasm: (wasm_id: text) -> (vec AuditRecord) query;
-   get_bounties_for_wasm: (wasm_id: text) -> (vec Bounty) query;
    get_canister_type_version: (req: GetCanisterTypeVersionRequest) ->
-    (Result_2) query;
+    (Result_3) query;
    get_divergence_progress: (wasm_id: text, audit_type: text) ->
     (vec nat) query;
    get_env_requirements: () ->
@@ -473,10 +425,6 @@ type ICRC118WasmRegistryCanister =
    ///    *         Returns `null` if no request is found for the given ID.
    get_verification_request: (wasm_id: text) ->
     (opt VerificationRequest) query;
-   /// * Check if a specific bounty has already filed an attestation by checking ICRC126 storage directly.
-   ///    * This is the source of truth, not the progress tracking arrays.
-   has_bounty_filed_attestation: (wasm_id: text, bounty_id: nat) ->
-    (bool) query;
    /// * Check if a verifier has already participated in the verification of a specific WASM.
    ///    * This prevents a verifier from being assigned to multiple bounties for the same WASM.
    ///    * Used by audit_hub during bounty reservation to enforce mutual exclusion.
@@ -520,28 +468,17 @@ type ICRC118WasmRegistryCanister =
    icrc126_file_divergence_with_api_key: (api_key: text, req:
     DivergenceReportRequest) -> (DivergenceResult);
    icrc126_verification_request: (req: VerificationRequest) -> (nat);
-   icrc127_create_bounty: (req: CreateBountyRequest) -> (CreateBountyResult);
-   icrc127_get_bounty: (bounty_id: nat) -> (opt Bounty) query;
-   icrc127_list_bounties:
-    (record {
-       filter: opt vec ListBountiesFilter;
-       prev: opt nat;
-       take: opt nat;
-     }) -> (vec Bounty) query;
-   icrc127_metadata: () -> (ICRC16Map__1) query;
-   icrc127_submit_bounty: (req: BountySubmissionRequest) ->
-    (BountySubmissionResult);
    icrc3_get_archives: (args: GetArchivesArgs) -> (GetArchivesResult) query;
    icrc3_get_blocks: (args: GetBlocksArgs) -> (GetBlocksResult) query;
    icrc3_get_tip_certificate: () -> (opt DataCertificate) query;
    icrc3_supported_block_types: () -> (vec BlockType) query;
-   is_controller_of_type: (namespace: text, user: principal) -> (Result_1);
+   is_controller_of_type: (namespace: text, user: principal) -> (Result_2);
    is_wasm_verified: (wasm_id: text) -> (bool) query;
-   /// * @notice Fetches a paginated and filtered list of all bounties.
-   ///    * @param req The request object containing optional filters and pagination cursors.
-   ///    * @return A result containing an array of matching `ICRC127.Bounty` records or an error.
-   list_bounties: (req: BountyListingRequest) ->
-    (BountyListingResponse) query;
+   list_all_verification_requests: (offset: opt nat, limit: opt nat) ->
+    (record {
+       requests: vec VerificationRecord;
+       total: nat;
+     }) query;
    list_pending_verifications: () -> (vec VerificationRecord) query;
    /// * [OWNER-ONLY] Manually re-triggers the deployment process for a given WASM.
    ///    * This is a utility function for debugging failed automated deployments without
@@ -549,15 +486,21 @@ type ICRC118WasmRegistryCanister =
    ///    *
    ///    * @param wasm_id The hex-encoded SHA256 hash of the WASM to deploy.
    ///    * @returns An empty Ok(()) on success, or a Text error on failure.
-   retrigger_deployment: (wasm_id: text) -> (Result);
-   set_auditor_credentials_canister_id: (canister_id: principal) -> (Result);
-   set_bounty_reward_amount: (amount: nat) -> (Result);
-   set_bounty_reward_token_canister_id: (canister_id: principal) -> (Result);
-   set_bounty_sponsor_canister_id: (canister_id: principal) -> (Result);
-   set_orchestrator_canister_id: (canister_id: principal) -> (Result);
-   set_search_index_canister_id: (canister_id: principal) -> (Result);
-   set_usage_tracker_canister_id: (canister_id: principal) -> (Result);
+   retrigger_deployment: (wasm_id: text) -> (Result_1);
+   set_auditor_credentials_canister_id: (canister_id: principal) ->
+    (Result_1);
+   set_bounty_reward_amount: (amount: nat) -> (Result_1);
+   set_bounty_reward_token_canister_id: (canister_id: principal) ->
+    (Result_1);
+   set_bounty_sponsor_canister_id: (canister_id: principal) -> (Result_1);
+   set_orchestrator_canister_id: (canister_id: principal) -> (Result_1);
+   set_search_index_canister_id: (canister_id: principal) -> (Result_1);
+   set_usage_tracker_canister_id: (canister_id: principal) -> (Result_1);
    test_only_notify_indexer: (namespace: text, content: text) -> ();
+   /// Withdraw USDC or other ICRC-2 tokens from the registry treasury
+   /// Only the owner can call this function
+   withdraw: (ledger_id: principal, amount: nat, destination: Account) ->
+    (Result);
  };
 type GetWasmsFilter = 
  variant {
@@ -692,7 +635,7 @@ type DivergenceResult =
 type DivergenceReportRequest = 
  record {
    divergence_report: text;
-   metadata: opt ICRC16Map__4;
+   metadata: opt ICRC16Map__1;
    wasm_id: text;
  };
 type DivergenceRecord = 
@@ -748,37 +691,17 @@ type CreateCanisterType =
    controllers: opt vec principal;
    description: text;
    forked_from: opt CanisterVersion;
-   metadata: ICRC16Map__5;
+   metadata: ICRC16Map__2;
    repo: text;
- };
-type CreateBountyResult = 
- variant {
-   Error: variant {
-            Generic: text;
-            InsufficientAllowance;
-          };
-   Ok: record {
-         bounty_id: nat;
-         trx_id: opt nat;
-       };
- };
-type CreateBountyRequest = 
- record {
-   bounty_id: opt nat;
-   bounty_metadata: ICRC16Map__2;
-   challenge_parameters: ICRC16__2;
-   start_date: opt nat;
-   timeout_date: nat;
-   validation_canister_id: principal;
  };
 type ClaimRecord = 
  record {
    caller: principal;
-   claim_account: opt Account;
+   claim_account: opt Account__1;
    claim_id: nat;
-   claim_metadata: ICRC16Map__1;
+   claim_metadata: ICRC16Map__3;
    result: opt RunBountyResult;
-   submission: ICRC16__1;
+   submission: ICRC16__3;
    time_submitted: nat;
  };
 type CanisterVersion = 
@@ -798,7 +721,7 @@ type CanisterType =
    controllers: vec principal;
    description: text;
    forked_from: opt CanisterVersion;
-   metadata: ICRC16Map__5;
+   metadata: ICRC16Map__2;
    repo: text;
    versions: vec CanisterVersion;
  };
@@ -809,51 +732,11 @@ type BuildInfo =
    repo_url: opt text;
    status: text;
  };
-type BountySubmissionResult = 
- variant {
-   Error: variant {
-            Generic: text;
-            NoMatch;
-            PayoutFailed: TransferError;
-          };
-   Ok: record {
-         claim_id: nat;
-         result: opt RunBountyResult__1;
-       };
- };
-type BountySubmissionRequest = 
- record {
-   account: opt Account;
-   bounty_id: nat;
-   submission: ICRC16__2;
- };
-type BountyStatus = 
- variant {
-   Claimed;
-   Open;
- };
-type BountyListingResponse = 
- variant {
-   err: text;
-   ok: vec Bounty;
- };
-type BountyListingRequest = 
- record {
-   filter: opt vec BountyFilter;
-   prev: opt nat;
-   take: opt nat;
- };
-type BountyFilter = 
- variant {
-   audit_type: text;
-   creator: principal;
-   status: BountyStatus;
- };
 type Bounty = 
  record {
    bounty_id: nat;
-   bounty_metadata: ICRC16Map__1;
-   challenge_parameters: ICRC16__1;
+   bounty_metadata: ICRC16Map__3;
+   challenge_parameters: ICRC16__3;
    claimed: opt nat;
    claimed_date: opt nat;
    claims: vec ClaimRecord;
@@ -887,7 +770,7 @@ type AttestationResult =
  };
 type AttestationRequest = 
  record {
-   metadata: ICRC16Map__4;
+   metadata: ICRC16Map__1;
    wasm_id: text;
  };
 type AttestationRecord = 
@@ -994,10 +877,15 @@ type Action =
    params: blob;
    retries: nat;
  };
-type Account = 
+type Account__1 = 
  record {
    owner: principal;
    subaccount: opt blob;
+ };
+type Account = 
+ record {
+   owner: principal;
+   subaccount: opt Subaccount;
  };
 service : (args: opt
                   record {

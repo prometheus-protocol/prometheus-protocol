@@ -77,7 +77,7 @@ module {
     token_id : Types.TokenId,
     amount : Types.Balance,
     available_balances : Map.Map<Principal, Map.Map<Types.TokenId, Types.Balance>>,
-    canister_principal : Principal,
+    _canister_principal : Principal,
   ) : async Result.Result<(), Text> {
 
     Debug.print("Withdrawing stake: Ledger=" # token_id # " Verifier=" # Principal.toText(verifier) # " Amount=" # Nat.toText(amount));

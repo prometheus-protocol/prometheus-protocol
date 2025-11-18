@@ -142,7 +142,7 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
       auditHubFixture.canisterId,
     );
 
-    // 5. Fund Bounty Creator and have them approve the Registry
+    // 5. Fund Bounty Creator and have them approve the AUDIT HUB
     ledgerActor.setIdentity(daoIdentity);
     await ledgerActor.icrc1_transfer({
       to: { owner: bountyCreatorIdentity.getPrincipal(), subaccount: [] },
@@ -154,7 +154,7 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
     });
     ledgerActor.setIdentity(bountyCreatorIdentity);
     await ledgerActor.icrc2_approve({
-      spender: { owner: registryFixture.canisterId, subaccount: [] },
+      spender: { owner: auditHubFixture.canisterId, subaccount: [] }, // CHANGED: Approve audit_hub, not registry
       amount: bountyAmount + fee + fee, // Extra fee for transfer out
       fee: [],
       memo: [],
@@ -237,14 +237,16 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
       commit_hash: new Uint8Array([1]),
       metadata: [],
     });
-    registryActor.setIdentity(bountyCreatorIdentity);
-    const createResult = await registryActor.icrc127_create_bounty({
+    // Create bounty on AUDIT HUB (new architecture)
+    auditHubActor.setIdentity(bountyCreatorIdentity);
+    const createResult = await auditHubActor.icrc127_create_bounty({
       bounty_id: [],
-      validation_canister_id: registryFixture.canisterId,
+      validation_canister_id: auditHubFixture.canisterId, // AUDIT HUB validates (by checking registry)
       timeout_date: BigInt(Date.now() + 8.64e10) * 1000000n,
       challenge_parameters: {
         Map: [
           ['wasm_hash', { Blob: wasmHashToVerify }],
+          ['wasm_id', { Text: wasmIdToVerify }], // REQUIRED for validation hook
           ['audit_type', { Text: reputationTokenId }], // metadata descriptive string
         ],
       },
@@ -254,7 +256,9 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
       ],
       start_date: [],
     });
+    console.log('Create bounty result:', createResult);
     bountyId = ('Ok' in createResult && createResult.Ok.bounty_id) || 0n;
+    console.log('Bounty ID:', bountyId);
   });
 
   afterAll(async () => {
@@ -300,22 +304,40 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
   });
 
   it('should ALLOW manual bounty submission for tools_v1 audit type', async () => {
-    // The auditor files the attestation WITHOUT reserving first
+    // Reserve the bounty first
+    auditHubActor.setIdentity(auditorIdentity);
+    await auditHubActor.reserve_bounty(bountyId, reputationTokenId);
+
+    // The auditor files the attestation
     registryActor.setIdentity(auditorIdentity);
-    await registryActor.icrc126_file_attestation({
+    const attestResult = await registryActor.icrc126_file_attestation({
       wasm_id: wasmIdToVerify,
       metadata: [
         ['126:audit_type', { Text: reputationTokenId }], // metadata descriptive string
         ['bounty_id', { Nat: bountyId }],
       ],
     });
+    console.log('Attestation result:', attestResult);
+    expect(attestResult).toHaveProperty('Ok');
 
-    // Now they try to claim the bounty. Manual claims are allowed for tools_v1 audits.
-    const submitResult = await registryActor.icrc127_submit_bounty({
+    // Verify the participation was recorded
+    const hasParticipated =
+      await registryActor.has_verifier_participated_in_wasm(
+        auditorIdentity.getPrincipal(),
+        wasmIdToVerify,
+        reputationTokenId,
+      );
+    console.log('Has participated:', hasParticipated);
+    expect(hasParticipated).toBe(true);
+
+    // Now they claim the bounty from AUDIT HUB. Manual claims are allowed for tools_v1 audits.
+    auditHubActor.setIdentity(auditorIdentity);
+    const submitResult = await auditHubActor.icrc127_submit_bounty({
       bounty_id: bountyId,
       submission: { Text: 'I claim this bounty' },
       account: [],
     });
+    console.log('Submit result:', submitResult);
 
     expect(submitResult).toHaveProperty('Ok');
     // @ts-ignore
@@ -331,7 +353,7 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
     );
     expect(reserveResult).toHaveProperty('ok');
 
-    // --- 2. File the Attestation ---
+    // --- 2. File the Attestation on REGISTRY ---
     registryActor.setIdentity(auditorIdentity);
     const attestResult = await registryActor.icrc126_file_attestation({
       wasm_id: wasmIdToVerify,
@@ -342,8 +364,9 @@ describe('MCP Registry ICRC-127 Integration with Audit Hub', () => {
     });
     expect(attestResult).toHaveProperty('Ok');
 
-    // --- 3. Manually submit the bounty (should succeed for tools_v1) ---
-    const submitResult = await registryActor.icrc127_submit_bounty({
+    // --- 3. Manually submit the bounty to AUDIT HUB (should succeed for tools_v1) ---
+    auditHubActor.setIdentity(auditorIdentity);
+    const submitResult = await auditHubActor.icrc127_submit_bounty({
       bounty_id: bountyId,
       submission: { Text: 'I claim this bounty now' },
       account: [], // Payout to self

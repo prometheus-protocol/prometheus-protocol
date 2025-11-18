@@ -9,7 +9,7 @@ import Types "Types";
 import Account "Account";
 
 module {
-  private let LOCK_DURATION_NS : Int = 3_600_000_000_000; // 1 hour in nanoseconds
+  private let _LOCK_DURATION_NS : Int = 3_600_000_000_000; // 1 hour in nanoseconds
 
   /**
    * Reserve a bounty for a verifier.

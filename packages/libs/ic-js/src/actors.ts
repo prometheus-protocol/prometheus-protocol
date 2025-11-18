@@ -12,6 +12,7 @@ import {
   SearchIndex,
   UsageTracker,
   TokenWatchlist,
+  BountySponsor,
 } from '@prometheus-protocol/declarations';
 import { getCanisterId, getHost } from './config.js';
 
@@ -172,6 +173,14 @@ export const getTokenWatchlistActor = (identity: Identity) => {
   return createActor<TokenWatchlist._SERVICE>(
     TokenWatchlist.idlFactory,
     getCanisterId('TOKEN_WATCHLIST'),
+    identity,
+  );
+};
+
+export const getBountySponsorActor = (identity?: Identity) => {
+  return createActor<BountySponsor._SERVICE>(
+    BountySponsor.idlFactory,
+    getCanisterId('BOUNTY_SPONSOR'),
     identity,
   );
 };

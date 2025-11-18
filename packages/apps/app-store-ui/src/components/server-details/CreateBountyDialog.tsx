@@ -1,6 +1,3 @@
-import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -8,119 +5,63 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from '@/components/ui/dialog';
+import { Loader2, CheckCircle2, Sparkles } from 'lucide-react';
 import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Loader2 } from 'lucide-react';
-import { useSponsorBounty } from '@/hooks/useAuditBounties';
-import { useMemo } from 'react';
-import { Token } from '@prometheus-protocol/ic-js';
-import { useGetTokenBalance } from '@/hooks/usePayment';
+  useSponsorBounty,
+  useSponsoredAuditTypes,
+} from '@/hooks/useAuditBounties';
+import {
+  ProcessedVerificationRecord,
+  CORE_AUDIT_TYPES,
+} from '@prometheus-protocol/ic-js';
+import { getAuditTypeInfo } from '@/lib/get-audit-type-info';
+import { useState } from 'react';
 
 interface CreateBountyDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   wasmId: string; // The WASM ID
-  auditType: string;
-  // For the MVP, we'll assume USDC. A future version could pass a list of accepted tokens.
-  paymentToken: Token;
+  verificationRequest: ProcessedVerificationRecord;
+  completedAuditTypes?: string[]; // List of audit types already completed
   onSuccess?: () => void;
 }
-
-// Helper component for displaying cost rows
-const CostRow = ({
-  label,
-  value,
-  symbol,
-}: {
-  label: string;
-  value: string;
-  symbol: string;
-}) => (
-  <div className="flex justify-between items-center text-sm">
-    <span className="text-muted-foreground">{label}</span>
-    <span className="font-mono text-foreground">
-      {value} {symbol}
-    </span>
-  </div>
-);
 
 export function CreateBountyDialog({
   isOpen,
   onOpenChange,
   wasmId,
-  auditType,
-  paymentToken,
+  verificationRequest,
+  completedAuditTypes = [],
   onSuccess,
 }: CreateBountyDialogProps) {
   const { mutate: sponsorBounty, isPending, status } = useSponsorBounty();
-  const { data: balance, isLoading: isBalanceLoading } =
-    useGetTokenBalance(paymentToken); // 4. Enhance calculations to include the max spendable amount
-  // 1. Calculate fixed fees and the maximum spendable amount first.
-  //    This does NOT depend on the form's input.
-  const { totalFees, maxSpendable } = useMemo(() => {
-    const fees = paymentToken.fee * 2; // Escrow fee (in) + Payout fee (out)
-    const maxSpendableAtomic = balance ? balance - BigInt(fees) : 0n;
-    return {
-      totalFees: fees,
-      maxSpendable: Number(
-        paymentToken.fromAtomic(
-          maxSpendableAtomic > 0n ? maxSpendableAtomic : 0n,
-        ),
-      ),
-    };
-  }, [paymentToken, balance]);
-
-  // 2. Create the form schema using the calculated maxSpendable value.
-  const formSchema = useMemo(
-    () =>
-      z.object({
-        amount: z.coerce
-          .number()
-          .positive('Bounty amount must be greater than zero.')
-          .max(
-            maxSpendable,
-            'Amount exceeds your available balance after fees.',
-          ),
-      }),
-    [maxSpendable],
+  const { data: sponsoredAuditTypes = [], isLoading: isLoadingSponsoredTypes } =
+    useSponsoredAuditTypes(wasmId);
+  const [selectedAuditType, setSelectedAuditType] = useState<string | null>(
+    null,
   );
 
-  // 3. Now, initialize the form. There is no more circular dependency.
-  const form = useForm<z.input<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: { amount: 10 },
-  });
+  const hasBuildReproducibility = completedAuditTypes.includes(
+    'build_reproducibility_v1',
+  );
 
-  // 4. Watch the form's input value to calculate the *display* total cost.
-  const bountyAmountInput = form.watch('amount') as number;
-  const totalCost = useMemo(() => {
-    const bountyAtomic = paymentToken.toAtomic(bountyAmountInput || 0);
-    return bountyAtomic + BigInt(totalFees);
-  }, [bountyAmountInput, totalFees, paymentToken]);
-
-  function onSubmit(values: z.infer<typeof formSchema>) {
+  function handleSponsor(auditType: string) {
+    setSelectedAuditType(auditType);
     sponsorBounty(
       {
         wasmId,
-        auditType,
-        paymentToken,
-        amount: values.amount,
+        auditTypes: [auditType],
+        verificationRequest,
       },
       {
         onSuccess: () => {
+          setSelectedAuditType(null);
           onOpenChange(false);
-          form.reset();
           onSuccess?.();
+        },
+        onError: () => {
+          setSelectedAuditType(null);
         },
       },
     );
@@ -128,78 +69,78 @@ export function CreateBountyDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Sponsor Bounty</DialogTitle>
-          <DialogDescription className="text-sm text-primary">
-            {auditType}
+          <DialogTitle>Sponsor Audit Bounties</DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            Select an audit type to sponsor. The first round of bounties is
+            sponsored by the protocol. Subsequent rounds require user payment.
           </DialogDescription>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground">
-          Fund a bounty to incentivize auditors to complete this attestation.
-          The amount will be transferred from your account to the registry
-          canister.
-        </p>
-        <Form {...form}>
-          <form
-            // @ts-ignore
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="space-y-4 py-4">
-            <FormField
-              control={form.control}
-              name="amount"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Bounty Amount ({paymentToken.symbol})</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      {...field}
-                      value={
-                        field.value === undefined || field.value === null
-                          ? ''
-                          : Number(field.value)
-                      }
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {isBalanceLoading ? (
-                      <div className="h-4 w-32 bg-muted/50 rounded-sm animate-pulse" />
-                    ) : (
-                      `Your balance: ${balance !== undefined ? paymentToken.fromAtomic(balance) : '0.00'} ${paymentToken.symbol}`
-                    )}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* 4. Display the dynamic cost breakdown */}
-            <div className="border border-border rounded-md p-3 space-y-2">
-              <CostRow
-                label="Network Fees (In + Out)"
-                value={paymentToken.fromAtomic(BigInt(totalFees))}
-                symbol={paymentToken.symbol}
-              />
-              <hr className="border-border" />
-              <CostRow
-                label="Total Cost"
-                value={paymentToken.fromAtomic(totalCost)}
-                symbol={paymentToken.symbol}
-              />
+        <div className="space-y-3 py-4">
+          {isLoadingSponsoredTypes ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-            <DialogFooter>
-              <Button
-                type="submit"
-                disabled={isPending}
-                className="w-full !mt-6">
-                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isPending ? status : 'Sponsor Bounty'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
+          ) : (
+            CORE_AUDIT_TYPES.map((auditType) => {
+              const info = getAuditTypeInfo(auditType);
+              const isCompleted = completedAuditTypes.includes(auditType);
+              const isAlreadySponsored =
+                sponsoredAuditTypes.includes(auditType);
+              const requiresBuildReproducibility =
+                auditType !== 'build_reproducibility_v1' &&
+                !hasBuildReproducibility;
+              const isDisabled =
+                isCompleted ||
+                isPending ||
+                requiresBuildReproducibility ||
+                isAlreadySponsored;
+              const isProcessing = isPending && selectedAuditType === auditType;
+
+              return (
+                <Button
+                  key={auditType}
+                  onClick={() => handleSponsor(auditType)}
+                  disabled={isDisabled}
+                  variant="outline"
+                  className="w-full h-auto py-4 px-4 flex items-start gap-3 justify-start">
+                  <info.Icon className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 text-left">
+                    <div className="font-semibold flex items-center gap-2">
+                      {info.title}
+                      {isCompleted && (
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      )}
+                      {!isAlreadySponsored && !isCompleted && (
+                        <span className="inline-flex items-center gap-1 text-xs font-normal bg-primary/20 text-primary px-2 py-0.5 rounded-full">
+                          <Sparkles className="h-3 w-3" />
+                          Protocol Sponsored
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs font-normal text-muted-foreground mt-1">
+                      {info.description}
+                    </div>
+                    {requiresBuildReproducibility && (
+                      <div className="text-xs font-normal text-amber-500 mt-1">
+                        ⚠️ Build Reproducibility must be completed first
+                      </div>
+                    )}
+                  </div>
+                  {isProcessing && (
+                    <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+                  )}
+                </Button>
+              );
+            })
+          )}
+        </div>
+        {isPending && (
+          <div className="text-sm text-center text-muted-foreground pb-2">
+            {status}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

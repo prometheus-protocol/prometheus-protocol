@@ -82,6 +82,17 @@ export function createWasmVerification(
   const totalReward = bounties.reduce((sum, b) => sum + b.tokenAmount, 0n);
   const auditType = bounties[0]?.challengeParameters.audit_type || 'unknown';
 
+  // Create a Set of bounty IDs from this specific job for efficient lookup
+  const jobBountyIds = new Set(bounties.map((b) => b.id.toString()));
+
+  // Filter attestation and divergence IDs to only include those belonging to this job's bounties
+  const filteredAttestationIds = attestationIds.filter((id) =>
+    jobBountyIds.has(id.toString()),
+  );
+  const filteredDivergenceIds = divergenceIds.filter((id) =>
+    jobBountyIds.has(id.toString()),
+  );
+
   // Count bounties with active locks (claims array has items)
   const claimedCount = bounties.filter(
     (b) => b.claims && b.claims.length > 0,
@@ -90,8 +101,8 @@ export function createWasmVerification(
 
   // Determine status based on audit type
   let status: WasmVerification['status'] = 'pending';
-  const attestationCount = attestationIds.length;
-  const divergenceCount = divergenceIds.length;
+  const attestationCount = filteredAttestationIds.length;
+  const divergenceCount = filteredDivergenceIds.length;
 
   const isBuildReproducibility = auditType === 'build_reproducibility_v1';
 
@@ -121,8 +132,8 @@ export function createWasmVerification(
     bounties,
     attestationCount,
     divergenceCount,
-    attestationBountyIds: attestationIds,
-    divergenceBountyIds: divergenceIds,
+    attestationBountyIds: filteredAttestationIds,
+    divergenceBountyIds: filteredDivergenceIds,
     totalReward,
     auditType,
     status,
