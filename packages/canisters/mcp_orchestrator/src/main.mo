@@ -104,8 +104,8 @@ shared (deployer) actor class ICRC120Canister<system>(
    * [PRIVATE] Iterates through all managed canisters, checks their cycle balance,
    * and tops them up if they are below the defined threshold.
    */
-  private func _check_and_top_up_cycles() : async () {
-    if (not _cycle_top_up_enabled) {
+  private func _check_and_top_up_cycles(force : Bool) : async () {
+    if (not force and not _cycle_top_up_enabled) {
       D.print("Cycle top-up is disabled. Skipping check.");
       return;
     };
@@ -201,7 +201,7 @@ shared (deployer) actor class ICRC120Canister<system>(
         // do any work here necessary for initialization
 
         func _handle_cycle_top_up_action(actionId : TT.ActionId, action : TT.Action) : async* Star.Star<TT.ActionId, TT.Error> {
-          await _check_and_top_up_cycles();
+          await _check_and_top_up_cycles(false);
 
           // Schedule the next run after successful completion
           _cycle_job_action_id := null; // Clear the old action ID
@@ -1120,7 +1120,7 @@ shared (deployer) actor class ICRC120Canister<system>(
     };
 
     D.print("Manual cycle top-up triggered by owner");
-    await _check_and_top_up_cycles();
+    await _check_and_top_up_cycles(true);
     return #ok("Cycle top-up check completed. Check logs for details.");
   };
 
