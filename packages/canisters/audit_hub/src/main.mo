@@ -275,8 +275,8 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   // Called by ICRC127 when a verifier submits a bounty claim
   // This verifies that the claimant actually submitted an attestation or divergence to the registry
   private func _validate_verification_submission(
-    req : ICRC127Lib.RunBountyRequest
-  ) : async ICRC127Lib.RunBountyResult {
+    req : ICRC127Service.RunBountyRequest
+  ) : async ICRC127Service.RunBountyResult {
     Debug.print("Validating bounty submission " # Nat.toText(req.bounty_id));
 
     // Get the verifier principal from the bounty lock
