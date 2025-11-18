@@ -13,97 +13,62 @@ import Text "mo:base/Text";
 import Types "Types";
 import JobQueue "JobQueue";
 import McpRegistry "McpRegistry";
+import ICRC127Lib "../../../../libs/icrc127/src/lib";
 
 module {
 
   /**
-   * Check if verifier has an active locked bounty for this job.
-   * Returns (bounty_id, challenge_params) if found.
+   * ICRC127 instance type for local bounty queries
    */
-  public func find_active_locked_bounty(
+  public type ICRC127Instance = () -> ICRC127Lib.ICRC127Bounty;
+
+  /**
+   * Check if verifier has an active locked LOCAL bounty for this job.
+   * Returns (bounty_id, challenge_params) if found.
+   * This is the PRIMARY method - queries local ICRC127 instance (no inter-canister calls).
+   */
+  public func find_active_local_bounty(
     job : Types.VerificationJob,
     verifier : Principal,
     bounty_locks : Map.Map<Types.BountyId, Types.BountyLock>,
-    registry_canister_id : ?Principal,
+    icrc127 : ICRC127Instance,
     current_time : Int,
-  ) : async ?(Types.BountyId, Types.ICRC16Map) {
-    let wasm_id = job.wasm_id;
-
-    let registry : ?McpRegistry.Service = switch (registry_canister_id) {
-      case (?id) { ?actor (Principal.toText(id)) };
-      case (null) { null };
-    };
-
+  ) : ?(Types.BountyId, Types.ICRC16Map) {
     label bounty_check for (bounty_id in job.bounty_ids.vals()) {
       switch (Map.get(bounty_locks, Map.nhash, bounty_id)) {
         case (?lock) {
-          if (Principal.equal(lock.claimant, verifier)) {
-            // Check if lock has expired
-            if (lock.expires_at <= current_time) {
-              // Skip expired locks silently (they'll be cleaned up elsewhere)
-            } else {
-              // This verifier has a valid active lock - check if bounty is claimed and get challenge_parameters
-              var is_claimed = false;
-              var bounty_challenge_params : ?Types.ICRC16Map = null;
+          if (Principal.equal(lock.claimant, verifier) and lock.expires_at > current_time) {
+            // Query local ICRC127 instance (no inter-canister call!)
+            let bounty_opt = icrc127().icrc127_get_bounty(bounty_id);
+            switch (bounty_opt) {
+              case (?bounty) {
+                if (Option.isNull(bounty.claimed)) {
+                  // Extract challenge_parameters from ICRC16 variant
+                  let challenge_params = switch (bounty.challenge_parameters) {
+                    case (#Map(params)) { params };
+                    case (_) { job.build_config }; // Fallback
+                  };
 
-              switch (registry) {
-                case (?reg) {
-                  try {
-                    let bounty_opt = await reg.icrc127_get_bounty(bounty_id);
-                    switch (bounty_opt) {
-                      case (?bounty) {
-                        is_claimed := Option.isSome(bounty.claimed_date);
-                        // Extract challenge_parameters from the bounty
-                        switch (bounty.challenge_parameters) {
-                          case (#Map(params)) {
-                            bounty_challenge_params := ?params;
-                          };
-                          case (_) {};
-                        };
-                      };
-                      case (null) {};
-                    };
-                  } catch (e) {
-                    Debug.print("Error checking if bounty is claimed: " # Error.message(e));
-                  };
+                  Debug.print("Verifier " # Principal.toText(verifier) # " has ACTIVE local bounty " # Nat.toText(bounty_id) # " for WASM " # job.wasm_id);
+                  return ?(bounty_id, challenge_params);
                 };
-                case (null) {};
               };
-
-              if (not is_claimed) {
-                // Found an active locked bounty
-                switch (bounty_challenge_params) {
-                  case (?params) {
-                    let audit_type_msg = switch (JobQueue.get_audit_type_from_metadata(params)) {
-                      case (?at) { " audit_type=" # at };
-                      case (null) { " audit_type=unknown" };
-                    };
-                    Debug.print("Verifier " # Principal.toText(verifier) # " has ACTIVE audit bounty " # Nat.toText(bounty_id) # audit_type_msg # " for WASM " # wasm_id # " - returning this job");
-                    return ?(bounty_id, params);
-                  };
-                  case (null) {
-                    Debug.print("Warning: Could not get challenge_parameters for active audit bounty " # Nat.toText(bounty_id) # ", falling back to job.build_config");
-                    return ?(bounty_id, job.build_config);
-                  };
-                };
-              } else {
-                Debug.print("Verifier " # Principal.toText(verifier) # " has COMPLETED audit bounty " # Nat.toText(bounty_id) # " for WASM " # wasm_id # " - can get another");
-              };
-            }; // Close the else block for expired check
+              case (null) {};
+            };
           };
         };
         case (null) {};
       };
     };
-
     return null;
   };
 
   /**
-   * Find an available bounty that hasn't been assigned yet.
+   * Claim an available LOCAL bounty (no inter-canister calls).
    * Atomically claims it by creating assignment and provisional lock.
+   * This is the PRIMARY method for local bounties.
    */
-  public func claim_available_bounty(
+  public func claim_available_local_bounty(
     job : Types.VerificationJob,
     verifier : Principal,
     current_time : Int,
@@ -112,51 +77,34 @@ module {
     token_id : Types.TokenId,
     assigned_jobs : Map.Map<Types.BountyId, Types.AssignedJob>,
     bounty_locks : Map.Map<Types.BountyId, Types.BountyLock>,
-    registry_canister_id : ?Principal,
-  ) : async ?Types.BountyId {
+    icrc127 : ICRC127Instance,
+  ) : ?Types.BountyId {
     let wasm_id = job.wasm_id;
 
-    // Get registry actor if available
-    let registry_opt : ?McpRegistry.Service = switch (registry_canister_id) {
-      case (?id) { ?(actor (Principal.toText(id)) : McpRegistry.Service) };
-      case (null) { null };
-    };
-
     label bounty_search for (bounty_id in job.bounty_ids.vals()) {
-      // Check if bounty is already completed by querying the registry
-      switch (registry_opt) {
-        case (?registry) {
-          try {
-            let bounty_result = await registry.icrc127_get_bounty(bounty_id);
-            switch (bounty_result) {
-              case (?bounty) {
-                // Check if bounty has been claimed/completed
-                if (Option.isSome(bounty.claimed)) {
-                  Debug.print("Bounty " # Nat.toText(bounty_id) # " already claimed - skipping");
-                  continue bounty_search;
-                };
-              };
-              case (null) {
-                // Bounty doesn't exist in registry - skip it
-                Debug.print("Bounty " # Nat.toText(bounty_id) # " not found in registry - skipping");
-                continue bounty_search;
-              };
-            };
-          } catch (e) {
-            Debug.print("Error checking bounty " # Nat.toText(bounty_id) # " status: " # Error.message(e));
-            // Continue anyway - don't block on registry errors
+      // Query local ICRC127 instance (no inter-canister call!)
+      let bounty_opt = icrc127().icrc127_get_bounty(bounty_id);
+      switch (bounty_opt) {
+        case (?bounty) {
+          // Check if bounty has been claimed
+          if (Option.isSome(bounty.claimed)) {
+            Debug.print("Local bounty " # Nat.toText(bounty_id) # " already claimed - skipping");
+            continue bounty_search;
           };
         };
         case (null) {
-          // No registry configured - can't check completion status
+          Debug.print("Local bounty " # Nat.toText(bounty_id) # " not found - skipping");
+          continue bounty_search;
         };
       };
 
+      // Check if already assigned
       let is_assigned = Option.isSome(Map.get(assigned_jobs, Map.nhash, bounty_id));
       if (not is_assigned) {
         // IMMEDIATELY claim this bounty to prevent race conditions
         let temp_assignment : Types.AssignedJob = {
           wasm_id;
+          audit_type = job.audit_type;
           verifier;
           bounty_id;
           assigned_at = current_time;
@@ -173,7 +121,7 @@ module {
         };
         ignore Map.put(bounty_locks, Map.nhash, bounty_id, provisional_lock);
 
-        Debug.print("Claimed audit bounty " # Nat.toText(bounty_id) # " for verifier " # Principal.toText(verifier));
+        Debug.print("Claimed local bounty " # Nat.toText(bounty_id) # " for verifier " # Principal.toText(verifier));
         return ?bounty_id;
       };
     };
@@ -182,41 +130,27 @@ module {
   };
 
   /**
-   * Fetch bounty build config from registry, with fallback to job config.
+   * Get build config from LOCAL bounty (no inter-canister call).
+   * This is the PRIMARY method for local bounties.
    */
-  public func get_bounty_build_config(
+  public func get_local_bounty_build_config(
     bounty_id : Types.BountyId,
     job : Types.VerificationJob,
-    registry_canister_id : ?Principal,
-  ) : async Types.ICRC16Map {
-    switch (registry_canister_id) {
-      case (?registry_id) {
-        let registry : McpRegistry.Service = actor (Principal.toText(registry_id));
-        try {
-          let bounty_opt = await registry.icrc127_get_bounty(bounty_id);
-          switch (bounty_opt) {
-            case (?bounty) {
-              // Extract the Map from the challenge_parameters variant
-              switch (bounty.challenge_parameters) {
-                case (#Map(params)) { return params };
-                case (_) {
-                  Debug.print("Warning: challenge_parameters for bounty " # Nat.toText(bounty_id) # " is not a Map, falling back to job.build_config");
-                  return job.build_config;
-                };
-              };
-            };
-            case (null) {
-              Debug.print("Warning: Could not find audit bounty " # Nat.toText(bounty_id) # " in registry, falling back to job.build_config");
-              return job.build_config;
-            };
+    icrc127 : ICRC127Instance,
+  ) : Types.ICRC16Map {
+    let bounty_opt = icrc127().icrc127_get_bounty(bounty_id);
+    switch (bounty_opt) {
+      case (?bounty) {
+        switch (bounty.challenge_parameters) {
+          case (#Map(params)) { return params };
+          case (_) {
+            Debug.print("Warning: challenge_parameters for local bounty " # Nat.toText(bounty_id) # " is not a Map, falling back to job.build_config");
+            return job.build_config;
           };
-        } catch (e) {
-          Debug.print("Error fetching audit bounty from registry: " # Error.message(e) # ", falling back to job.build_config");
-          return job.build_config;
         };
       };
       case (null) {
-        Debug.print("Warning: Registry not configured, using job.build_config");
+        Debug.print("Warning: Could not find local bounty " # Nat.toText(bounty_id) # ", falling back to job.build_config");
         return job.build_config;
       };
     };
@@ -244,39 +178,25 @@ module {
   };
 
   /**
-   * Check and cleanup expired or claimed assignments for a verifier.
+   * Check and cleanup expired assignments for a verifier.
    * Returns active assignment if found.
+   * Only uses local bounties (no inter-canister calls to registry).
    */
   public func check_existing_assignment(
     verifier : Principal,
     current_time : Int,
     assigned_jobs : Map.Map<Types.BountyId, Types.AssignedJob>,
     pending_audits : BTree.BTree<Text, Types.VerificationJob>,
-    registry_canister_id : ?Principal,
     bounty_locks : Map.Map<Types.BountyId, Types.BountyLock>,
-  ) : async ?Types.VerificationJobAssignment {
-    let registry : ?McpRegistry.Service = switch (registry_canister_id) {
-      case (?id) { ?actor (Principal.toText(id)) };
-      case (null) { null };
-    };
-
+    icrc127 : ICRC127Instance,
+  ) : ?Types.VerificationJobAssignment {
     for ((bounty_id, assignment) in Map.entries(assigned_jobs)) {
       if (Principal.equal(assignment.verifier, verifier) and assignment.expires_at > current_time) {
-        // Check if this bounty is claimed
-        var is_claimed = false;
-        switch (registry) {
-          case (?reg) {
-            try {
-              let bounty_opt = await reg.icrc127_get_bounty(bounty_id);
-              is_claimed := switch (bounty_opt) {
-                case (?bounty) { Option.isSome(bounty.claimed_date) };
-                case (null) { false };
-              };
-            } catch (e) {
-              Debug.print("Error checking if bounty is claimed: " # Error.message(e));
-            };
-          };
-          case (null) {};
+        // Check if this bounty is claimed (query local ICRC127)
+        let bounty_opt = icrc127().icrc127_get_bounty(bounty_id);
+        let is_claimed = switch (bounty_opt) {
+          case (?bounty) { Option.isSome(bounty.claimed) };
+          case (null) { false };
         };
 
         if (is_claimed) {
@@ -296,10 +216,10 @@ module {
 
           switch (found_job) {
             case (?job) {
-              let bounty_build_config = await get_bounty_build_config(
+              let bounty_build_config = get_local_bounty_build_config(
                 bounty_id,
                 job,
-                registry_canister_id,
+                icrc127,
               );
 
               return ?create_job_assignment(

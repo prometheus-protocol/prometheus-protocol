@@ -1,18 +1,14 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Search, Frown, Loader2, RefreshCw } from 'lucide-react';
-import { useGetAuditBountiesInfinite } from '@/hooks/useAuditBounties';
-import { useGetWasmVerifications } from '@/hooks/useWasmVerifications';
+import { useListPendingJobs } from '@/hooks/useAuditBounties';
 import { AuditHubSkeleton } from '@/components/audits/AuditHubSkeleton';
 import { AuditHubError } from '@/components/audits/AuditHubError';
-import { VerificationListItem } from './VerificationListItem';
+import { PendingJobListItem } from './PendingJobListItem';
 
-// Larger page size since we're grouping - fetch enough bounties to get a good number of unique WASMs
-// Typically 9 bounties per WASM, so 90 bounties = ~10 WASMs shown
-const PAGE_SIZE = 90;
 const POLL_INTERVAL = 10000; // 10 seconds
-const CONSENSUS_THRESHOLD = 9; // Number of attestations/divergences needed for consensus
+const JOBS_PER_PAGE = 20;
 
 export function OpenBountiesTab() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -20,44 +16,28 @@ export function OpenBountiesTab() {
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(
     POLL_INTERVAL / 1000,
   );
+  const [visibleCount, setVisibleCount] = useState(JOBS_PER_PAGE);
 
-  const {
-    data,
-    isLoading: isBountiesLoading, // True only on initial load with no data
-    isError: isBountiesError,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    refetch,
-  } = useGetAuditBountiesInfinite(PAGE_SIZE);
+  const { data, isLoading, isError, refetch } = useListPendingJobs(
+    0,
+    visibleCount,
+  );
 
-  // Flatten all pages into a single array
-  const allBounties = useMemo(() => {
-    if (!data?.pages) return [];
-    return data.pages.flatMap((page) => page);
-  }, [data]);
+  const jobs = data?.jobs ?? [];
+  const total = data?.total ?? 0;
 
-  // Get grouped verifications with progress data
-  const {
-    data: verifications,
-    isLoading: isVerificationsLoading,
-    isError: isVerificationsError,
-    refetch: refetchVerifications,
-    dataUpdatedAt,
-  } = useGetWasmVerifications(allBounties);
-
-  // Check if any verifications are in progress
-  const hasInProgressVerifications = useMemo(() => {
+  // Check if any jobs are in progress (not fully completed)
+  const hasInProgressJobs = useMemo(() => {
     return (
-      verifications?.some(
-        (v) => v.attestationCount + v.divergenceCount < CONSENSUS_THRESHOLD,
+      jobs?.some(
+        (job) => job.completedCount + job.assignedCount < job.requiredVerifiers,
       ) ?? false
     );
-  }, [verifications]);
+  }, [jobs]);
 
   // Countdown timer and polling
   useEffect(() => {
-    if (!hasInProgressVerifications || !autoRefreshEnabled) {
+    if (!hasInProgressJobs || !autoRefreshEnabled) {
       setSecondsUntilRefresh(0);
       return;
     }
@@ -76,43 +56,37 @@ export function OpenBountiesTab() {
     // Polling timer (refetches every POLL_INTERVAL)
     const pollInterval = setInterval(() => {
       console.log('Polling for updates...');
-      refetch(); // Refetch bounties
-      refetchVerifications(); // Refetch verifications
+      refetch();
     }, POLL_INTERVAL);
 
     return () => {
       clearInterval(countdownInterval);
       clearInterval(pollInterval);
     };
-  }, [
-    hasInProgressVerifications,
-    autoRefreshEnabled,
-    refetch,
-    refetchVerifications,
-  ]);
+  }, [hasInProgressJobs, autoRefreshEnabled, refetch]);
 
-  // Filter verifications based on search query
-  const filteredVerifications = useMemo(() => {
-    if (!verifications) return [];
+  // Filter jobs based on search query
+  const filteredJobs = useMemo(() => {
+    if (!jobs) return [];
     const lowercasedQuery = searchQuery.toLowerCase().trim();
-    if (!lowercasedQuery) return verifications;
+    if (!lowercasedQuery) return jobs;
 
-    return verifications.filter((verification) => {
-      const auditType = verification.auditType.toLowerCase();
-      const wasmId = verification.wasmId.toLowerCase();
+    return jobs.filter((job) => {
+      const auditType = job.auditType.toLowerCase();
+      const wasmId = job.wasmId.toLowerCase();
       return (
         auditType.includes(lowercasedQuery) || wasmId.includes(lowercasedQuery)
       );
     });
-  }, [verifications, searchQuery]);
+  }, [jobs, searchQuery]);
 
-  // Show skeleton only on true initial load (no cached data)
-  const isInitialLoading =
-    (isBountiesLoading || isVerificationsLoading) && !verifications;
+  const hasSearchQuery = searchQuery.trim().length > 0;
+  const visibleJobs = hasSearchQuery ? filteredJobs : jobs;
+  const hasMore = hasSearchQuery ? false : visibleCount < total;
 
-  if (isInitialLoading) return <AuditHubSkeleton />;
-  if (isBountiesError || isVerificationsError)
-    return <AuditHubError onRetry={refetch} />;
+  // Show skeleton only on true initial load
+  if (isLoading && !data) return <AuditHubSkeleton />;
+  if (isError) return <AuditHubError onRetry={refetch} />;
 
   return (
     <div className="space-y-6">
@@ -128,36 +102,28 @@ export function OpenBountiesTab() {
           />
         </div>
         <Button
-          onClick={() => {
-            refetch();
-            refetchVerifications();
-          }}
+          onClick={() => refetch()}
           variant="outline"
           size="icon"
-          disabled={isBountiesLoading || isVerificationsLoading}
+          disabled={isLoading}
           className="shrink-0">
-          <RefreshCw
-            className={`h-4 w-4 ${isBountiesLoading || isVerificationsLoading ? 'animate-spin' : ''}`}
-          />
+          <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
         </Button>
       </div>
 
       {/* Auto-refresh indicator */}
       <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground bg-card/30 border border-gray-700 rounded px-3 py-2">
         <div className="flex items-center gap-2">
-          {autoRefreshEnabled && hasInProgressVerifications && (
+          {autoRefreshEnabled && hasInProgressJobs && (
             <>
               <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
               <span>
-                Auto-refreshing bounties and verifications • Next update in{' '}
-                {secondsUntilRefresh}s
+                Auto-refreshing jobs • Next update in {secondsUntilRefresh}s
               </span>
             </>
           )}
-          {autoRefreshEnabled && !hasInProgressVerifications && (
-            <span>
-              Auto-refresh active (updates when verifications are in progress)
-            </span>
+          {autoRefreshEnabled && !hasInProgressJobs && (
+            <span>Auto-refresh active (updates when jobs are in progress)</span>
           )}
           {!autoRefreshEnabled && <span>Auto-refresh paused</span>}
         </div>
@@ -171,60 +137,51 @@ export function OpenBountiesTab() {
       </div>
 
       <div className="space-y-3">
-        {filteredVerifications.length > 0 ? (
+        {filteredJobs.length > 0 ? (
           <>
-            {filteredVerifications.map((verification) => (
-              <VerificationListItem
-                key={`${verification.wasmId}::${verification.auditType}`}
-                verification={verification}
+            {visibleJobs.map((job) => (
+              <PendingJobListItem
+                key={job.queueKey}
+                job={job}
+                onSponsorClick={() => {}}
+                isSponsored={false}
               />
             ))}
-            {/* Show loading indicator when fetching bounties or recalculating verifications */}
-            {(isFetchingNextPage ||
-              (isVerificationsLoading && allBounties.length > 0)) && (
+            {isLoading && jobs && jobs.length > 0 && (
               <div className="flex flex-col items-center justify-center py-8 gap-2">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <p className="text-sm text-muted-foreground">
-                  {isFetchingNextPage
-                    ? 'Loading more bounties...'
-                    : 'Recalculating verifications...'}
+                  Refreshing jobs...
                 </p>
               </div>
             )}
-            {!hasNextPage && (
+            {hasMore ? (
+              <div className="text-center py-8">
+                <Button
+                  onClick={() =>
+                    setVisibleCount((prev) => prev + JOBS_PER_PAGE)
+                  }
+                  variant="outline"
+                  className="mx-auto">
+                  Load More
+                </Button>
+                <p className="text-sm text-gray-500 mt-2">
+                  Showing {visibleJobs.length} of {total} jobs
+                </p>
+              </div>
+            ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <p>
-                  All verifications loaded ({filteredVerifications.length}{' '}
-                  verifications, {allBounties.length} bounties)
+                  All jobs loaded ({total} {total === 1 ? 'job' : 'jobs'})
                 </p>
               </div>
-            )}
-            {/* Manual load more button + invisible observer target */}
-            {hasNextPage && !isFetchingNextPage && !isVerificationsLoading && (
-              <>
-                <div className="text-center py-8">
-                  <Button
-                    onClick={() => {
-                      console.log('Manual load more clicked');
-                      fetchNextPage();
-                    }}
-                    variant="outline"
-                    className="mx-auto">
-                    Load More Verifications
-                  </Button>
-                  <p className="text-sm text-gray-500 mt-2">
-                    Showing {filteredVerifications.length} verifications (
-                    {allBounties.length} bounties)
-                  </p>
-                </div>
-              </>
             )}
           </>
         ) : (
           <div className="text-center py-16 text-gray-500 flex flex-col items-center gap-4">
             <Frown className="h-12 w-12" />
-            <p className="font-semibold">No Verifications Found</p>
-            <p>There are no verifications matching your search.</p>
+            <p className="font-semibold">No Jobs Found</p>
+            <p>There are no jobs matching your search.</p>
           </div>
         )}
       </div>

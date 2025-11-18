@@ -9,6 +9,7 @@ import * as McpServer from './generated/mcp_server/mcp_server.did.js';
 import * as SearchIndex from './generated/search_index/search_index.did.js';
 import * as UsageTracker from './generated/usage_tracker/usage_tracker.did.js';
 import * as TokenWatchlist from './generated/token_watchlist/token_watchlist.did.js';
+import * as BountySponsor from './generated/bounty_sponsor/bounty_sponsor.did.js';
 
 export {
   Registry,
@@ -22,6 +23,7 @@ export {
   SearchIndex,
   UsageTracker,
   TokenWatchlist,
+  BountySponsor,
 };
 
 // Bump version number

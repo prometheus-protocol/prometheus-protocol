@@ -1,11 +1,11 @@
 import {
   AttestationRecord,
   AuditRecord,
-  Bounty,
   ICRC16Map,
   VerificationRecord,
   VerificationRequest,
 } from '@prometheus-protocol/declarations/mcp_registry/mcp_registry.did.js';
+import { Bounty } from '@prometheus-protocol/declarations/audit_hub/audit_hub.did.js';
 import {
   AuditBounty,
   ProcessedAttestation,
@@ -75,9 +75,9 @@ export function calculateSecurityTier(
 export function processBounty(bounty: Bounty): AuditBounty {
   const claimedDateNs = fromNullable(bounty.claimed_date);
   const timeoutDateNs = fromNullable(bounty.timeout_date);
-  const challengeParameters = deserializeIcrc16Value(
-    bounty.challenge_parameters,
-  );
+  const challengeParameters = bounty.challenge_parameters
+    ? deserializeIcrc16Value(bounty.challenge_parameters)
+    : {};
 
   // Extract WASM hash from challenge parameters if available
   let wasmHashHex: string | undefined;

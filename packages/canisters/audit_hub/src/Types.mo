@@ -61,13 +61,15 @@ module {
     build_config : ICRC16Map;
     created_at : Timestamp;
     required_verifiers : Nat;
-    assigned_count : Nat;
-    bounty_ids : [BountyId]; // List of bounty IDs created for this verification
-  };
-
-  // A job assignment to a specific verifier
+    assigned_count : Nat; // How many verifiers currently have active assignments
+    completed_count : Nat; // How many verifiers have completed and submitted attestations
+    bounty_ids : [BountyId]; // IDs of auto-attached bounties
+    audit_type : Text; // e.g., "build_reproducibility_v1", "tools_v1", etc.
+    creator : Principal; // Who created this verification job (for registry authorization)
+  }; // A job assignment to a specific verifier
   public type AssignedJob = {
     wasm_id : Text;
+    audit_type : Text;
     verifier : Principal;
     bounty_id : BountyId;
     assigned_at : Timestamp;

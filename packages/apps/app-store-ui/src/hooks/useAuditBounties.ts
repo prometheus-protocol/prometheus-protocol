@@ -19,10 +19,14 @@ import {
   approveAllowance,
   getVerifierProfile,
   listPendingVerifications,
+  listAllVerificationRequests,
+  listPendingJobs,
   submitDivergence,
   depositStake,
   sponsorBountiesForWasm,
   ProcessedVerificationRecord,
+  getSponsoredAuditTypes,
+  getCompletedAuditTypes,
 } from '@prometheus-protocol/ic-js';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import useMutation from './useMutation';
@@ -341,6 +345,57 @@ export const useListPendingVerifications = () => {
   return useQuery({
     queryKey: ['pendingVerifications'],
     queryFn: listPendingVerifications,
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+};
+
+/**
+ * Hook to fetch all verification requests with optional pagination
+ */
+export const useListAllVerificationRequests = (
+  offset?: number,
+  limit?: number,
+) => {
+  return useQuery({
+    queryKey: ['allVerificationRequests', offset, limit],
+    queryFn: () => listAllVerificationRequests(offset, limit),
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+};
+
+export const useListPendingJobs = (offset?: number, limit?: number) => {
+  return useQuery({
+    queryKey: ['pendingJobs', offset, limit],
+    queryFn: () => listPendingJobs(offset, limit),
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
+};
+
+/**
+ * Hook to fetch audit types that have been sponsored by the bounty_sponsor canister.
+ * The bounty_sponsor pays for the first round of bounties.
+ * Any subsequent sponsorships must be paid by users.
+ */
+export const useSponsoredAuditTypes = (wasmId: string) => {
+  return useQuery({
+    queryKey: ['sponsoredAuditTypes', wasmId],
+    queryFn: () => getSponsoredAuditTypes(wasmId),
+    enabled: !!wasmId,
+    refetchOnMount: 'always', // Always refetch when component mounts
+  });
+};
+
+/**
+ * Hook to fetch audit types that have been completed (reached consensus) for a WASM.
+ * An audit type is completed when it has enough successful attestations.
+ */
+export const useCompletedAuditTypes = (wasmId: string) => {
+  return useQuery({
+    queryKey: ['completedAuditTypes', wasmId],
+    queryFn: () => getCompletedAuditTypes(wasmId),
+    enabled: !!wasmId,
+    refetchOnMount: 'always', // Always refetch when component mounts
+    refetchInterval: 30000, // Refetch every 30 seconds
   });
 };
 

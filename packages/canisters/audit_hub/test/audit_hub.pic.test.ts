@@ -65,6 +65,56 @@ describe('Audit Hub Canister - USDC Staking System', () => {
   const USDC_FEE = 10_000n; // 0.01 USDC
   const toUSDC = (amount: number) => BigInt(amount * 10 ** USDC_DECIMALS);
 
+  // Helper function to create a bounty for testing
+  const createTestBounty = async (auditType: string): Promise<bigint> => {
+    // Fund randomUser with USDC to create bounties
+    usdcLedgerActor.setIdentity(ownerIdentity);
+    await usdcLedgerActor.icrc1_transfer({
+      to: { owner: randomUserIdentity.getPrincipal(), subaccount: [] },
+      amount: toUSDC(10) + 20_000n, // Amount for bounty + fees
+      fee: [],
+      memo: [],
+      from_subaccount: [],
+      created_at_time: [],
+    });
+
+    // Approve audit_hub to spend tokens for bounty creation
+    usdcLedgerActor.setIdentity(randomUserIdentity);
+    await usdcLedgerActor.icrc2_approve({
+      spender: { owner: auditHubCanisterId, subaccount: [] },
+      amount: toUSDC(2) + 10_000n, // Bounty reward + fees
+      fee: [],
+      memo: [],
+      from_subaccount: [],
+      created_at_time: [],
+      expected_allowance: [],
+      expires_at: [],
+    });
+
+    // Create the bounty
+    auditHubActor.setIdentity(randomUserIdentity);
+    const createResult = await auditHubActor.icrc127_create_bounty({
+      challenge_parameters: { Map: [['audit_type', { Text: auditType }]] },
+      timeout_date: BigInt(Date.now() + 7 * 24 * 60 * 60 * 1000) * 1_000_000n,
+      start_date: [],
+      bounty_id: [],
+      validation_canister_id: auditHubCanisterId,
+      bounty_metadata: [
+        ['icrc127:reward_canister', { Principal: usdcLedgerCanisterId }],
+        ['icrc127:reward_amount', { Nat: toUSDC(1) }],
+      ],
+    });
+
+    if ('Error' in createResult) {
+      throw new Error(
+        `Failed to create bounty: ${JSON.stringify(createResult.Error)}`,
+      );
+    }
+
+    // @ts-ignore
+    return createResult.Ok.bounty_id;
+  };
+
   beforeEach(async () => {
     const url = inject('PIC_URL');
     pic = await PocketIc.create(url);
@@ -108,7 +158,8 @@ describe('Audit Hub Canister - USDC Staking System', () => {
     usdcLedgerActor = ledgerFixture.actor;
     usdcLedgerCanisterId = ledgerFixture.canisterId;
 
-    // Deploy registry
+    // Deploy registry (still needed for authorization, but NOT for ICRC127 bounties)
+    // The audit_hub uses registry_canister_id to authorize certain operations like stake release
     const registryFixture = await pic.setupCanister<RegistryService>({
       idlFactory: registryIdlFactory,
       wasm: REGISTRY_WASM_PATH,
@@ -130,7 +181,8 @@ describe('Audit Hub Canister - USDC Staking System', () => {
     // Configure audit_hub with USDC ledger
     auditHubActor.setIdentity(ownerIdentity);
 
-    // Set registry canister ID (needed for API key operations and stake release/slash)
+    // Set registry canister ID (needed for API key operations and stake release/slash authorization)
+    // Note: The registry is NO LONGER used for ICRC127 bounty creation - that's now done locally
     await auditHubActor.set_registry_canister_id(registryCanisterId);
 
     // Set stake requirement for build verification
@@ -311,7 +363,6 @@ describe('Audit Hub Canister - USDC Staking System', () => {
 
   // --- Suite 4: Bounty Reservation with USDC Staking ---
   describe('Bounty Reservation & Staking', () => {
-    const BOUNTY_ID = 1000n;
     const AUDIT_TYPE = 'build_v1';
     let TOKEN_ID: string; // Ledger canister ID
 
@@ -358,7 +409,8 @@ describe('Audit Hub Canister - USDC Staking System', () => {
     });
 
     it('should allow verifier to reserve bounty with sufficient balance', async () => {
-      const BOUNTY_ID = 1001n;
+      const BOUNTY_ID = await createTestBounty(AUDIT_TYPE);
+
       auditHubActor.setIdentity(verifier1Identity);
       const result = await auditHubActor.reserve_bounty(BOUNTY_ID, AUDIT_TYPE);
       expect(result).toHaveProperty('ok');
@@ -378,7 +430,8 @@ describe('Audit Hub Canister - USDC Staking System', () => {
     });
 
     it('should reject reserve_bounty_with_api_key with invalid API key', async () => {
-      const BOUNTY_ID = 1002n;
+      const BOUNTY_ID = await createTestBounty(AUDIT_TYPE);
+
       const result = await auditHubActor.reserve_bounty_with_api_key(
         'invalid-api-key-12345',
         BOUNTY_ID,
@@ -390,7 +443,7 @@ describe('Audit Hub Canister - USDC Staking System', () => {
     });
 
     it('should reject reserve_bounty_with_api_key with revoked API key', async () => {
-      const BOUNTY_ID = 1002n;
+      const BOUNTY_ID = await createTestBounty(AUDIT_TYPE);
 
       // Generate and then revoke an API key
       auditHubActor.setIdentity(verifier1Identity);
@@ -411,7 +464,8 @@ describe('Audit Hub Canister - USDC Staking System', () => {
     });
 
     it('should reject reserving bounty with insufficient balance', async () => {
-      const BOUNTY_ID = 1003n;
+      const BOUNTY_ID = await createTestBounty(AUDIT_TYPE);
+
       auditHubActor.setIdentity(verifier2Identity); // Has no balance
       const result = await auditHubActor.reserve_bounty(BOUNTY_ID, AUDIT_TYPE);
       expect(result).toHaveProperty('err');
@@ -420,7 +474,8 @@ describe('Audit Hub Canister - USDC Staking System', () => {
     });
 
     it('should reject reserving already locked bounty', async () => {
-      const BOUNTY_ID = 1004n;
+      const BOUNTY_ID = await createTestBounty(AUDIT_TYPE);
+
       auditHubActor.setIdentity(verifier1Identity);
       await auditHubActor.reserve_bounty(BOUNTY_ID, AUDIT_TYPE);
 
@@ -430,13 +485,58 @@ describe('Audit Hub Canister - USDC Staking System', () => {
       // @ts-ignore
       expect(result.err).toMatch(/already locked/);
     });
+
+    it('should allow verifier to submit bounty claim after reservation', async () => {
+      const BOUNTY_ID = await createTestBounty(AUDIT_TYPE);
+
+      // Reserve the bounty
+      auditHubActor.setIdentity(verifier1Identity);
+      const reserveResult = await auditHubActor.reserve_bounty(
+        BOUNTY_ID,
+        AUDIT_TYPE,
+      );
+      expect(reserveResult).toHaveProperty('ok');
+
+      // Submit the bounty claim
+      const submitResult = await auditHubActor.icrc127_submit_bounty({
+        bounty_id: BOUNTY_ID,
+        submission: { Text: 'Completed verification' },
+        account: [], // Payout to self
+      });
+
+      expect(submitResult).toHaveProperty('Ok');
+      // @ts-ignore
+      expect(submitResult.Ok.result.length).toBeGreaterThan(0);
+    });
+
+    it('should reject bounty submission without reservation', async () => {
+      const BOUNTY_ID = await createTestBounty(AUDIT_TYPE);
+
+      // Try to submit without reserving first
+      auditHubActor.setIdentity(verifier1Identity);
+      const submitResult = await auditHubActor.icrc127_submit_bounty({
+        bounty_id: BOUNTY_ID,
+        submission: { Text: 'Completed verification' },
+        account: [],
+      });
+
+      // Submission succeeds but validation should fail
+      expect(submitResult).toHaveProperty('Ok');
+      // @ts-ignore
+      expect(submitResult.Ok.result[0].result).toHaveProperty('Invalid');
+      // @ts-ignore
+      expect(submitResult.Ok.result[0].metadata.Map).toContainEqual([
+        'error',
+        { Text: 'bounty not reserved' },
+      ]);
+    });
   });
 
   // --- Suite 5: Stake Release & Earnings Tracking ---
   describe('Stake Release & Earnings', () => {
-    const BOUNTY_ID = 2000n;
     const AUDIT_TYPE = 'build_v1';
     let TOKEN_ID: string;
+    let BOUNTY_ID: bigint;
 
     beforeEach(async () => {
       TOKEN_ID = usdcLedgerCanisterId.toText();
@@ -477,6 +577,12 @@ describe('Audit Hub Canister - USDC Staking System', () => {
         usdcLedgerCanisterId.toText(),
         toUSDC(5),
       );
+
+      // Create a bounty using the test helper
+      BOUNTY_ID = await createTestBounty(AUDIT_TYPE);
+
+      // Reserve the bounty
+      auditHubActor.setIdentity(verifier1Identity);
       await auditHubActor.reserve_bounty(BOUNTY_ID, AUDIT_TYPE);
     });
 

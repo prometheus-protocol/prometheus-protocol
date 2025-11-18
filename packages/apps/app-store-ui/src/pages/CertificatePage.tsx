@@ -252,13 +252,13 @@ export function CertificatePage() {
         </div>
       </div>
 
-      <CreateBountyDialog
+      {/* <CreateBountyDialog
         isOpen={!!sponsoringAuditType}
         onOpenChange={(open) => !open && setSponsoringAuditType(null)}
         wasmId={latestVersion.wasmId}
         auditType={sponsoringAuditType ?? ''}
-        paymentToken={Tokens.USDC}
-      />
+        verificationRequest={Tokens.generateVerificationRequest()}
+      /> */}
     </>
   );
 }

@@ -21,6 +21,28 @@ import Types "./Types";
 module {
   type BuildConfig = [(Text, ICRC126.ICRC16)];
 
+  // Extended audit_hub actor interface with custom functions beyond ICRC127
+  type AuditHubService = actor {
+    // Standard ICRC127 functions
+    icrc127_create_bounty : (ICRC127Service.CreateBountyRequest) -> async ICRC127Service.CreateBountyResult;
+    icrc127_submit_bounty : (ICRC127Service.BountySubmissionRequest) -> async ICRC127Service.BountySubmissionResult;
+    icrc127_get_bounty : (bounty_id : Nat) -> async ?ICRC127Service.Bounty;
+    icrc127_list_bounties : (filter : ?[ICRC127Service.ListBountiesFilter], prev : ?Nat, take : ?Nat) -> async [ICRC127Service.Bounty];
+    icrc127_metadata : () -> async ICRC127Service.ICRC16Map;
+    icrc10_supported_standards : () -> async [{ name : Text; url : Text }];
+
+    // Custom audit_hub functions
+    add_verification_job : (
+      wasm_id : Text,
+      repo : Text,
+      commit_hash : Text,
+      build_config : ICRC127Service.ICRC16Map,
+      audit_type : Text,
+      required_verifiers : Nat,
+      bounty_ids : [Nat],
+    ) -> async Result.Result<(), Text>;
+  };
+
   public func sponsor_bounties_for_wasm<system>(
     state : Types.State,
     _canister_id : Principal,
@@ -79,9 +101,9 @@ module {
     };
 
     // Validate configuration first
-    let registry_id = switch (state.registry_canister_id) {
+    let audit_hub_id = switch (state.audit_hub_canister_id) {
       case (?id) { id };
-      case (null) { return #err("Registry canister ID not configured") };
+      case (null) { return #err("Audit Hub canister ID not configured") };
     };
 
     let reward_token_id = switch (state.reward_token_canister_id) {
@@ -129,7 +151,7 @@ module {
     let all_bounty_ids = Buffer.Buffer<Types.BountyId>(state.required_verifiers * audit_types_to_create.size());
     let timestamp = Time.now();
 
-    let registry = actor (Principal.toText(registry_id)) : ICRC127Service.Service;
+    let audit_hub = actor (Principal.toText(audit_hub_id)) : AuditHubService;
 
     // Calculate total amount needed ONLY for audit types we're actually creating
     var total_amount_needed : Nat = 0;
@@ -158,7 +180,7 @@ module {
 
       let approve_args : ICRC2.ApproveArgs = {
         from_subaccount = null;
-        spender = { owner = registry_id; subaccount = null };
+        spender = { owner = audit_hub_id; subaccount = null };
         amount = total_amount_needed;
         expected_allowance = null;
         expires_at = ?expiry_nanos;
@@ -171,7 +193,7 @@ module {
         let approve_result = await reward_token_ledger.icrc2_approve(approve_args);
         switch (approve_result) {
           case (#Ok(_)) {
-            Debug.print("Approved registry to spend " # Nat.toText(total_amount_needed) # " tokens");
+            Debug.print("Approved audit_hub to spend " # Nat.toText(total_amount_needed) # " tokens");
           };
           case (#Err(err)) {
             return #err("Failed to approve token spending: " # debug_show (err));
@@ -203,19 +225,26 @@ module {
           challenge_parameters = #Map([
             ("wasm_hash", #Blob(wasm_hash)),
             ("audit_type", #Text(audit_type)),
+            ("wasm_id", #Text(wasm_id)),
+            ("repo", #Text(repo)),
+            ("commit_hash", #Text(commit_hash)),
           ]);
           timeout_date = Int.abs(Time.now() + (7 * 24 * 60 * 60 * 1_000_000_000)); // 7 days
           start_date = null;
           bounty_id = null;
-          validation_canister_id = registry_id;
+          validation_canister_id = audit_hub_id;
           bounty_metadata = [
             ("icrc127:reward_canister", #Principal(reward_token_id)),
             ("icrc127:reward_amount", #Nat(reward_amount)),
+            ("wasm_id", #Text(wasm_id)),
+            ("audit_type", #Text(audit_type)),
+            ("repo", #Text(repo)),
+            ("commit_hash", #Text(commit_hash)),
           ];
         };
 
         try {
-          let result = await registry.icrc127_create_bounty(bounty_request);
+          let result = await audit_hub.icrc127_create_bounty(bounty_request);
           switch (result) {
             case (#Ok(bounty_result)) {
               let bounty_id = bounty_result.bounty_id;
@@ -251,42 +280,6 @@ module {
         };
 
         i += 1;
-      };
-
-      // Add verification job to audit_hub for this specific audit type
-      if (audit_type_bounty_ids.size() > 0) {
-        switch (state.audit_hub_canister_id) {
-          case (?hub_id) {
-            let audit_hub = actor (Principal.toText(hub_id)) : actor {
-              add_verification_job : (Text, Text, Text, [(Text, ICRC126.ICRC16)], Nat, [Nat]) -> async Result.Result<(), Text>;
-            };
-
-            // Add audit_type to build_config for this job
-            let build_config_with_audit_type = Buffer.fromArray<(Text, ICRC126.ICRC16)>(build_config);
-            build_config_with_audit_type.add(("audit_type", #Text(audit_type)));
-            let final_build_config = Buffer.toArray(build_config_with_audit_type);
-
-            Debug.print("Adding " # audit_type # " verification job to audit hub for WASM " # wasm_id);
-            try {
-              switch (await audit_hub.add_verification_job(wasm_id, repo, commit_hash, final_build_config, state.required_verifiers, Buffer.toArray(audit_type_bounty_ids))) {
-                case (#ok()) {
-                  Debug.print("Successfully added " # audit_type # " verification job to audit hub");
-                };
-                case (#err(msg)) {
-                  Debug.print("Error adding " # audit_type # " verification job to audit hub: " # msg);
-                  // Don't fail the whole operation, bounties are already created
-                };
-              };
-            } catch (e) {
-              Debug.print("Exception adding " # audit_type # " verification job to audit hub: " # Error.message(e));
-              // Don't fail the whole operation, bounties are already created
-            };
-          };
-          case (null) {
-            Debug.print("Warning: Audit hub canister ID not configured, skipping job registration for " # audit_type);
-            // Don't fail - bounties are still valid
-          };
-        };
       };
     };
 

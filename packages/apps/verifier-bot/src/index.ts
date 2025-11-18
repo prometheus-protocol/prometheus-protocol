@@ -11,6 +11,7 @@ import {
   getLockedBountyForVerifier,
   requestVerificationJob,
   releaseJobAssignment,
+  claimBountyWithApiKey,
   AttestationData,
   configure as configureIcJs,
 } from '@prometheus-protocol/ic-js';
@@ -246,6 +247,15 @@ async function pollAndVerifyWithJobQueue(): Promise<void> {
             });
 
             console.log(`   ✅ Tools attestation filed successfully`);
+
+            // Claim the bounty
+            console.log(`   💰 Claiming bounty...`);
+            await claimBountyWithApiKey(VERIFIER_API_KEY!, {
+              bounty_id: job.bounty_id,
+              wasm_id: job.wasm_id,
+            });
+
+            console.log(`   ✅ Bounty claimed successfully!`);
             console.log(`   📋 Tools discovered:`);
             toolsResult.tools.forEach((tool) => {
               console.log(
@@ -305,6 +315,15 @@ async function pollAndVerifyWithJobQueue(): Promise<void> {
             });
 
             console.log(`   ✅ Attestation filed successfully`);
+
+            // Claim the bounty
+            console.log(`   💰 Claiming bounty...`);
+            await claimBountyWithApiKey(VERIFIER_API_KEY!, {
+              bounty_id: job.bounty_id,
+              wasm_id: job.wasm_id,
+            });
+
+            console.log(`   ✅ Bounty claimed successfully!`);
             console.log(`   ⏳ Waiting for 5-of-9 consensus...`);
             console.log(
               `   💰 Payout will be automatic after consensus is reached\n`,

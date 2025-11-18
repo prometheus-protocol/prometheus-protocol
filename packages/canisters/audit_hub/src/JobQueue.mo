@@ -6,11 +6,17 @@ import Principal "mo:base/Principal";
 import Result "mo:base/Result";
 import Time "mo:base/Time";
 import Nat "mo:base/Nat";
+import Int "mo:base/Int";
+import Iter "mo:base/Iter";
 import Text "mo:base/Text";
 import Buffer "mo:base/Buffer";
 import Debug "mo:base/Debug";
+import Array "mo:base/Array";
+import Order "mo:base/Order";
+import Option "mo:base/Option";
 
 import Types "Types";
+import ICRC127Lib "../../../../libs/icrc127/src/lib";
 
 module {
   public type VerificationJob = Types.VerificationJob;
@@ -34,9 +40,10 @@ module {
   };
 
   // Helper function to create composite key for pending_audits BTree
-  // Format: wasm_id::audit_type (e.g., "abc123::tools_v1")
-  public func make_queue_key(wasm_id : Text, audit_type : Text) : Text {
-    wasm_id # "::" # audit_type;
+  // Format: wasm_id::audit_type::timestamp (e.g., "abc123::tools_v1::1234567890")
+  // Including timestamp allows multiple jobs for the same wasm_id + audit_type
+  public func make_queue_key(wasm_id : Text, audit_type : Text, timestamp : Int) : Text {
+    wasm_id # "::" # audit_type # "::" # Int.toText(timestamp);
   };
 
   /**
@@ -47,8 +54,9 @@ module {
    * @param repo - The repository URL
    * @param commit_hash - The commit hash to build from
    * @param build_config - ICRC-16 metadata containing audit_type and other config
+   * @param audit_type - The audit type (e.g., "build_reproducibility_v1")
    * @param required_verifiers - Number of verifiers needed
-   * @param bounty_ids - Array of bounty IDs associated with this job
+   * @param bounty_ids - Legacy parameter (unused, kept for compatibility)
    * @param caller - The principal calling this function (for authorization)
    * @param registry_canister_id - Optional registry canister ID for authorization
    * @param bounty_sponsor_canister_id - Optional bounty sponsor canister ID for authorization
@@ -59,80 +67,35 @@ module {
     repo : Text,
     commit_hash : Text,
     build_config : ICRC16Map,
+    audit_type : Text,
     required_verifiers : Nat,
     bounty_ids : [Nat],
     caller : Principal,
     registry_canister_id : ?Principal,
     bounty_sponsor_canister_id : ?Principal,
   ) : Result.Result<(), Text> {
-    // Check authorization: caller must be registry or bounty_sponsor
-    var authorized = false;
-    switch (registry_canister_id) {
-      case (?registry_id) {
-        if (Principal.equal(caller, registry_id)) {
-          authorized := true;
-        };
-      };
-      case (null) {};
+    // Check authorization: caller must be authenticated (not anonymous)
+    if (Principal.isAnonymous(caller)) {
+      return #err("Anonymous users cannot add verification jobs");
     };
 
-    if (not authorized) {
-      switch (bounty_sponsor_canister_id) {
-        case (?sponsor_id) {
-          if (Principal.equal(caller, sponsor_id)) {
-            authorized := true;
-          };
-        };
-        case (null) {};
-      };
-    };
-
-    if (not authorized) {
-      return #err("Only the registry or bounty_sponsor canister can add verification jobs");
-    };
-
-    // Extract audit_type from build_config
-    let audit_type = switch (get_audit_type_from_metadata(build_config)) {
-      case (?at) { at };
-      case (null) { "build_reproducibility_v1" }; // Default if not specified
-    };
-
-    // Create composite key: wasm_id::audit_type
-    let queue_key = make_queue_key(wasm_id, audit_type);
+    // Create job with timestamp
+    let created_at = Time.now();
+    let queue_key = make_queue_key(wasm_id, audit_type, created_at);
     Debug.print("Adding " # audit_type # " audit job for WASM " # wasm_id # " with key: " # queue_key);
-
-    // Check if job already exists in the queue
-    let final_bounty_ids = switch (BTree.get(pending_audits, Text.compare, queue_key)) {
-      case (?existing) {
-        // Job already exists, merge the bounty_ids
-        Debug.print("Job for " # queue_key # " already exists, merging " # Nat.toText(bounty_ids.size()) # " new bounty_ids with existing " # Nat.toText(existing.bounty_ids.size()));
-
-        // Create a buffer with all existing bounty_ids
-        let merged = Buffer.Buffer<Nat>(existing.bounty_ids.size() + bounty_ids.size());
-        for (id in existing.bounty_ids.vals()) {
-          merged.add(id);
-        };
-        // Add new bounty_ids
-        for (id in bounty_ids.vals()) {
-          merged.add(id);
-        };
-        Buffer.toArray(merged);
-      };
-      case (null) {
-        Debug.print("Adding new audit job for " # queue_key);
-        bounty_ids;
-      };
-    };
 
     let job : VerificationJob = {
       wasm_id;
       repo;
       commit_hash;
       build_config;
-      created_at = Time.now();
+      created_at;
       required_verifiers;
       assigned_count = 0;
-      bounty_ids = final_bounty_ids;
+      completed_count = 0;
+      bounty_ids = []; // Empty array - bounties will attach via auto-attach mechanism
+      audit_type;
+      creator = caller;
     };
 
     ignore BTree.insert(pending_audits, Text.compare, queue_key, job);
@@ -169,21 +132,13 @@ module {
       };
     };
 
-    // Create composite key: wasm_id::audit_type
-    let queue_key = make_queue_key(wasm_id, audit_type);
-    Debug.print("Marking " # audit_type # " audit job complete for WASM " # wasm_id # " with key: " # queue_key);
+    // Note: We used to delete completed jobs, but now we keep them
+    // so they remain visible in the UI. Jobs with assigned_count >= required_verifiers
+    // are considered complete.
+    Debug.print("Verification complete for " # audit_type # " audit on WASM " # wasm_id);
+    Debug.print("Jobs are kept in queue for historical visibility");
 
-    // Remove from pending queue
-    switch (BTree.delete(pending_audits, Text.compare, queue_key)) {
-      case (?_removed_job) {
-        Debug.print("Successfully removed completed job for " # queue_key);
-        #ok();
-      };
-      case (null) {
-        Debug.print("Warning: No pending job found for " # queue_key);
-        #ok(); // Don't error if job not found
-      };
-    };
+    #ok();
   };
 
   /**
@@ -260,6 +215,7 @@ module {
               bounty_id;
               expires_at = Time.now() + lock_duration_ns;
               wasm_id = job.wasm_id;
+              audit_type = job.audit_type;
             };
 
             // Store assignment
@@ -285,7 +241,10 @@ module {
               created_at = job.created_at;
               required_verifiers = job.required_verifiers;
               assigned_count = job.assigned_count + 1;
+              completed_count = job.completed_count;
               bounty_ids = job.bounty_ids;
+              audit_type = job.audit_type;
+              creator = job.creator;
             };
             ignore BTree.insert(pending_audits, Text.compare, key, updated_job);
 
@@ -342,17 +301,108 @@ module {
   };
 
   /**
-   * List all pending audit jobs.
+   * List all pending audit jobs with pagination and sorting.
    * @param pending_audits - The BTree queue for pending audit jobs
+   * @param assigned_jobs - Map of currently assigned jobs to calculate accurate counts
+   * @param icrc127_get_bounty - Function to retrieve bounty details by ID
+   * @param offset - Starting index for pagination
+   * @param limit - Maximum number of results to return
    */
   public func list_pending_jobs(
-    pending_audits : BTree.BTree<Text, VerificationJob>
-  ) : [(Text, VerificationJob)] {
+    pending_audits : BTree.BTree<Text, VerificationJob>,
+    assigned_jobs : Map.Map<BountyId, AssignedJob>,
+    icrc127_get_bounty : (BountyId) -> ?ICRC127Lib.Bounty,
+    offset : ?Nat,
+    limit : ?Nat,
+  ) : {
+    jobs : [(Text, VerificationJob)];
+    total : Nat;
+  } {
     let result = Buffer.Buffer<(Text, VerificationJob)>(0);
     for ((key, job) in BTree.entries(pending_audits)) {
-      result.add((key, job));
+      // Calculate actual assigned count by counting assignments for this wasm_id and audit_type
+      var actual_assigned_count : Nat = 0;
+      for ((bounty_id, assignment) in Map.entries(assigned_jobs)) {
+        if (assignment.wasm_id == job.wasm_id and assignment.audit_type == job.audit_type) {
+          actual_assigned_count += 1;
+        };
+      };
+
+      // Calculate completed count by checking how many bounties have been claimed
+      var actual_completed_count : Nat = 0;
+      for (bounty_id in job.bounty_ids.vals()) {
+        switch (icrc127_get_bounty(bounty_id)) {
+          case (?bounty) {
+            // Check if bounty has been claimed (has claims and they're valid)
+            if (bounty.claims.size() > 0) {
+              actual_completed_count += 1;
+            };
+          };
+          case (null) {};
+        };
+      };
+
+      // Create updated job with accurate counts
+      let updated_job : VerificationJob = {
+        wasm_id = job.wasm_id;
+        repo = job.repo;
+        commit_hash = job.commit_hash;
+        build_config = job.build_config;
+        created_at = job.created_at;
+        required_verifiers = job.required_verifiers;
+        assigned_count = actual_assigned_count;
+        completed_count = actual_completed_count;
+        bounty_ids = job.bounty_ids;
+        audit_type = job.audit_type;
+        creator = job.creator;
+      };
+
+      result.add((key, updated_job));
     };
-    Buffer.toArray(result);
+
+    // Sort by timestamp descending (newest first)
+    // Keys are in format: wasm_id::audit_type::timestamp
+    var array = Buffer.toArray(result);
+    let total = array.size();
+
+    array := Array.sort<(Text, VerificationJob)>(
+      array,
+      func(a : (Text, VerificationJob), b : (Text, VerificationJob)) : Order.Order {
+        // Use created_at from the job directly instead of parsing the key
+        let a_timestamp = a.1.created_at;
+        let b_timestamp = b.1.created_at;
+
+        // Sort descending (newest first)
+        if (a_timestamp > b_timestamp) {
+          #less;
+        } else if (a_timestamp < b_timestamp) {
+          #greater;
+        } else {
+          #equal;
+        };
+      },
+    );
+
+    // Apply pagination
+    let start = Option.get(offset, 0);
+    let page_size = Option.get(limit, total);
+    let end = Nat.min(start + page_size, total);
+
+    let paginated = if (start >= total) {
+      [];
+    } else {
+      Array.tabulate<(Text, VerificationJob)>(
+        end - start,
+        func(i : Nat) : (Text, VerificationJob) {
+          array[start + i];
+        },
+      );
+    };
+
+    return {
+      jobs = paginated;
+      total = total;
+    };
   };
 
   /**

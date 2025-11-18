@@ -637,13 +637,13 @@ export default function ServerDetailsPage() {
       </div>
 
       {/* Dialogs now receive the correct, version-specific wasmId. */}
-      <CreateBountyDialog
+      {/* <CreateBountyDialog
         isOpen={isBountyDialogOpen}
         onOpenChange={setIsBountyDialogOpen}
         wasmId={latestVersion.wasmId}
         auditType="app_info_v1"
         paymentToken={Tokens.USDC}
-      />
+      /> */}
 
       {/* InstallDialog takes the whole object and will need to be updated internally. */}
       {canisterId && (

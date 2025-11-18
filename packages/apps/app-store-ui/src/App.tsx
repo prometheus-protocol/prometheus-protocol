@@ -52,6 +52,7 @@ const canisterIds = {
   SEARCH_INDEX: process.env.CANISTER_ID_SEARCH_INDEX!,
   USAGE_TRACKER: process.env.CANISTER_ID_USAGE_TRACKER!,
   TOKEN_WATCHLIST: process.env.CANISTER_ID_TOKEN_WATCHLIST!,
+  BOUNTY_SPONSOR: process.env.CANISTER_ID_BOUNTY_SPONSOR!,
   // ... add all other canister IDs your app needs
 };
 

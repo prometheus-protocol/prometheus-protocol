@@ -30,7 +30,6 @@ import Order "mo:base/Order";
 
 import AppStore "AppStore";
 import AuditHub "AuditHub";
-import Bounty "Bounty";
 import Orchestrator "Orchestrator";
 import UsageTracker "UsageTracker";
 import SearchIndex "SearchIndex";
@@ -64,6 +63,9 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   stable var _bounty_sponsor_canister_id : ?Principal = null;
   stable var _bounty_reward_token_canister_id : ?Principal = null;
   stable var _bounty_reward_amount : Nat = 250_000; // Default: $0.25 in 6-decimal token
+
+  // deprecated
+  stable var icrc127_migration_state : ICRC127.State = ICRC127.initialState();
 
   // --- NEW: A reverse-lookup index to find a namespace from a wasm_id ---
   // Key: wasm_id (hex string)
@@ -493,58 +495,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     return Iter.toArray(Map.vals(latest_by_type));
   };
 
-  private func _get_bounties_for_wasm(wasm_id : Text) : [ICRC127.Bounty] {
-    let state = icrc127().state;
-
-    // Use the reverse index if available
-    let bounty_ids_opt = BTree.get(wasm_to_bounties_map, Text.compare, wasm_id);
-    switch (bounty_ids_opt) {
-      case (?bounty_ids) {
-        // Fast path: We have the bounty IDs in the index
-        let bounties_buffer = Buffer.Buffer<ICRC127.Bounty>(bounty_ids.size());
-        for (bounty_id in bounty_ids.vals()) {
-          switch (BTree.get(state.bounties, Nat.compare, bounty_id)) {
-            case (?bounty) { bounties_buffer.add(bounty) };
-            case (null) {}; // Bounty was deleted, skip
-          };
-        };
-        return Buffer.toArray(bounties_buffer);
-      };
-      case (null) {
-        // Slow path: Index not populated yet, scan all bounties (for backwards compatibility)
-        var matching_bounties : [ICRC127.Bounty] = [];
-
-        for (bounty in BTree.toValueArray(state.bounties).vals()) {
-          switch (bounty.challenge_parameters) {
-            case (#Map(params_map)) {
-              label findWasmHashKey for ((key, value) in params_map.vals()) {
-                if (key == "wasm_hash") {
-                  switch (value) {
-                    case (#Blob(bounty_wasm_hash)) {
-                      let bounty_wasm_id = Base16.encode(bounty_wasm_hash);
-                      if (bounty_wasm_id == wasm_id) {
-                        matching_bounties := Array.append(matching_bounties, [bounty]);
-                      };
-                    };
-                    case (_) {};
-                  };
-                  break findWasmHashKey;
-                };
-              };
-            };
-            case (_) {};
-          };
-        };
-
-        return matching_bounties;
-      };
-    };
-  };
-
-  public shared query func get_bounties_for_wasm(wasm_id : Text) : async [ICRC127.Bounty] {
-    return _get_bounties_for_wasm(wasm_id);
-  };
-
   /**
    * Checks if a valid audit submission (either an attestation or a divergence)
    * exists for a given WASM and the bounty's required audit type.
@@ -585,140 +535,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       };
     };
   };
-
-  // --- ICRC-127 Library Setup (The Core of this Canister) ---
-  stable var icrc127_migration_state : ICRC127.State = ICRC127.initialState();
-  let icrc127 = ICRC127.Init<system>({
-    manager = initManager;
-    initialState = icrc127_migration_state;
-    args = null;
-    pullEnvironment = ?(
-      func() : ICRC127.Environment {
-        {
-          tt = tt();
-          advanced = null;
-          log = localLog();
-          add_record = ?(
-            func<system>(data : ICRC127.ICRC16, meta : ?ICRC127.ICRC16) : Nat {
-              let converted_data = convertIcrc126ValueToIcrc3Value(data);
-              let converted_meta = Option.map(meta, convertIcrc126ValueToIcrc3Value);
-              icrc3().add_record<system>(converted_data, converted_meta);
-            }
-          );
-
-          // --- Provide real token transfer hooks ---
-          icrc1_fee = func(canister : Principal) : async Nat {
-            let ledger : ICRC2.Service = actor (Principal.toText(canister));
-            await ledger.icrc1_fee();
-          };
-          icrc1_transfer = func(canister : Principal, args : ICRC2.TransferArgs) : async ICRC2.TransferResult {
-            let ledger : ICRC2.Service = actor (Principal.toText(canister));
-            await ledger.icrc1_transfer(args);
-          };
-          icrc2_transfer_from = func(canister : Principal, args : ICRC2.TransferFromArgs) : async ICRC2.TransferFromResult {
-            // Special case: If transferring from registry to registry, use direct transfer
-            if (Principal.equal(args.from.owner, thisPrincipal)) {
-              let ledger : ICRC2.Service = actor (Principal.toText(canister));
-              let transfer_args : ICRC2.TransferArgs = {
-                from_subaccount = args.from.subaccount;
-                to = args.to;
-                amount = args.amount;
-                fee = args.fee;
-                memo = args.memo;
-                created_at_time = args.created_at_time;
-              };
-              let result = await ledger.icrc1_transfer(transfer_args);
-              // Convert TransferResult to TransferFromResult
-              switch (result) {
-                case (#Ok(blockIndex)) { #Ok(blockIndex) };
-                case (#Err(#BadFee(e))) { #Err(#BadFee(e)) };
-                case (#Err(#InsufficientFunds(e))) {
-                  #Err(#InsufficientFunds(e));
-                };
-                case (#Err(#TooOld)) { #Err(#TooOld) };
-                case (#Err(#CreatedInFuture(e))) { #Err(#CreatedInFuture(e)) };
-                case (#Err(#Duplicate(e))) { #Err(#Duplicate(e)) };
-                case (#Err(#TemporarilyUnavailable)) {
-                  #Err(#TemporarilyUnavailable);
-                };
-                case (#Err(#GenericError(e))) { #Err(#GenericError(e)) };
-              };
-            } else {
-              // Normal case: use transfer_from for external accounts
-              let ledger : ICRC2.Service = actor (Principal.toText(canister));
-              await ledger.icrc2_transfer_from(args);
-            };
-          };
-          // --- Provide the core validation logic ---
-          validate_submission = func(req : ICRC127Service.RunBountyRequest) : async ICRC127Service.RunBountyResult {
-            // The challenge is now a map containing the wasm_hash and the required audit_type.
-            let params_map = switch (req.challenge_parameters) {
-              case (#Map(m)) { m };
-              case (_) {
-                return {
-                  result = #Invalid;
-                  metadata = #Map([("error", #Text("Challenge parameters must be a Map."))]);
-                  trx_id = null;
-                };
-              };
-            };
-
-            // Safely extract wasm_hash and audit_type from the map
-            var wasm_hash : ?Blob = null;
-            var audit_type : ?Text = null;
-
-            for ((key, val) in params_map.vals()) {
-              if (key == "wasm_hash") {
-                switch (val) {
-                  case (#Blob(b)) { wasm_hash := ?b };
-                  case (_) {};
-                };
-              } else if (key == "audit_type") {
-                switch (val) {
-                  case (#Text(t)) { audit_type := ?t };
-                  case (_) {};
-                };
-              };
-            };
-
-            switch (wasm_hash, audit_type) {
-              case (?wasm_hash_exists, ?audit_type_exists) {
-                // Both required parameters are present.
-                let wasm_id = Base16.encode(wasm_hash_exists);
-                if (has_valid_audit_submission(wasm_id, audit_type_exists)) {
-                  return {
-                    result = #Valid;
-                    metadata = #Map([("status", #Text("Attestation found for audit type: " # audit_type_exists))]);
-                    trx_id = null;
-                  };
-                } else {
-                  return {
-                    result = #Invalid;
-                    metadata = #Map([("status", #Text("No attestation found for audit type: " # audit_type_exists))]);
-                    trx_id = null;
-                  };
-                };
-
-              };
-              case (_, _) {
-                return {
-                  result = #Invalid;
-                  metadata = #Map([("error", #Text("Challenge map must contain wasm_hash (Blob) and audit_type (Text)."))]);
-                  trx_id = null;
-                };
-              };
-            };
-          };
-        };
-      }
-    );
-    onStorageChange = func(state) { icrc127_migration_state := state };
-    onInitialize = ?(
-      func(icrc127 : ICRC127.ICRC127Bounty) : async* () {
-        D.print("ICRC127: Initialized");
-      }
-    );
-  });
 
   //------------------- API IMPLEMENTATION -------------------//
 
@@ -807,13 +623,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
 
   // --- ICRC126 Endpoints ---
   public shared (msg) func icrc126_verification_request(req : ICRC126Service.VerificationRequest) : async Nat {
-    // Register the verification request and return transaction ID
-    let trx_id = await icrc126().icrc126_verification_request(msg.caller, req);
-
-    // Note: Indexing now happens in icrc118_update_wasm when the WASM is registered
-    // Note: Bounty creation is now triggered explicitly from the UI, not automatically
-
-    return trx_id;
+    await icrc126().icrc126_verification_request(msg.caller, req);
   };
 
   /**
@@ -1390,28 +1200,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           };
           case (#Ok(_)) {
             Debug.print("   ✅ Attestation successfully recorded in ICRC126");
-          };
-        };
-
-        // 8.5. IMMEDIATELY pay bounty (reward for doing the work)
-        // NOTE: We do NOT release the stake yet - that waits for consensus outcome
-        Debug.print("💰 Immediately paying bounty " # Nat.toText(bounty_id) # " (stake remains locked)");
-
-        // Trigger the bounty payout through ICRC-127
-        let submission_req : ICRC127Service.BountySubmissionRequest = {
-          bounty_id = bounty_id;
-          submission = #Text("Attestation filed successfully");
-          account = ?{ owner = verifier_principal; subaccount = null };
-        };
-
-        let payout_result = await icrc127().icrc127_submit_bounty(verifier_principal, submission_req);
-        switch (payout_result) {
-          case (#Ok(_)) {
-            Debug.print("   ✅ Bounty payout completed for bounty " # Nat.toText(bounty_id));
-          };
-          case (#Error(e)) {
-            Debug.print("   ⚠️  Error paying bounty " # Nat.toText(bounty_id) # ": " # debug_show (e));
-            // Continue anyway - we've recorded the attestation
+            Debug.print("   💰 Verifier can now claim bounty " # Nat.toText(bounty_id) # " from audit_hub");
           };
         };
 
@@ -1442,41 +1231,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
                 ("total_attestations", #Nat(updated_attestations.size())),
               ];
               let _ = await _finalize_verification(req.wasm_id, #Verified, finalization_meta);
-
-              // Auto-trigger tools_v1 bounties now that build is verified
-              // ONLY for build_reproducibility_v1, not for tools_v1 itself
-              if (audit_type == "build_reproducibility_v1") {
-                switch (_bounty_sponsor_canister_id) {
-                  case (?sponsor_id) {
-                    // Get the original verification request to extract repo and metadata
-                    let verification_request_opt = _get_verification_request(req.wasm_id);
-                    switch (verification_request_opt) {
-                      case (?verification_request) {
-                        let sponsor = actor (Principal.toText(sponsor_id)) : actor {
-                          sponsor_bounties_for_wasm : (Text, Blob, [Text], Text, Text, [(Text, ICRC126.ICRC16)], Nat) -> async Result.Result<{ bounty_ids : [Nat]; total_sponsored : Nat }, Text>;
-                        };
-
-                        Debug.print("🎯 Auto-triggering tools_v1 bounties for verified WASM " # req.wasm_id);
-                        ignore sponsor.sponsor_bounties_for_wasm(
-                          req.wasm_id,
-                          verification_request.wasm_hash,
-                          ["tools_v1"],
-                          verification_request.repo,
-                          Base16.encode(verification_request.commit_hash),
-                          verification_request.metadata,
-                          REQUIRED_VERIFIERS,
-                        );
-                      };
-                      case (null) {
-                        Debug.print("Cannot create tools_v1 bounties: verification request not found for " # req.wasm_id);
-                      };
-                    };
-                  };
-                  case (null) {
-                    Debug.print("Cannot create tools_v1 bounties: bounty_sponsor not configured");
-                  };
-                };
-              }; // End audit_type == "build_reproducibility_v1" check
             };
           };
         } else {
@@ -1713,28 +1467,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
           };
           case (#Ok(_)) {
             Debug.print("   ✅ Divergence successfully recorded in ICRC126");
-          };
-        };
-
-        // 8.5. IMMEDIATELY pay bounty (reward for doing the work)
-        // NOTE: We do NOT release the stake yet - that waits for consensus outcome
-        Debug.print("💰 Immediately paying bounty " # Nat.toText(bounty_id) # " (stake remains locked)");
-
-        // Trigger the bounty payout through ICRC-127
-        let submission_req : ICRC127Service.BountySubmissionRequest = {
-          bounty_id = bounty_id;
-          submission = #Text("Divergence report filed successfully");
-          account = ?{ owner = verifier_principal; subaccount = null };
-        };
-
-        let payout_result = await icrc127().icrc127_submit_bounty(verifier_principal, submission_req);
-        switch (payout_result) {
-          case (#Ok(_)) {
-            Debug.print("   ✅ Bounty payout completed for bounty " # Nat.toText(bounty_id));
-          };
-          case (#Error(e)) {
-            Debug.print("   ⚠️  Error paying bounty " # Nat.toText(bounty_id) # ": " # debug_show (e));
-            // Continue anyway - we've recorded the divergence
+            Debug.print("   💰 Verifier can now claim bounty " # Nat.toText(bounty_id) # " from audit_hub");
           };
         };
 
@@ -1829,30 +1562,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   };
 
   /**
-   * Check if a specific bounty has already filed an attestation by checking ICRC126 storage directly.
-   * This is the source of truth, not the progress tracking arrays.
-   */
-  public query func has_bounty_filed_attestation(wasm_id : Text, bounty_id : Nat) : async Bool {
-    let state = icrc126().state;
-    let audit_records = Option.get(Map.get(state.audits, Map.thash, wasm_id), []);
-
-    let has_attestation = Array.find<ICRC126.AuditRecord>(
-      audit_records,
-      func(record) {
-        switch (record) {
-          case (#Attestation(att)) {
-            let att_bounty_id = AuditHub.get_bounty_id_from_metadata(att.metadata);
-            Option.isSome(att_bounty_id) and att_bounty_id == ?bounty_id;
-          };
-          case (_) { false };
-        };
-      },
-    );
-
-    Option.isSome(has_attestation);
-  };
-
-  /**
    * Check if a verifier has already participated in the verification of a specific WASM.
    * This prevents a verifier from being assigned to multiple bounties for the same WASM.
    * Used by audit_hub during bounty reservation to enforce mutual exclusion.
@@ -1902,91 +1611,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     );
 
     return Option.isSome(has_divergence);
-  };
-
-  // --- ICRC127 Endpoints ---
-  public shared (msg) func icrc127_create_bounty(req : ICRC127Service.CreateBountyRequest) : async ICRC127Service.CreateBountyResult {
-    await icrc127().icrc127_create_bounty<system>(msg.caller, req);
-  };
-  public shared (msg) func icrc127_submit_bounty(req : ICRC127Service.BountySubmissionRequest) : async ICRC127Service.BountySubmissionResult {
-    // ==========================================================================
-    // == CONSENSUS-BASED SYSTEM: Manual bounty claims are disabled for build_reproducibility.
-    // == Build reproducibility bounties are automatically distributed by the registry after reaching
-    // == 5-of-9 majority consensus. This prevents:
-    // == - Verifiers on the losing side from claiming rewards before slashing
-    // == - Early claims that bypass consensus outcome handling
-    // == - Gaming the system by claiming before final verification
-    // ==
-    // == For other audit types (tools_v1, data_safety_v1, etc.), manual claims are allowed
-    // == since they are single-node attestations, not consensus-based.
-    // ==========================================================================
-
-    // Get the bounty to check its audit type
-    let ?bounty = icrc127().icrc127_get_bounty(req.bounty_id) else {
-      return #Error(#Generic("Bounty not found"));
-    };
-
-    // Extract audit_type from challenge_parameters
-    let audit_type = switch (bounty.challenge_parameters) {
-      case (#Map(params_map)) {
-        switch (Array.find<(Text, ICRC127.ICRC16)>(params_map, func((key, _)) { key == "audit_type" })) {
-          case (?("audit_type", #Text(t))) { t };
-          case (_) { "" };
-        };
-      };
-      case (_) { "" };
-    };
-
-    // Only block manual claims for build_reproducibility_v1
-    if (audit_type == "build_reproducibility_v1") {
-      return #Error(#Generic("Manual bounty claims are disabled for build reproducibility audits. Bounties are automatically distributed after reaching 5-of-9 consensus."));
-    };
-
-    // Allow manual claims for other audit types
-    let submission_result = await icrc127().icrc127_submit_bounty<system>(msg.caller, req);
-
-    // If submission was successful, release the verifier's stake
-    switch (submission_result) {
-      case (#Ok(_)) {
-        // Release the stake for successful manual claims
-        switch (_credentials_canister_id) {
-          case (?audit_hub_id) {
-            let auditHub : AuditHub.Service = actor (Principal.toText(audit_hub_id));
-            let release_result = await auditHub.release_stake(req.bounty_id);
-            switch (release_result) {
-              case (#ok(_)) {
-                Debug.print("Released stake for manual bounty claim " # Nat.toText(req.bounty_id));
-              };
-              case (#err(e)) {
-                Debug.print("Warning: Failed to release stake for bounty " # Nat.toText(req.bounty_id) # ": " # e);
-                // Don't fail the submission if stake release fails - the submission already succeeded
-              };
-            };
-          };
-          case (null) {
-            Debug.print("Warning: Cannot release stake - Audit Hub not configured");
-          };
-        };
-      };
-      case (#Error(_)) {
-        // Submission failed, don't release stake
-      };
-    };
-
-    return submission_result;
-  };
-  public query func icrc127_get_bounty(bounty_id : Nat) : async ?ICRC127.Bounty {
-    icrc127().icrc127_get_bounty(bounty_id);
-  };
-  public query func icrc127_list_bounties({
-    filter : ?[ICRC127Service.ListBountiesFilter];
-    prev : ?Nat;
-    take : ?Nat;
-  }) : async [ICRC127.Bounty] {
-    icrc127().icrc127_list_bounties(filter, prev, take);
-  };
-  public query func icrc127_metadata() : async ICRC127.ICRC16Map {
-    icrc127().icrc127_metadata();
   };
 
   // --- ICRC3 Endpoints ---
@@ -2079,62 +1703,11 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   };
 
   /**
-   * Find the verifier principal who filed work for a given bounty.
-   * Checks attestation and divergence records to find which verifier worked on this bounty.
-   */
-  private func _find_verifier_for_bounty(bounty_id : Nat, wasm_id : Text, audit_type : Text) : async ?Principal {
-    // Get all audit records for this WASM from ICRC126 state
-    let state = icrc126().state;
-    let all_audit_records = switch (Map.get(state.audits, Map.thash, wasm_id)) {
-      case (null) { return null };
-      case (?records) { records };
-    };
-
-    // Search through all audit records to find one matching this bounty_id
-    for (record in all_audit_records.vals()) {
-      switch (record) {
-        case (#Attestation(attestation)) {
-          // Extract bounty_id from metadata
-          switch (AuditHub.get_bounty_id_from_metadata(attestation.metadata)) {
-            case (?bid) {
-              if (bid == bounty_id) {
-                return ?attestation.auditor;
-              };
-            };
-            case (null) {};
-          };
-        };
-        case (#Divergence(divergence)) {
-          // Extract bounty_id from metadata if it exists
-          switch (divergence.metadata) {
-            case (?meta) {
-              switch (AuditHub.get_bounty_id_from_metadata(meta)) {
-                case (?bid) {
-                  if (bid == bounty_id) {
-                    return ?divergence.reporter;
-                  };
-                };
-                case (null) {};
-              };
-            };
-            case (null) {};
-          };
-        };
-      };
-    };
-
-    return null;
-  };
-
-  /**
    * Handle consensus outcome by releasing stakes for winners and slashing stakes for losers.
    * Winners: Verifiers who voted with the majority consensus
    * Losers: Verifiers who voted against the majority consensus
    */
   private func _handle_consensus_outcome(wasm_id : Text, outcome : VerificationOutcome, audit_type : Text) : async () {
-    // Get all bounties for this WASM
-    let all_bounties = _get_bounties_for_wasm(wasm_id);
-
     // Create composite key for progress tracking (wasm_id::audit_type)
     let progress_key = _make_progress_key(wasm_id, audit_type);
 
@@ -2249,7 +1822,7 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     ignore BTree.insert(finalization_log, Text.compare, wasm_id, record);
 
     // 2.5. Handle consensus penalties - slash stakes of verifiers on the losing side
-    ignore await _handle_consensus_outcome(wasm_id, outcome, audit_type);
+    await _handle_consensus_outcome(wasm_id, outcome, audit_type);
 
     // 3. Log the official ICRC-3 block.
     let btype = switch (outcome) {
@@ -2798,7 +2371,8 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
 
     // 3. Fetch all data for the LATEST version in parallel.
     let latest_audit_records = _get_audit_records_for_wasm(wasm_id_to_load);
-    let latest_bounties = _get_bounties_for_wasm(wasm_id_to_load);
+    // Note: Bounties are now managed by audit_hub, not registry
+    let latest_bounties : [ICRC127.Bounty] = [];
 
     // 4. Build the `all_versions` summary list.
     var all_versions_summary = Buffer.Buffer<AppStore.AppVersionSummary>(canister_type.versions.size());
@@ -2894,99 +2468,6 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     };
   };
 
-  /**
-   * @notice Fetches a paginated and filtered list of all bounties.
-   * @param req The request object containing optional filters and pagination cursors.
-   * @return A result containing an array of matching `ICRC127.Bounty` records or an error.
-   */
-  public shared query func list_bounties(req : Bounty.BountyListingRequest) : async Bounty.BountyListingResponse {
-    // 1. Handle optional arguments and set defaults.
-    let filters = switch (req.filter) { case null []; case (?fs) fs };
-    let take = switch (req.take) { case null 20; case (?n) Nat.min(n, 100) };
-    let prev = req.prev;
-
-    // 2. Use BTree iterator instead of converting to array - this is O(n) only for items we check
-    // not O(n) upfront cost of converting entire tree to array
-    let bounties_tree = icrc127().state.bounties;
-
-    // 3. Define the filtering logic in a helper function.
-    // A bounty must match ALL filters in the request to be included.
-    func matchesAllFilters(bounty : ICRC127.Bounty, filters : [Bounty.BountyFilter]) : Bool {
-      if (filters.size() == 0) return true;
-
-      for (f in filters.vals()) {
-        switch (f) {
-          case (#status(statusFilter)) {
-            let is_claimed = bounty.claimed != null;
-            switch (statusFilter) {
-              case (#Open) { if (is_claimed) return false };
-              case (#Claimed) { if (not is_claimed) return false };
-            };
-          };
-          case (#audit_type(typeFilter)) {
-            switch (bounty.challenge_parameters) {
-              case (#Map(params_map)) {
-                switch (AppStore.getICRC16TextOptional(params_map, "audit_type")) {
-                  case (?bountyType) {
-                    if (bountyType != typeFilter) { return false };
-                  };
-                  case (null) {
-                    return false;
-                  };
-                };
-              };
-              case (_) {
-                return false;
-              };
-            };
-          };
-          case (#creator(creatorFilter)) {
-            if (bounty.creator != creatorFilter) return false;
-          };
-        };
-      };
-      return true;
-    };
-
-    // 4. Apply pagination and filtering by iterating the BTree
-    // Convert to array but only for matching/pagination, not for storage
-    // This is still better than the old approach since we can exit early
-    var started = prev == null;
-    var count : Nat = 0;
-    let out = Buffer.Buffer<ICRC127.Bounty>(take);
-
-    // Get entries and convert to array for reverse iteration (newest first)
-    let entries = Buffer.fromArray<(Nat, ICRC127.Bounty)>(
-      Iter.toArray(BTree.entries(bounties_tree))
-    );
-
-    // Iterate in reverse order (newest first)
-    var i = entries.size();
-    while (i > 0 and count < take) {
-      i -= 1;
-      let (id, bounty) = entries.get(i);
-
-      if (not started) {
-        switch (prev) {
-          case (?p) {
-            if (bounty.bounty_id == p) {
-              started := true;
-            };
-          };
-          case (null) {};
-        };
-      } else {
-        // We've started collecting
-        if (matchesAllFilters(bounty, filters)) {
-          out.add(bounty);
-          count += 1;
-        };
-      };
-    };
-
-    return #ok(Buffer.toArray(out));
-  };
-
   // --- DAO-Specific Endpoints ---
 
   // Define the shape of the data we'll return for the DAO list command.
@@ -3057,6 +2538,58 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
 
     // --- Step 5: Return the now-sorted array ---
     return pending_array;
+  };
+
+  // List ALL verification requests with optional pagination
+  public shared query func list_all_verification_requests(
+    offset : ?Nat,
+    limit : ?Nat,
+  ) : async {
+    requests : [ICRC126.VerificationRecord];
+    total : Nat;
+  } {
+    let all_requests = icrc126().state.requests;
+    var all_array = Buffer.Buffer<ICRC126.VerificationRecord>(0);
+
+    // Collect all requests
+    for ((wasm_id, request) in Map.entries(all_requests)) {
+      all_array.add(request);
+    };
+
+    // Sort by timestamp (newest first)
+    func compareRecords(a : ICRC126.VerificationRecord, b : ICRC126.VerificationRecord) : Order.Order {
+      if (a.timestamp > b.timestamp) {
+        return #less;
+      } else if (a.timestamp < b.timestamp) {
+        return #greater;
+      } else {
+        return #equal;
+      };
+    };
+
+    var sorted_array = Array.sort<ICRC126.VerificationRecord>(Buffer.toArray(all_array), compareRecords);
+    let total = sorted_array.size();
+
+    // Apply pagination
+    let start = Option.get(offset, 0);
+    let page_size = Option.get(limit, total); // Default to all if no limit
+    let end = Nat.min(start + page_size, total);
+
+    let paginated = if (start >= total) {
+      [];
+    } else {
+      Array.tabulate<ICRC126.VerificationRecord>(
+        end - start,
+        func(i : Nat) : ICRC126.VerificationRecord {
+          sorted_array[start + i];
+        },
+      );
+    };
+
+    return {
+      requests = paginated;
+      total = total;
+    };
   };
 
   private func _get_audit_records_for_wasm(wasm_id : Text) : [ICRC126.AuditRecord] {

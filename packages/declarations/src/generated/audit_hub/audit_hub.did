@@ -9,42 +9,140 @@ type VerificationJobAssignment =
    bounty_id: BountyId;
    build_config: ICRC16Map;
    commit_hash: text;
-   expires_at: Timestamp;
+   expires_at: Timestamp__1;
    repo: text;
    wasm_id: text;
  };
 type VerificationJob = 
  record {
    assigned_count: nat;
+   audit_type: text;
    bounty_ids: vec BountyId;
    build_config: ICRC16Map;
    commit_hash: text;
-   created_at: Timestamp;
+   completed_count: nat;
+   created_at: Timestamp__1;
+   creator: principal;
    repo: text;
    required_verifiers: nat;
    wasm_id: text;
  };
+type TreasuryError = 
+ variant {
+   LedgerTrap: text;
+   NotOwner;
+   TransferFailed: TransferError;
+ };
+type TransferError = 
+ variant {
+   BadBurn: record {min_burn_amount: nat;};
+   BadFee: record {expected_fee: nat;};
+   CreatedInFuture: record {ledger_time: Timestamp;};
+   Duplicate: record {duplicate_of: nat;};
+   GenericError: record {
+                   error_code: nat;
+                   message: text;
+                 };
+   InsufficientFunds: record {balance: nat;};
+   TemporarilyUnavailable;
+   TooOld;
+ };
 type TokenId = text;
-type Timestamp = int;
-type Result_3 = 
+type Timestamp__1 = int;
+type Timestamp = nat64;
+type Subaccount = blob;
+type RunBountyResult__1 = 
+ record {
+   metadata: ICRC16__1;
+   result: variant {
+             Invalid;
+             Valid;
+           };
+   trx_id: opt nat;
+ };
+type RunBountyResult = 
+ record {
+   metadata: ICRC16;
+   result: variant {
+             Invalid;
+             Valid;
+           };
+   trx_id: opt nat;
+ };
+type Result_5 = 
+ variant {
+   err: text;
+   ok: vec nat;
+ };
+type Result_4 = 
  variant {
    err: text;
    ok: text;
  };
-type Result_2 = 
+type Result_3 = 
  variant {
    err: text;
    ok: VerificationJobAssignment;
  };
-type Result_1 = 
+type Result_2 = 
  variant {
    err: text;
    ok: principal;
+ };
+type Result_1 = 
+ variant {
+   err: TreasuryError;
+   ok: nat;
  };
 type Result = 
  variant {
    err: text;
    ok;
+ };
+type ListBountiesFilter = 
+ variant {
+   claimed: bool;
+   claimed_by: Account__1;
+   created_after: nat;
+   created_before: nat;
+   metadata: ICRC16Map__2;
+   validation_canister: principal;
+ };
+type ICRC16__1 = 
+ variant {
+   Array: vec ICRC16__1;
+   Blob: blob;
+   Bool: bool;
+   Bytes: vec nat8;
+   Class: vec ICRC16Property__1;
+   Float: float64;
+   Floats: vec float64;
+   Int: int;
+   Int16: int16;
+   Int32: int32;
+   Int64: int64;
+   Int8: int8;
+   Map: ICRC16Map__2;
+   Nat: nat;
+   Nat16: nat16;
+   Nat32: nat32;
+   Nat64: nat64;
+   Nat8: nat8;
+   Nats: vec nat;
+   Option: opt ICRC16__1;
+   Principal: principal;
+   Set: vec ICRC16__1;
+   Text: text;
+   ValueMap: vec record {
+                   ICRC16__1;
+                   ICRC16__1;
+                 };
+ };
+type ICRC16Property__1 = 
+ record {
+   immutable: bool;
+   name: text;
+   value: ICRC16__1;
  };
 type ICRC16Property = 
  record {
@@ -52,6 +150,11 @@ type ICRC16Property =
    name: text;
    value: ICRC16;
  };
+type ICRC16Map__2 = 
+ vec record {
+       text;
+       ICRC16__1;
+     };
 type ICRC16Map = 
  vec record {
        text;
@@ -106,14 +209,129 @@ type EnvConfig =
    setter: text;
    value_type: text;
  };
+type CreateBountyResult = 
+ variant {
+   Error: variant {
+            Generic: text;
+            InsufficientAllowance;
+          };
+   Ok: record {
+         bounty_id: nat;
+         trx_id: opt nat;
+       };
+ };
+type CreateBountyRequest = 
+ record {
+   bounty_id: opt nat;
+   bounty_metadata: ICRC16Map__2;
+   challenge_parameters: ICRC16__1;
+   start_date: opt nat;
+   timeout_date: nat;
+   validation_canister_id: principal;
+ };
+type ClaimRecord__1 = 
+ record {
+   caller: principal;
+   claim_account: opt Account__1;
+   claim_id: nat;
+   claim_metadata: ICRC16Map__2;
+   result: opt RunBountyResult__1;
+   submission: ICRC16__1;
+   time_submitted: nat;
+ };
+type ClaimRecord = 
+ record {
+   caller: principal;
+   claim_account: opt Account__1;
+   claim_id: nat;
+   claim_metadata: ICRC16Map;
+   result: opt RunBountyResult;
+   submission: ICRC16;
+   time_submitted: nat;
+ };
+type Bounty__1 = 
+ record {
+   bounty_id: nat;
+   bounty_metadata: ICRC16Map__2;
+   challenge_parameters: ICRC16__1;
+   claimed: opt nat;
+   claimed_date: opt nat;
+   claims: vec ClaimRecord__1;
+   created: nat;
+   creator: principal;
+   payout_fee: nat;
+   timeout_date: opt nat;
+   token_amount: nat;
+   token_canister_id: principal;
+   validation_call_timeout: nat;
+   validation_canister_id: principal;
+ };
+type BountySubmissionResult = 
+ variant {
+   Error: variant {
+            Generic: text;
+            NoMatch;
+            PayoutFailed: TransferError;
+          };
+   Ok: record {
+         claim_id: nat;
+         result: opt RunBountyResult__1;
+       };
+ };
+type BountySubmissionRequest = 
+ record {
+   account: opt Account__1;
+   bounty_id: nat;
+   submission: ICRC16__1;
+ };
+type BountyStatus = 
+ variant {
+   Claimed;
+   Open;
+ };
 type BountyLock = 
  record {
    claimant: principal;
-   expires_at: Timestamp;
+   expires_at: Timestamp__1;
    stake_amount: Balance;
    stake_token_id: TokenId;
  };
+type BountyListingResponse = 
+ variant {
+   err: text;
+   ok: vec Bounty;
+ };
+type BountyListingRequest = 
+ record {
+   filter: opt vec BountyFilter;
+   prev: opt nat;
+   take: opt nat;
+ };
 type BountyId = nat;
+type BountyFilter = 
+ variant {
+   audit_type: text;
+   creator: principal;
+   status: BountyStatus;
+   wasm_id: text;
+ };
+type Bounty = 
+ record {
+   bounty_id: nat;
+   bounty_metadata: ICRC16Map;
+   challenge_parameters: ICRC16;
+   claimed: opt nat;
+   claimed_date: opt nat;
+   claims: vec ClaimRecord;
+   created: nat;
+   creator: principal;
+   payout_fee: nat;
+   timeout_date: opt nat;
+   token_amount: nat;
+   token_canister_id: principal;
+   validation_call_timeout: nat;
+   validation_canister_id: principal;
+ };
 type Balance = nat;
 type AuditHub = 
  service {
@@ -121,12 +339,24 @@ type AuditHub =
    ///    * Called by mcp_registry when a new WASM is registered.
    ///    * Only the registry canister can call this function.
    add_verification_job: (wasm_id: text, repo: text, commit_hash: text,
-    build_config: ICRC16Map, required_verifiers: nat, bounty_ids:
-    vec BountyId) -> (Result);
+    build_config: ICRC16Map, audit_type: text, required_verifiers: nat,
+    bounty_ids: vec BountyId) -> (Result);
    admin_add_bounties_to_job: (wasm_id: text, audit_type: text,
     additional_bounty_ids: vec nat) -> (Result);
    cleanup_expired_lock: (bounty_id: BountyId) -> (Result);
-   debug_get_bounty: (bounty_id: nat) -> (text);
+   /// * Create local bounties for a verification job.
+   ///    * This enables local bounty management instead of relying on mcp_registry.
+   ///    * Can be called by authorized canisters (registry, bounty_sponsor) or owner.
+   ///    *
+   ///    * @param wasm_id - The WASM ID
+   ///    * @param audit_type - The audit type (e.g., "build_reproducibility_v1")
+   ///    * @param num_bounties - Number of bounties to create
+   ///    * @param reward_amount - Reward amount per bounty (in token atomic units)
+   ///    * @param reward_token - Token canister ID for rewards
+   ///    * @param timeout_date - Expiration timestamp for bounties
+   create_local_bounties_for_job: (wasm_id: text, audit_type: text,
+    num_bounties: nat, reward_amount: nat, reward_token: principal,
+    timeout_date: int) -> (Result_5);
    /// * Deposit tokens as stake to become an eligible auditor.
    ///    * The caller must have already approved this canister to spend tokens on their behalf.
    ///    * @param token_id - The ledger canister ID (as Principal text) of the token to deposit (e.g., USDC, ICP)
@@ -134,7 +364,7 @@ type AuditHub =
    deposit_stake: (token_id: TokenId, amount: Balance) -> (Result);
    /// * Generate a new API key for the verifier to use in their bot.
    ///    * Called by the verifier principal (authenticated via Internet Identity in UI).
-   generate_api_key: () -> (Result_3);
+   generate_api_key: () -> (Result_4);
    /// * Get available balance by audit_type.
    ///    * Looks up the token_id from the stake_requirements for this audit type.
    get_available_balance_by_audit_type: (verifier: principal, audit_type:
@@ -167,6 +397,18 @@ type AuditHub =
    ///    * @param verifier - The principal of the verifier to check
    ///    * @returns true if the verifier has at least one active lock, false otherwise
    has_active_bounty_lock: (verifier: principal) -> (bool) query;
+   icrc10_supported_standards: () ->
+    (vec record {
+           name: text;
+           url: text;
+         }) query;
+   icrc127_create_bounty: (req: CreateBountyRequest) -> (CreateBountyResult);
+   icrc127_get_bounty: (bounty_id: nat) -> (opt Bounty__1) query;
+   icrc127_list_bounties: (filter: opt vec ListBountiesFilter, prev: 
+    opt nat, take: opt nat) -> (vec Bounty) query;
+   icrc127_metadata: () -> (ICRC16Map) query;
+   icrc127_submit_bounty: (req: BountySubmissionRequest) ->
+    (BountySubmissionResult);
    is_bounty_ready_for_collection: (bounty_id: BountyId, potential_claimant:
     principal) -> (bool) query;
    /// * List all API keys for the authenticated verifier.
@@ -176,11 +418,20 @@ type AuditHub =
                                     BountyId;
                                     AssignedJob;
                                   }) query;
-   /// * Get all pending verification jobs (for debugging/monitoring).
-   list_pending_jobs: () -> (vec record {
-                                   text;
-                                   VerificationJob;
-                                 }) query;
+   /// * @notice Fetches a paginated and filtered list of all bounties.
+   ///    * @param req The request object containing optional filters and pagination cursors.
+   ///    * @return A result containing an array of matching `ICRC127Lib.Bounty` records or an error.
+   list_bounties: (req: BountyListingRequest) ->
+    (BountyListingResponse) query;
+   /// * Get all pending verification jobs with pagination (for debugging/monitoring).
+   list_pending_jobs: (offset: opt nat, limit: opt nat) ->
+    (record {
+       jobs: vec record {
+                   text;
+                   VerificationJob;
+                 };
+       total: nat;
+     }) query;
    /// * Mark a verification job as complete.
    ///    * Called by mcp_registry when a WASM verification or audit is finalized.
    ///    * Only the registry canister can call this function.
@@ -199,7 +450,7 @@ type AuditHub =
    ///    * Instead of checking participation for each job individually (N jobs × M verifiers = lots of calls),
    ///    * we batch-check participation for ALL jobs that need verifiers upfront (M verifiers × 1 batch each).
    ///    * This dramatically reduces inter-canister calls to mcp_registry.
-   request_verification_job_with_api_key: (api_key: text) -> (Result_2);
+   request_verification_job_with_api_key: (api_key: text) -> (Result_3);
    /// * Allows a verifier to stake tokens to reserve a bounty (1-hour lock).
    ///    * Can be called directly by the verifier principal.
    ///    * @param bounty_id - The bounty to reserve
@@ -229,7 +480,11 @@ type AuditHub =
    slash_stake_for_incorrect_consensus: (bounty_id: BountyId) -> (Result);
    /// * Validate an API key and return the associated verifier principal.
    ///    * Used by the verifier bot to authenticate reserve_bounty requests.
-   validate_api_key: (api_key: text) -> (Result_1) query;
+   validate_api_key: (api_key: text) -> (Result_2) query;
+   /// Withdraw USDC or other ICRC-2 tokens from the audit_hub treasury
+   /// Only the owner can call this function
+   withdraw: (ledger_id: principal, amount: nat, destination: Account) ->
+    (Result_1);
    /// * Withdraw tokens from the verifier's available balance (not currently staked).
    ///    * The withdrawal amount will have the token's fee deducted from it during transfer.
    ///    * @param token_id - The ledger canister ID (as Principal text) of the token to withdraw
@@ -238,18 +493,29 @@ type AuditHub =
  };
 type AssignedJob = 
  record {
-   assigned_at: Timestamp;
+   assigned_at: Timestamp__1;
+   audit_type: text;
    bounty_id: BountyId;
-   expires_at: Timestamp;
+   expires_at: Timestamp__1;
    verifier: principal;
    wasm_id: text;
  };
 type ApiCredential = 
  record {
    api_key: text;
-   created_at: Timestamp;
+   created_at: Timestamp__1;
    is_active: bool;
-   last_used: opt Timestamp;
+   last_used: opt Timestamp__1;
    verifier_principal: principal;
+ };
+type Account__1 = 
+ record {
+   owner: principal;
+   subaccount: opt blob;
+ };
+type Account = 
+ record {
+   owner: principal;
+   subaccount: opt Subaccount;
  };
 service : () -> AuditHub

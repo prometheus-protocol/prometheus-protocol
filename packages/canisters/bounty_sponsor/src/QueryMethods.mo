@@ -65,20 +65,6 @@ module {
     state.owner;
   };
 
-  public func get_config(state : Types.State) : {
-    registry_canister_id : ?Principal;
-    reward_token_canister_id : ?Principal;
-    reward_amounts : [(Text, Nat)];
-    required_verifiers : Nat;
-  } {
-    {
-      registry_canister_id = state.registry_canister_id;
-      reward_token_canister_id = state.reward_token_canister_id;
-      reward_amounts = Map.toArray(state.reward_amounts);
-      required_verifiers = state.required_verifiers;
-    };
-  };
-
   public func get_env_requirements(state : Types.State) : {
     #v1 : {
       dependencies : [Types.EnvDependency];

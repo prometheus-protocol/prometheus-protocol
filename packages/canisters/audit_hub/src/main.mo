@@ -13,6 +13,17 @@ import Text "mo:base/Text";
 import Debug "mo:base/Debug";
 import Error "mo:base/Error";
 import Base16 "mo:base16/Base16";
+import Array "mo:base/Array";
+import Buffer "mo:base/Buffer";
+import Option "mo:base/Option";
+import Iter "mo:base/Iter";
+import ICRC127Lib "../../../../libs/icrc127/src/lib";
+import ICRC127Service "../../../../libs/icrc127/src/service";
+import ClassPlus "mo:class-plus";
+import TimerTool "mo:timer-tool";
+import LogLib "mo:stable-local-log";
+import ICRC3 "mo:icrc3-mo";
+import CertTree "mo:ic-certification/CertTree";
 
 import Admin "Admin";
 import ApiKey "ApiKey";
@@ -21,12 +32,47 @@ import Types "Types";
 import Account "Account";
 import StakePool "StakePool";
 import BountyLock "BountyLock";
+import Bounty "Bounty";
 import JobQueue "JobQueue";
 import QueryMethods "QueryMethods";
 import Config "Config";
 import JobAssignment "JobAssignment";
 import Treasury "Treasury";
 
+(
+  with migration = func(
+    old_state : {
+      var pending_audits : BTree.BTree<Text, { wasm_id : Text; repo : Text; commit_hash : Text; build_config : Types.ICRC16Map; created_at : Types.Timestamp; required_verifiers : Nat; assigned_count : Nat; bounty_ids : [Types.BountyId]; audit_type : Text; creator : Principal }>;
+    }
+  ) : {
+    var pending_audits : BTree.BTree<Text, Types.VerificationJob>;
+  } {
+    // Migrate pending_audits to add completed_count field
+    var new_pending_audits = BTree.init<Text, Types.VerificationJob>(null);
+
+    for ((key, old_job) in BTree.entries(old_state.pending_audits)) {
+      let new_job : Types.VerificationJob = {
+        wasm_id = old_job.wasm_id;
+        repo = old_job.repo;
+        commit_hash = old_job.commit_hash;
+        build_config = old_job.build_config;
+        created_at = old_job.created_at;
+        required_verifiers = old_job.required_verifiers;
+        assigned_count = old_job.assigned_count;
+        completed_count = 0; // Initialize to 0 for existing jobs
+        bounty_ids = old_job.bounty_ids;
+        audit_type = old_job.audit_type;
+        creator = old_job.creator;
+      };
+
+      ignore BTree.insert(new_pending_audits, Text.compare, key, new_job);
+    };
+
+    {
+      var pending_audits = new_pending_audits;
+    };
+  }
+)
 shared ({ caller = deployer }) persistent actor class AuditHub() = this {
 
   // The duration a lock is valid before it expires (10 mins for automated builds).
@@ -94,6 +140,414 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   // Track which verifiers have been assigned to which WASMs (to prevent duplicate assignments)
   // Map<WASM_ID, Set<Principal>>
   var wasm_verifier_assignments = Map.new<Text, Map.Map<Principal, Bool>>();
+
+  // ==================================================================================
+  // == ICRC127 LOCAL BOUNTY SYSTEM
+  // ==================================================================================
+
+  // ClassPlus manager for all library instances
+  transient let initManager = ClassPlus.ClassPlusInitializationManager(owner, Principal.fromActor(this), false);
+
+  // TimerTool setup
+  var tt_migration_state : TimerTool.State = TimerTool.initialState();
+  transient let tt = TimerTool.Init<system>({
+    manager = initManager;
+    initialState = tt_migration_state;
+    args = null;
+    pullEnvironment = ?(
+      func() : TimerTool.Environment {
+        {
+          advanced = null;
+          reportExecution = null;
+          reportError = null;
+          syncUnsafe = null;
+          reportBatch = null;
+        };
+      }
+    );
+    onInitialize = ?(
+      func(newClass : TimerTool.TimerTool) : async* () {
+        Debug.print("Initializing TimerTool");
+        newClass.initialize<system>();
+      }
+    );
+    onStorageChange = func(state : TimerTool.State) {
+      tt_migration_state := state;
+    };
+  });
+
+  // Local log setup
+  var localLog_migration_state : LogLib.State = LogLib.initialState();
+  transient let localLog = LogLib.Init<system>({
+    args = ?{
+      min_level = ?#Debug;
+      bufferSize = ?5000;
+    };
+    manager = initManager;
+    initialState = localLog_migration_state;
+    pullEnvironment = ?(
+      func() : LogLib.Environment {
+        {
+          tt = tt();
+          advanced = null;
+          onEvict = null;
+        };
+      }
+    );
+    onInitialize = null;
+    onStorageChange = func(state : LogLib.State) {
+      localLog_migration_state := state;
+    };
+  });
+
+  // ==================================================================================
+  // == ICRC3 INTEGRATION
+  // ==================================================================================
+
+  stable let cert_store : CertTree.Store = CertTree.newStore();
+  transient let ct = CertTree.Ops(cert_store);
+
+  private func get_certificate_store() : CertTree.Store {
+    cert_store;
+  };
+
+  private func updated_certification(cert : Blob, lastIndex : Nat) : Bool {
+    ct.setCertifiedData();
+    true;
+  };
+
+  private func get_icrc3_environment() : ICRC3.Environment {
+    {
+      updated_certification = ?updated_certification;
+      get_certificate_store = ?get_certificate_store;
+    };
+  };
+
+  stable var icrc3_migration_state = ICRC3.initialState();
+  transient let icrc3 = ICRC3.Init<system>({
+    manager = initManager;
+    initialState = icrc3_migration_state;
+    args = null;
+    pullEnvironment = ?get_icrc3_environment;
+    onInitialize = ?(
+      func(newClass : ICRC3.ICRC3) : async* () {
+        if (newClass.stats().supportedBlocks.size() == 0) {
+          newClass.update_supported_blocks([
+            { block_type = "127mint"; url = "https://github.com/icdevs/ICRCs" },
+            { block_type = "127burn"; url = "https://github.com/icdevs/ICRCs" },
+            {
+              block_type = "127transfer";
+              url = "https://github.com/icdevs/ICRCs";
+            },
+          ]);
+        };
+      }
+    );
+    onStorageChange = func(state : ICRC3.State) {
+      icrc3_migration_state := state;
+    };
+  });
+
+  // Helper function to convert ICRC127 ICRC16 values to ICRC3 Values
+  private func convertIcrc127ValueToIcrc3Value(val : ICRC127Lib.ICRC16) : ICRC3.Value {
+    switch (val) {
+      case (#Nat(n)) { return #Nat(n) };
+      case (#Int(i)) { return #Int(i) };
+      case (#Text(t)) { return #Text(t) };
+      case (#Blob(b)) { return #Blob(b) };
+      case (#Array(arr)) {
+        let converted_arr = Array.map<ICRC127Lib.ICRC16, ICRC3.Value>(arr, convertIcrc127ValueToIcrc3Value);
+        return #Array(converted_arr);
+      };
+      case (#Map(map)) {
+        let converted_map = Array.map<(Text, ICRC127Lib.ICRC16), (Text, ICRC3.Value)>(map, func((k, v)) { (k, convertIcrc127ValueToIcrc3Value(v)) });
+        return #Map(converted_map);
+      };
+      case (#Bool(b)) { return #Text(debug_show (b)) };
+      case (#Principal(p)) { return #Text(Principal.toText(p)) };
+      case (_) {
+        return #Text("Unsupported ICRC-3 Value Type");
+      };
+    };
+  };
+
+  // Validation hook for WASM verification submissions
+  // Called by ICRC127 when a verifier submits a bounty claim
+  // This verifies that the claimant actually submitted an attestation or divergence to the registry
+  private func _validate_verification_submission(
+    req : ICRC127Lib.RunBountyRequest
+  ) : async ICRC127Lib.RunBountyResult {
+    Debug.print("Validating bounty submission " # Nat.toText(req.bounty_id));
+
+    // Get the verifier principal from the bounty lock
+    let verifier = switch (Map.get(_bounty_verifier_map, Map.nhash, req.bounty_id)) {
+      case (?v) { v };
+      case (null) {
+        Debug.print("No verifier found for bounty " # Nat.toText(req.bounty_id));
+        return {
+          result = #Invalid;
+          metadata = #Map([("error", #Text("bounty not reserved"))]);
+          trx_id = null;
+        };
+      };
+    };
+
+    // Extract wasm_id and audit_type from challenge_parameters
+    let challenge_data = switch (req.challenge_parameters) {
+      case (#Map(m)) { m };
+      case (_) {
+        Debug.print("Invalid challenge_parameters: not a map");
+        return {
+          result = #Invalid;
+          metadata = #Map([("error", #Text("invalid challenge_parameters"))]);
+          trx_id = null;
+        };
+      };
+    };
+
+    var wasm_id_opt : ?Text = null;
+    var audit_type_opt : ?Text = null;
+
+    for ((key, value) in challenge_data.vals()) {
+      if (key == "wasm_id") {
+        switch (value) {
+          case (#Text(t)) { wasm_id_opt := ?t };
+          case (_) {};
+        };
+      } else if (key == "audit_type") {
+        switch (value) {
+          case (#Text(t)) { audit_type_opt := ?t };
+          case (_) {};
+        };
+      };
+    };
+
+    let wasm_id = switch (wasm_id_opt) {
+      case (?id) { id };
+      case (null) {
+        Debug.print("Missing wasm_id in challenge_parameters");
+        return {
+          result = #Invalid;
+          metadata = #Map([("error", #Text("missing wasm_id"))]);
+          trx_id = null;
+        };
+      };
+    };
+
+    let audit_type = switch (audit_type_opt) {
+      case (?at) { at };
+      case (null) {
+        Debug.print("Missing audit_type in challenge_parameters");
+        return {
+          result = #Invalid;
+          metadata = #Map([("error", #Text("missing audit_type"))]);
+          trx_id = null;
+        };
+      };
+    };
+
+    // Call registry to verify the claimant submitted an attestation or divergence
+    let registry_id = switch (registry_canister_id) {
+      case (?id) { id };
+      case (null) {
+        Debug.print("Registry canister ID not configured");
+        return {
+          result = #Invalid;
+          metadata = #Map([("error", #Text("registry not configured"))]);
+          trx_id = null;
+        };
+      };
+    };
+
+    let registry : McpRegistry.Service = actor (Principal.toText(registry_id));
+
+    // Check if the verifier participated by submitting attestation/divergence
+    let has_participated = await registry.has_verifier_participated_in_wasm(
+      verifier,
+      wasm_id,
+      audit_type,
+    );
+
+    if (has_participated) {
+      Debug.print("✓ Valid: Verifier " # Principal.toText(verifier) # " submitted attestation/divergence for " # wasm_id);
+      return {
+        result = #Valid;
+        metadata = #Map([
+          ("wasm_id", #Text(wasm_id)),
+          ("audit_type", #Text(audit_type)),
+        ]);
+        trx_id = null;
+      };
+    } else {
+      Debug.print("✗ Invalid: Verifier " # Principal.toText(verifier) # " has not submitted attestation/divergence for " # wasm_id);
+      return {
+        result = #Invalid;
+        metadata = #Map([
+          ("error", #Text("No attestation or divergence found")),
+          ("wasm_id", #Text(wasm_id)),
+        ]);
+        trx_id = null;
+      };
+    };
+  };
+
+  // Stable state for ICRC127 bounty management
+  var icrc127_migration_state : ICRC127Lib.State = ICRC127Lib.initialState();
+
+  // ICRC127 instance getter (lazy initialization)
+  transient let icrc127 = ICRC127Lib.Init<system>({
+    manager = initManager;
+    initialState = icrc127_migration_state;
+    args = null;
+    pullEnvironment = ?(
+      func() : ICRC127Lib.Environment {
+        {
+          tt = tt();
+          log = localLog();
+          advanced = null; // No ICRC-85 support for now
+          add_record = ?(
+            func<system>(data : ICRC127Lib.ICRC16, meta : ?ICRC127Lib.ICRC16) : Nat {
+              let converted_data = convertIcrc127ValueToIcrc3Value(data);
+              let converted_meta = Option.map(meta, convertIcrc127ValueToIcrc3Value);
+              icrc3().add_record<system>(converted_data, converted_meta);
+            }
+          );
+          icrc1_fee = func(token_canister : Principal) : async Nat {
+            let ledger : ICRC2.Service = actor (Principal.toText(token_canister));
+            await ledger.icrc1_fee();
+          };
+          icrc1_transfer = func(token_canister : Principal, args : ICRC2.TransferArgs) : async ICRC2.TransferResult {
+            let ledger : ICRC2.Service = actor (Principal.toText(token_canister));
+            await ledger.icrc1_transfer(args);
+          };
+          icrc2_transfer_from = func(token_canister : Principal, args : ICRC2.TransferFromArgs) : async ICRC2.TransferFromResult {
+            let ledger : ICRC2.Service = actor (Principal.toText(token_canister));
+            await ledger.icrc2_transfer_from(args);
+          };
+          validate_submission = _validate_verification_submission;
+        };
+      }
+    );
+    onInitialize = ?(
+      func(icrc127 : ICRC127Lib.ICRC127Bounty) : async* () {
+        Debug.print("ICRC127: Initialized in audit_hub");
+      }
+    );
+    onStorageChange = func(state : ICRC127Lib.State) {
+      icrc127_migration_state := state;
+    };
+  });
+
+  // ==================================================================================
+  // == LOCAL BOUNTY ASSIGNMENT HELPERS
+  // ==================================================================================
+
+  /**
+   * Find an active locked bounty for a verifier from LOCAL bounties.
+   * Returns (bounty_id, challenge_params) if found.
+   */
+  private func _find_active_local_bounty(
+    job : Types.VerificationJob,
+    verifier : Principal,
+    current_time : Int,
+  ) : ?(Types.BountyId, ICRC127Lib.ICRC16) {
+    label bounty_check for (bounty_id in job.bounty_ids.vals()) {
+      switch (Map.get(bounty_locks, Map.nhash, bounty_id)) {
+        case (?lock) {
+          if (Principal.equal(lock.claimant, verifier) and lock.expires_at > current_time) {
+            // Check bounty status locally
+            let bounty_opt = icrc127().icrc127_get_bounty(bounty_id);
+            switch (bounty_opt) {
+              case (?bounty) {
+                if (Option.isNull(bounty.claimed)) {
+                  // Active unclaimed bounty
+                  Debug.print("Verifier " # Principal.toText(verifier) # " has ACTIVE local bounty " # Nat.toText(bounty_id) # " for WASM " # job.wasm_id);
+                  return ?(bounty_id, bounty.challenge_parameters);
+                };
+              };
+              case (null) {};
+            };
+          };
+        };
+        case (null) {};
+      };
+    };
+    return null;
+  };
+
+  /**
+   * Claim an available LOCAL bounty for a verifier.
+   * Atomically creates assignment and provisional lock.
+   */
+  private func _claim_available_local_bounty(
+    job : Types.VerificationJob,
+    verifier : Principal,
+    current_time : Int,
+    stake_amount : Types.Balance,
+    token_id : Types.TokenId,
+  ) : ?Types.BountyId {
+    label bounty_search for (bounty_id in job.bounty_ids.vals()) {
+      // Skip if already assigned
+      if (Option.isSome(Map.get(assigned_jobs, Map.nhash, bounty_id))) {
+        continue bounty_search;
+      };
+
+      // Check bounty status locally
+      let bounty_opt = icrc127().icrc127_get_bounty(bounty_id);
+      switch (bounty_opt) {
+        case (?bounty) {
+          // Skip if already claimed
+          if (Option.isSome(bounty.claimed)) {
+            continue bounty_search;
+          };
+
+          // Found available bounty - claim it
+          let assignment : Types.AssignedJob = {
+            wasm_id = job.wasm_id;
+            audit_type = job.audit_type;
+            verifier = verifier;
+            bounty_id = bounty_id;
+            assigned_at = current_time;
+            expires_at = current_time + LOCK_DURATION_NS;
+          };
+
+          let lock : Types.BountyLock = {
+            claimant = verifier;
+            expires_at = current_time + LOCK_DURATION_NS;
+            stake_amount = stake_amount;
+            stake_token_id = token_id;
+          };
+
+          ignore Map.put(assigned_jobs, Map.nhash, bounty_id, assignment);
+          ignore Map.put(bounty_locks, Map.nhash, bounty_id, lock);
+          ignore Map.put(_bounty_verifier_map, Map.nhash, bounty_id, verifier);
+
+          Debug.print("Assigned local bounty " # Nat.toText(bounty_id) # " to verifier " # Principal.toText(verifier));
+          return ?bounty_id;
+        };
+        case (null) {};
+      };
+    };
+    return null;
+  };
+
+  /**
+   * Get build config from LOCAL bounty's challenge parameters.
+   */
+  private func _get_local_bounty_build_config(
+    bounty_id : Types.BountyId
+  ) : ICRC127Lib.ICRC16 {
+    let bounty_opt = icrc127().icrc127_get_bounty(bounty_id);
+    switch (bounty_opt) {
+      case (?bounty) {
+        return bounty.challenge_parameters;
+      };
+      case (null) {
+        Debug.print("Warning: Could not get local bounty " # Nat.toText(bounty_id) # ", returning empty config");
+        return #Map([]);
+      };
+    };
+  };
 
   // ==================================================================================
   // == HELPER FUNCTIONS
@@ -520,21 +974,195 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     repo : Text,
     commit_hash : Text,
     build_config : Types.ICRC16Map,
+    audit_type : Text,
     required_verifiers : Nat,
     bounty_ids : [Types.BountyId],
   ) : async Result.Result<(), Text> {
-    JobQueue.add_verification_job(
+    let result = JobQueue.add_verification_job(
       pending_audits,
       wasm_id,
       repo,
       commit_hash,
       build_config,
+      audit_type,
       required_verifiers,
       bounty_ids,
       msg.caller,
       registry_canister_id,
       bounty_sponsor_canister_id,
     );
+
+    // Note: This function is called by legacy mcp_registry with external bounty_ids
+    // For new integrations, use create_local_bounties_for_job after adding the job
+    result;
+  };
+
+  /**
+   * Create local bounties for a verification job.
+   * This enables local bounty management instead of relying on mcp_registry.
+   * Can be called by authorized canisters (registry, bounty_sponsor) or owner.
+   *
+   * @param wasm_id - The WASM ID
+   * @param audit_type - The audit type (e.g., "build_reproducibility_v1")
+   * @param num_bounties - Number of bounties to create
+   * @param reward_amount - Reward amount per bounty (in token atomic units)
+   * @param reward_token - Token canister ID for rewards
+   * @param timeout_date - Expiration timestamp for bounties
+   */
+  public shared (msg) func create_local_bounties_for_job(
+    wasm_id : Text,
+    audit_type : Text,
+    num_bounties : Nat,
+    reward_amount : Nat,
+    reward_token : Principal,
+    timeout_date : Int,
+  ) : async Result.Result<[Nat], Text> {
+    // Check authorization
+    var authorized = false;
+    if (is_owner(msg.caller)) {
+      authorized := true;
+    } else {
+      switch (registry_canister_id) {
+        case (?registry_id) {
+          if (Principal.equal(msg.caller, registry_id)) {
+            authorized := true;
+          };
+        };
+        case (null) {};
+      };
+    };
+    if (not authorized) {
+      switch (bounty_sponsor_canister_id) {
+        case (?sponsor_id) {
+          if (Principal.equal(msg.caller, sponsor_id)) {
+            authorized := true;
+          };
+        };
+        case (null) {};
+      };
+    };
+    if (not authorized) {
+      return #err("Only owner, registry, or bounty_sponsor can create bounties");
+    };
+
+    // Find the most recent job matching wasm_id and audit_type
+    let prefix = wasm_id # "::" # audit_type # "::";
+    var matching_job : ?Types.VerificationJob = null;
+    var matching_key : ?Text = null;
+
+    for ((key, job) in BTree.entries(pending_audits)) {
+      if (Text.size(key) >= Text.size(prefix)) {
+        let chars = Text.toIter(key);
+        var i = 0;
+        var matches = true;
+        label char_check for (c in Text.toIter(prefix)) {
+          switch (chars.next()) {
+            case (?key_char) {
+              if (key_char != c) {
+                matches := false;
+                break char_check;
+              };
+            };
+            case (null) {
+              matches := false;
+              break char_check;
+            };
+          };
+        };
+        if (matches) {
+          // Found a matching job - use the most recent one
+          switch (matching_job) {
+            case (null) {
+              matching_job := ?job;
+              matching_key := ?key;
+            };
+            case (?existing) {
+              if (job.created_at > existing.created_at) {
+                matching_job := ?job;
+                matching_key := ?key;
+              };
+            };
+          };
+        };
+      };
+    };
+
+    let job = switch (matching_job) {
+      case (?j) { j };
+      case (null) {
+        return #err("Job not found for wasm_id: " # wasm_id # ", audit_type: " # audit_type);
+      };
+    };
+
+    let queue_key = switch (matching_key) {
+      case (?k) { k };
+      case (null) {
+        return #err("Job key not found");
+      };
+    };
+
+    // Create bounties
+    let created_bounty_ids = Buffer.Buffer<Nat>(num_bounties);
+
+    for (i in Iter.range(0, num_bounties - 1)) {
+      let bounty_metadata : Types.ICRC16Map = [
+        ("icrc127:reward_canister", #Principal(reward_token)),
+        ("icrc127:reward_amount", #Nat(reward_amount)),
+        ("wasm_id", #Text(wasm_id)),
+        ("audit_type", #Text(audit_type)),
+        ("repo", #Text(job.repo)),
+        ("commit_hash", #Text(job.commit_hash)),
+      ];
+
+      let challenge_parameters : Types.ICRC16Map = [
+        ("wasm_id", #Text(wasm_id)),
+        ("repo", #Text(job.repo)),
+        ("commit_hash", #Text(job.commit_hash)),
+        ("audit_type", #Text(audit_type)),
+      ];
+
+      let create_req : ICRC127Service.CreateBountyRequest = {
+        bounty_id = null; // Let ICRC127 assign ID
+        validation_canister_id = Principal.fromActor(this);
+        bounty_metadata = bounty_metadata;
+        challenge_parameters = #Map(challenge_parameters);
+        timeout_date = Int.abs(timeout_date);
+        start_date = null;
+      };
+
+      let create_result = await icrc127().icrc127_create_bounty(msg.caller, create_req);
+
+      switch (create_result) {
+        case (#Ok(result)) {
+          created_bounty_ids.add(result.bounty_id);
+          Debug.print("Created local bounty " # Nat.toText(result.bounty_id) # " for job " # queue_key);
+        };
+        case (#Error(err)) {
+          // Rollback not implemented - bounties already created will remain
+          return #err("Failed to create bounty " # Nat.toText(i) # ": " # debug_show (err));
+        };
+      };
+    };
+
+    // Update job with new bounty_ids
+    let updated_job : Types.VerificationJob = {
+      wasm_id = job.wasm_id;
+      repo = job.repo;
+      commit_hash = job.commit_hash;
+      build_config = job.build_config;
+      created_at = job.created_at;
+      required_verifiers = job.required_verifiers;
+      assigned_count = job.assigned_count;
+      completed_count = job.completed_count;
+      bounty_ids = Array.append(job.bounty_ids, Buffer.toArray(created_bounty_ids));
+      audit_type = job.audit_type;
+      creator = job.creator;
+    };
+
+    ignore BTree.insert(pending_audits, Text.compare, queue_key, updated_job);
+
+    Debug.print("Created " # Nat.toText(created_bounty_ids.size()) # " local bounties for job " # queue_key);
+    #ok(Buffer.toArray(created_bounty_ids));
   };
 
   /**
@@ -561,6 +1189,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   /**
    * Helper function to process an audit job for a verifier.
    * Returns a job assignment or null if the job is fully assigned.
+   * Uses ONLY local bounties (no legacy mcp_registry bounties).
    */
   private func _process_audit_job(
     queue_key : Text,
@@ -568,37 +1197,19 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     verifier : Principal,
     current_time : Int,
   ) : async ?Result.Result<Types.VerificationJobAssignment, Text> {
-    // This is the old version - kept for backwards compatibility if needed
-    // New code should use _process_audit_job_with_cache
-    let empty_cache = Map.new<Text, Bool>();
-    await _process_audit_job_with_cache(queue_key, job, verifier, current_time, empty_cache);
-  };
-
-  /**
-   * Helper function to process an audit job for a verifier with participation cache.
-   * Returns a job assignment or null if the job is fully assigned.
-   */
-  private func _process_audit_job_with_cache(
-    queue_key : Text,
-    job : Types.VerificationJob,
-    verifier : Principal,
-    current_time : Int,
-    participation_cache : Map.Map<Text, Bool>,
-  ) : async ?Result.Result<Types.VerificationJobAssignment, Text> {
     let wasm_id = job.wasm_id;
 
-    // Check if verifier has an active locked bounty for this job
-    let active_locked_bounty = await JobAssignment.find_active_locked_bounty(
+    // 1. Check for active LOCAL bounty
+    let active_local_bounty = JobAssignment.find_active_local_bounty(
       job,
       verifier,
       bounty_locks,
-      registry_canister_id,
+      icrc127,
       current_time,
     );
-
-    // If verifier has an active locked bounty, return it
-    switch (active_locked_bounty) {
+    switch (active_local_bounty) {
       case (?(bounty_id, challenge_params)) {
+        Debug.print("Returning active LOCAL bounty " # Nat.toText(bounty_id) # " to verifier " # Principal.toText(verifier));
         return ?#ok(
           JobAssignment.create_job_assignment(
             bounty_id,
@@ -608,17 +1219,15 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
             challenge_params,
             switch (Map.get(bounty_locks, Map.nhash, bounty_id)) {
               case (?lock) { lock.expires_at };
-              case (null) { current_time + (3600_000_000_000) };
+              case (null) { current_time + LOCK_DURATION_NS };
             },
           )
         );
       };
-      case (null) {
-        // No active locked bounty, continue to check if we can assign a new one
-      };
+      case (null) {};
     };
 
-    // Check if we can assign a new bounty
+    // 2. No active bounty - try to assign a new one
     if (job.assigned_count < job.required_verifiers) {
       Debug.print("Found audit job needing verification: " # queue_key # " (" # Nat.toText(job.assigned_count) # "/" # Nat.toText(job.required_verifiers) # " assigned)");
 
@@ -628,31 +1237,23 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
         case (null) { "build_reproducibility_v1" };
       };
 
-      // Check participation using cache (if available)
-      let cache_key = wasm_id # "::" # audit_type;
-      let has_participated = switch (Map.get(participation_cache, thash, cache_key)) {
-        case (?participated) { participated };
-        case (null) {
-          // Cache miss - check directly if cache is empty (backwards compatibility)
-          switch (registry_canister_id) {
-            case (?reg_id) {
-              let registry = actor (Principal.toText(reg_id)) : McpRegistry.Service;
-              try {
-                let participated = await registry.has_verifier_participated_in_wasm(verifier, wasm_id, audit_type);
-                participated;
-              } catch (e) {
-                Debug.print("Warning: Could not check verifier participation: " # Error.message(e));
-                false; // Default to false on error
-              };
+      // Check if verifier already has a bounty for this verification job
+      var already_participating = false;
+      label check_participation for (bounty_id in job.bounty_ids.vals()) {
+        switch (Map.get(_bounty_verifier_map, Map.nhash, bounty_id)) {
+          case (?assigned_verifier) {
+            if (Principal.equal(assigned_verifier, verifier)) {
+              Debug.print("Verifier " # Principal.toText(verifier) # " already has bounty " # Nat.toText(bounty_id) # " for this verification job - skipping");
+              already_participating := true;
+              break check_participation;
             };
-            case (null) { false };
           };
+          case (null) {};
         };
       };
 
-      if (has_participated) {
-        Debug.print("Verifier " # Principal.toText(verifier) # " has already participated in WASM " # wasm_id # " with audit_type " # audit_type # " - skipping");
-        return null; // Skip this job, let them get assigned to a different WASM
+      if (already_participating) {
+        return null;
       };
 
       let (token_id, stake_amount) = switch (Map.get(stake_requirements, thash, audit_type)) {
@@ -663,82 +1264,61 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
         };
       };
 
-      // Claim an available bounty
-      let available_bounty_id = await JobAssignment.claim_available_bounty(
-        job,
-        verifier,
-        current_time,
-        LOCK_DURATION_NS,
-        stake_amount,
-        token_id,
-        assigned_jobs,
-        bounty_locks,
-        registry_canister_id,
-      );
+      // Try to claim a LOCAL bounty
+      if (job.bounty_ids.size() > 0) {
+        let local_bounty_id = JobAssignment.claim_available_local_bounty(
+          job,
+          verifier,
+          current_time,
+          LOCK_DURATION_NS,
+          stake_amount,
+          token_id,
+          assigned_jobs,
+          bounty_locks,
+          icrc127,
+        );
 
-      switch (available_bounty_id) {
-        case (?bounty_id) {
-          // Get bounty's challenge_parameters from registry
-          let bounty_build_config = await JobAssignment.get_bounty_build_config(
-            bounty_id,
-            job,
-            registry_canister_id,
-          );
-
-          // Extract audit_type from bounty's challenge_parameters
-          let bounty_audit_type = switch (JobQueue.get_audit_type_from_metadata(bounty_build_config)) {
-            case (?at) { at };
-            case (null) { "build_reproducibility_v1" };
-          };
-
-          // Verify stake requirement exists for this audit type
-          let (final_token_id, final_stake_amount) = switch (Map.get(stake_requirements, thash, bounty_audit_type)) {
-            case (?(tid, amt)) { (tid, amt) };
-            case (null) {
-              Debug.print("Warning: No stake requirement configured for audit_type '" # bounty_audit_type # "'");
-              ignore Map.remove(assigned_jobs, Map.nhash, bounty_id);
-              return ?#err("No stake requirement configured for audit type: " # bounty_audit_type);
-            };
-          };
-
-          // Reserve the bounty with stake
-          switch (await _reserve_bounty_internal(verifier, bounty_id, final_token_id, final_stake_amount)) {
-            case (#err(e)) {
-              ignore Map.remove(assigned_jobs, Map.nhash, bounty_id);
-              ignore Map.remove(bounty_locks, Map.nhash, bounty_id);
-              return ?#err("Failed to reserve bounty: " # e);
-            };
-            case (#ok()) {};
-          };
-
-          // Update job assignment count
-          let updated_job : Types.VerificationJob = {
-            job with
-            assigned_count = job.assigned_count + 1;
-          };
-          ignore BTree.insert(pending_audits, Text.compare, queue_key, updated_job);
-
-          Debug.print("Assigned audit job to verifier: bounty_id=" # Nat.toText(bounty_id) # ", wasm_id=" # wasm_id # ", audit_type=" # bounty_audit_type);
-
-          // Return assignment
-          let expires_at = switch (Map.get(assigned_jobs, Map.nhash, bounty_id)) {
-            case (?assignment) { assignment.expires_at };
-            case (null) { current_time + LOCK_DURATION_NS };
-          };
-
-          return ?#ok(
-            JobAssignment.create_job_assignment(
+        switch (local_bounty_id) {
+          case (?bounty_id) {
+            // Successfully claimed LOCAL bounty
+            let bounty_build_config = JobAssignment.get_local_bounty_build_config(
               bounty_id,
-              wasm_id,
-              job.repo,
-              job.commit_hash,
-              bounty_build_config,
-              expires_at,
-            )
-          );
-        };
-        case (null) {
-          return null;
+              job,
+              icrc127,
+            );
+
+            // Reserve the bounty with stake
+            switch (await _reserve_bounty_internal(verifier, bounty_id, token_id, stake_amount)) {
+              case (#err(e)) {
+                ignore Map.remove(assigned_jobs, Map.nhash, bounty_id);
+                ignore Map.remove(bounty_locks, Map.nhash, bounty_id);
+                return ?#err("Failed to reserve LOCAL bounty: " # e);
+              };
+              case (#ok()) {};
+            };
+
+            // Update job assignment count
+            let updated_job : Types.VerificationJob = {
+              job with assigned_count = job.assigned_count + 1;
+            };
+            ignore BTree.insert(pending_audits, Text.compare, queue_key, updated_job);
+
+            Debug.print("✓ Assigned LOCAL bounty " # Nat.toText(bounty_id) # " to verifier (wasm=" # wasm_id # ", audit_type=" # audit_type # ")");
+
+            return ?#ok(
+              JobAssignment.create_job_assignment(
+                bounty_id,
+                wasm_id,
+                job.repo,
+                job.commit_hash,
+                bounty_build_config,
+                current_time + LOCK_DURATION_NS,
+              )
+            );
+          };
+          case (null) {
+            Debug.print("No available LOCAL bounties for this job");
+          };
         };
       };
     };
@@ -769,13 +1349,13 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
 
     // 2. Check for existing active assignment
     let current_time = Time.now();
-    let existing_assignment = await JobAssignment.check_existing_assignment(
+    let existing_assignment = JobAssignment.check_existing_assignment(
       verifier,
       current_time,
       assigned_jobs,
       pending_audits,
-      registry_canister_id,
       bounty_locks,
+      icrc127,
     );
 
     switch (existing_assignment) {
@@ -783,67 +1363,22 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
       case (null) { /* Continue to find new job */ };
     };
 
-    // 3. Build a participation cache by collecting all wasm_id + audit_type pairs
-    // and checking them in ONE batch to avoid N registry calls
-    // OPTIMIZATION: Only check up to MAX_JOBS_TO_CHECK to limit inter-canister calls
-    var participation_cache = Map.new<Text, Bool>(); // Map<wasm_id::audit_type, has_participated>
+    // 3. Search for available jobs
+    // Each job already prevents duplicate assignments via _bounty_verifier_map check
     var jobs_checked : Nat = 0;
-
-    switch (registry_canister_id) {
-      case (?reg_id) {
-        let registry = actor (Principal.toText(reg_id)) : McpRegistry.Service;
-
-        // Collect unique wasm_id::audit_type pairs from jobs that need verifiers
-        label job_loop for ((queue_key, job) in BTree.entries(pending_audits)) {
-          if (jobs_checked >= MAX_JOBS_TO_CHECK) {
-            Debug.print("Reached maximum jobs to check (" # Nat.toText(MAX_JOBS_TO_CHECK) # "), stopping participation cache build");
-            break job_loop;
-          };
-          
-          if (job.assigned_count < job.required_verifiers) {
-            jobs_checked += 1;
-            let audit_type = switch (JobQueue.get_audit_type_from_metadata(job.build_config)) {
-              case (?at) { at };
-              case (null) { "build_reproducibility_v1" };
-            };
-            let cache_key = job.wasm_id # "::" # audit_type;
-
-            // Only check if not already cached
-            if (Map.get(participation_cache, thash, cache_key) == null) {
-              try {
-                let has_participated = await registry.has_verifier_participated_in_wasm(verifier, job.wasm_id, audit_type);
-                Map.set(participation_cache, thash, cache_key, has_participated);
-              } catch (e) {
-                Debug.print("Warning: Could not check verifier participation for " # cache_key # ": " # Error.message(e));
-                // Default to false (allow assignment) on error
-                Map.set(participation_cache, thash, cache_key, false);
-              };
-            };
-          };
-        };
-      };
-      case (null) {
-        // No registry configured - can't check participation
-      };
-    };
-
-    // 4. Search for available jobs using the participation cache
-    // OPTIMIZATION: Limit job processing and exit early on first successful assignment
-    jobs_checked := 0;
     label assignment_loop for ((queue_key, job) in BTree.entries(pending_audits)) {
       if (jobs_checked >= MAX_JOBS_TO_CHECK) {
         Debug.print("Reached maximum jobs to check (" # Nat.toText(MAX_JOBS_TO_CHECK) # "), stopping job search");
         break assignment_loop;
       };
-      
+
       if (job.assigned_count < job.required_verifiers) {
         jobs_checked += 1;
       };
-      
-      switch (await _process_audit_job_with_cache(queue_key, job, verifier, current_time, participation_cache)) {
-        case (?result) { 
-          // CRITICAL OPTIMIZATION: Exit immediately on successful assignment
-          // This prevents checking remaining jobs unnecessarily
+
+      switch (await _process_audit_job(queue_key, job, verifier, current_time)) {
+        case (?result) {
+          // Exit immediately on successful assignment
           Debug.print("Job assigned successfully, stopping search");
           return result;
         };
@@ -870,10 +1405,13 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   };
 
   /**
-   * Get all pending verification jobs (for debugging/monitoring).
+   * Get all pending verification jobs with pagination (for debugging/monitoring).
    */
-  public shared query func list_pending_jobs() : async [(Text, Types.VerificationJob)] {
-    JobQueue.list_pending_jobs(pending_audits);
+  public shared query func list_pending_jobs(offset : ?Nat, limit : ?Nat) : async {
+    jobs : [(Text, Types.VerificationJob)];
+    total : Nat;
+  } {
+    JobQueue.list_pending_jobs(pending_audits, assigned_jobs, icrc127().icrc127_get_bounty, offset, limit);
   };
 
   /**
@@ -954,31 +1492,280 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   };
 
   // ==================================================================================
-  // == DEBUG METHODS
+  // == PUBLIC ICRC127 ENDPOINTS
   // ==================================================================================
 
-  // Debug method to proxy icrc127_get_bounty call to registry
-  public shared func debug_get_bounty(bounty_id : Nat) : async Text {
-    switch (registry_canister_id) {
-      case (?id) {
-        Debug.print("Calling registry " # Principal.toText(id) # " for bounty " # Nat.toText(bounty_id));
-        let registry = actor (Principal.toText(id)) : McpRegistry.Service;
-        try {
-          let result = await registry.icrc127_get_bounty(bounty_id);
-          let msg = "debug_get_bounty(" # Nat.toText(bounty_id) # ") returned: " # debug_show (result);
-          Debug.print(msg);
-          msg;
-        } catch (e) {
-          let msg = "debug_get_bounty(" # Nat.toText(bounty_id) # ") threw error: " # Error.message(e);
-          Debug.print(msg);
-          msg;
+  // Create a bounty locally (called by app_store when registering WASM)
+  public shared (msg) func icrc127_create_bounty(
+    req : ICRC127Service.CreateBountyRequest
+  ) : async ICRC127Service.CreateBountyResult {
+    let result = await icrc127().icrc127_create_bounty(msg.caller, req);
+
+    // Auto-attach bounty to matching verification job (if exists)
+    switch (result) {
+      case (#Ok(bounty_result)) {
+        let bounty_id = bounty_result.bounty_id;
+
+        // Extract wasm_id and audit_type from bounty metadata
+        var wasm_id_opt : ?Text = null;
+        var audit_type_opt : ?Text = null;
+
+        for ((key, value) in req.bounty_metadata.vals()) {
+          if (key == "wasm_id") {
+            switch (value) {
+              case (#Text(t)) { wasm_id_opt := ?t };
+              case (_) {};
+            };
+          };
+          if (key == "audit_type") {
+            switch (value) {
+              case (#Text(t)) { audit_type_opt := ?t };
+              case (_) {};
+            };
+          };
+        };
+
+        // If both wasm_id and audit_type found, try to attach to most recent matching job
+        switch (wasm_id_opt, audit_type_opt) {
+          case (?wasm_id, ?audit_type) {
+            let prefix = wasm_id # "::" # audit_type # "::";
+            var matching_job : ?Types.VerificationJob = null;
+            var matching_key : ?Text = null;
+
+            // Find the most recent job matching this wasm_id and audit_type
+            for ((key, job) in BTree.entries(pending_audits)) {
+              if (Text.size(key) >= Text.size(prefix)) {
+                let chars = Text.toIter(key);
+                var matches = true;
+                label char_check for (c in Text.toIter(prefix)) {
+                  switch (chars.next()) {
+                    case (?key_char) {
+                      if (key_char != c) {
+                        matches := false;
+                        break char_check;
+                      };
+                    };
+                    case (null) {
+                      matches := false;
+                      break char_check;
+                    };
+                  };
+                };
+                if (matches) {
+                  switch (matching_job) {
+                    case (null) {
+                      matching_job := ?job;
+                      matching_key := ?key;
+                    };
+                    case (?existing) {
+                      if (job.created_at > existing.created_at) {
+                        matching_job := ?job;
+                        matching_key := ?key;
+                      };
+                    };
+                  };
+                };
+              };
+            };
+
+            switch (matching_job, matching_key) {
+              case (?existing_job, ?queue_key) {
+                // Append this bounty to the job's bounty_ids
+                let updated_bounty_ids = Buffer.fromArray<Types.BountyId>(existing_job.bounty_ids);
+                updated_bounty_ids.add(bounty_id);
+
+                let updated_job : Types.VerificationJob = {
+                  wasm_id = existing_job.wasm_id;
+                  repo = existing_job.repo;
+                  commit_hash = existing_job.commit_hash;
+                  build_config = existing_job.build_config;
+                  required_verifiers = existing_job.required_verifiers;
+                  bounty_ids = Buffer.toArray(updated_bounty_ids);
+                  audit_type = existing_job.audit_type;
+                  assigned_count = existing_job.assigned_count;
+                  completed_count = existing_job.completed_count;
+                  created_at = existing_job.created_at;
+                  creator = existing_job.creator;
+                };
+
+                ignore BTree.insert(pending_audits, Text.compare, queue_key, updated_job);
+                Debug.print("Auto-attached bounty " # Nat.toText(bounty_id) # " to job " # queue_key);
+              };
+              case (_, _) {
+                Debug.print("No matching job found for bounty " # Nat.toText(bounty_id) # " (wasm_id: " # wasm_id # ", audit_type: " # audit_type # ")");
+              };
+            };
+          };
+          case (_, _) {
+            Debug.print("Bounty " # Nat.toText(bounty_id) # " missing wasm_id or audit_type metadata - cannot auto-attach");
+          };
         };
       };
-      case (null) {
-        let msg = "debug_get_bounty: registry_canister_id is not set";
-        Debug.print(msg);
-        msg;
+      case (#Error(_)) {
+        // Bounty creation failed, nothing to attach
       };
     };
+
+    result;
+  };
+
+  // Submit a bounty claim (called by verifier after completing verification)
+  public shared (msg) func icrc127_submit_bounty(
+    req : ICRC127Service.BountySubmissionRequest
+  ) : async ICRC127Service.BountySubmissionResult {
+    await icrc127().icrc127_submit_bounty(msg.caller, req);
+  };
+
+  // Query bounty information
+  public shared query func icrc127_get_bounty(
+    bounty_id : Nat
+  ) : async ?ICRC127Service.Bounty {
+    icrc127().icrc127_get_bounty(bounty_id);
+  };
+
+  // List bounties with optional filters
+  public shared query func icrc127_list_bounties(
+    filter : ?[ICRC127Service.ListBountiesFilter],
+    prev : ?Nat,
+    take : ?Nat,
+  ) : async [ICRC127Lib.Bounty] {
+    icrc127().icrc127_list_bounties(filter, prev, take);
+  };
+
+  // Get ICRC127 metadata
+  public shared query func icrc127_metadata() : async Types.ICRC16Map {
+    icrc127().icrc127_metadata();
+  };
+
+  // Get supported ICRC standards
+  public shared query func icrc10_supported_standards() : async [{
+    name : Text;
+    url : Text;
+  }] {
+    icrc127().icrc10_supported_standards();
+  };
+
+  private func _getICRC16Field(map : Types.ICRC16Map, key : Text) : ?Types.ICRC16 {
+    for ((k, v) in map.vals()) { if (k == key) return ?v };
+    null;
+  };
+
+  // Add this new helper function. It's designed specifically for filtering.
+  private func _getICRC16TextOptional(map : Types.ICRC16Map, key : Text) : ?Text {
+    switch (_getICRC16Field(map, key)) {
+      case (null) { return null }; // Not found, return null
+      case (?(#Text(t))) { return ?t }; // Found and is Text, return the optional value
+      case (_) { return null }; // Found but is wrong type, return null
+    };
+  };
+
+  /**
+   * @notice Fetches a paginated and filtered list of all bounties.
+   * @param req The request object containing optional filters and pagination cursors.
+   * @return A result containing an array of matching `ICRC127Lib.Bounty` records or an error.
+   */
+  public shared query func list_bounties(req : Bounty.BountyListingRequest) : async Bounty.BountyListingResponse {
+    // 1. Handle optional arguments and set defaults.
+    let filters = switch (req.filter) { case null []; case (?fs) fs };
+    let take = switch (req.take) { case null 20; case (?n) Nat.min(n, 100) };
+    let prev = req.prev;
+
+    // 2. Use BTree iterator instead of converting to array - this is O(n) only for items we check
+    // not O(n) upfront cost of converting entire tree to array
+    let bounties_tree = icrc127().state.bounties;
+
+    // 3. Define the filtering logic in a helper function.
+    // A bounty must match ALL filters in the request to be included.
+    func matchesAllFilters(bounty : ICRC127Lib.Bounty, filters : [Bounty.BountyFilter]) : Bool {
+      if (filters.size() == 0) return true;
+
+      for (f in filters.vals()) {
+        switch (f) {
+          case (#status(statusFilter)) {
+            let is_claimed = bounty.claimed != null;
+            switch (statusFilter) {
+              case (#Open) { if (is_claimed) return false };
+              case (#Claimed) { if (not is_claimed) return false };
+            };
+          };
+          case (#audit_type(typeFilter)) {
+            switch (bounty.challenge_parameters) {
+              case (#Map(params_map)) {
+                switch (_getICRC16TextOptional(params_map, "audit_type")) {
+                  case (?bountyType) {
+                    if (bountyType != typeFilter) { return false };
+                  };
+                  case (null) {
+                    return false;
+                  };
+                };
+              };
+              case (_) {
+                return false;
+              };
+            };
+          };
+          case (#creator(creatorFilter)) {
+            if (bounty.creator != creatorFilter) return false;
+          };
+          case (#wasm_id(wasmIdFilter)) {
+            switch (bounty.challenge_parameters) {
+              case (#Map(params_map)) {
+                switch (_getICRC16TextOptional(params_map, "wasm_id")) {
+                  case (?bountyWasmId) {
+                    if (bountyWasmId != wasmIdFilter) { return false };
+                  };
+                  case (null) {
+                    return false;
+                  };
+                };
+              };
+              case (_) {
+                return false;
+              };
+            };
+          };
+        };
+      };
+      return true;
+    };
+
+    // 4. Apply pagination and filtering by iterating the BTree
+    // Convert to array but only for matching/pagination, not for storage
+    // This is still better than the old approach since we can exit early
+    var started = prev == null;
+    var count : Nat = 0;
+    let out = Buffer.Buffer<ICRC127Lib.Bounty>(take);
+
+    // Get entries and convert to array for reverse iteration (newest first)
+    let entries = Buffer.fromArray<(Nat, ICRC127Lib.Bounty)>(
+      Iter.toArray(BTree.entries(bounties_tree))
+    );
+
+    // Iterate in reverse order (newest first)
+    var i = entries.size();
+    while (i > 0 and count < take) {
+      i -= 1;
+      let (id, bounty) = entries.get(i);
+
+      if (not started) {
+        switch (prev) {
+          case (?p) {
+            if (bounty.bounty_id == p) {
+              started := true;
+            };
+          };
+          case (null) {};
+        };
+      } else {
+        // We've started collecting
+        if (matchesAllFilters(bounty, filters)) {
+          out.add(bounty);
+          count += 1;
+        };
+      };
+    };
+
+    return #ok(Buffer.toArray(out));
   };
 };

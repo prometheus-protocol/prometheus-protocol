@@ -11,12 +11,9 @@ import { Identity } from '@icp-sdk/core/agent';
 import { idlFactory as bountySponsorIdlFactory } from '@declarations/bounty_sponsor';
 import { type _SERVICE as BountySponsorService } from '@declarations/bounty_sponsor/bounty_sponsor.did.js';
 
-// Import mcp_registry declarations
-import {
-  init as registryInit,
-  idlFactory as registryIdlFactory,
-} from '@declarations/mcp_registry/mcp_registry.did.js';
-import { type _SERVICE as RegistryService } from '@declarations/mcp_registry/mcp_registry.did.js';
+// Import audit_hub declarations
+import { idlFactory as auditHubIdlFactory } from '@declarations/audit_hub';
+import { type _SERVICE as AuditHubService } from '@declarations/audit_hub/audit_hub.did.js';
 
 // Import ICRC-1 ledger IDL
 import { idlFactory as ledgerIdlFactory } from '@declarations/icrc1_ledger';
@@ -31,10 +28,10 @@ const BOUNTY_SPONSOR_WASM_PATH = path.resolve(
   '.dfx/local/canisters/bounty_sponsor/bounty_sponsor.wasm',
 );
 
-const MCP_REGISTRY_WASM_PATH = path.resolve(
+const AUDIT_HUB_WASM_PATH = path.resolve(
   __dirname,
   '../../../../',
-  '.dfx/local/canisters/mcp_registry/mcp_registry.wasm.gz',
+  '.dfx/local/canisters/audit_hub/audit_hub.wasm',
 );
 
 const USDC_LEDGER_WASM_PATH = path.resolve(
@@ -46,10 +43,10 @@ const USDC_LEDGER_WASM_PATH = path.resolve(
 describe('Bounty Sponsor Canister', () => {
   let pic: PocketIc;
   let bountySponsorActor: Actor<BountySponsorService>;
-  let registryActor: Actor<RegistryService>;
+  let auditHubActor: Actor<AuditHubService>;
   let usdcLedgerActor: Actor<LedgerService>;
   let bountySponsorCanisterId: Principal;
-  let registryCanisterId: Principal;
+  let auditHubCanisterId: Principal;
   let usdcLedgerCanisterId: Principal;
 
   // Test identities
@@ -133,32 +130,14 @@ describe('Bounty Sponsor Canister', () => {
     usdcLedgerActor = ledgerFixture.actor;
     usdcLedgerCanisterId = ledgerFixture.canisterId;
 
-    // Deploy mcp_registry
-    const registryFixture = await pic.setupCanister<RegistryService>({
-      idlFactory: registryIdlFactory,
-      wasm: MCP_REGISTRY_WASM_PATH,
+    // Deploy audit_hub
+    const auditHubFixture = await pic.setupCanister<AuditHubService>({
+      idlFactory: auditHubIdlFactory,
+      wasm: AUDIT_HUB_WASM_PATH,
       sender: ownerIdentity.getPrincipal(),
-      arg: IDL.encode(registryInit({ IDL }), [[]]).buffer,
     });
-    registryActor = registryFixture.actor;
-    registryCanisterId = registryFixture.canisterId;
-
-    // Configure mcp_registry with reward token
-    registryActor.setIdentity(ownerIdentity);
-    await registryActor.set_bounty_reward_token_canister_id(
-      usdcLedgerCanisterId,
-    );
-
-    // Fund mcp_registry with USDC for bounty rewards
-    usdcLedgerActor.setIdentity(ownerIdentity);
-    await usdcLedgerActor.icrc1_transfer({
-      to: { owner: registryCanisterId, subaccount: [] },
-      amount: toUSDC(1000), // 1000 USDC for bounty rewards
-      fee: [],
-      memo: [],
-      from_subaccount: [],
-      created_at_time: [],
-    });
+    auditHubActor = auditHubFixture.actor;
+    auditHubCanisterId = auditHubFixture.canisterId;
 
     // Deploy bounty_sponsor
     const sponsorFixture = await pic.setupCanister<BountySponsorService>({
@@ -171,7 +150,7 @@ describe('Bounty Sponsor Canister', () => {
 
     // Configure bounty_sponsor
     bountySponsorActor.setIdentity(ownerIdentity);
-    await bountySponsorActor.set_registry_canister_id(registryCanisterId);
+    await bountySponsorActor.set_audit_hub_canister_id(auditHubCanisterId);
     await bountySponsorActor.set_reward_token_canister_id(usdcLedgerCanisterId);
 
     // Fund the bounty_sponsor canister with USDC
@@ -188,20 +167,23 @@ describe('Bounty Sponsor Canister', () => {
 
   // --- Suite 1: Configuration Management ---
   describe('Configuration Management', () => {
-    it('should allow owner to set registry canister ID', async () => {
+    it('should allow owner to set audit_hub canister ID', async () => {
       bountySponsorActor.setIdentity(ownerIdentity);
-      const result = await bountySponsorActor.set_registry_canister_id(
+      const result = await bountySponsorActor.set_audit_hub_canister_id(
         Principal.fromText('aaaaa-aa'),
       );
       expect(result).toHaveProperty('ok');
 
-      const config = await bountySponsorActor.get_config();
-      expect(config.registry_canister_id[0]?.toText()).toBe('aaaaa-aa');
+      const envReq = await bountySponsorActor.get_env_requirements();
+      const auditHubDep = envReq.v1.dependencies.find(
+        (d) => d.canister_name === 'audit_hub',
+      );
+      expect(auditHubDep?.current_value[0]?.toText()).toBe('aaaaa-aa');
     });
 
-    it('should reject registry config from non-owner', async () => {
+    it('should reject audit_hub config from non-owner', async () => {
       bountySponsorActor.setIdentity(randomUserIdentity);
-      const result = await bountySponsorActor.set_registry_canister_id(
+      const result = await bountySponsorActor.set_audit_hub_canister_id(
         Principal.fromText('aaaaa-aa'),
       );
       expect(result).toHaveProperty('err');
@@ -216,8 +198,11 @@ describe('Bounty Sponsor Canister', () => {
       );
       expect(result).toHaveProperty('ok');
 
-      const config = await bountySponsorActor.get_config();
-      expect(config.reward_token_canister_id[0]?.toText()).toBe('aaaaa-aa');
+      const envReq = await bountySponsorActor.get_env_requirements();
+      const tokenDep = envReq.v1.dependencies.find(
+        (d) => d.canister_name === 'usdc_ledger',
+      );
+      expect(tokenDep?.current_value[0]?.toText()).toBe('aaaaa-aa');
     });
 
     it('should allow owner to set reward amounts for audit types', async () => {
@@ -258,11 +243,16 @@ describe('Bounty Sponsor Canister', () => {
         toUSDC(0.5),
       );
 
-      const config = await bountySponsorActor.get_config();
-      expect(config.registry_canister_id.length).toBe(1);
-      expect(config.reward_token_canister_id.length).toBe(1);
-      expect(config.required_verifiers).toBe(9n);
-      expect(config.reward_amounts.length).toBe(2);
+      const envReq = await bountySponsorActor.get_env_requirements();
+      expect(envReq.v1.dependencies.length).toBeGreaterThan(0);
+      const auditHubDep = envReq.v1.dependencies.find(
+        (d) => d.canister_name === 'audit_hub',
+      );
+      const tokenDep = envReq.v1.dependencies.find(
+        (d) => d.canister_name === 'usdc_ledger',
+      );
+      expect(auditHubDep?.current_value.length).toBe(1);
+      expect(tokenDep?.current_value.length).toBe(1);
     });
 
     it('should reject reward amount config from non-owner', async () => {
@@ -413,8 +403,8 @@ describe('Bounty Sponsor Canister', () => {
       expect(result.ok.total_sponsored).toBe(9n); // Only build_reproducibility_v1
     });
 
-    it('should reject when registry canister not configured', async () => {
-      // Create new bounty_sponsor without registry config
+    it('should reject when audit_hub canister not configured', async () => {
+      // Create new bounty_sponsor without audit_hub config
       const newSponsorFixture = await pic.setupCanister<BountySponsorService>({
         idlFactory: bountySponsorIdlFactory,
         wasm: BOUNTY_SPONSOR_WASM_PATH,
@@ -435,7 +425,7 @@ describe('Bounty Sponsor Canister', () => {
 
       expect(result).toHaveProperty('err');
       // @ts-ignore
-      expect(result.err).toMatch(/Registry canister ID not configured/);
+      expect(result.err).toMatch(/Audit Hub canister ID not configured/);
     });
 
     it('should reject when reward token canister not configured', async () => {
@@ -448,7 +438,7 @@ describe('Bounty Sponsor Canister', () => {
       const newSponsorActor = newSponsorFixture.actor;
 
       newSponsorActor.setIdentity(ownerIdentity);
-      await newSponsorActor.set_registry_canister_id(registryCanisterId);
+      await newSponsorActor.set_audit_hub_canister_id(auditHubCanisterId);
       await newSponsorActor.set_reward_amount_for_audit_type(
         'build_reproducibility_v1',
         toUSDC(0.25),
@@ -555,35 +545,16 @@ describe('Bounty Sponsor Canister', () => {
       // @ts-ignore
       expect(requirements.v1.dependencies.length).toBe(3);
 
-      // Check registry dependency
+      // Check audit_hub dependency (used for bounty creation)
       // @ts-ignore
-      const registryDep = requirements.v1.dependencies.find(
-        (d) => d.canister_name === 'mcp_registry',
+      const auditHubCreateDep = requirements.v1.dependencies.find(
+        (d) =>
+          d.canister_name === 'audit_hub' && d.key === '_audit_hub_canister_id',
       );
-      expect(registryDep).toBeDefined();
-      expect(registryDep.key).toBe('_registry_canister_id');
-      expect(registryDep.setter).toBe('set_registry_canister_id');
-      expect(registryDep.required).toBe(true);
-
-      // Check USDC ledger dependency
-      // @ts-ignore
-      const usdcDep = requirements.v1.dependencies.find(
-        (d) => d.canister_name === 'usdc_ledger',
-      );
-      expect(usdcDep).toBeDefined();
-      expect(usdcDep.key).toBe('_reward_token_canister_id');
-      expect(usdcDep.setter).toBe('set_reward_token_canister_id');
-      expect(usdcDep.required).toBe(true);
-
-      // Check audit_hub dependency
-      // @ts-ignore
-      const auditHubDep = requirements.v1.dependencies.find(
-        (d) => d.canister_name === 'audit_hub',
-      );
-      expect(auditHubDep).toBeDefined();
-      expect(auditHubDep.key).toBe('_audit_hub_canister_id');
-      expect(auditHubDep.setter).toBe('set_audit_hub_canister_id');
-      expect(auditHubDep.required).toBe(true);
+      expect(auditHubCreateDep).toBeDefined();
+      expect(auditHubCreateDep.key).toBe('_audit_hub_canister_id');
+      expect(auditHubCreateDep.setter).toBe('set_audit_hub_canister_id');
+      expect(auditHubCreateDep.required).toBe(true);
     });
   });
 

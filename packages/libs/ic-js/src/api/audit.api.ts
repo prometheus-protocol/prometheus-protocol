@@ -16,10 +16,12 @@ import {
 } from '../actors.js';
 import { AuditHub, Registry } from '@prometheus-protocol/declarations';
 import { Principal } from '@icp-sdk/core/principal';
+import { ICRC16Map } from '@prometheus-protocol/declarations/mcp_registry/mcp_registry.did.js';
 import {
   BountyListingRequest,
-  ICRC16Map,
-} from '@prometheus-protocol/declarations/mcp_registry/mcp_registry.did.js';
+  CreateBountyRequest,
+  BountySubmissionRequest,
+} from '@prometheus-protocol/declarations/audit_hub/audit_hub.did.js';
 import {
   hexToUint8Array,
   nsToDate,
@@ -169,6 +171,7 @@ export const getVerificationStatus = async (
   wasmId: string,
 ): Promise<VerificationStatus> => {
   const registryActor = getRegistryActor();
+  const bountySponsorActor = getBountySponsorActor();
 
   // 1. Fetch all data in parallel. Renamed for clarity.
   const [
@@ -180,7 +183,7 @@ export const getVerificationStatus = async (
     registryActor.is_wasm_verified(wasmId),
     registryActor.get_verification_request(wasmId),
     registryActor.get_audit_records_for_wasm(wasmId), // This now fetches both types
-    registryActor.get_bounties_for_wasm(wasmId),
+    bountySponsorActor.get_sponsored_bounties_for_wasm(wasmId),
   ]);
 
   const verificationRequest =
@@ -225,9 +228,9 @@ export const createBounty = async (
   // The 'hex' encoding tells Buffer how to interpret the input string.
   const wasm_hash_blob = hexToUint8Array(wasm_id);
 
-  const registryActor = getRegistryActor(identity);
+  const auditHubActor = getAuditHubActor(identity);
 
-  const request: Registry.CreateBountyRequest = {
+  const request: CreateBountyRequest = {
     bounty_id: [],
     validation_canister_id: args.validation_canister_id,
     timeout_date: timeout_date,
@@ -245,7 +248,7 @@ export const createBounty = async (
     ],
   };
 
-  const result = await registryActor.icrc127_create_bounty(request);
+  const result = await auditHubActor.icrc127_create_bounty(request);
 
   if ('Error' in result) {
     throw new Error(`Failed to create bounty: ${JSON.stringify(result.Error)}`);
@@ -259,6 +262,42 @@ export interface SponsorBountiesArgs {
   audit_types: string[];
   verification_request: ProcessedVerificationRecord;
 }
+
+/**
+ * Adds a verification job to the audit hub.
+ * This creates the job that verifiers will pick up and work on.
+ *
+ * @param identity - The user's identity
+ * @param args - Job creation parameters
+ * @returns Promise that resolves when the job is created
+ */
+export const addVerificationJob = async (
+  identity: Identity,
+  args: {
+    wasm_id: string;
+    repo: string;
+    commit_hash: string;
+    build_config: Array<[string, any]>;
+    audit_type: string;
+    required_verifiers: bigint;
+  },
+): Promise<void> => {
+  const auditHubActor = getAuditHubActor(identity);
+
+  const result = await auditHubActor.add_verification_job(
+    args.wasm_id,
+    args.repo,
+    args.commit_hash,
+    args.build_config,
+    args.audit_type,
+    args.required_verifiers,
+    [], // Empty bounty_ids - bounties will auto-attach via metadata
+  );
+
+  if ('err' in result) {
+    throw new Error(`Failed to create verification job: ${result.err}`);
+  }
+};
 
 /**
  * Sponsors bounties for a WASM using the bounty_sponsor canister.
@@ -276,21 +315,24 @@ export const sponsorBountiesForWasm = async (
   // Convert hex wasm_id to Blob
   const wasm_hash_blob = hexToUint8Array(wasm_id);
 
-  // Convert metadata to ICRC126 format
-  const build_config: [string, any][] = [];
+  // Convert metadata to ICRC16 format using the serialization utility
+  const build_config = verification_request.metadata
+    ? serializeToIcrc16Map(verification_request.metadata)
+    : [];
 
-  if (verification_request.metadata) {
-    for (const [key, value] of Object.entries(verification_request.metadata)) {
-      if (typeof value === 'string') {
-        build_config.push([key, { Text: value }]);
-      } else if (typeof value === 'number' || typeof value === 'bigint') {
-        build_config.push([key, { Nat: BigInt(value) }]);
-      } else if (Array.isArray(value)) {
-        build_config.push([key, { Array: value }]);
-      }
-    }
+  // Step 1: Create verification jobs for each audit type BEFORE sponsoring bounties
+  for (const audit_type of audit_types) {
+    await addVerificationJob(identity, {
+      wasm_id,
+      repo: verification_request.repo,
+      commit_hash: verification_request.commit_hash,
+      build_config,
+      audit_type,
+      required_verifiers: BigInt(9), // Hardcoded to 9 for now
+    });
   }
 
+  // Step 2: Sponsor the bounties (which will auto-attach to the jobs we just created)
   const bountySponsorActor = getBountySponsorActor(identity);
 
   const result = await bountySponsorActor.sponsor_bounties_for_wasm(
@@ -303,14 +345,37 @@ export const sponsorBountiesForWasm = async (
     BigInt(9), // required_verifiers - hardcoded to 9 for now
   );
 
-  if ('Err' in result) {
-    throw new Error(`Failed to sponsor bounties: ${result.Err}`);
+  if ('err' in result) {
+    throw new Error(`Failed to sponsor bounties: ${result.err}`);
+  }
+
+  if (!result.ok) {
+    throw new Error(
+      'Failed to sponsor bounties: Invalid response from canister',
+    );
   }
 
   return {
-    bounty_ids: result.Ok.bounty_ids,
-    total_sponsored: Number(result.Ok.total_sponsored),
+    bounty_ids: result.ok.bounty_ids,
+    total_sponsored: Number(result.ok.total_sponsored),
   };
+};
+
+/**
+ * Gets the audit types that have been sponsored by the bounty_sponsor canister for a given WASM.
+ * The bounty_sponsor pays for the first round of bounties for each audit type.
+ * Subsequent sponsorships must be paid by users.
+ *
+ * @param wasmId - The WASM ID to check
+ * @returns Array of audit types that have been sponsored by the bounty_sponsor
+ */
+export const getSponsoredAuditTypes = async (
+  wasmId: string,
+): Promise<string[]> => {
+  const bountySponsorActor = getBountySponsorActor();
+
+  // The bounty_sponsor canister has a dedicated method that returns audit types
+  return await bountySponsorActor.get_sponsored_audit_types_for_wasm(wasmId);
 };
 
 export interface AppInfoAttestationData {
@@ -367,10 +432,34 @@ export type AttestationData =
 // Define the core audits that determine security tiers.
 export const CORE_AUDIT_TYPES = [
   'build_reproducibility_v1',
-  'app_info_v1',
   'tools_v1',
-  'data_safety_v1',
+  // Not yet implemented:
+  // 'app_info_v1',
+  // 'data_safety_v1',
 ];
+
+/**
+ * Gets the audit types that have been completed (reached consensus threshold) for a WASM.
+ * An audit type is considered completed if it has at least 9 successful attestations.
+ */
+export const getCompletedAuditTypes = async (
+  wasmId: string,
+): Promise<string[]> => {
+  const REQUIRED_ATTESTATIONS = 9;
+  const completedTypes: string[] = [];
+
+  for (const auditType of CORE_AUDIT_TYPES) {
+    const attestationBountyIds = await getVerificationProgress(
+      wasmId,
+      auditType,
+    );
+    if (attestationBountyIds.length >= REQUIRED_ATTESTATIONS) {
+      completedTypes.push(auditType);
+    }
+  }
+
+  return completedTypes;
+};
 
 export interface AuditBountyWithDetails {
   id: bigint;
@@ -406,11 +495,34 @@ export const getAuditBounty = async (
   const registryActor = getRegistryActor();
   const auditHubActor = getAuditHubActor();
 
-  // 1. Fetch the core ICRC-127 bounty record (unchanged).
-  const rawBountyOpt = await registryActor.icrc127_get_bounty(bountyId);
+  // 1. Fetch the core ICRC-127 bounty record from audit_hub.
+  const rawBountyOpt = await auditHubActor.icrc127_get_bounty(bountyId);
   if (rawBountyOpt.length === 0) return null;
-  const processed = processBounty(rawBountyOpt[0]);
-  const wasmId = uint8ArrayToHex(processed.challengeParameters.wasm_hash);
+
+  const rawBounty = rawBountyOpt[0];
+
+  // Skip old bounties that don't have challenge_parameters (legacy data)
+  if (!rawBounty.challenge_parameters) {
+    console.warn(
+      `Bounty ${bountyId} is missing challenge_parameters - skipping (legacy bounty)`,
+    );
+    return null;
+  }
+
+  const processed = processBounty(rawBounty);
+
+  // Get wasm_id from challenge parameters (it's a hex string)
+  const wasmId =
+    processed.challengeParameters?.wasm_id || processed.wasmHashHex;
+  if (!wasmId) {
+    console.error(
+      'Failed to extract wasm_id. Challenge params:',
+      processed.challengeParameters,
+      'wasmHashHex:',
+      processed.wasmHashHex,
+    );
+    throw new Error('Bounty missing wasm_id in challenge parameters');
+  }
 
   // 2. Fetch ancillary data, using the unified audit records endpoint.
   const [
@@ -429,7 +541,10 @@ export const getAuditBounty = async (
 
   const bountyLock: AuditHub.BountyLock | undefined =
     fromNullable(bountyLockOpt);
-  const bountyStake: bigint | undefined = fromNullable(bountyStakeOpt);
+  const bountyStakeResult = fromNullable(bountyStakeOpt);
+  const bountyStake: bigint | undefined = bountyStakeResult
+    ? (bountyStakeResult as [any, bigint])[1]
+    : undefined;
 
   // 3. Determine the final status by finding the matching audit record (of any type).
   let status: AuditBountyWithDetails['status'] = 'Open';
@@ -520,8 +635,8 @@ export const getAuditBounty = async (
 export const getBounty = async (
   bounty_id: bigint,
 ): Promise<AuditBounty | undefined> => {
-  const registryActor = getRegistryActor();
-  const result = await registryActor.icrc127_get_bounty(bounty_id);
+  const auditHubActor = getAuditHubActor();
+  const result = await auditHubActor.icrc127_get_bounty(bounty_id);
   return result.length > 0
     ? processBounty(result[0] as Registry.Bounty)
     : undefined;
@@ -624,9 +739,9 @@ export const claimBounty = async (
   args: ClaimBountyArgs,
 ): Promise<bigint> => {
   const { bounty_id, wasm_id } = args;
-  const registryActor = getRegistryActor(identity);
+  const auditHubActor = getAuditHubActor(identity);
 
-  const request: Registry.BountySubmissionRequest = {
+  const request: BountySubmissionRequest = {
     account: [
       {
         owner: identity.getPrincipal(),
@@ -639,7 +754,7 @@ export const claimBounty = async (
     },
   };
 
-  const result = await registryActor.icrc127_submit_bounty(request);
+  const result = await auditHubActor.icrc127_submit_bounty(request);
 
   if ('Error' in result) {
     throw new Error(`Failed to claim bounty: ${JSON.stringify(result.Error)}`);
@@ -763,15 +878,6 @@ export interface AppStoreDetails {
   allVersions: AppVersionSummary[];
 }
 
-// 1. Define the new, more powerful filter types that match the canister.
-// Using a discriminated union in TypeScript is the perfect way to model this.
-
-export interface ListBountiesRequestInput {
-  filter?: BountyFilterInput[];
-  take?: bigint;
-  prev?: bigint;
-}
-
 /**
  * Request parameters for the new list_bounties canister endpoint.
  */
@@ -790,7 +896,7 @@ export interface ListBountiesRequest {
 export const listBounties = async (
   request: ListBountiesRequest,
 ): Promise<AuditBounty[]> => {
-  const registryActor = getRegistryActor();
+  const auditHubActor = getAuditHubActor();
   try {
     // 2. Transform the user-friendly request object into the format Candid expects.
     const requestFilters =
@@ -823,7 +929,7 @@ export const listBounties = async (
     };
 
     // 3. Call the new canister endpoint.
-    const result = await registryActor.list_bounties(candidRequest);
+    const result = await auditHubActor.list_bounties(candidRequest);
 
     // 4. Handle the Result<> type returned by the canister.
     if ('err' in result) {
@@ -918,6 +1024,38 @@ export const getStakedBalance = async (
  * Each request is fully processed and deserialized for easy consumption.
  * @returns An array of processed verification requests.
  */
+
+/**
+ * Lists all verification requests from the registry with optional pagination.
+ *
+ * @param offset - Starting index for pagination (default: 0)
+ * @param limit - Maximum number of results to return (default: all)
+ * @returns Object containing paginated requests and total count
+ */
+export const listAllVerificationRequests = async (
+  offset?: number,
+  limit?: number,
+): Promise<{
+  requests: ProcessedVerificationRecord[];
+  total: number;
+}> => {
+  try {
+    const registryActor = getRegistryActor();
+    const result = await registryActor.list_all_verification_requests(
+      offset !== undefined ? [BigInt(offset)] : [],
+      limit !== undefined ? [BigInt(limit)] : [],
+    );
+
+    return {
+      requests: result.requests.map(processVerificationRecord),
+      total: Number(result.total),
+    };
+  } catch (error) {
+    console.error('Error listing all verification requests:', error);
+    return { requests: [], total: 0 };
+  }
+};
+
 export const listPendingVerifications = async (): Promise<
   ProcessedVerificationRecord[]
 > => {
@@ -1040,6 +1178,54 @@ export const fileAttestationWithApiKey = async (
   return result.Ok;
 };
 
+export interface ClaimBountyWithApiKeyArgs {
+  bounty_id: bigint;
+  wasm_id: string;
+}
+
+/**
+ * Claims a bounty after successfully filing an attestation using an API key.
+ * This links the bounty to the verifier's attestation and triggers payout.
+ * @param apiKey - The verifier's API key
+ * @param args - The bounty_id and wasm_id for the claim
+ * @returns The claim ID
+ */
+export const claimBountyWithApiKey = async (
+  apiKey: string,
+  args: ClaimBountyWithApiKeyArgs,
+): Promise<bigint> => {
+  const { bounty_id, wasm_id } = args;
+  const auditHubActor = getAuditHubActor();
+
+  // Validate the API key and get the verifier's principal
+  const validateResult = await auditHubActor.validate_api_key(apiKey);
+  if ('err' in validateResult) {
+    throw new Error(`Invalid API key: ${validateResult.err}`);
+  }
+  const verifierPrincipal = validateResult.ok;
+
+  const request: BountySubmissionRequest = {
+    account: [
+      {
+        owner: verifierPrincipal,
+        subaccount: [],
+      },
+    ],
+    bounty_id: bounty_id,
+    submission: {
+      Map: [['wasm_id', { Text: wasm_id }]],
+    },
+  };
+
+  const result = await auditHubActor.icrc127_submit_bounty(request);
+
+  if ('Error' in result) {
+    throw new Error(`Failed to claim bounty: ${JSON.stringify(result.Error)}`);
+  }
+
+  return result.Ok.claim_id;
+};
+
 /**
  * Fetches the complete audit history (attestations and divergences) for a given WASM ID.
  */
@@ -1083,9 +1269,20 @@ export const getAuditRecordsForWasm = async (
 export const getBountiesForWasm = async (
   wasmId: string,
 ): Promise<AuditBounty[]> => {
-  const registryActor = getRegistryActor();
-  const bounties = await registryActor.get_bounties_for_wasm(wasmId);
-  return bounties.map(processBounty);
+  const auditHubActor = getAuditHubActor();
+
+  // Use the list_bounties method with wasm_id filter
+  const result = await auditHubActor.list_bounties({
+    filter: [[{ wasm_id: wasmId }]],
+    take: [],
+    prev: [],
+  });
+
+  if ('err' in result) {
+    throw new Error(`Failed to get bounties for WASM: ${result.err}`);
+  }
+
+  return result.ok.map(processBounty);
 };
 
 /**
@@ -1100,7 +1297,7 @@ export const hasVerifierParticipatedWithApiKey = async (
   wasmId: string,
   apiKey: string,
 ): Promise<boolean> => {
-  const registryActor = getRegistryActor();
+  const bountySponsorActor = getBountySponsorActor();
   const auditHubActor = getAuditHubActor();
 
   // First, validate the API key and get the verifier's principal
@@ -1110,8 +1307,9 @@ export const hasVerifierParticipatedWithApiKey = async (
   }
   const verifierPrincipal = validateResult.ok;
 
-  // Get all bounties for this WASM
-  const rawBounties = await registryActor.get_bounties_for_wasm(wasmId);
+  // Get all bounties for this WASM from bounty_sponsor
+  const rawBounties =
+    await bountySponsorActor.get_sponsored_bounties_for_wasm(wasmId);
   const bounties = rawBounties.map(processBounty);
 
   // Check each bounty to see if our verifier has claimed it (and lock is not expired)
@@ -1145,7 +1343,7 @@ export const getLockedBountyForVerifier = async (
   wasmId: string,
   apiKey: string,
 ): Promise<AuditBounty | null> => {
-  const registryActor = getRegistryActor();
+  const bountySponsorActor = getBountySponsorActor();
   const auditHubActor = getAuditHubActor();
 
   // First, validate the API key and get the verifier's principal
@@ -1155,8 +1353,9 @@ export const getLockedBountyForVerifier = async (
   }
   const verifierPrincipal = validateResult.ok;
 
-  // Get all bounties for this WASM
-  const rawBounties = await registryActor.get_bounties_for_wasm(wasmId);
+  // Get all bounties for this WASM from bounty_sponsor
+  const rawBounties =
+    await bountySponsorActor.get_sponsored_bounties_for_wasm(wasmId);
   const bounties = rawBounties.map(processBounty);
 
   // Check each bounty to see if our verifier has claimed it
@@ -1397,4 +1596,54 @@ export const releaseJobAssignment = async (
   if ('err' in result) {
     throw new Error(`Failed to release job assignment: ${result.err}`);
   }
+};
+
+export interface PendingJob {
+  queueKey: string;
+  wasmId: string;
+  repo: string;
+  commitHash: string;
+  auditType: string;
+  requiredVerifiers: number;
+  assignedCount: number;
+  completedCount: number;
+  bountyIds: bigint[];
+  createdAt: Date;
+}
+
+/**
+ * Lists all pending verification jobs from the audit hub with pagination.
+ * This is more efficient than fetching individual bounties.
+ *
+ * @param offset - Starting index for pagination (optional)
+ * @param limit - Maximum number of results to return (optional)
+ * @returns Object with paginated jobs array and total count
+ */
+export const listPendingJobs = async (
+  offset?: number,
+  limit?: number,
+): Promise<{ jobs: PendingJob[]; total: number }> => {
+  const auditHubActor = getAuditHubActor();
+  const result = await auditHubActor.list_pending_jobs(
+    offset !== undefined ? [BigInt(offset)] : [],
+    limit !== undefined ? [BigInt(limit)] : [],
+  );
+
+  const jobs = result.jobs.map(([queueKey, job]: [string, any]) => ({
+    queueKey,
+    wasmId: job.wasm_id,
+    repo: job.repo,
+    commitHash: job.commit_hash,
+    auditType: job.audit_type,
+    requiredVerifiers: Number(job.required_verifiers),
+    assignedCount: Number(job.assigned_count),
+    completedCount: Number(job.completed_count),
+    bountyIds: job.bounty_ids,
+    createdAt: nsToDate(job.created_at),
+  }));
+
+  return {
+    jobs,
+    total: Number(result.total),
+  };
 };

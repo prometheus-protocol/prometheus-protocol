@@ -14,6 +14,7 @@ module {
     #status : BountyStatus;
     #audit_type : Text;
     #creator : Principal;
+    #wasm_id : Text;
   };
 
   // The request object for the list_bounties endpoint.

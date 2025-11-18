@@ -112,9 +112,9 @@ module {
    */
   public func get_verifier_profile(
     verifier : Principal,
-    token_id : Types.TokenId,
-    available_balances : Map.Map<Principal, Map.Map<Types.TokenId, Types.Balance>>,
-    staked_balances : Map.Map<Principal, Map.Map<Types.TokenId, Types.Balance>>,
+    _token_id : Types.TokenId,
+    _available_balances : Map.Map<Principal, Map.Map<Types.TokenId, Types.Balance>>,
+    _staked_balances : Map.Map<Principal, Map.Map<Types.TokenId, Types.Balance>>,
     verifier_stats : Map.Map<Principal, Types.VerifierProfile>,
   ) : Types.VerifierProfile {
     let stats = Account.get_verifier_stats(verifier_stats, verifier);
