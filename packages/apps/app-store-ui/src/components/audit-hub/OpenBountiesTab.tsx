@@ -1,21 +1,16 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Frown, Loader2, RefreshCw } from 'lucide-react';
+import { Search, Frown, Loader2 } from 'lucide-react';
 import { useListPendingJobs } from '@/hooks/useAuditBounties';
 import { AuditHubSkeleton } from '@/components/audits/AuditHubSkeleton';
 import { AuditHubError } from '@/components/audits/AuditHubError';
 import { PendingJobListItem } from './PendingJobListItem';
 
-const POLL_INTERVAL = 10000; // 10 seconds
 const JOBS_PER_PAGE = 20;
 
 export function OpenBountiesTab() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
-  const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(
-    POLL_INTERVAL / 1000,
-  );
   const [visibleCount, setVisibleCount] = useState(JOBS_PER_PAGE);
 
   const { data, isLoading, isError, refetch } = useListPendingJobs(
@@ -25,45 +20,6 @@ export function OpenBountiesTab() {
 
   const jobs = data?.jobs ?? [];
   const total = data?.total ?? 0;
-
-  // Check if any jobs are in progress (not fully completed)
-  const hasInProgressJobs = useMemo(() => {
-    return (
-      jobs?.some(
-        (job) => job.completedCount + job.assignedCount < job.requiredVerifiers,
-      ) ?? false
-    );
-  }, [jobs]);
-
-  // Countdown timer and polling
-  useEffect(() => {
-    if (!hasInProgressJobs || !autoRefreshEnabled) {
-      setSecondsUntilRefresh(0);
-      return;
-    }
-
-    // Initialize countdown
-    setSecondsUntilRefresh(POLL_INTERVAL / 1000);
-
-    // Countdown timer (updates every second)
-    const countdownInterval = setInterval(() => {
-      setSecondsUntilRefresh((prev) => {
-        if (prev <= 1) return POLL_INTERVAL / 1000;
-        return prev - 1;
-      });
-    }, 1000);
-
-    // Polling timer (refetches every POLL_INTERVAL)
-    const pollInterval = setInterval(() => {
-      console.log('Polling for updates...');
-      refetch();
-    }, POLL_INTERVAL);
-
-    return () => {
-      clearInterval(countdownInterval);
-      clearInterval(pollInterval);
-    };
-  }, [hasInProgressJobs, autoRefreshEnabled, refetch]);
 
   // Filter jobs based on search query
   const filteredJobs = useMemo(() => {
@@ -101,39 +57,6 @@ export function OpenBountiesTab() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <Button
-          onClick={() => refetch()}
-          variant="outline"
-          size="icon"
-          disabled={isLoading}
-          className="shrink-0">
-          <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-        </Button>
-      </div>
-
-      {/* Auto-refresh indicator */}
-      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground bg-card/30 border border-gray-700 rounded px-3 py-2">
-        <div className="flex items-center gap-2">
-          {autoRefreshEnabled && hasInProgressJobs && (
-            <>
-              <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-              <span>
-                Auto-refreshing jobs • Next update in {secondsUntilRefresh}s
-              </span>
-            </>
-          )}
-          {autoRefreshEnabled && !hasInProgressJobs && (
-            <span>Auto-refresh active (updates when jobs are in progress)</span>
-          )}
-          {!autoRefreshEnabled && <span>Auto-refresh paused</span>}
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
-          className="h-6 text-xs">
-          {autoRefreshEnabled ? 'Pause' : 'Resume'}
-        </Button>
       </div>
 
       <div className="space-y-3">

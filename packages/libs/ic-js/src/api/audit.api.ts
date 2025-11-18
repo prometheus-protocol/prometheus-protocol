@@ -1647,3 +1647,72 @@ export const listPendingJobs = async (
     total: Number(result.total),
   };
 };
+
+/**
+ * Get a specific pending job by its queue key.
+ * Much more efficient than listing all jobs when you need one specific job.
+ */
+export const getPendingJob = async (
+  queueKey: string,
+): Promise<PendingJob | null> => {
+  const auditHubActor = getAuditHubActor();
+  const result = await auditHubActor.get_pending_job(queueKey);
+
+  if (result.length === 0) {
+    return null;
+  }
+
+  const job = result[0];
+  return {
+    queueKey,
+    wasmId: job.wasm_id,
+    repo: job.repo,
+    commitHash: job.commit_hash,
+    auditType: job.audit_type,
+    requiredVerifiers: Number(job.required_verifiers),
+    assignedCount: Number(job.assigned_count),
+    completedCount: Number(job.completed_count),
+    bountyIds: job.bounty_ids,
+    createdAt: nsToDate(job.created_at),
+  };
+};
+
+/**
+ * Get all bounties for a specific job by its queue key.
+ * Most efficient way to fetch bounties for a job - single query, pre-filtered.
+ */
+export const getBountiesForJob = async (
+  queueKey: string,
+): Promise<AuditBounty[]> => {
+  const auditHubActor = getAuditHubActor();
+  const bounties = await auditHubActor.get_bounties_for_job(queueKey);
+  return bounties.map(processBounty);
+};
+
+/**
+ * Get all bounties and their locks for a specific job by its queue key.
+ * Single query that returns both bounties and locks - much more efficient than N separate lock requests.
+ */
+export const getBountiesWithLocksForJob = async (
+  queueKey: string,
+): Promise<{
+  bounties: AuditBounty[];
+  locks: Map<string, AuditHub.BountyLock>;
+}> => {
+  const auditHubActor = getAuditHubActor();
+  const result = await auditHubActor.get_bounties_with_locks_for_job(queueKey);
+
+  const bounties: AuditBounty[] = [];
+  const locks = new Map<string, AuditHub.BountyLock>();
+
+  for (const [bounty, lock] of result) {
+    const processedBounty = processBounty(bounty);
+    bounties.push(processedBounty);
+
+    if (lock.length > 0) {
+      locks.set(processedBounty.id.toString(), lock[0]);
+    }
+  }
+
+  return { bounties, locks };
+};

@@ -92,7 +92,10 @@ export function CreateBountyDialog({
                 auditType !== 'build_reproducibility_v1' &&
                 !hasBuildReproducibility;
               const isDisabled =
-                isCompleted || isPending || requiresBuildReproducibility;
+                isCompleted ||
+                isPending ||
+                requiresBuildReproducibility ||
+                isAlreadySponsored;
               const isProcessing = isPending && selectedAuditType === auditType;
 
               return (
@@ -119,11 +122,6 @@ export function CreateBountyDialog({
                     <div className="text-xs font-normal text-muted-foreground mt-1">
                       {info.description}
                     </div>
-                    {isAlreadySponsored && !isCompleted && (
-                      <div className="text-xs font-normal text-amber-500 mt-1">
-                        Requires user payment (protocol already sponsored once)
-                      </div>
-                    )}
                     {requiresBuildReproducibility && (
                       <div className="text-xs font-normal text-amber-500 mt-1">
                         ⚠️ Build Reproducibility must be completed first

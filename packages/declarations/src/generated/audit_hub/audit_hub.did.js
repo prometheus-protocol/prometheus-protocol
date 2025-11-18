@@ -42,6 +42,40 @@ export const idlFactory = ({ IDL }) => {
   const TokenId = IDL.Text;
   const Balance = IDL.Nat;
   const Result_4 = IDL.Variant({ 'ok' : IDL.Text, 'err' : IDL.Text });
+  const RunBountyResult = IDL.Record({
+    'result' : IDL.Variant({ 'Invalid' : IDL.Null, 'Valid' : IDL.Null }),
+    'metadata' : ICRC16,
+    'trx_id' : IDL.Opt(IDL.Nat),
+  });
+  const Account__1 = IDL.Record({
+    'owner' : IDL.Principal,
+    'subaccount' : IDL.Opt(IDL.Vec(IDL.Nat8)),
+  });
+  const ClaimRecord = IDL.Record({
+    'result' : IDL.Opt(RunBountyResult),
+    'claim_account' : IDL.Opt(Account__1),
+    'time_submitted' : IDL.Nat,
+    'claim_id' : IDL.Nat,
+    'caller' : IDL.Principal,
+    'claim_metadata' : ICRC16Map,
+    'submission' : ICRC16,
+  });
+  const Bounty = IDL.Record({
+    'claims' : IDL.Vec(ClaimRecord),
+    'created' : IDL.Nat,
+    'creator' : IDL.Principal,
+    'token_amount' : IDL.Nat,
+    'bounty_metadata' : ICRC16Map,
+    'claimed' : IDL.Opt(IDL.Nat),
+    'token_canister_id' : IDL.Principal,
+    'challenge_parameters' : ICRC16,
+    'validation_call_timeout' : IDL.Nat,
+    'bounty_id' : IDL.Nat,
+    'validation_canister_id' : IDL.Principal,
+    'claimed_date' : IDL.Opt(IDL.Nat),
+    'timeout_date' : IDL.Opt(IDL.Nat),
+    'payout_fee' : IDL.Nat,
+  });
   const Timestamp__1 = IDL.Int;
   const BountyLock = IDL.Record({
     'stake_token_id' : TokenId,
@@ -62,6 +96,19 @@ export const idlFactory = ({ IDL }) => {
     'setter' : IDL.Text,
     'required' : IDL.Bool,
     'current_value' : IDL.Opt(IDL.Text),
+  });
+  const VerificationJob = IDL.Record({
+    'audit_type' : IDL.Text,
+    'creator' : IDL.Principal,
+    'repo' : IDL.Text,
+    'bounty_ids' : IDL.Vec(BountyId),
+    'completed_count' : IDL.Nat,
+    'created_at' : Timestamp__1,
+    'build_config' : ICRC16Map,
+    'assigned_count' : IDL.Nat,
+    'wasm_id' : IDL.Text,
+    'required_verifiers' : IDL.Nat,
+    'commit_hash' : IDL.Text,
   });
   const VerifierProfile = IDL.Record({
     'reputation_score' : IDL.Nat,
@@ -122,10 +169,6 @@ export const idlFactory = ({ IDL }) => {
     'metadata' : ICRC16__1,
     'trx_id' : IDL.Opt(IDL.Nat),
   });
-  const Account__1 = IDL.Record({
-    'owner' : IDL.Principal,
-    'subaccount' : IDL.Opt(IDL.Vec(IDL.Nat8)),
-  });
   const ClaimRecord__1 = IDL.Record({
     'result' : IDL.Opt(RunBountyResult__1),
     'claim_account' : IDL.Opt(Account__1),
@@ -158,36 +201,6 @@ export const idlFactory = ({ IDL }) => {
     'claimed' : IDL.Bool,
     'created_after' : IDL.Nat,
     'created_before' : IDL.Nat,
-  });
-  const RunBountyResult = IDL.Record({
-    'result' : IDL.Variant({ 'Invalid' : IDL.Null, 'Valid' : IDL.Null }),
-    'metadata' : ICRC16,
-    'trx_id' : IDL.Opt(IDL.Nat),
-  });
-  const ClaimRecord = IDL.Record({
-    'result' : IDL.Opt(RunBountyResult),
-    'claim_account' : IDL.Opt(Account__1),
-    'time_submitted' : IDL.Nat,
-    'claim_id' : IDL.Nat,
-    'caller' : IDL.Principal,
-    'claim_metadata' : ICRC16Map,
-    'submission' : ICRC16,
-  });
-  const Bounty = IDL.Record({
-    'claims' : IDL.Vec(ClaimRecord),
-    'created' : IDL.Nat,
-    'creator' : IDL.Principal,
-    'token_amount' : IDL.Nat,
-    'bounty_metadata' : ICRC16Map,
-    'claimed' : IDL.Opt(IDL.Nat),
-    'token_canister_id' : IDL.Principal,
-    'challenge_parameters' : ICRC16,
-    'validation_call_timeout' : IDL.Nat,
-    'bounty_id' : IDL.Nat,
-    'validation_canister_id' : IDL.Principal,
-    'claimed_date' : IDL.Opt(IDL.Nat),
-    'timeout_date' : IDL.Opt(IDL.Nat),
-    'payout_fee' : IDL.Nat,
   });
   const BountySubmissionRequest = IDL.Record({
     'account' : IDL.Opt(Account__1),
@@ -250,19 +263,6 @@ export const idlFactory = ({ IDL }) => {
     'ok' : IDL.Vec(Bounty),
     'err' : IDL.Text,
   });
-  const VerificationJob = IDL.Record({
-    'audit_type' : IDL.Text,
-    'creator' : IDL.Principal,
-    'repo' : IDL.Text,
-    'bounty_ids' : IDL.Vec(BountyId),
-    'completed_count' : IDL.Nat,
-    'created_at' : Timestamp__1,
-    'build_config' : ICRC16Map,
-    'assigned_count' : IDL.Nat,
-    'wasm_id' : IDL.Text,
-    'required_verifiers' : IDL.Nat,
-    'commit_hash' : IDL.Text,
-  });
   const VerificationJobAssignment = IDL.Record({
     'repo' : IDL.Text,
     'build_config' : ICRC16Map,
@@ -319,6 +319,12 @@ export const idlFactory = ({ IDL }) => {
         [Balance],
         ['query'],
       ),
+    'get_bounties_for_job' : IDL.Func([IDL.Text], [IDL.Vec(Bounty)], ['query']),
+    'get_bounties_with_locks_for_job' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(IDL.Tuple(Bounty, IDL.Opt(BountyLock)))],
+        ['query'],
+      ),
     'get_bounty_lock' : IDL.Func([BountyId], [IDL.Opt(BountyLock)], ['query']),
     'get_env_requirements' : IDL.Func(
         [],
@@ -333,6 +339,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'get_owner' : IDL.Func([], [IDL.Principal], ['query']),
+    'get_pending_job' : IDL.Func(
+        [IDL.Text],
+        [IDL.Opt(VerificationJob)],
+        ['query'],
+      ),
     'get_stake_requirement' : IDL.Func(
         [IDL.Text],
         [IDL.Opt(IDL.Tuple(TokenId, Balance))],

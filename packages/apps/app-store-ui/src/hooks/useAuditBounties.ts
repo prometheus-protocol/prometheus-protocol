@@ -27,6 +27,9 @@ import {
   ProcessedVerificationRecord,
   getSponsoredAuditTypes,
   getCompletedAuditTypes,
+  getBountiesForWasm,
+  getBountiesForJob,
+  getBountiesWithLocksForJob,
 } from '@prometheus-protocol/ic-js';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import useMutation from './useMutation';
@@ -49,63 +52,55 @@ export const useGetAllAuditBounties = () => {
 
 /**
  * React Query hook to fetch bounties for a specific WASM ID.
- * More efficient than fetching all bounties when you only need one WASM.
+ * When jobKey is provided, returns both bounties and locks in a single efficient query.
  */
 export const useGetBountiesForWasm = (
   wasmId: string | undefined,
   auditType?: string,
+  jobKey?: string | null,
   options?: { refetchInterval?: number | false },
 ) => {
   return useQuery<AuditBounty[]>({
-    queryKey: ['auditBounties', 'wasm', wasmId, auditType],
+    queryKey: ['auditBounties', 'wasm', wasmId, auditType, jobKey],
     queryFn: async () => {
-      if (!wasmId) return [];
-      const { getBountiesForWasm } = await import('@prometheus-protocol/ic-js');
-      const bounties = await getBountiesForWasm(wasmId);
-      // Filter by audit type if provided
-      if (auditType) {
-        return bounties.filter(
-          (b) => b.challengeParameters.audit_type === auditType,
-        );
+      // If jobKey is provided, use the optimized single-query function
+      if (jobKey) {
+        const { bounties } = await getBountiesWithLocksForJob(jobKey);
+        return bounties;
       }
-      return bounties;
+
+      // Otherwise fall back to filtering by WASM ID and audit type
+      if (!wasmId) return [];
+      const bounties = await getBountiesForWasm(wasmId);
+
+      // Filter by audit type if provided
+      return auditType
+        ? bounties.filter((b) => b.challengeParameters.audit_type === auditType)
+        : bounties;
     },
-    enabled: !!wasmId,
+    enabled: !!wasmId || !!jobKey,
+    staleTime: 0, // Always fetch fresh data
     refetchInterval: options?.refetchInterval,
-    staleTime: options?.refetchInterval ? 0 : undefined,
   });
 };
 
 /**
- * React Query infinite hook to fetch paginated bounties.
- * This enables efficient infinite scrolling without fetching all bounties at once.
+ * React Query hook to fetch bounties with their locks for a specific job.
+ * Single efficient query that returns both bounties and locks.
  */
-export const useGetAuditBountiesInfinite = (
-  pageSize: number = 20,
-  options?: { refetchInterval?: number },
+export const useGetBountiesWithLocksForJob = (
+  jobKey: string | null,
+  options?: { refetchInterval?: number | false },
 ) => {
-  return useInfiniteQuery({
-    queryKey: ['auditBounties', 'infinite', pageSize],
-    queryFn: async ({ pageParam }: { pageParam?: number }) => {
-      console.log('Fetching bounties page...');
-      return listBounties({
-        take: BigInt(pageSize),
-        prev: pageParam ? BigInt(pageParam) : undefined,
-      });
+  return useQuery({
+    queryKey: ['bountiesWithLocks', 'job', jobKey],
+    queryFn: async () => {
+      if (!jobKey) return { bounties: [], locks: new Map() };
+      return getBountiesWithLocksForJob(jobKey);
     },
-    getNextPageParam: (lastPage: AuditBounty[]) => {
-      // If we got a full page, there might be more
-      // Return the ID of the last bounty as the cursor for the next page
-      if (lastPage.length === pageSize && lastPage.length > 0) {
-        const lastBounty = lastPage[lastPage.length - 1];
-        return Number(lastBounty.id);
-      }
-      return undefined; // No more pages
-    },
-    initialPageParam: undefined as number | undefined,
+    enabled: !!jobKey,
+    staleTime: 0, // Always fetch fresh data
     refetchInterval: options?.refetchInterval,
-    staleTime: options?.refetchInterval ? 0 : undefined, // Force fresh data when polling
-    refetchOnMount: true,
   });
 };
 
@@ -345,7 +340,7 @@ export const useListPendingVerifications = () => {
   return useQuery({
     queryKey: ['pendingVerifications'],
     queryFn: listPendingVerifications,
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: 10000, // Refresh every 10 seconds
   });
 };
 
@@ -359,7 +354,6 @@ export const useListAllVerificationRequests = (
   return useQuery({
     queryKey: ['allVerificationRequests', offset, limit],
     queryFn: () => listAllVerificationRequests(offset, limit),
-    refetchInterval: 30000, // Refresh every 30 seconds
   });
 };
 
@@ -367,7 +361,7 @@ export const useListPendingJobs = (offset?: number, limit?: number) => {
   return useQuery({
     queryKey: ['pendingJobs', offset, limit],
     queryFn: () => listPendingJobs(offset, limit),
-    refetchInterval: 30000, // Refetch every 30 seconds
+    refetchInterval: 10000, // Auto-refresh every 10 seconds
   });
 };
 
@@ -381,7 +375,7 @@ export const useSponsoredAuditTypes = (wasmId: string) => {
     queryKey: ['sponsoredAuditTypes', wasmId],
     queryFn: () => getSponsoredAuditTypes(wasmId),
     enabled: !!wasmId,
-    refetchOnMount: 'always', // Always refetch when component mounts
+    refetchOnMount: true, // Always refetch when component mounts
   });
 };
 
@@ -394,8 +388,7 @@ export const useCompletedAuditTypes = (wasmId: string) => {
     queryKey: ['completedAuditTypes', wasmId],
     queryFn: () => getCompletedAuditTypes(wasmId),
     enabled: !!wasmId,
-    refetchOnMount: 'always', // Always refetch when component mounts
-    refetchInterval: 30000, // Refetch every 30 seconds
+    staleTime: 0,
   });
 };
 

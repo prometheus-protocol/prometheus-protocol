@@ -80,7 +80,8 @@ export const PendingJobListItem = ({
 
   return (
     <div className="bg-card/50 border border-gray-700 rounded-lg hover:border-primary transition-colors">
-      <Link to={`/audit-hub/${job.wasmId}?auditType=${job.auditType}`}>
+      <Link
+        to={`/audit-hub/${job.wasmId}?auditType=${job.auditType}&jobKey=${encodeURIComponent(job.queueKey)}`}>
         {/* --- DESKTOP VIEW --- */}
         <div className="hidden md:block px-6 py-5">
           <div className="flex items-center justify-between mb-4">

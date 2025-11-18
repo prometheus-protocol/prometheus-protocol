@@ -39,40 +39,40 @@ import Config "Config";
 import JobAssignment "JobAssignment";
 import Treasury "Treasury";
 
-(
-  with migration = func(
-    old_state : {
-      var pending_audits : BTree.BTree<Text, { wasm_id : Text; repo : Text; commit_hash : Text; build_config : Types.ICRC16Map; created_at : Types.Timestamp; required_verifiers : Nat; assigned_count : Nat; bounty_ids : [Types.BountyId]; audit_type : Text; creator : Principal }>;
-    }
-  ) : {
-    var pending_audits : BTree.BTree<Text, Types.VerificationJob>;
-  } {
-    // Migrate pending_audits to add completed_count field
-    var new_pending_audits = BTree.init<Text, Types.VerificationJob>(null);
+// (
+//   with migration = func(
+//     old_state : {
+//       var pending_audits : BTree.BTree<Text, { wasm_id : Text; repo : Text; commit_hash : Text; build_config : Types.ICRC16Map; created_at : Types.Timestamp; required_verifiers : Nat; assigned_count : Nat; bounty_ids : [Types.BountyId]; audit_type : Text; creator : Principal }>;
+//     }
+//   ) : {
+//     var pending_audits : BTree.BTree<Text, Types.VerificationJob>;
+//   } {
+//     // Migrate pending_audits to add completed_count field
+//     var new_pending_audits = BTree.init<Text, Types.VerificationJob>(null);
 
-    for ((key, old_job) in BTree.entries(old_state.pending_audits)) {
-      let new_job : Types.VerificationJob = {
-        wasm_id = old_job.wasm_id;
-        repo = old_job.repo;
-        commit_hash = old_job.commit_hash;
-        build_config = old_job.build_config;
-        created_at = old_job.created_at;
-        required_verifiers = old_job.required_verifiers;
-        assigned_count = old_job.assigned_count;
-        completed_count = 0; // Initialize to 0 for existing jobs
-        bounty_ids = old_job.bounty_ids;
-        audit_type = old_job.audit_type;
-        creator = old_job.creator;
-      };
+//     for ((key, old_job) in BTree.entries(old_state.pending_audits)) {
+//       let new_job : Types.VerificationJob = {
+//         wasm_id = old_job.wasm_id;
+//         repo = old_job.repo;
+//         commit_hash = old_job.commit_hash;
+//         build_config = old_job.build_config;
+//         created_at = old_job.created_at;
+//         required_verifiers = old_job.required_verifiers;
+//         assigned_count = old_job.assigned_count;
+//         completed_count = 0; // Initialize to 0 for existing jobs
+//         bounty_ids = old_job.bounty_ids;
+//         audit_type = old_job.audit_type;
+//         creator = old_job.creator;
+//       };
 
-      ignore BTree.insert(new_pending_audits, Text.compare, key, new_job);
-    };
+//       ignore BTree.insert(new_pending_audits, Text.compare, key, new_job);
+//     };
 
-    {
-      var pending_audits = new_pending_audits;
-    };
-  }
-)
+//     {
+//       var pending_audits = new_pending_audits;
+//     };
+//   }
+// )
 shared ({ caller = deployer }) persistent actor class AuditHub() = this {
 
   // The duration a lock is valid before it expires (10 mins for automated builds).
@@ -1412,6 +1412,58 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     total : Nat;
   } {
     JobQueue.list_pending_jobs(pending_audits, assigned_jobs, icrc127().icrc127_get_bounty, offset, limit);
+  };
+
+  /**
+   * Get a specific pending job by its queue key.
+   * Returns null if the job doesn't exist.
+   */
+  public shared query func get_pending_job(queue_key : Text) : async ?Types.VerificationJob {
+    BTree.get(pending_audits, Text.compare, queue_key);
+  };
+
+  /**
+   * Get all bounties for a specific job by its queue key.
+   * Returns an empty array if the job doesn't exist.
+   */
+  public shared query func get_bounties_for_job(queue_key : Text) : async [ICRC127Lib.Bounty] {
+    switch (BTree.get(pending_audits, Text.compare, queue_key)) {
+      case (?job) {
+        let bounties = Buffer.Buffer<ICRC127Lib.Bounty>(job.bounty_ids.size());
+        for (bounty_id in job.bounty_ids.vals()) {
+          switch (icrc127().icrc127_get_bounty(bounty_id)) {
+            case (?bounty) bounties.add(bounty);
+            case null {}; // Skip if bounty not found
+          };
+        };
+        Buffer.toArray(bounties);
+      };
+      case null [];
+    };
+  };
+
+  /**
+   * Get all bounties and their locks for a specific job by its queue key.
+   * More efficient than fetching bounties and then fetching each lock separately.
+   * Returns tuple of (bounty, optional lock) for each bounty in the job.
+   */
+  public shared query func get_bounties_with_locks_for_job(queue_key : Text) : async [(ICRC127Lib.Bounty, ?Types.BountyLock)] {
+    switch (BTree.get(pending_audits, Text.compare, queue_key)) {
+      case (?job) {
+        let result = Buffer.Buffer<(ICRC127Lib.Bounty, ?Types.BountyLock)>(job.bounty_ids.size());
+        for (bounty_id in job.bounty_ids.vals()) {
+          switch (icrc127().icrc127_get_bounty(bounty_id)) {
+            case (?bounty) {
+              let lock = QueryMethods.get_bounty_lock(bounty_id, bounty_locks);
+              result.add((bounty, lock));
+            };
+            case null {}; // Skip if bounty not found
+          };
+        };
+        Buffer.toArray(result);
+      };
+      case null [];
+    };
   };
 
   /**

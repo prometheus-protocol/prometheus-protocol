@@ -369,6 +369,17 @@ type AuditHub =
    ///    * Looks up the token_id from the stake_requirements for this audit type.
    get_available_balance_by_audit_type: (verifier: principal, audit_type:
     text) -> (Balance) query;
+   /// * Get all bounties for a specific job by its queue key.
+   ///    * Returns an empty array if the job doesn't exist.
+   get_bounties_for_job: (queue_key: text) -> (vec Bounty) query;
+   /// * Get all bounties and their locks for a specific job by its queue key.
+   ///    * More efficient than fetching bounties and then fetching each lock separately.
+   ///    * Returns tuple of (bounty, optional lock) for each bounty in the job.
+   get_bounties_with_locks_for_job: (queue_key: text) ->
+    (vec record {
+           Bounty;
+           opt BountyLock;
+         }) query;
    get_bounty_lock: (bounty_id: BountyId) -> (opt BountyLock) query;
    get_env_requirements: () ->
     (variant {
@@ -378,6 +389,9 @@ type AuditHub =
           dependencies: vec EnvDependency;
         };}) query;
    get_owner: () -> (principal) query;
+   /// * Get a specific pending job by its queue key.
+   ///    * Returns null if the job doesn't exist.
+   get_pending_job: (queue_key: text) -> (opt VerificationJob) query;
    /// * Get the stake requirement for a specific audit type.
    ///    * Returns (token_id, amount) tuple.
    get_stake_requirement: (audit_type: text) ->

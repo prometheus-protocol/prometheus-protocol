@@ -45,6 +45,11 @@ export interface AuditHub {
     [Principal, string],
     Balance
   >,
+  'get_bounties_for_job' : ActorMethod<[string], Array<Bounty>>,
+  'get_bounties_with_locks_for_job' : ActorMethod<
+    [string],
+    Array<[Bounty, [] | [BountyLock]]>
+  >,
   'get_bounty_lock' : ActorMethod<[BountyId], [] | [BountyLock]>,
   'get_env_requirements' : ActorMethod<
     [],
@@ -56,6 +61,7 @@ export interface AuditHub {
       }
   >,
   'get_owner' : ActorMethod<[], Principal>,
+  'get_pending_job' : ActorMethod<[string], [] | [VerificationJob]>,
   'get_stake_requirement' : ActorMethod<[string], [] | [[TokenId, Balance]]>,
   'get_staked_balance' : ActorMethod<[Principal, TokenId], Balance>,
   'get_verifier_profile' : ActorMethod<[Principal, TokenId], VerifierProfile>,
