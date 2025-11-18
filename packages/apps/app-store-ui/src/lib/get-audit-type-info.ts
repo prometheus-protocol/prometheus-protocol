@@ -31,7 +31,7 @@ const auditTypeMap: Record<string, AuditTypeInfo> = {
   tools_v1: {
     title: 'MCP Compatibility',
     description:
-      'Verifies that the application is compatible with the MCP tools and standards.',
+      'Verifies that the application is compatible with the Model Context Protocol (MCP).',
     Icon: Wrench,
   },
   data_safety_v1: {
