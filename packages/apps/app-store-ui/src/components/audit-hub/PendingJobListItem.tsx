@@ -122,7 +122,7 @@ export const PendingJobListItem = ({
               <span className="text-gray-400">
                 {job.completedCount > 0 && (
                   <span className="text-green-400 font-semibold">
-                    {job.completedCount} completed
+                    {job.completedCount} claimed
                   </span>
                 )}
                 {job.completedCount > 0 && job.assignedCount > 0 && (

@@ -137,20 +137,13 @@ export const BountyPanel = ({ audit }: { audit: AuditBountyWithDetails }) => {
           </div>
         );
       case 'Completed':
-        const completedBy =
-          audit.results?.type === 'success' && audit.results.auditor
-            ? truncatePrincipal(audit.results.auditor.toText())
-            : claimedBy
-              ? truncatePrincipal(claimedBy.toText())
-              : 'N/A';
-
         return (
           <div className="space-y-4">
             <InfoPanelItem icon={<CheckCircle2 />} label="Status">
               Completed
             </InfoPanelItem>
-            <InfoPanelItem icon={<User />} label="Completed By">
-              {completedBy}
+            <InfoPanelItem icon={<User />} label="Claimed By">
+              {claimedBy ? truncatePrincipal(claimedBy.toText()) : 'Unclaimed'}
             </InfoPanelItem>
             <InfoPanelItem icon={<Clock />} label="Completed On">
               {completedDate ? completedDate.toLocaleDateString() : 'N/A'}

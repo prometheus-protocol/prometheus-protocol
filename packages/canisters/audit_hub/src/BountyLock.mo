@@ -23,6 +23,7 @@ module {
     stake_requirements : Map.Map<Text, (Types.TokenId, Types.Balance)>,
     available_balances : Map.Map<Principal, Map.Map<Types.TokenId, Types.Balance>>,
     staked_balances : Map.Map<Principal, Map.Map<Types.TokenId, Types.Balance>>,
+    verifier_stats : Map.Map<Principal, Types.VerifierProfile>,
     lock_duration_ns : Int,
   ) : Result.Result<(), Text> {
     // 1. Check if bounty is already locked by someone else.
@@ -31,7 +32,26 @@ module {
         if (Time.now() < lock.expires_at) {
           return #err("Bounty is already locked.");
         };
-        // If lock is expired, it can be overwritten.
+        // If lock is expired, clean it up first (slash the old stake)
+        let current_staked = Account.get_balance(staked_balances, lock.claimant, lock.stake_token_id);
+        Account.set_balance(staked_balances, lock.claimant, lock.stake_token_id, current_staked - lock.stake_amount);
+        
+        // Penalize reputation for abandoning verification
+        let stats = Account.get_verifier_stats(verifier_stats, lock.claimant);
+        var new_score : Nat = 0;
+        if (stats.reputation_score > 10) {
+          new_score := stats.reputation_score - 10;
+        };
+        ignore Map.put(
+          verifier_stats,
+          phash,
+          lock.claimant,
+          {
+            total_verifications = stats.total_verifications;
+            reputation_score = new_score;
+            total_earnings = stats.total_earnings;
+          },
+        );
       };
       case (null) {};
     };
@@ -80,6 +100,7 @@ module {
     stake_requirements : Map.Map<Text, (Types.TokenId, Types.Balance)>,
     available_balances : Map.Map<Principal, Map.Map<Types.TokenId, Types.Balance>>,
     staked_balances : Map.Map<Principal, Map.Map<Types.TokenId, Types.Balance>>,
+    verifier_stats : Map.Map<Principal, Types.VerifierProfile>,
     lock_duration_ns : Int,
     record_api_key_usage : (Text) -> (),
   ) : Result.Result<(), Text> {
@@ -104,6 +125,7 @@ module {
       stake_requirements,
       available_balances,
       staked_balances,
+      verifier_stats,
       lock_duration_ns,
     );
   };

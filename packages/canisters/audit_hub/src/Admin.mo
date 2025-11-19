@@ -17,12 +17,15 @@ module {
     audit_type : Text,
     additional_bounty_ids : [Nat],
   ) : Result.Result<(), Text> {
-    let pending_audit_key = wasm_id # "::" # audit_type;
+    // Search for job by wasm_id and audit_type (key format is wasm_id::audit_type::timestamp)
+    var found = false;
+    let prefix = wasm_id # "::" # audit_type # "::";
 
-    switch (BTree.get(pending_audits, Text.compare, pending_audit_key)) {
-      case (?existing) {
-        let merged = Buffer.Buffer<Nat>(existing.bounty_ids.size() + additional_bounty_ids.size());
-        for (id in existing.bounty_ids.vals()) {
+    label job_search for ((key, job) in BTree.entries(pending_audits)) {
+      // Check if this key matches our wasm_id and audit_type
+      if (Text.startsWith(key, #text prefix)) {
+        let merged = Buffer.Buffer<Nat>(job.bounty_ids.size() + additional_bounty_ids.size());
+        for (id in job.bounty_ids.vals()) {
           merged.add(id);
         };
         for (id in additional_bounty_ids.vals()) {
@@ -30,26 +33,20 @@ module {
         };
 
         let updated_job : Types.VerificationJob = {
-          wasm_id = existing.wasm_id;
-          repo = existing.repo;
-          commit_hash = existing.commit_hash;
-          build_config = existing.build_config;
-          created_at = existing.created_at;
-          required_verifiers = existing.required_verifiers;
-          assigned_count = existing.assigned_count;
-          completed_count = existing.completed_count;
-          bounty_ids = Buffer.toArray(merged);
-          audit_type = existing.audit_type;
-          creator = existing.creator;
+          job with bounty_ids = Buffer.toArray(merged);
         };
 
-        ignore BTree.insert(pending_audits, Text.compare, pending_audit_key, updated_job);
-        Debug.print("Added " # Nat.toText(additional_bounty_ids.size()) # " bounty_ids to job for WASM " # wasm_id # ". Total now: " # Nat.toText(updated_job.bounty_ids.size()));
-        #ok();
+        ignore BTree.insert(pending_audits, Text.compare, key, updated_job);
+        Debug.print("Added " # Nat.toText(additional_bounty_ids.size()) # " bounty_ids to job " # key # ". Total now: " # Nat.toText(updated_job.bounty_ids.size()));
+        found := true;
+        break job_search;
       };
-      case (null) {
-        #err("No verification job found for wasm_id: " # wasm_id);
-      };
+    };
+
+    if (found) {
+      #ok();
+    } else {
+      #err("No verification job found for wasm_id: " # wasm_id # " and audit_type: " # audit_type);
     };
   };
 };
