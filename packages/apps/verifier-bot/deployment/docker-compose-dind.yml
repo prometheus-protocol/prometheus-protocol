@@ -29,7 +29,7 @@ services:
       - DOCKER_HOST=tcp://localhost:2375
     depends_on:
       - dind-1
-    network_mode: "service:dind-1"
+    network_mode: 'service:dind-1'
 
   dind-1:
     image: docker:27-dind
@@ -38,7 +38,7 @@ services:
     privileged: true
     environment:
       - DOCKER_TLS_CERTDIR=
-    command: ["dockerd", "--host=tcp://0.0.0.0:2375"]
+    command: ['dockerd', '--host=tcp://0.0.0.0:2375']
     volumes:
       - dind-1-storage:/var/lib/docker
 
@@ -57,7 +57,7 @@ services:
       - DOCKER_HOST=tcp://localhost:2375
     depends_on:
       - dind-2
-    network_mode: "service:dind-2"
+    network_mode: 'service:dind-2'
 
   dind-2:
     image: docker:27-dind
@@ -66,7 +66,7 @@ services:
     privileged: true
     environment:
       - DOCKER_TLS_CERTDIR=
-    command: ["dockerd", "--host=tcp://0.0.0.0:2375"]
+    command: ['dockerd', '--host=tcp://0.0.0.0:2375']
     volumes:
       - dind-2-storage:/var/lib/docker
 
@@ -85,7 +85,7 @@ services:
       - DOCKER_HOST=tcp://localhost:2375
     depends_on:
       - dind-3
-    network_mode: "service:dind-3"
+    network_mode: 'service:dind-3'
 
   dind-3:
     image: docker:27-dind
@@ -94,7 +94,7 @@ services:
     privileged: true
     environment:
       - DOCKER_TLS_CERTDIR=
-    command: ["dockerd", "--host=tcp://0.0.0.0:2375"]
+    command: ['dockerd', '--host=tcp://0.0.0.0:2375']
     volumes:
       - dind-3-storage:/var/lib/docker
 
@@ -113,7 +113,7 @@ services:
       - DOCKER_HOST=tcp://localhost:2375
     depends_on:
       - dind-4
-    network_mode: "service:dind-4"
+    network_mode: 'service:dind-4'
 
   dind-4:
     image: docker:27-dind
@@ -122,7 +122,7 @@ services:
     privileged: true
     environment:
       - DOCKER_TLS_CERTDIR=
-    command: ["dockerd", "--host=tcp://0.0.0.0:2375"]
+    command: ['dockerd', '--host=tcp://0.0.0.0:2375']
     volumes:
       - dind-4-storage:/var/lib/docker
 
@@ -141,7 +141,7 @@ services:
       - DOCKER_HOST=tcp://localhost:2375
     depends_on:
       - dind-5
-    network_mode: "service:dind-5"
+    network_mode: 'service:dind-5'
 
   dind-5:
     image: docker:27-dind
@@ -150,7 +150,7 @@ services:
     privileged: true
     environment:
       - DOCKER_TLS_CERTDIR=
-    command: ["dockerd", "--host=tcp://0.0.0.0:2375"]
+    command: ['dockerd', '--host=tcp://0.0.0.0:2375']
     volumes:
       - dind-5-storage:/var/lib/docker
 
@@ -169,7 +169,7 @@ services:
       - DOCKER_HOST=tcp://localhost:2375
     depends_on:
       - dind-6
-    network_mode: "service:dind-6"
+    network_mode: 'service:dind-6'
 
   dind-6:
     image: docker:27-dind
@@ -178,7 +178,7 @@ services:
     privileged: true
     environment:
       - DOCKER_TLS_CERTDIR=
-    command: ["dockerd", "--host=tcp://0.0.0.0:2375"]
+    command: ['dockerd', '--host=tcp://0.0.0.0:2375']
     volumes:
       - dind-6-storage:/var/lib/docker
 
@@ -197,7 +197,7 @@ services:
       - DOCKER_HOST=tcp://localhost:2375
     depends_on:
       - dind-7
-    network_mode: "service:dind-7"
+    network_mode: 'service:dind-7'
 
   dind-7:
     image: docker:27-dind
@@ -206,7 +206,7 @@ services:
     privileged: true
     environment:
       - DOCKER_TLS_CERTDIR=
-    command: ["dockerd", "--host=tcp://0.0.0.0:2375"]
+    command: ['dockerd', '--host=tcp://0.0.0.0:2375']
     volumes:
       - dind-7-storage:/var/lib/docker
 
@@ -225,7 +225,7 @@ services:
       - DOCKER_HOST=tcp://localhost:2375
     depends_on:
       - dind-8
-    network_mode: "service:dind-8"
+    network_mode: 'service:dind-8'
 
   dind-8:
     image: docker:27-dind
@@ -234,7 +234,7 @@ services:
     privileged: true
     environment:
       - DOCKER_TLS_CERTDIR=
-    command: ["dockerd", "--host=tcp://0.0.0.0:2375"]
+    command: ['dockerd', '--host=tcp://0.0.0.0:2375']
     volumes:
       - dind-8-storage:/var/lib/docker
 
@@ -253,7 +253,7 @@ services:
       - DOCKER_HOST=tcp://localhost:2375
     depends_on:
       - dind-9
-    network_mode: "service:dind-9"
+    network_mode: 'service:dind-9'
 
   dind-9:
     image: docker:27-dind
@@ -262,7 +262,7 @@ services:
     privileged: true
     environment:
       - DOCKER_TLS_CERTDIR=
-    command: ["dockerd", "--host=tcp://0.0.0.0:2375"]
+    command: ['dockerd', '--host=tcp://0.0.0.0:2375']
     volumes:
       - dind-9-storage:/var/lib/docker
 
@@ -281,7 +281,7 @@ services:
       - DOCKER_HOST=tcp://localhost:2375
     depends_on:
       - dind-10
-    network_mode: "service:dind-10"
+    network_mode: 'service:dind-10'
 
   dind-10:
     image: docker:27-dind
@@ -290,7 +290,7 @@ services:
     privileged: true
     environment:
       - DOCKER_TLS_CERTDIR=
-    command: ["dockerd", "--host=tcp://0.0.0.0:2375"]
+    command: ['dockerd', '--host=tcp://0.0.0.0:2375']
     volumes:
       - dind-10-storage:/var/lib/docker
 

@@ -5,8 +5,8 @@ This guide is for external node providers running verifier bots on their own inf
 ## ✅ Prerequisites
 
 - Docker and Docker Compose installed
-- 10 verifier API keys (contact Prometheus Protocol team)
-- Optional: GitHub token (for private repos, not required for public repos)
+- Verifier API keys (created in the App Store on Prometheus Protocol)
+- Optional: GitHub token to increase rate limits (if running multiple bots or high volume)
 
 ## 🚀 Quick Start (5 minutes)
 
@@ -38,7 +38,7 @@ nano .env
 
 ```bash
 IC_NETWORK=ic  # Must be 'ic' for production
-GITHUB_TOKEN=your_github_token_here  # Optional
+GITHUB_TOKEN=your_github_token_here  # Required for multiple bots or high volume usage
 
 # Replace these with your real API keys from Prometheus Protocol
 VERIFIER_1_API_KEY=vr_your_real_key_here
@@ -47,6 +47,24 @@ VERIFIER_2_API_KEY=vr_your_real_key_here
 ```
 
 ### 3. Start the verifiers
+
+**Option A: Start just one bot first (recommended for testing)**
+
+```bash
+# Start only verifier-bot-1 and its Docker daemon
+docker-compose -f docker-compose-dind.yml up -d verifier-bot-1 dind-1
+
+# Check it's running
+docker-compose -f docker-compose-dind.yml ps
+
+# Watch logs in real-time
+docker-compose -f docker-compose-dind.yml logs -f verifier-bot-1
+
+# Check last 50 lines of logs
+docker-compose -f docker-compose-dind.yml logs --tail=50 verifier-bot-1
+```
+
+**Option B: Start all 10 verifiers**
 
 ```bash
 docker-compose -f docker-compose-dind.yml up -d
@@ -63,9 +81,13 @@ docker-compose -f docker-compose-dind.yml logs -f
 
 # View logs from a specific verifier
 docker-compose -f docker-compose-dind.yml logs -f verifier-bot-1
+
+# View last 100 lines from a specific verifier
+docker-compose -f docker-compose-dind.yml logs --tail=100 verifier-bot-1
 ```
 
 You should see output like:
+
 ```
 verifier-bot-1  | 🤖 Verifier Bot Starting...
 verifier-bot-1  | 🔑 Using API key: vr_****...
@@ -82,8 +104,11 @@ verifier-bot-1  | ✅ Verifier bot initialized
 # See which containers are running
 docker-compose -f docker-compose-dind.yml ps
 
-# See resource usage
+# See resource usage (all containers)
 docker stats
+
+# See resource usage for specific verifier
+docker stats verifier-bot-1 dind-1
 ```
 
 ### View Logs
@@ -92,17 +117,43 @@ docker stats
 # All verifiers (follow mode)
 docker-compose -f docker-compose-dind.yml logs -f
 
-# Specific verifier
-docker-compose -f docker-compose-dind.yml logs -f verifier-bot-5
+# Specific verifier (follow mode)
+docker-compose -f docker-compose-dind.yml logs -f verifier-bot-1
+
+# Last 100 lines from specific verifier
+docker-compose -f docker-compose-dind.yml logs --tail=100 verifier-bot-1
 
 # Last 100 lines from all verifiers
 docker-compose -f docker-compose-dind.yml logs --tail=100
+
+# Search logs for specific text
+docker-compose -f docker-compose-dind.yml logs verifier-bot-1 | grep "Build completed"
 ```
 
-### Restart a Specific Bot
+### Restart Individual Bots
 
 ```bash
-docker-compose -f docker-compose-dind.yml restart verifier-bot-3
+# Restart a specific bot
+docker-compose -f docker-compose-dind.yml restart verifier-bot-1
+
+# Restart a specific bot and its dind container
+docker-compose -f docker-compose-dind.yml restart verifier-bot-1 dind-1
+
+# Restart all bots
+docker-compose -f docker-compose-dind.yml restart
+```
+
+### Stop Individual Bots
+
+```bash
+# Stop a specific bot (keeps data)
+docker-compose -f docker-compose-dind.yml stop verifier-bot-1 dind-1
+
+# Start it again
+docker-compose -f docker-compose-dind.yml start verifier-bot-1 dind-1
+
+# Remove a specific bot completely
+docker-compose -f docker-compose-dind.yml down verifier-bot-1 dind-1
 ```
 
 ## 🔄 Updates
@@ -136,6 +187,7 @@ docker-compose -f docker-compose-dind.yml down -v
 **This should NOT happen with docker-compose-dind.yml** because it uses Docker-in-Docker (no host Docker socket required).
 
 If you still see this error:
+
 1. Make sure you're using `docker-compose-dind.yml` (NOT `docker-compose.yml`)
 2. Check that Docker is running: `docker ps`
 3. Try restarting: `docker-compose -f docker-compose-dind.yml restart`
@@ -151,10 +203,12 @@ This is normal if there are no pending verification jobs. The bots will automati
 ### High CPU/Memory Usage
 
 Each verifier bot needs:
+
 - **2-4 GB RAM** (during builds)
 - **1-2 CPU cores** (during builds)
 
 For 10 bots, recommended minimum:
+
 - **16 GB RAM**
 - **8 CPU cores**
 
@@ -175,12 +229,14 @@ docker-compose -f docker-compose-dind.yml logs --tail=50 verifier-bot-1
 ## 📈 Resource Requirements
 
 ### Per Bot
+
 - CPU: 0.5-2 cores (spikes during builds)
 - Memory: 512 MB idle, 2-4 GB during builds
 - Disk: ~2 GB for Docker images + build cache
 - Network: Low (only API calls to ICP)
 
 ### For 10 Bots
+
 - **Minimum:** 8 vCPU, 16 GB RAM, 50 GB disk
 - **Recommended:** 12 vCPU, 32 GB RAM, 100 GB disk
 
@@ -221,6 +277,7 @@ This setup uses **Docker-in-Docker (dind)**:
 ```
 
 **Why dind?**
+
 - ✅ No Docker socket permission issues
 - ✅ Works on any host OS
 - ✅ Better isolation between verifiers
@@ -231,19 +288,34 @@ This setup uses **Docker-in-Docker (dind)**:
 **Quick commands reference:**
 
 ```bash
-# Start
+# Start just one bot for testing
+docker-compose -f docker-compose-dind.yml up -d verifier-bot-1 dind-1
+
+# Check if it's running
+docker-compose -f docker-compose-dind.yml ps
+
+# View logs (follow mode)
+docker-compose -f docker-compose-dind.yml logs -f verifier-bot-1
+
+# View last 50 lines
+docker-compose -f docker-compose-dind.yml logs --tail=50 verifier-bot-1
+
+# Start all bots
 docker-compose -f docker-compose-dind.yml up -d
 
 # Status
 docker-compose -f docker-compose-dind.yml ps
 
-# Logs
+# Logs from all bots
 docker-compose -f docker-compose-dind.yml logs -f
 
-# Stop
+# Restart specific bot
+docker-compose -f docker-compose-dind.yml restart verifier-bot-1
+
+# Stop all
 docker-compose -f docker-compose-dind.yml down
 
-# Update
+# Update to latest version
 docker-compose -f docker-compose-dind.yml pull
 docker-compose -f docker-compose-dind.yml up -d
 ```
