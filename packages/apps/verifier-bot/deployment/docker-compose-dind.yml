@@ -1,0 +1,307 @@
+# Docker Compose setup with Docker-in-Docker (no host Docker socket required)
+# Uses published GHCR image - no local build needed
+# This setup works on any system without Docker socket permission issues
+#
+# Setup:
+#   1. Copy .env.example to .env
+#   2. Add your API keys to .env
+#   3. Set IC_NETWORK=ic in .env
+#   4. Run: docker-compose -f docker-compose-dind.yml up -d
+#
+# Each verifier bot runs in a container with its own Docker daemon (dind sidecar)
+# The verifier bot connects to its sidecar via tcp://localhost:2375
+
+version: '3.8'
+
+services:
+  # ========== VERIFIER BOT 1 ==========
+  verifier-bot-1:
+    image: ghcr.io/prometheus-protocol/verifier-bot:latest
+    container_name: verifier-bot-1
+    restart: unless-stopped
+    environment:
+      - VERIFIER_API_KEY=${VERIFIER_1_API_KEY}
+      - IC_NETWORK=${IC_NETWORK:-ic}
+      - IC_HOST=${IC_HOST:-https://ic0.app}
+      - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
+      - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - DOCKER_HOST=tcp://localhost:2375
+    depends_on:
+      - dind-1
+    network_mode: "service:dind-1"
+
+  dind-1:
+    image: docker:27-dind
+    container_name: dind-1
+    restart: unless-stopped
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    command: ["dockerd", "--host=tcp://0.0.0.0:2375"]
+    volumes:
+      - dind-1-storage:/var/lib/docker
+
+  # ========== VERIFIER BOT 2 ==========
+  verifier-bot-2:
+    image: ghcr.io/prometheus-protocol/verifier-bot:latest
+    container_name: verifier-bot-2
+    restart: unless-stopped
+    environment:
+      - VERIFIER_API_KEY=${VERIFIER_2_API_KEY}
+      - IC_NETWORK=${IC_NETWORK:-ic}
+      - IC_HOST=${IC_HOST:-https://ic0.app}
+      - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
+      - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - DOCKER_HOST=tcp://localhost:2375
+    depends_on:
+      - dind-2
+    network_mode: "service:dind-2"
+
+  dind-2:
+    image: docker:27-dind
+    container_name: dind-2
+    restart: unless-stopped
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    command: ["dockerd", "--host=tcp://0.0.0.0:2375"]
+    volumes:
+      - dind-2-storage:/var/lib/docker
+
+  # ========== VERIFIER BOT 3 ==========
+  verifier-bot-3:
+    image: ghcr.io/prometheus-protocol/verifier-bot:latest
+    container_name: verifier-bot-3
+    restart: unless-stopped
+    environment:
+      - VERIFIER_API_KEY=${VERIFIER_3_API_KEY}
+      - IC_NETWORK=${IC_NETWORK:-ic}
+      - IC_HOST=${IC_HOST:-https://ic0.app}
+      - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
+      - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - DOCKER_HOST=tcp://localhost:2375
+    depends_on:
+      - dind-3
+    network_mode: "service:dind-3"
+
+  dind-3:
+    image: docker:27-dind
+    container_name: dind-3
+    restart: unless-stopped
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    command: ["dockerd", "--host=tcp://0.0.0.0:2375"]
+    volumes:
+      - dind-3-storage:/var/lib/docker
+
+  # ========== VERIFIER BOT 4 ==========
+  verifier-bot-4:
+    image: ghcr.io/prometheus-protocol/verifier-bot:latest
+    container_name: verifier-bot-4
+    restart: unless-stopped
+    environment:
+      - VERIFIER_API_KEY=${VERIFIER_4_API_KEY}
+      - IC_NETWORK=${IC_NETWORK:-ic}
+      - IC_HOST=${IC_HOST:-https://ic0.app}
+      - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
+      - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - DOCKER_HOST=tcp://localhost:2375
+    depends_on:
+      - dind-4
+    network_mode: "service:dind-4"
+
+  dind-4:
+    image: docker:27-dind
+    container_name: dind-4
+    restart: unless-stopped
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    command: ["dockerd", "--host=tcp://0.0.0.0:2375"]
+    volumes:
+      - dind-4-storage:/var/lib/docker
+
+  # ========== VERIFIER BOT 5 ==========
+  verifier-bot-5:
+    image: ghcr.io/prometheus-protocol/verifier-bot:latest
+    container_name: verifier-bot-5
+    restart: unless-stopped
+    environment:
+      - VERIFIER_API_KEY=${VERIFIER_5_API_KEY}
+      - IC_NETWORK=${IC_NETWORK:-ic}
+      - IC_HOST=${IC_HOST:-https://ic0.app}
+      - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
+      - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - DOCKER_HOST=tcp://localhost:2375
+    depends_on:
+      - dind-5
+    network_mode: "service:dind-5"
+
+  dind-5:
+    image: docker:27-dind
+    container_name: dind-5
+    restart: unless-stopped
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    command: ["dockerd", "--host=tcp://0.0.0.0:2375"]
+    volumes:
+      - dind-5-storage:/var/lib/docker
+
+  # ========== VERIFIER BOT 6 ==========
+  verifier-bot-6:
+    image: ghcr.io/prometheus-protocol/verifier-bot:latest
+    container_name: verifier-bot-6
+    restart: unless-stopped
+    environment:
+      - VERIFIER_API_KEY=${VERIFIER_6_API_KEY}
+      - IC_NETWORK=${IC_NETWORK:-ic}
+      - IC_HOST=${IC_HOST:-https://ic0.app}
+      - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
+      - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - DOCKER_HOST=tcp://localhost:2375
+    depends_on:
+      - dind-6
+    network_mode: "service:dind-6"
+
+  dind-6:
+    image: docker:27-dind
+    container_name: dind-6
+    restart: unless-stopped
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    command: ["dockerd", "--host=tcp://0.0.0.0:2375"]
+    volumes:
+      - dind-6-storage:/var/lib/docker
+
+  # ========== VERIFIER BOT 7 ==========
+  verifier-bot-7:
+    image: ghcr.io/prometheus-protocol/verifier-bot:latest
+    container_name: verifier-bot-7
+    restart: unless-stopped
+    environment:
+      - VERIFIER_API_KEY=${VERIFIER_7_API_KEY}
+      - IC_NETWORK=${IC_NETWORK:-ic}
+      - IC_HOST=${IC_HOST:-https://ic0.app}
+      - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
+      - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - DOCKER_HOST=tcp://localhost:2375
+    depends_on:
+      - dind-7
+    network_mode: "service:dind-7"
+
+  dind-7:
+    image: docker:27-dind
+    container_name: dind-7
+    restart: unless-stopped
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    command: ["dockerd", "--host=tcp://0.0.0.0:2375"]
+    volumes:
+      - dind-7-storage:/var/lib/docker
+
+  # ========== VERIFIER BOT 8 ==========
+  verifier-bot-8:
+    image: ghcr.io/prometheus-protocol/verifier-bot:latest
+    container_name: verifier-bot-8
+    restart: unless-stopped
+    environment:
+      - VERIFIER_API_KEY=${VERIFIER_8_API_KEY}
+      - IC_NETWORK=${IC_NETWORK:-ic}
+      - IC_HOST=${IC_HOST:-https://ic0.app}
+      - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
+      - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - DOCKER_HOST=tcp://localhost:2375
+    depends_on:
+      - dind-8
+    network_mode: "service:dind-8"
+
+  dind-8:
+    image: docker:27-dind
+    container_name: dind-8
+    restart: unless-stopped
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    command: ["dockerd", "--host=tcp://0.0.0.0:2375"]
+    volumes:
+      - dind-8-storage:/var/lib/docker
+
+  # ========== VERIFIER BOT 9 ==========
+  verifier-bot-9:
+    image: ghcr.io/prometheus-protocol/verifier-bot:latest
+    container_name: verifier-bot-9
+    restart: unless-stopped
+    environment:
+      - VERIFIER_API_KEY=${VERIFIER_9_API_KEY}
+      - IC_NETWORK=${IC_NETWORK:-ic}
+      - IC_HOST=${IC_HOST:-https://ic0.app}
+      - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
+      - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - DOCKER_HOST=tcp://localhost:2375
+    depends_on:
+      - dind-9
+    network_mode: "service:dind-9"
+
+  dind-9:
+    image: docker:27-dind
+    container_name: dind-9
+    restart: unless-stopped
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    command: ["dockerd", "--host=tcp://0.0.0.0:2375"]
+    volumes:
+      - dind-9-storage:/var/lib/docker
+
+  # ========== VERIFIER BOT 10 ==========
+  verifier-bot-10:
+    image: ghcr.io/prometheus-protocol/verifier-bot:latest
+    container_name: verifier-bot-10
+    restart: unless-stopped
+    environment:
+      - VERIFIER_API_KEY=${VERIFIER_10_API_KEY}
+      - IC_NETWORK=${IC_NETWORK:-ic}
+      - IC_HOST=${IC_HOST:-https://ic0.app}
+      - POLL_INTERVAL_MS=${POLL_INTERVAL_MS:-60000}
+      - BUILD_TIMEOUT_MS=${BUILD_TIMEOUT_MS:-600000}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - DOCKER_HOST=tcp://localhost:2375
+    depends_on:
+      - dind-10
+    network_mode: "service:dind-10"
+
+  dind-10:
+    image: docker:27-dind
+    container_name: dind-10
+    restart: unless-stopped
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    command: ["dockerd", "--host=tcp://0.0.0.0:2375"]
+    volumes:
+      - dind-10-storage:/var/lib/docker
+
+volumes:
+  dind-1-storage:
+  dind-2-storage:
+  dind-3-storage:
+  dind-4-storage:
+  dind-5-storage:
+  dind-6-storage:
+  dind-7-storage:
+  dind-8-storage:
+  dind-9-storage:
+  dind-10-storage:
