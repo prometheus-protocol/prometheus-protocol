@@ -276,7 +276,7 @@ module {
    */
   public func release_job_assignment(
     assigned_jobs : Map.Map<BountyId, AssignedJob>,
-    wasm_verifier_assignments : Map.Map<Text, Map.Map<Principal, Bool>>,
+    job_verifier_assignments : Map.Map<Text, Map.Map<Principal, Bool>>,
     bounty_id : BountyId,
   ) : () {
     switch (Map.get(assigned_jobs, Map.nhash, bounty_id)) {
@@ -284,13 +284,9 @@ module {
         // Remove from assigned_jobs
         ignore Map.remove(assigned_jobs, Map.nhash, bounty_id);
 
-        // Remove from wasm_verifier_assignments
-        switch (Map.get(wasm_verifier_assignments, thash, assignment.wasm_id)) {
-          case (?assignments) {
-            ignore Map.remove(assignments, phash, assignment.verifier);
-          };
-          case (null) {};
-        };
+        // DO NOT remove from job_verifier_assignments - this should be permanent
+        // to prevent verifiers from being reassigned to the same job
+        // The verifier has already started work on this job and should not get another bounty for it
 
         Debug.print("Released job assignment for bounty " # Nat.toText(bounty_id));
       };

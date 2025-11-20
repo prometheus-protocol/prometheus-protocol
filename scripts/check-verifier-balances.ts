@@ -11,13 +11,15 @@ import { $, chalk, argv } from 'zx';
 // 3. Audit hub staked balance
 //
 // Usage:
-//   pnpm check:verifier-balances              # Local network
-//   pnpm check:verifier-balances --network ic # Production network
+//   pnpm check:verifier-balances                # Local network
+//   pnpm check:verifier-balances --network ic   # Production network
+//   pnpm check:verifier-balances --network ic --deposit  # Deposit all wallet funds to available
 //
 // ==================================================================================================
 
 // --- CONFIGURATION ---
 const NETWORK = argv.network || process.env.DFX_NETWORK || 'local';
+const DEPOSIT_MODE = argv.deposit || false;
 const DEV_IDENTITIES = [
   'node-1',
   'node-2',
@@ -126,13 +128,13 @@ async function main() {
 
   // Table header
   console.log(chalk.bold('📊 Balance Summary:'));
-  console.log('─'.repeat(100));
+  console.log('─'.repeat(94));
   console.log(
     chalk.bold(
-      '  Identity      Principal                                              Wallet USDC    Available      Staked        Total',
+      '  Identity    Principal                       Wallet      Available    Staked     Total',
     ),
   );
-  console.log('─'.repeat(100));
+  console.log('─'.repeat(94));
 
   const results: Array<{
     identity: string;
@@ -169,8 +171,8 @@ async function main() {
 
       // Format principal for display (truncate middle)
       const shortPrincipal =
-        principal.length > 50
-          ? `${principal.slice(0, 20)}...${principal.slice(-20)}`
+        principal.length > 28
+          ? `${principal.slice(0, 20)}...${principal.slice(-5)}`
           : principal;
 
       // Color code based on balance status
@@ -183,7 +185,7 @@ async function main() {
 
       console.log(
         statusColor(
-          `  ${identity.padEnd(12)}  ${shortPrincipal.padEnd(50)}  ${formatUsdc(walletBalance).padStart(12)}  ${formatUsdc(available).padStart(12)}  ${formatUsdc(staked).padStart(12)}  ${formatUsdc(total).padStart(12)}`,
+          `  ${identity.padEnd(10)}  ${shortPrincipal.padEnd(28)}  ${formatUsdc(walletBalance).padStart(10)}  ${formatUsdc(available).padStart(11)}  ${formatUsdc(staked).padStart(10)}  ${formatUsdc(total).padStart(10)}`,
         ),
       );
     } catch (error) {
@@ -196,8 +198,71 @@ async function main() {
     }
   }
 
-  console.log('─'.repeat(100));
+  console.log('─'.repeat(94));
   console.log('');
+
+  // Deposit wallet funds to available if requested
+  if (DEPOSIT_MODE) {
+    console.log(
+      chalk.bold.yellow('💸 Depositing wallet funds to available balance...'),
+    );
+    console.log('');
+
+    const APPROVAL_FEE = 10_000; // 0.01 USDC
+    const TRANSFER_FEE = 10_000; // 0.01 USDC
+    const TOTAL_FEES = APPROVAL_FEE + TRANSFER_FEE; // 0.02 USDC total
+
+    for (const result of results) {
+      if (result.wallet > TOTAL_FEES) {
+        try {
+          await $`dfx identity use ${result.identity} 2>/dev/null`;
+
+          // Amount to credit to available balance (after all fees)
+          const depositAmount = result.wallet - TOTAL_FEES;
+
+          // Amount available after approval fee
+          const amountAfterApprovalFee = result.wallet - APPROVAL_FEE;
+
+          // Approve for amount after approval fee (so transfer_from can pull depositAmount + its fee)
+          const approveArgs = `(record { spender = record { owner = principal \"${audit_hub}\"; subaccount = null }; amount = ${amountAfterApprovalFee} : nat })`;
+          await $`dfx canister call ${usdc_ledger} icrc2_approve ${approveArgs} --network ${NETWORK}`;
+
+          // Call deposit_stake with the amount we want credited (transfer_from will pull this + fee from wallet)
+          const depositArgs = `(\"${usdc_ledger}\", ${depositAmount} : nat)`;
+          await $`dfx canister call ${audit_hub} deposit_stake ${depositArgs} --network ${NETWORK}`;
+
+          console.log(
+            chalk.green(
+              `  ✅ ${result.identity}: Deposited ${formatUsdc(depositAmount)} USDC (${formatUsdc(TOTAL_FEES)} USDC in fees)`,
+            ),
+          );
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          console.log(
+            chalk.red(
+              `  ❌ ${result.identity}: Failed to deposit - ${message}`,
+            ),
+          );
+        }
+      } else if (result.wallet > 0) {
+        console.log(
+          chalk.yellow(
+            `  ⚠️  ${result.identity}: Wallet balance ${formatUsdc(result.wallet)} USDC too low (need at least ${formatUsdc(TOTAL_FEES)} USDC for fees)`,
+          ),
+        );
+      }
+    }
+
+    console.log('');
+    console.log(
+      chalk.green(
+        '✅ Deposit complete! Run the script again to see updated balances.',
+      ),
+    );
+    await $`dfx identity use ${originalIdentity} 2>/dev/null`;
+    return;
+  }
 
   // Summary statistics
   const totalWallet = results.reduce((sum, r) => sum + r.wallet, 0);
