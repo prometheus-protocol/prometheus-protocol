@@ -116,7 +116,14 @@ function bumpVersion(currentVersion: string): string {
 }
 
 async function main() {
-  console.log('🚀 Starting automated test app release...\n');
+  // Parse command line arguments
+  const args = process.argv.slice(2);
+  const networkArg = args.find((arg) => arg.startsWith('--network='));
+  const network = networkArg ? networkArg.split('=')[1] : 'local';
+
+  console.log(
+    `🚀 Starting automated test app release (network: ${network})...\n`,
+  );
 
   // Get GitHub token
   console.log('🔑 Reading GitHub token...');
@@ -160,7 +167,7 @@ async function main() {
   console.log('   ✅ Version committed and pushed\n');
 
   // Release the new version with spinner
-  const releaseCommand = `GITHUB_TOKEN=${githubToken} app-store-cli release ${newVersion} --network local`;
+  const releaseCommand = `GITHUB_TOKEN=${githubToken} app-store-cli release ${newVersion} --network ${network}`;
 
   try {
     const output = await runWithSpinner(

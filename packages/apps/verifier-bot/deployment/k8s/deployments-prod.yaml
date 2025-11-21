@@ -1,3 +1,7 @@
+# This deployment uses Docker-in-Docker (DinD) sidecar pattern
+# Each pod runs both the verifier bot and a Docker daemon in separate containers
+# Optimized for smaller nodes with limited memory
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -23,6 +27,13 @@ spec:
           image: ghcr.io/prometheus-protocol/verifier-bot:latest
           imagePullPolicy: Always
           env:
+            - name: DOCKER_HOST
+              value: tcp://localhost:2375
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
             - name: VERIFIER_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -45,40 +56,35 @@ spec:
                   key: BUILD_TIMEOUT_MS
           resources:
             requests:
-              memory: '2Gi'
-              cpu: '500m'
+              memory: '512Mi'
+              cpu: '250m'
             limits:
-              memory: '4Gi'
-              cpu: '2000m'
+              memory: '1Gi'
+              cpu: '1000m'
           volumeMounts:
-            - name: docker-socket
-              mountPath: /var/run/docker.sock
             - name: canister-ids
               mountPath: /.dfx/local
               readOnly: true
-          livenessProbe:
-            exec:
-              command:
-                - pgrep
-                - -f
-                - 'node.*index.js'
-            initialDelaySeconds: 30
-            periodSeconds: 60
-            timeoutSeconds: 10
-            failureThreshold: 3
-          readinessProbe:
-            exec:
-              command:
-                - pgrep
-                - -f
-                - 'node.*index.js'
-            initialDelaySeconds: 10
-            periodSeconds: 10
+        - name: dind
+          image: docker:27-dind
+          securityContext:
+            privileged: true
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: ''
+          resources:
+            requests:
+              memory: '256Mi'
+              cpu: '100m'
+            limits:
+              memory: '512Mi'
+              cpu: '500m'
+          volumeMounts:
+            - name: docker-storage
+              mountPath: /var/lib/docker
       volumes:
-        - name: docker-socket
-          hostPath:
-            path: /var/run/docker.sock
-            type: Socket
+        - name: docker-storage
+          emptyDir: {}
         - name: canister-ids
           configMap:
             name: canister-ids
@@ -112,6 +118,13 @@ spec:
           image: ghcr.io/prometheus-protocol/verifier-bot:latest
           imagePullPolicy: Always
           env:
+            - name: DOCKER_HOST
+              value: tcp://localhost:2375
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
             - name: VERIFIER_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -134,40 +147,35 @@ spec:
                   key: BUILD_TIMEOUT_MS
           resources:
             requests:
-              memory: '2Gi'
-              cpu: '500m'
+              memory: '512Mi'
+              cpu: '250m'
             limits:
-              memory: '4Gi'
-              cpu: '2000m'
+              memory: '1Gi'
+              cpu: '1000m'
           volumeMounts:
-            - name: docker-socket
-              mountPath: /var/run/docker.sock
             - name: canister-ids
               mountPath: /.dfx/local
               readOnly: true
-          livenessProbe:
-            exec:
-              command:
-                - pgrep
-                - -f
-                - 'node.*index.js'
-            initialDelaySeconds: 30
-            periodSeconds: 60
-            timeoutSeconds: 10
-            failureThreshold: 3
-          readinessProbe:
-            exec:
-              command:
-                - pgrep
-                - -f
-                - 'node.*index.js'
-            initialDelaySeconds: 10
-            periodSeconds: 10
+        - name: dind
+          image: docker:27-dind
+          securityContext:
+            privileged: true
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: ''
+          resources:
+            requests:
+              memory: '256Mi'
+              cpu: '100m'
+            limits:
+              memory: '512Mi'
+              cpu: '500m'
+          volumeMounts:
+            - name: docker-storage
+              mountPath: /var/lib/docker
       volumes:
-        - name: docker-socket
-          hostPath:
-            path: /var/run/docker.sock
-            type: Socket
+        - name: docker-storage
+          emptyDir: {}
         - name: canister-ids
           configMap:
             name: canister-ids
@@ -201,6 +209,13 @@ spec:
           image: ghcr.io/prometheus-protocol/verifier-bot:latest
           imagePullPolicy: Always
           env:
+            - name: DOCKER_HOST
+              value: tcp://localhost:2375
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
             - name: VERIFIER_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -223,40 +238,35 @@ spec:
                   key: BUILD_TIMEOUT_MS
           resources:
             requests:
-              memory: '2Gi'
-              cpu: '500m'
+              memory: '512Mi'
+              cpu: '250m'
             limits:
-              memory: '4Gi'
-              cpu: '2000m'
+              memory: '1Gi'
+              cpu: '1000m'
           volumeMounts:
-            - name: docker-socket
-              mountPath: /var/run/docker.sock
             - name: canister-ids
               mountPath: /.dfx/local
               readOnly: true
-          livenessProbe:
-            exec:
-              command:
-                - pgrep
-                - -f
-                - 'node.*index.js'
-            initialDelaySeconds: 30
-            periodSeconds: 60
-            timeoutSeconds: 10
-            failureThreshold: 3
-          readinessProbe:
-            exec:
-              command:
-                - pgrep
-                - -f
-                - 'node.*index.js'
-            initialDelaySeconds: 10
-            periodSeconds: 10
+        - name: dind
+          image: docker:27-dind
+          securityContext:
+            privileged: true
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: ''
+          resources:
+            requests:
+              memory: '256Mi'
+              cpu: '100m'
+            limits:
+              memory: '512Mi'
+              cpu: '500m'
+          volumeMounts:
+            - name: docker-storage
+              mountPath: /var/lib/docker
       volumes:
-        - name: docker-socket
-          hostPath:
-            path: /var/run/docker.sock
-            type: Socket
+        - name: docker-storage
+          emptyDir: {}
         - name: canister-ids
           configMap:
             name: canister-ids
@@ -290,6 +300,13 @@ spec:
           image: ghcr.io/prometheus-protocol/verifier-bot:latest
           imagePullPolicy: Always
           env:
+            - name: DOCKER_HOST
+              value: tcp://localhost:2375
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
             - name: VERIFIER_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -312,40 +329,35 @@ spec:
                   key: BUILD_TIMEOUT_MS
           resources:
             requests:
-              memory: '2Gi'
-              cpu: '500m'
+              memory: '512Mi'
+              cpu: '250m'
             limits:
-              memory: '4Gi'
-              cpu: '2000m'
+              memory: '1Gi'
+              cpu: '1000m'
           volumeMounts:
-            - name: docker-socket
-              mountPath: /var/run/docker.sock
             - name: canister-ids
               mountPath: /.dfx/local
               readOnly: true
-          livenessProbe:
-            exec:
-              command:
-                - pgrep
-                - -f
-                - 'node.*index.js'
-            initialDelaySeconds: 30
-            periodSeconds: 60
-            timeoutSeconds: 10
-            failureThreshold: 3
-          readinessProbe:
-            exec:
-              command:
-                - pgrep
-                - -f
-                - 'node.*index.js'
-            initialDelaySeconds: 10
-            periodSeconds: 10
+        - name: dind
+          image: docker:27-dind
+          securityContext:
+            privileged: true
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: ''
+          resources:
+            requests:
+              memory: '256Mi'
+              cpu: '100m'
+            limits:
+              memory: '512Mi'
+              cpu: '500m'
+          volumeMounts:
+            - name: docker-storage
+              mountPath: /var/lib/docker
       volumes:
-        - name: docker-socket
-          hostPath:
-            path: /var/run/docker.sock
-            type: Socket
+        - name: docker-storage
+          emptyDir: {}
         - name: canister-ids
           configMap:
             name: canister-ids
@@ -379,6 +391,13 @@ spec:
           image: ghcr.io/prometheus-protocol/verifier-bot:latest
           imagePullPolicy: Always
           env:
+            - name: DOCKER_HOST
+              value: tcp://localhost:2375
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
             - name: VERIFIER_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -401,40 +420,35 @@ spec:
                   key: BUILD_TIMEOUT_MS
           resources:
             requests:
-              memory: '2Gi'
-              cpu: '500m'
+              memory: '512Mi'
+              cpu: '250m'
             limits:
-              memory: '4Gi'
-              cpu: '2000m'
+              memory: '1Gi'
+              cpu: '1000m'
           volumeMounts:
-            - name: docker-socket
-              mountPath: /var/run/docker.sock
             - name: canister-ids
               mountPath: /.dfx/local
               readOnly: true
-          livenessProbe:
-            exec:
-              command:
-                - pgrep
-                - -f
-                - 'node.*index.js'
-            initialDelaySeconds: 30
-            periodSeconds: 60
-            timeoutSeconds: 10
-            failureThreshold: 3
-          readinessProbe:
-            exec:
-              command:
-                - pgrep
-                - -f
-                - 'node.*index.js'
-            initialDelaySeconds: 10
-            periodSeconds: 10
+        - name: dind
+          image: docker:27-dind
+          securityContext:
+            privileged: true
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: ''
+          resources:
+            requests:
+              memory: '256Mi'
+              cpu: '100m'
+            limits:
+              memory: '512Mi'
+              cpu: '500m'
+          volumeMounts:
+            - name: docker-storage
+              mountPath: /var/lib/docker
       volumes:
-        - name: docker-socket
-          hostPath:
-            path: /var/run/docker.sock
-            type: Socket
+        - name: docker-storage
+          emptyDir: {}
         - name: canister-ids
           configMap:
             name: canister-ids
@@ -468,6 +482,13 @@ spec:
           image: ghcr.io/prometheus-protocol/verifier-bot:latest
           imagePullPolicy: Always
           env:
+            - name: DOCKER_HOST
+              value: tcp://localhost:2375
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
             - name: VERIFIER_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -490,40 +511,35 @@ spec:
                   key: BUILD_TIMEOUT_MS
           resources:
             requests:
-              memory: '2Gi'
-              cpu: '500m'
+              memory: '512Mi'
+              cpu: '250m'
             limits:
-              memory: '4Gi'
-              cpu: '2000m'
+              memory: '1Gi'
+              cpu: '1000m'
           volumeMounts:
-            - name: docker-socket
-              mountPath: /var/run/docker.sock
             - name: canister-ids
               mountPath: /.dfx/local
               readOnly: true
-          livenessProbe:
-            exec:
-              command:
-                - pgrep
-                - -f
-                - 'node.*index.js'
-            initialDelaySeconds: 30
-            periodSeconds: 60
-            timeoutSeconds: 10
-            failureThreshold: 3
-          readinessProbe:
-            exec:
-              command:
-                - pgrep
-                - -f
-                - 'node.*index.js'
-            initialDelaySeconds: 10
-            periodSeconds: 10
+        - name: dind
+          image: docker:27-dind
+          securityContext:
+            privileged: true
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: ''
+          resources:
+            requests:
+              memory: '256Mi'
+              cpu: '100m'
+            limits:
+              memory: '512Mi'
+              cpu: '500m'
+          volumeMounts:
+            - name: docker-storage
+              mountPath: /var/lib/docker
       volumes:
-        - name: docker-socket
-          hostPath:
-            path: /var/run/docker.sock
-            type: Socket
+        - name: docker-storage
+          emptyDir: {}
         - name: canister-ids
           configMap:
             name: canister-ids
@@ -557,6 +573,13 @@ spec:
           image: ghcr.io/prometheus-protocol/verifier-bot:latest
           imagePullPolicy: Always
           env:
+            - name: DOCKER_HOST
+              value: tcp://localhost:2375
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
             - name: VERIFIER_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -579,40 +602,35 @@ spec:
                   key: BUILD_TIMEOUT_MS
           resources:
             requests:
-              memory: '2Gi'
-              cpu: '500m'
+              memory: '512Mi'
+              cpu: '250m'
             limits:
-              memory: '4Gi'
-              cpu: '2000m'
+              memory: '1Gi'
+              cpu: '1000m'
           volumeMounts:
-            - name: docker-socket
-              mountPath: /var/run/docker.sock
             - name: canister-ids
               mountPath: /.dfx/local
               readOnly: true
-          livenessProbe:
-            exec:
-              command:
-                - pgrep
-                - -f
-                - 'node.*index.js'
-            initialDelaySeconds: 30
-            periodSeconds: 60
-            timeoutSeconds: 10
-            failureThreshold: 3
-          readinessProbe:
-            exec:
-              command:
-                - pgrep
-                - -f
-                - 'node.*index.js'
-            initialDelaySeconds: 10
-            periodSeconds: 10
+        - name: dind
+          image: docker:27-dind
+          securityContext:
+            privileged: true
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: ''
+          resources:
+            requests:
+              memory: '256Mi'
+              cpu: '100m'
+            limits:
+              memory: '512Mi'
+              cpu: '500m'
+          volumeMounts:
+            - name: docker-storage
+              mountPath: /var/lib/docker
       volumes:
-        - name: docker-socket
-          hostPath:
-            path: /var/run/docker.sock
-            type: Socket
+        - name: docker-storage
+          emptyDir: {}
         - name: canister-ids
           configMap:
             name: canister-ids
@@ -646,6 +664,13 @@ spec:
           image: ghcr.io/prometheus-protocol/verifier-bot:latest
           imagePullPolicy: Always
           env:
+            - name: DOCKER_HOST
+              value: tcp://localhost:2375
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
             - name: VERIFIER_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -668,40 +693,35 @@ spec:
                   key: BUILD_TIMEOUT_MS
           resources:
             requests:
-              memory: '2Gi'
-              cpu: '500m'
+              memory: '512Mi'
+              cpu: '250m'
             limits:
-              memory: '4Gi'
-              cpu: '2000m'
+              memory: '1Gi'
+              cpu: '1000m'
           volumeMounts:
-            - name: docker-socket
-              mountPath: /var/run/docker.sock
             - name: canister-ids
               mountPath: /.dfx/local
               readOnly: true
-          livenessProbe:
-            exec:
-              command:
-                - pgrep
-                - -f
-                - 'node.*index.js'
-            initialDelaySeconds: 30
-            periodSeconds: 60
-            timeoutSeconds: 10
-            failureThreshold: 3
-          readinessProbe:
-            exec:
-              command:
-                - pgrep
-                - -f
-                - 'node.*index.js'
-            initialDelaySeconds: 10
-            periodSeconds: 10
+        - name: dind
+          image: docker:27-dind
+          securityContext:
+            privileged: true
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: ''
+          resources:
+            requests:
+              memory: '256Mi'
+              cpu: '100m'
+            limits:
+              memory: '512Mi'
+              cpu: '500m'
+          volumeMounts:
+            - name: docker-storage
+              mountPath: /var/lib/docker
       volumes:
-        - name: docker-socket
-          hostPath:
-            path: /var/run/docker.sock
-            type: Socket
+        - name: docker-storage
+          emptyDir: {}
         - name: canister-ids
           configMap:
             name: canister-ids
@@ -735,6 +755,13 @@ spec:
           image: ghcr.io/prometheus-protocol/verifier-bot:latest
           imagePullPolicy: Always
           env:
+            - name: DOCKER_HOST
+              value: tcp://localhost:2375
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: verifier-api-keys
+                  key: github-token
             - name: VERIFIER_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -757,40 +784,35 @@ spec:
                   key: BUILD_TIMEOUT_MS
           resources:
             requests:
-              memory: '2Gi'
-              cpu: '500m'
+              memory: '512Mi'
+              cpu: '250m'
             limits:
-              memory: '4Gi'
-              cpu: '2000m'
+              memory: '1Gi'
+              cpu: '1000m'
           volumeMounts:
-            - name: docker-socket
-              mountPath: /var/run/docker.sock
             - name: canister-ids
               mountPath: /.dfx/local
               readOnly: true
-          livenessProbe:
-            exec:
-              command:
-                - pgrep
-                - -f
-                - 'node.*index.js'
-            initialDelaySeconds: 30
-            periodSeconds: 60
-            timeoutSeconds: 10
-            failureThreshold: 3
-          readinessProbe:
-            exec:
-              command:
-                - pgrep
-                - -f
-                - 'node.*index.js'
-            initialDelaySeconds: 10
-            periodSeconds: 10
+        - name: dind
+          image: docker:27-dind
+          securityContext:
+            privileged: true
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: ''
+          resources:
+            requests:
+              memory: '256Mi'
+              cpu: '100m'
+            limits:
+              memory: '512Mi'
+              cpu: '500m'
+          volumeMounts:
+            - name: docker-storage
+              mountPath: /var/lib/docker
       volumes:
-        - name: docker-socket
-          hostPath:
-            path: /var/run/docker.sock
-            type: Socket
+        - name: docker-storage
+          emptyDir: {}
         - name: canister-ids
           configMap:
             name: canister-ids

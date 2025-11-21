@@ -439,8 +439,9 @@ export const CORE_AUDIT_TYPES = [
 ];
 
 /**
- * Gets the audit types that have been completed (reached consensus threshold) for a WASM.
- * An audit type is considered completed if it has at least 9 successful attestations.
+ * Gets the audit types that have been completed (reached consensus and been finalized) for a WASM.
+ * For build_reproducibility_v1, checks if the WASM has been verified (ICRC-126 verified status).
+ * For other audit types, checks if there are at least 9 successful attestations.
  */
 export const getCompletedAuditTypes = async (
   wasmId: string,
@@ -449,12 +450,26 @@ export const getCompletedAuditTypes = async (
   const completedTypes: string[] = [];
 
   for (const auditType of CORE_AUDIT_TYPES) {
-    const attestationBountyIds = await getVerificationProgress(
-      wasmId,
-      auditType,
-    );
-    if (attestationBountyIds.length >= REQUIRED_ATTESTATIONS) {
-      completedTypes.push(auditType);
+    if (auditType === 'build_reproducibility_v1') {
+      // For build reproducibility, check if the WASM has been verified (ICRC-126)
+      try {
+        const registryActor = getRegistryActor();
+        const isVerified = await registryActor.is_wasm_verified(wasmId);
+        if (isVerified) {
+          completedTypes.push(auditType);
+        }
+      } catch (error) {
+        console.error('Error checking WASM verification status:', error);
+      }
+    } else {
+      // For other audit types, check attestation count
+      const attestationBountyIds = await getVerificationProgress(
+        wasmId,
+        auditType,
+      );
+      if (attestationBountyIds.length >= REQUIRED_ATTESTATIONS) {
+        completedTypes.push(auditType);
+      }
     }
   }
 
@@ -610,6 +625,10 @@ export const getAuditBounty = async (
     fromNullable(verificationRequest)!,
   );
 
+  // Get claimedBy from the claims array, not the lock
+  const claimedBy =
+    processed.claims.length > 0 ? processed.claims[0].claimer : undefined;
+
   // 4. Assemble and return the final object.
   return {
     id: processed.id,
@@ -618,7 +637,7 @@ export const getAuditBounty = async (
     reward: processed.tokenAmount,
     stake: bountyStake ?? 0n,
     status,
-    claimedBy: bountyLock?.claimant,
+    claimedBy,
     completedDate,
     lockExpiresAt,
     results, // <-- This now holds the correctly typed result

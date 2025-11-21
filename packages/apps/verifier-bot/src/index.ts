@@ -273,7 +273,16 @@ async function pollAndVerifyWithJobQueue(): Promise<void> {
               auditType: auditType,
             });
 
-            console.log(`   ✅ Divergence report filed successfully\n`);
+            console.log(`   ✅ Divergence report filed successfully`);
+
+            // Claim the bounty
+            console.log(`   💰 Claiming bounty...`);
+            await claimBountyWithApiKey(VERIFIER_API_KEY!, {
+              bounty_id: job.bounty_id,
+              wasm_id: job.wasm_id,
+            });
+
+            console.log(`   ✅ Bounty claimed successfully!\n`);
           }
         } else {
           // === BUILD REPRODUCIBILITY VERIFICATION (default) ===
@@ -343,6 +352,15 @@ async function pollAndVerifyWithJobQueue(): Promise<void> {
             });
 
             console.log(`   ✅ Divergence report filed successfully`);
+
+            // Claim the bounty
+            console.log(`   💰 Claiming bounty...`);
+            await claimBountyWithApiKey(VERIFIER_API_KEY!, {
+              bounty_id: job.bounty_id,
+              wasm_id: job.wasm_id,
+            });
+
+            console.log(`   ✅ Bounty claimed successfully!`);
             console.log(`   ⏳ Waiting for 5-of-9 consensus...`);
             console.log(
               `   ❌ WASM ${job.wasm_id.slice(0, 12)}... divergence reported\n`,
