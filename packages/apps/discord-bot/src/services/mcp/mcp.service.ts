@@ -337,11 +337,13 @@ export class MCPService {
       }
 
       // Check if this server URL is already connected for this user+channel
+      // BUT skip this check if we're reconnecting to the same serverId
       const existingConnections =
         await this.databaseService.getUserMCPConnections(userId, channelId);
 
       const duplicateConnection = existingConnections.find(
-        (conn) => conn.server_url === actualServerUrl,
+        (conn) =>
+          conn.server_url === actualServerUrl && conn.server_id !== serverId,
       );
 
       if (duplicateConnection) {
