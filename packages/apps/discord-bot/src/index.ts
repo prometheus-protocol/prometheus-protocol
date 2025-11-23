@@ -33,7 +33,6 @@ class DiscordBot {
   private llmService: LLMService;
   private database: SupabaseService;
   private scheduler: AlertScheduler;
-  private taskFunctions: TaskManagementFunctions;
   private mcpService: MCPService;
   private discordNotification: DiscordNotificationService;
   private mcpEventService: MCPEventService;
