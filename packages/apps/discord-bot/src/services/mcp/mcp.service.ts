@@ -336,6 +336,20 @@ export class MCPService {
         );
       }
 
+      // Check if this server URL is already connected for this user+channel
+      const existingConnections =
+        await this.databaseService.getUserMCPConnections(userId, channelId);
+
+      const duplicateConnection = existingConnections.find(
+        (conn) => conn.server_url === actualServerUrl,
+      );
+
+      if (duplicateConnection) {
+        throw new Error(
+          `You are already connected to this server as "${duplicateConnection.server_name}". Please disconnect or delete the existing connection first.`,
+        );
+      }
+
       const connectionPayload: ConnectionRequestPayload = {
         generatedAt: new Date().toISOString(),
         userId: userId, // Using userId as userId for Discord bot
