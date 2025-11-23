@@ -27,6 +27,7 @@ import Base16 "mo:base16/Base16";
 import ICRC2 "mo:icrc2-types";
 import Map "mo:map/Map";
 import Order "mo:base/Order";
+import Star "mo:star/star";
 
 import AppStore "AppStore";
 import AuditHub "AuditHub";
