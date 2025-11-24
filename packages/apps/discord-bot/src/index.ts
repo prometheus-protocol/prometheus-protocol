@@ -33,7 +33,6 @@ class DiscordBot {
   private llmService: LLMService;
   private database: SupabaseService;
   private scheduler: AlertScheduler;
-  private taskFunctions: TaskManagementFunctions;
   private mcpService: MCPService;
   private discordNotification: DiscordNotificationService;
   private mcpEventService: MCPEventService;
@@ -87,6 +86,8 @@ class DiscordBot {
     // Initialize the MCP service after all dependencies are set up
     this.mcpService.initialize();
 
+    // DISABLED: Task scheduling system removed to reduce LLM token costs
+    // This is a free onboarding tool and scheduled tasks were too expensive
     // Create scheduler and task functions first (LLM service needs task functions)
     this.scheduler = new AlertScheduler(
       this.client,
@@ -94,16 +95,17 @@ class DiscordBot {
       this.config,
       null as any, // Will be set after LLM service is created
     );
-    this.taskFunctions = new TaskManagementFunctions(
-      this.scheduler,
-      this.database,
-    );
+    // Commenting out task functions to disable the system
+    // this.taskFunctions = new TaskManagementFunctions(
+    //   this.scheduler,
+    //   this.database,
+    // );
 
-    // Now create LLM service with both MCP and task functions
+    // Now create LLM service without task functions (disabled)
     this.llmService = new LLMService(
       this.config,
       this.mcpService,
-      this.taskFunctions,
+      undefined, // taskFunctions disabled
     );
 
     // Set the LLM service in scheduler now that it's created
@@ -142,17 +144,19 @@ class DiscordBot {
           console.log(`📍 Guild: ${guild.name} (${guild.id})`);
         });
 
+        // DISABLED: Scheduler system removed to reduce LLM token costs
         // Start scheduler with alert loading
         // Skip loading alerts in development if DISABLE_SCHEDULER is set
-        if (process.env.DISABLE_SCHEDULER === 'true') {
-          console.log('⏸️ Scheduler disabled via DISABLE_SCHEDULER env var');
-        } else {
-          try {
-            await this.scheduler.start();
-          } catch (error) {
-            console.error('⚠️ Scheduler initialization error:', error);
-          }
-        }
+        console.log('⏸️ Task scheduler permanently disabled (removed feature)');
+        // if (process.env.DISABLE_SCHEDULER === 'true') {
+        //   console.log('⏸️ Scheduler disabled via DISABLE_SCHEDULER env var');
+        // } else {
+        //   try {
+        //     await this.scheduler.start();
+        //   } catch (error) {
+        //     console.error('⚠️ Scheduler initialization error:', error);
+        //   }
+        // }
 
         // NOTE: Reestablishing persistent MCP connections on startup is disabled
         // for scalability. With thousands of users, this would create too many
@@ -536,10 +540,11 @@ class DiscordBot {
     // Register MCP management command (no registry service needed)
     this.commandRegistry.register(new MCPCommand(this.mcpService));
 
+    // DISABLED: Tasks command removed (task scheduling system disabled)
     // Register dedicated tasks management command
-    this.commandRegistry.register(
-      new TasksCommand(this.taskFunctions, this.database),
-    );
+    // this.commandRegistry.register(
+    //   new TasksCommand(this.taskFunctions, this.database),
+    // );
 
     console.log(
       `📝 Registered ${this.commandRegistry.getAllCommands().length} commands`,
@@ -719,7 +724,8 @@ class DiscordBot {
   }
 
   async stop(): Promise<void> {
-    this.scheduler.stop();
+    // DISABLED: Scheduler no longer runs
+    // this.scheduler.stop();
     await this.client.destroy();
     if (this.webServer) {
       this.webServer.close();

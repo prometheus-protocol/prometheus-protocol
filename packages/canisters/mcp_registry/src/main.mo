@@ -27,6 +27,7 @@ import Base16 "mo:base16/Base16";
 import ICRC2 "mo:icrc2-types";
 import Map "mo:map/Map";
 import Order "mo:base/Order";
+import Star "mo:star/star";
 
 import AppStore "AppStore";
 import AuditHub "AuditHub";
@@ -131,6 +132,16 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       func(newClass : TT.TimerTool) : async* () {
         D.print("Initializing TimerTool");
         newClass.initialize<system>();
+
+        // Register a handler for orphaned ICRC127 bounty expiration timers
+        // These are legacy timers from when bounty management was in this canister
+        // The handler returns #trappable to permanently remove them from the queue
+        func _cleanup_orphaned_icrc127_timer(actionId : TT.ActionId, action : TT.Action) : async* Star.Star<TT.ActionId, TT.Error> {
+          D.print("Cleaning up orphaned ICRC127 bounty expiration timer: " # debug_show (actionId));
+          return #trappable(actionId);
+        };
+
+        newClass.registerExecutionListenerAsync(?"icrc127:bounty:bounty-expired:icrc127", _cleanup_orphaned_icrc127_timer);
       }
     );
     onStorageChange = func(state : TT.State) { tt_migration_state := state };
@@ -2789,6 +2800,56 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       ];
       configuration = [];
     });
+  };
+
+  // =====================================================================================
+  // TIMERTOOL DIAGNOSTICS & CLEANUP
+  // =====================================================================================
+
+  // Tracing functions
+  public query func get_reconstitution_traces() : async [TT.ReconstitutionTrace] {
+    tt().getReconstitutionTraces();
+  };
+
+  public query func get_latest_reconstitution_trace() : async ?TT.ReconstitutionTrace {
+    tt().getLatestReconstitutionTrace();
+  };
+
+  public shared func clear_reconstitution_traces() : async () {
+    tt().clearReconstitutionTraces();
+  };
+
+  public query func validate_timer_state() : async [Text] {
+    tt().validateTimerState();
+  };
+
+  public query func get_timer_diagnostics() : async TT.TimerDiagnostics {
+    tt().getTimerDiagnostics();
+  };
+
+  // Cancellation functions
+  public shared func cancel_actions_by_filter(filter : TT.ActionFilter) : async TT.CancellationResult {
+    tt().cancelActionsByFilter(filter);
+  };
+
+  public shared func cancel_actions_by_ids(ids : [Nat]) : async TT.CancellationResult {
+    tt().cancelActionsByIds(ids);
+  };
+
+  public query func get_actions_by_filter(filter : TT.ActionFilter) : async [TT.ActionDetail] {
+    tt().getActionsByFilter(filter);
+  };
+
+  public shared func emergency_clear_all_timers() : async Nat {
+    tt().emergencyClearAllTimers();
+  };
+
+  public shared func force_system_timer_cancel() : async Bool {
+    tt().forceSystemTimerCancel();
+  };
+
+  public shared func force_release_lock() : async ?Time.Time {
+    tt().forceReleaseLock();
   };
 
 };
