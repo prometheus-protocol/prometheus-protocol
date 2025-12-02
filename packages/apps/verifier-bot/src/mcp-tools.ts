@@ -6,6 +6,8 @@ import { idlFactory as mcpServerIdlFactory } from '@prometheus-protocol/declarat
 import type { _SERVICE as McpServerService } from '@prometheus-protocol/declarations/mcp_server/mcp_server.did.js';
 import type { Actor } from '@dfinity/pic';
 import { randomBytes } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
+import fs from 'node:fs';
 
 export interface McpToolsResult {
   success: boolean;
@@ -62,9 +64,18 @@ export async function verifyMcpTools(
           [IDL.Opt(IDL.Record({ owner: IDL.Opt(IDL.Principal) }))],
           [[]],
         );
+
+        // Read and gzip the WASM to reduce size below 2MB limit
+        console.log(`   🗜️  Compressing WASM with gzip...`);
+        const wasmBytes = fs.readFileSync(wasmPath);
+        const gzippedWasm = gzipSync(wasmBytes);
+        console.log(
+          `   ✅ WASM compressed: ${wasmBytes.length} → ${gzippedWasm.length} bytes (${Math.round((1 - gzippedWasm.length / wasmBytes.length) * 100)}% reduction)`,
+        );
+
         await pic.installCode({
           canisterId,
-          wasm: wasmPath,
+          wasm: gzippedWasm,
           arg: initArg.buffer as ArrayBufferLike,
         });
         console.log(`   ✅ WASM installed successfully`);

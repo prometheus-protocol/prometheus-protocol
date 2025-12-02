@@ -1,8 +1,9 @@
 // packages/ic-js/src/leaderboard.api.ts
 
 import { Identity } from '@icp-sdk/core/agent';
-import { getLeaderboardActor } from '../actors.js';
-import { Leaderboard } from '@prometheus-protocol/declarations';
+import { Principal } from '@icp-sdk/core/principal';
+import { getLeaderboardActor, getAuditHubActor } from '../actors.js';
+import { Leaderboard, AuditHub } from '@prometheus-protocol/declarations';
 
 export type { Leaderboard };
 
@@ -85,4 +86,41 @@ export const getToolInvocationsForServer = async (
   }
 
   return invocationMap;
+};
+
+/**
+ * A verifier leaderboard entry with ranking information.
+ */
+export interface VerifierLeaderboardEntry {
+  rank: number;
+  verifier: Principal;
+  total_verifications: bigint;
+  reputation_score: bigint;
+  total_earnings: bigint;
+}
+
+/**
+ * Fetches the ranked list of verifiers by total verifications.
+ * This is a public, unauthenticated call that reads from the audit_hub.
+ * @returns An array of VerifierLeaderboardEntry objects, sorted by rank.
+ */
+export const getVerifierLeaderboard = async (): Promise<
+  VerifierLeaderboardEntry[]
+> => {
+  const auditHubActor = getAuditHubActor();
+  const result = (await (auditHubActor as any).get_verifier_leaderboard()) as [
+    Principal,
+    AuditHub.VerifierProfile,
+  ][];
+  
+  // Transform the result into ranked entries
+  return result.map(
+    ([principal, profile]: [Principal, AuditHub.VerifierProfile], index: number) => ({
+      rank: index + 1,
+      verifier: principal,
+      total_verifications: profile.total_verifications,
+      reputation_score: profile.reputation_score,
+      total_earnings: profile.total_earnings,
+    }),
+  );
 };

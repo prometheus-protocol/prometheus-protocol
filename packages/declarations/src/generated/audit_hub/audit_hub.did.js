@@ -38,10 +38,10 @@ export const idlFactory = ({ IDL }) => {
   const ICRC16Map = IDL.Vec(IDL.Tuple(IDL.Text, ICRC16));
   const BountyId = IDL.Nat;
   const Result = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
+  const Result_4 = IDL.Variant({ 'ok' : IDL.Text, 'err' : IDL.Text });
   const Result_5 = IDL.Variant({ 'ok' : IDL.Vec(IDL.Nat), 'err' : IDL.Text });
   const TokenId = IDL.Text;
   const Balance = IDL.Nat;
-  const Result_4 = IDL.Variant({ 'ok' : IDL.Text, 'err' : IDL.Text });
   const RunBountyResult = IDL.Record({
     'result' : IDL.Variant({ 'Invalid' : IDL.Null, 'Valid' : IDL.Null }),
     'metadata' : ICRC16,
@@ -301,7 +301,42 @@ export const idlFactory = ({ IDL }) => {
         [Result],
         [],
       ),
+    'admin_add_bounties_by_queue_key' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Nat)],
+        [Result],
+        [],
+      ),
     'admin_add_bounties_to_job' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Vec(IDL.Nat)],
+        [Result],
+        [],
+      ),
+    'admin_add_to_deny_list' : IDL.Func([IDL.Principal], [Result], []),
+    'admin_add_verifier_to_job' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [Result],
+        [],
+      ),
+    'admin_claim_bounty_for_verifier' : IDL.Func(
+        [BountyId, IDL.Principal, IDL.Text],
+        [Result],
+        [],
+      ),
+    'admin_cleanup_orphaned_stakes' : IDL.Func([], [Result_4], []),
+    'admin_clear_bounty_verifier' : IDL.Func([BountyId], [Result], []),
+    'admin_fix_job_assigned_count' : IDL.Func(
+        [IDL.Text, IDL.Nat],
+        [Result],
+        [],
+      ),
+    'admin_force_release_lock' : IDL.Func([BountyId], [Result], []),
+    'admin_remove_from_deny_list' : IDL.Func([IDL.Principal], [Result], []),
+    'admin_remove_verifier_from_job' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [Result],
+        [],
+      ),
+    'attach_bounties_to_job' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Vec(IDL.Nat)],
         [Result],
         [],
@@ -326,6 +361,7 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'get_bounty_lock' : IDL.Func([BountyId], [IDL.Opt(BountyLock)], ['query']),
+    'get_deny_list' : IDL.Func([], [IDL.Vec(IDL.Principal)], ['query']),
     'get_env_requirements' : IDL.Func(
         [],
         [
@@ -352,6 +388,11 @@ export const idlFactory = ({ IDL }) => {
     'get_staked_balance' : IDL.Func(
         [IDL.Principal, TokenId],
         [Balance],
+        ['query'],
+      ),
+    'get_verifier_leaderboard' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Tuple(IDL.Principal, VerifierProfile))],
         ['query'],
       ),
     'get_verifier_profile' : IDL.Func(

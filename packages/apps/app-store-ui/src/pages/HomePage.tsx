@@ -11,6 +11,16 @@ import { AppStoreListing } from '@prometheus-protocol/ic-js';
 import { HomePageSkeleton } from '@/components/HomePageSkeleton';
 import { HomePageError } from '@/components/HomePageError';
 
+// Hardcoded featured servers to always show at the front of the carousel
+const FEATURED_NAMESPACES = [
+  'io.github.jneums.pokedbots-racing',
+  'io.github.jneums.final-score',
+  'io.github.jneums.ext-wallet',
+  'io.github.jneums.cycle-buddy',
+  'org.prometheusprotocol.token-watchlist',
+  'io.github.jneums.sui-wallet',
+];
+
 function HomePage() {
   const {
     data: allServers,
@@ -46,11 +56,29 @@ function HomePage() {
         (app) => app.latestVersion.status === 'Verified',
       );
 
-      // 2. Create the list for the main carousel (mix of best and newest)
-      const carouselApps = [
-        ...goldApps.slice(0, 3),
-        ...pendingApps.slice(0, 3),
-      ].sort(() => 0.5 - Math.random());
+      // 2. Create the list for the main carousel with hybrid approach:
+      //    - Start with hardcoded featured servers (if they exist)
+      //    - Fill remaining slots with gold tier apps and new releases
+      const featuredApps = allServers.filter((app) =>
+        FEATURED_NAMESPACES.includes(app.namespace),
+      );
+
+      // Get the featured servers in the order they're defined in FEATURED_NAMESPACES
+      const orderedFeaturedApps = FEATURED_NAMESPACES.map((namespace) =>
+        featuredApps.find((app) => app.namespace === namespace),
+      ).filter((app): app is AppStoreListing => app !== undefined);
+
+      // Add remaining gold apps and pending apps to fill out the carousel
+      const remainingApps = [
+        ...goldApps.filter(
+          (app) => !FEATURED_NAMESPACES.includes(app.namespace),
+        ),
+        ...pendingApps.filter(
+          (app) => !FEATURED_NAMESPACES.includes(app.namespace),
+        ),
+      ].slice(0, 6 - orderedFeaturedApps.length);
+
+      const carouselApps = [...orderedFeaturedApps, ...remainingApps];
 
       // 3. Group remaining listed apps by category
       const categoryMap = new Map<string, AppStoreListing[]>();

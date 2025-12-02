@@ -4,8 +4,10 @@ import { useQuery } from '@tanstack/react-query';
 import {
   getUserLeaderboard,
   getServerLeaderboard,
+  getVerifierLeaderboard,
   Leaderboard,
   getToolInvocationsForServer,
+  type VerifierLeaderboardEntry,
 } from '@prometheus-protocol/ic-js';
 import { Principal } from '@icp-sdk/core/principal';
 
@@ -54,5 +56,19 @@ export const useGetToolInvocations = (wasmId: string | null) => {
     },
     // This query is only enabled if the wasmId is actually provided.
     enabled: !!wasmId,
+  });
+};
+
+/**
+ * React Query hook to fetch the ranked list of verifiers.
+ * This is used for the "Top Verifiers" tab on the leaderboard page.
+ */
+export const useGetVerifierLeaderboard = () => {
+  return useQuery<VerifierLeaderboardEntry[]>({
+    // A unique key for the verifier leaderboard query.
+    queryKey: ['verifierLeaderboard'],
+    queryFn: async () => {
+      return getVerifierLeaderboard();
+    },
   });
 };

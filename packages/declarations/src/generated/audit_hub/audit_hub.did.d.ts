@@ -30,7 +30,27 @@ export interface AuditHub {
     [string, string, string, ICRC16Map, string, bigint, Array<BountyId>],
     Result
   >,
+  'admin_add_bounties_by_queue_key' : ActorMethod<
+    [string, Array<bigint>],
+    Result
+  >,
   'admin_add_bounties_to_job' : ActorMethod<
+    [string, string, Array<bigint>],
+    Result
+  >,
+  'admin_add_to_deny_list' : ActorMethod<[Principal], Result>,
+  'admin_add_verifier_to_job' : ActorMethod<[string, Principal], Result>,
+  'admin_claim_bounty_for_verifier' : ActorMethod<
+    [BountyId, Principal, string],
+    Result
+  >,
+  'admin_cleanup_orphaned_stakes' : ActorMethod<[], Result_4>,
+  'admin_clear_bounty_verifier' : ActorMethod<[BountyId], Result>,
+  'admin_fix_job_assigned_count' : ActorMethod<[string, bigint], Result>,
+  'admin_force_release_lock' : ActorMethod<[BountyId], Result>,
+  'admin_remove_from_deny_list' : ActorMethod<[Principal], Result>,
+  'admin_remove_verifier_from_job' : ActorMethod<[string, Principal], Result>,
+  'attach_bounties_to_job' : ActorMethod<
     [string, string, Array<bigint>],
     Result
   >,
@@ -51,6 +71,7 @@ export interface AuditHub {
     Array<[Bounty, [] | [BountyLock]]>
   >,
   'get_bounty_lock' : ActorMethod<[BountyId], [] | [BountyLock]>,
+  'get_deny_list' : ActorMethod<[], Array<Principal>>,
   'get_env_requirements' : ActorMethod<
     [],
     {
@@ -64,6 +85,10 @@ export interface AuditHub {
   'get_pending_job' : ActorMethod<[string], [] | [VerificationJob]>,
   'get_stake_requirement' : ActorMethod<[string], [] | [[TokenId, Balance]]>,
   'get_staked_balance' : ActorMethod<[Principal, TokenId], Balance>,
+  'get_verifier_leaderboard' : ActorMethod<
+    [],
+    Array<[Principal, VerifierProfile]>
+  >,
   'get_verifier_profile' : ActorMethod<[Principal, TokenId], VerifierProfile>,
   'has_active_bounty_lock' : ActorMethod<[Principal], boolean>,
   'icrc10_supported_standards' : ActorMethod<

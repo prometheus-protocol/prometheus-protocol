@@ -41,6 +41,12 @@ module {
       required_verifiers : Nat,
       bounty_ids : [Nat],
     ) -> async Result.Result<(), Text>;
+
+    attach_bounties_to_job : (
+      wasm_id : Text,
+      audit_type : Text,
+      bounty_ids : [Nat],
+    ) -> async Result.Result<(), Text>;
   };
 
   public func sponsor_bounties_for_wasm<system>(
@@ -280,6 +286,29 @@ module {
         };
 
         i += 1;
+      };
+
+      // Attach all bounties for this audit_type to the job in one atomic operation
+      if (audit_type_bounty_ids.size() > 0) {
+        try {
+          let attach_result = await audit_hub.attach_bounties_to_job(
+            wasm_id,
+            audit_type,
+            Buffer.toArray(audit_type_bounty_ids),
+          );
+          switch (attach_result) {
+            case (#ok()) {
+              Debug.print("Successfully attached " # Nat.toText(audit_type_bounty_ids.size()) # " bounties to job for " # audit_type);
+            };
+            case (#err(msg)) {
+              Debug.print("Warning: Failed to attach bounties to job: " # msg);
+              // Continue anyway - bounties are created and tracked
+            };
+          };
+        } catch (e) {
+          Debug.print("Warning: Exception attaching bounties to job: " # Error.message(e));
+          // Continue anyway - bounties are created and tracked
+        };
       };
     };
 
