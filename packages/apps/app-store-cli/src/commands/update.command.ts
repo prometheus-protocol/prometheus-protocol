@@ -1,7 +1,6 @@
 import type { Command } from 'commander';
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import yaml from 'js-yaml';
 import {
   submitVerificationRequest,
@@ -42,8 +41,8 @@ export function registerUpdateCommand(program: Command) {
       'Updates the app store metadata for an existing published version (idempotent).',
     )
     .option(
-      '--wasm <path>',
-      'Path to the WASM file (defaults to prometheus.yml wasm_path)',
+      '--hash <hash>',
+      'WASM hash (required) - the hex-encoded SHA256 hash of the WASM you want to update',
     )
     .option(
       '--commit <hash>',
@@ -76,16 +75,7 @@ export function registerUpdateCommand(program: Command) {
           return;
         }
 
-        // Use options or fall back to manifest values
-        const wasmPath = options.wasm || manifest.submission.wasm_path;
         const gitCommit = options.commit || manifest.submission.git_commit;
-
-        if (!wasmPath) {
-          console.error(
-            '❌ Error: WASM path not specified. Set wasm_path in prometheus.yml or use --wasm flag.',
-          );
-          return;
-        }
 
         if (!gitCommit) {
           console.error(
@@ -94,32 +84,26 @@ export function registerUpdateCommand(program: Command) {
           return;
         }
 
-        // --- 1. VALIDATE WASM FILE ---
-        console.log('   [1/3] 🔍 Validating WASM file...');
-        const fullWasmPath = path.resolve(wasmPath);
-        if (!fs.existsSync(fullWasmPath)) {
-          console.error(`❌ Error: WASM file not found at path: ${wasmPath}`);
+        if (!options.hash) {
+          console.error(
+            '❌ Error: WASM hash is required. Use --hash flag to specify the WASM hash.',
+          );
+          console.error(
+            '   You can find the WASM hash from a previous publish or from the app store.',
+          );
           return;
         }
 
-        const wasmContent = fs.readFileSync(fullWasmPath);
-        const totalWasmHash = crypto
-          .createHash('sha256')
-          .update(wasmContent)
-          .digest();
-
-        console.log(
-          `   ✅ WASM hash: ${totalWasmHash.toString('hex').substring(0, 16)}...`,
-        );
-
-        // --- 2. LOAD IDENTITY ---
-        console.log('\n   [2/3] 🔐 Loading identity...');
+        // --- 1. LOAD IDENTITY ---
+        console.log('   [1/2] 🔐 Loading identity...');
         const currentIdentityName = await getCurrentIdentityName();
         console.log(`   Using identity: ${currentIdentityName}`);
         const identity = loadDfxIdentity(currentIdentityName);
 
-        // --- 3. SUBMIT UPDATED VERIFICATION REQUEST ---
-        console.log('\n   [3/3] 📝 Updating app store metadata...');
+        // --- 2. SUBMIT UPDATED VERIFICATION REQUEST ---
+        console.log('\n   [2/2] 📝 Updating app store metadata...');
+
+        const totalWasmHash = Buffer.from(options.hash, 'hex');
         const commitHash = Buffer.from(gitCommit.trim(), 'hex');
 
         // Prepare metadata payload (exclude fields that shouldn't be in metadata)

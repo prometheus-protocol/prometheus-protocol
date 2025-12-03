@@ -1275,6 +1275,18 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
                 Debug.print("⚠️ Cannot mark tools_v1 complete: audit_hub not configured");
               };
             };
+
+            // Whitelist the WASM for tools_v1 audits so usage tracking works
+            switch (_usage_tracker_canister_id) {
+              case (null) {
+                Debug.print("⚠️ Usage Tracker canister is not configured - skipping whitelist");
+              };
+              case (?id) {
+                let usage_tracker : UsageTracker.Service = actor (Principal.toText(id));
+                ignore await usage_tracker.add_approved_wasm_hash(req.wasm_id);
+                Debug.print("✅ WASM " # req.wasm_id # " whitelisted with usage tracker");
+              };
+            };
           };
 
           // Check if all verifiers have now participated to trigger stake slashing

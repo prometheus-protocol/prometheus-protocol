@@ -7,6 +7,7 @@ import { truncatePrincipal } from '@/lib/utils';
 import {
   useGetServerLeaderboard,
   useGetUserLeaderboard,
+  useGetVerifierLeaderboard,
 } from '@/hooks/useLeaderboard';
 import { Leaderboard } from '@prometheus-protocol/ic-js';
 import { Button } from '@/components/ui/button';
@@ -209,12 +210,17 @@ const INITIAL_VISIBLE_COUNT = 10;
 const LOAD_MORE_INCREMENT = 10;
 
 export default function LeaderboardPage() {
-  const [activeTab, setActiveTab] = useState<'users' | 'servers'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'servers' | 'verifiers'>(
+    'users',
+  );
   const [visibleUserCount, setVisibleUserCount] = useState(
     INITIAL_VISIBLE_COUNT,
   );
   // --- 1. ADD STATE FOR SERVER PAGINATION ---
   const [visibleServerCount, setVisibleServerCount] = useState(
+    INITIAL_VISIBLE_COUNT,
+  );
+  const [visibleVerifierCount, setVisibleVerifierCount] = useState(
     INITIAL_VISIBLE_COUNT,
   );
 
@@ -233,12 +239,20 @@ export default function LeaderboardPage() {
     refetch: refetchServers,
   } = useGetServerLeaderboard();
 
-  const isLoading = usersLoading || serversLoading;
-  const isError = usersError || serversError;
+  const {
+    data: verifiers,
+    isLoading: verifiersLoading,
+    isError: verifiersError,
+    refetch: refetchVerifiers,
+  } = useGetVerifierLeaderboard();
+
+  const isLoading = usersLoading || serversLoading || verifiersLoading;
+  const isError = usersError || serversError || verifiersError;
 
   const handleRetry = () => {
     if (usersError) refetchUsers();
     if (serversError) refetchServers();
+    if (verifiersError) refetchVerifiers();
   };
 
   if (isLoading) {
@@ -252,11 +266,13 @@ export default function LeaderboardPage() {
   const topThreeUsers = users?.slice(0, 3) || [];
   const restOfUsers = users?.slice(3) || [];
   const allServers = servers || [];
+  const allVerifiers = verifiers || [];
 
   // Slice the data for display
   const visibleUsers = restOfUsers.slice(0, visibleUserCount);
   // --- 2. SLICE THE SERVER DATA FOR DISPLAY ---
   const visibleServers = allServers.slice(0, visibleServerCount);
+  const visibleVerifiers = allVerifiers.slice(0, visibleVerifierCount);
 
   return (
     <div className="w-full max-w-6xl mx-auto pt-12 pb-24 text-gray-300">
@@ -279,11 +295,14 @@ export default function LeaderboardPage() {
 
       <Tabs
         value={activeTab}
-        onValueChange={(value) => setActiveTab(value as 'users' | 'servers')}
+        onValueChange={(value) =>
+          setActiveTab(value as 'users' | 'servers' | 'verifiers')
+        }
         className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:w-[400px] mb-16 md:mb-8">
+        <TabsList className="grid w-full grid-cols-3 md:w-[600px] mb-16 md:mb-8">
           <TabsTrigger value="users">Top Agents</TabsTrigger>
           <TabsTrigger value="servers">Top Servers</TabsTrigger>
+          <TabsTrigger value="verifiers">Top Verifiers</TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
@@ -318,6 +337,59 @@ export default function LeaderboardPage() {
               <Button
                 onClick={() =>
                   setVisibleServerCount(
+                    (prevCount) => prevCount + LOAD_MORE_INCREMENT,
+                  )
+                }
+                variant="outline">
+                Load More
+              </Button>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="verifiers">
+          <div className="space-y-3">
+            <div className="grid grid-cols-12 gap-4 px-2 py-2 text-gray-500 font-semibold uppercase text-sm">
+              <div className="col-span-2">Rank</div>
+              <div className="col-span-6">Verifier</div>
+              <div className="col-span-4 text-right">Verifications</div>
+            </div>
+            {visibleVerifiers.map((entry) => {
+              const id = entry.verifier.toText();
+              const truncatedId = truncatePrincipal(id);
+              return (
+                <div
+                  key={entry.rank}
+                  className="grid grid-cols-12 gap-4 items-center px-6 py-4 border border-gray-400 rounded-lg">
+                  <div className="col-span-2 font-bold text-lg text-gray-400">
+                    #{entry.rank}
+                  </div>
+                  <div className="col-span-6 flex items-center gap-4">
+                    <img
+                      src={`https://api.dicebear.com/9.x/adventurer/svg?seed=${id}`}
+                      alt="Avatar"
+                      className="w-10 h-10 rounded-full bg-gray-800 p-1"
+                    />
+                    <span className="font-mono text-white">{truncatedId}</span>
+                  </div>
+                  <div className="col-span-4 text-right">
+                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground font-mono justify-end">
+                      <BarChart3 className="h-3 w-3" />
+                      <span>
+                        {Number(entry.total_verifications).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {allVerifiers.length > visibleVerifierCount && (
+            <div className="text-center mt-8">
+              <Button
+                onClick={() =>
+                  setVisibleVerifierCount(
                     (prevCount) => prevCount + LOAD_MORE_INCREMENT,
                   )
                 }

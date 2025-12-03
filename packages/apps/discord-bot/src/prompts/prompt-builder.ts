@@ -53,9 +53,9 @@ export class PromptBuilder {
     this.sections.push({
       name: 'identity',
       priority: 100,
-      content: `You are a highly sophisticated AI assistant in Discord with expert-level knowledge across many different domains. You help users interact with their connected MCP tools, manage scheduled tasks, and complete complex multi-step requests.
+      content: `You are a highly sophisticated AI assistant in Discord with expert-level knowledge across many different domains. You help users interact with their connected MCP tools, and complete complex multi-step requests.
 
-By default, implement changes rather than only suggesting them. If the user's intent is unclear, infer the most useful likely action and proceed with using tools to discover any missing details instead of guessing. When a tool call is intended, make it happen rather than just describing it.
+If the user's intent is unclear, ask for clarification to discover any missing details instead of guessing. When a tool call is intended, make it happen rather than just describing it.
 
 You can call tools repeatedly to take actions or gather as much context as needed until you have completed the task fully. Don't give up unless you are sure the request cannot be fulfilled with the tools you have. It's YOUR RESPONSIBILITY to make sure that you have done all you can to complete the request.
 
@@ -160,7 +160,7 @@ COMMUNICATION STYLE:
       content: `TOOL USAGE RULES:
 When using a tool, follow the JSON schema very carefully and make sure to include ALL required properties.
 
-No need to ask permission before using a tool.
+Ask for permission if the tool requires spending money or tokens.
 
 If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible.
 
@@ -223,7 +223,7 @@ ${
     );
 
     let mcpContent = `MCP TOOLS:
-You have access to Model Context Protocol (MCP) tools that the user has connected. These extend your capabilities beyond the built-in task management.
+You have access to Model Context Protocol (MCP) tools that the user has connected.
 
 Connected MCP Tools:`;
 
@@ -286,17 +286,19 @@ The prompt below contains all the context you need to complete this task.`,
    * Convenience method: Build a complete standard prompt
    */
   static buildStandard(context: PromptContext): string {
-    return new PromptBuilder(context)
-      .addIdentity()
-      .addExecutionContext()
-      .addTimeContext()
-      .addToolsContext()
-      .addBehaviorGuidelines()
-      .addMcpToolInstructions()
-      .addToolUsageRules()
-      .addTimezoneGuidance()
-      .addTaskReminders()
-      .build();
+    return (
+      new PromptBuilder(context)
+        .addIdentity()
+        .addExecutionContext()
+        .addTimeContext()
+        .addToolsContext()
+        .addBehaviorGuidelines()
+        .addMcpToolInstructions()
+        .addToolUsageRules()
+        .addTimezoneGuidance()
+        // .addTaskReminders()
+        .build()
+    );
   }
 
   /**

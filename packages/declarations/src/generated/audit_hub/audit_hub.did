@@ -341,8 +341,43 @@ type AuditHub =
    add_verification_job: (wasm_id: text, repo: text, commit_hash: text,
     build_config: ICRC16Map, audit_type: text, required_verifiers: nat,
     bounty_ids: vec BountyId) -> (Result);
+   admin_add_bounties_by_queue_key: (queue_key: text, additional_bounty_ids:
+    vec nat) -> (Result);
    admin_add_bounties_to_job: (wasm_id: text, audit_type: text,
     additional_bounty_ids: vec nat) -> (Result);
+   /// * Add a verifier to the deny list (temporarily blocks them from receiving jobs).
+   ///    * Use this for problematic nodes until they upgrade.
+   admin_add_to_deny_list: (verifier: principal) -> (Result);
+   /// * Admin method to manually add a verifier to job_verifier_assignments.
+   ///    * Used for migration or manual fixes when verifiers have already participated but aren't tracked.
+   ///    * @param queue_key - The job queue key (wasm_id::audit_type::timestamp)
+   ///    * @param verifier - The verifier principal to add
+   admin_add_verifier_to_job: (queue_key: text, verifier: principal) ->
+    (Result);
+   admin_claim_bounty_for_verifier: (bounty_id: BountyId, verifier:
+    principal, wasm_id: text) -> (Result);
+   /// * Admin function to clean up staked balances from deleted/non-existent bounties.
+   ///    * This will check all bounty locks and return stakes to available for bounties that don't exist.
+   admin_cleanup_orphaned_stakes: () -> (Result_4);
+   admin_clear_bounty_verifier: (bounty_id: BountyId) -> (Result);
+   /// * Admin function to manually fix a job's assigned_count
+   ///    * Useful when locks are released but assigned_count wasn't decremented
+   admin_fix_job_assigned_count: (queue_key: text, new_assigned_count:
+    nat) -> (Result);
+   admin_force_release_lock: (bounty_id: BountyId) -> (Result);
+   /// * Remove a verifier from the deny list.
+   admin_remove_from_deny_list: (verifier: principal) -> (Result);
+   /// * Admin method to remove a verifier from job_verifier_assignments.
+   ///    * Allows a verifier to retry a job they previously failed or released.
+   ///    * @param queue_key - The job queue key (wasm_id::audit_type::timestamp)
+   ///    * @param verifier - The verifier principal to remove
+   admin_remove_verifier_from_job: (queue_key: text, verifier: principal) ->
+    (Result);
+   /// * Attach multiple bounties to a job in a single atomic operation.
+   ///    * This prevents race conditions when creating multiple bounties concurrently.
+   ///    * Can be called by bounty_sponsor or owner after creating bounties.
+   attach_bounties_to_job: (wasm_id: text, audit_type: text, bounty_ids:
+    vec nat) -> (Result);
    cleanup_expired_lock: (bounty_id: BountyId) -> (Result);
    /// * Create local bounties for a verification job.
    ///    * This enables local bounty management instead of relying on mcp_registry.
@@ -381,6 +416,8 @@ type AuditHub =
            opt BountyLock;
          }) query;
    get_bounty_lock: (bounty_id: BountyId) -> (opt BountyLock) query;
+   /// * Get the current deny list.
+   get_deny_list: () -> (vec principal) query;
    get_env_requirements: () ->
     (variant {
        v1:
@@ -401,6 +438,14 @@ type AuditHub =
          }) query;
    get_staked_balance: (verifier: principal, token_id: TokenId) ->
     (Balance) query;
+   /// * Get leaderboard of all verifiers sorted by total verifications.
+   ///    * Returns an array of (Principal, VerifierProfile) tuples, sorted descending by total_verifications.
+   ///    * Used for the verifier leaderboard UI.
+   get_verifier_leaderboard: () ->
+    (vec record {
+           principal;
+           VerifierProfile;
+         }) query;
    /// * Get verifier profile with balances for a specific token.
    ///    * @param verifier - The principal of the verifier
    ///    * @param token_id - The ledger canister ID (as Principal text) of the token to query

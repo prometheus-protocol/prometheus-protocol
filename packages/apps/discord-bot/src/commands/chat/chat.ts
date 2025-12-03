@@ -17,6 +17,7 @@ import {
 import { LLMService } from '../../services/llm.js';
 import { chatLogger } from '../../utils/logger.js';
 import { ErrorHandler, AuthenticationError } from '../../utils/errors.js';
+import { startSession, endSession } from './stop.js';
 
 export class ChatCommand extends BaseCommand {
   name = 'chat';
@@ -272,6 +273,9 @@ export class ChatCommand extends BaseCommand {
       };
     }
 
+    // Start tracking this session for interrupt capability
+    startSession(context.userId, context.channelId);
+
     try {
       // Since we're only supporting slash commands now, we don't need to check
       // - the interaction is always deferred in executeSlash before calling this
@@ -393,6 +397,9 @@ export class ChatCommand extends BaseCommand {
           'Sorry, I encountered an error while processing your request. Please try again later.',
         ephemeral: true,
       };
+    } finally {
+      // Clean up session tracking
+      endSession(context.userId, context.channelId);
     }
   }
 

@@ -58,8 +58,8 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   // The duration a lock is valid before it expires (10 mins for automated builds).
   let LOCK_DURATION_NS : Int = 10 * 60 * 1_000_000_000; // 10 minutes in nanoseconds
 
-  // Maximum number of pending jobs to check per verifier request
-  // This prevents excessive inter-canister calls when many jobs are pending
+  // DEPRECATED: No longer used, kept for stable variable compatibility
+  // TODO: Remove in next major migration
   let MAX_JOBS_TO_CHECK : Nat = 20;
 
   // ==================================================================================
@@ -701,6 +701,32 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     #ok();
   };
 
+  /**
+   * Admin method to remove a verifier from job_verifier_assignments.
+   * Allows a verifier to retry a job they previously failed or released.
+   * @param queue_key - The job queue key (wasm_id::audit_type::timestamp)
+   * @param verifier - The verifier principal to remove
+   */
+  public shared (msg) func admin_remove_verifier_from_job(
+    queue_key : Text,
+    verifier : Principal,
+  ) : async Result.Result<(), Text> {
+    if (not is_owner(msg.caller)) {
+      return #err("Unauthorized: Only owner can call this method");
+    };
+
+    switch (Map.get(job_verifier_assignments, thash, queue_key)) {
+      case (?assignments) {
+        ignore Map.remove(assignments, phash, verifier);
+        Debug.print("Admin: Removed verifier " # Principal.toText(verifier) # " from job " # queue_key);
+        #ok();
+      };
+      case (null) {
+        #err("Job not found: " # queue_key);
+      };
+    };
+  };
+
   // ==================================================================================
   // == API KEY MANAGEMENT (For Verifier Bots)
   // ==================================================================================
@@ -1327,6 +1353,32 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     QueryMethods.get_verifier_profile(verifier, token_id, available_balances, staked_balances, verifier_stats);
   };
 
+  /**
+   * Get leaderboard of all verifiers sorted by total verifications.
+   * Returns an array of (Principal, VerifierProfile) tuples, sorted descending by total_verifications.
+   * Used for the verifier leaderboard UI.
+   */
+  public shared query func get_verifier_leaderboard() : async [(Principal, Types.VerifierProfile)] {
+    let verifiers = Buffer.Buffer<(Principal, Types.VerifierProfile)>(Map.size(verifier_stats));
+
+    // Collect all verifier profiles
+    for ((principal, profile) in Map.entries(verifier_stats)) {
+      verifiers.add((principal, profile));
+    };
+
+    // Sort by total_verifications descending
+    let sorted = Array.sort<(Principal, Types.VerifierProfile)>(
+      Buffer.toArray(verifiers),
+      func(a, b) {
+        if (a.1.total_verifications > b.1.total_verifications) { #less } else if (a.1.total_verifications < b.1.total_verifications) {
+          #greater;
+        } else { #equal };
+      },
+    );
+
+    return sorted;
+  };
+
   // ==================================================================================
   // == CONFIGURATION & ENV REQUIREMENTS
   // ==================================================================================
@@ -1625,10 +1677,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
             let assignment : Types.AssignedJob = {
               verifier = verifier;
               wasm_id = wasm_id;
-              audit_type = switch (JobQueue.get_audit_type_from_metadata(job.build_config)) {
-                case (?at) { at };
-                case (null) { "build_reproducibility_v1" };
-              };
+              audit_type = job.audit_type; // Use job.audit_type directly from the job struct
               bounty_id = bounty_id;
               assigned_at = current_time;
               expires_at = lock_expires;
@@ -1659,15 +1708,20 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     };
 
     // 2. No active bounty - try to assign a new one
-    Debug.print("Job " # queue_key # " - Checking assignment availability: assigned_count=" # Nat.toText(job.assigned_count) # ", required=" # Nat.toText(job.required_verifiers));
-    if (job.assigned_count < job.required_verifiers) {
-      Debug.print("Found audit job needing verification: " # queue_key # " (" # Nat.toText(job.assigned_count) # "/" # Nat.toText(job.required_verifiers) # " assigned)");
-
-      // Determine audit_type and stake requirement
-      let audit_type = switch (JobQueue.get_audit_type_from_metadata(job.build_config)) {
-        case (?at) { at };
-        case (null) { "build_reproducibility_v1" };
+    // Calculate actual active assignments by counting assignments in assigned_jobs for this wasm_id and audit_type
+    var actual_assigned_count : Nat = 0;
+    for ((_, assignment) in Map.entries(assigned_jobs)) {
+      if (assignment.wasm_id == job.wasm_id and assignment.audit_type == job.audit_type) {
+        actual_assigned_count += 1;
       };
+    };
+
+    Debug.print("Job " # queue_key # " - Checking assignment availability: actual_assigned=" # Nat.toText(actual_assigned_count) # ", required=" # Nat.toText(job.required_verifiers));
+    if (actual_assigned_count < job.required_verifiers) {
+      Debug.print("Found audit job needing verification: " # queue_key # " (" # Nat.toText(actual_assigned_count) # "/" # Nat.toText(job.required_verifiers) # " assigned)");
+
+      // Use audit_type directly from the job struct
+      let audit_type = job.audit_type;
 
       // Check if verifier already has a bounty for this verification job
       var already_participating = false;
@@ -1781,7 +1835,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
         };
       };
     } else {
-      Debug.print("Job " # queue_key # " skipped: assigned_count=" # Nat.toText(job.assigned_count) # " >= required=" # Nat.toText(job.required_verifiers));
+      Debug.print("Job " # queue_key # " skipped: actual_assigned=" # Nat.toText(actual_assigned_count) # " >= required=" # Nat.toText(job.required_verifiers));
     };
 
     Debug.print("_process_audit_job returning null for job " # queue_key);
@@ -1838,11 +1892,6 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     // Each job already prevents duplicate assignments via _bounty_verifier_map check
     var jobs_checked : Nat = 0;
     label assignment_loop for ((queue_key, job) in BTree.entries(pending_audits)) {
-      if (jobs_checked >= MAX_JOBS_TO_CHECK) {
-        Debug.print("Reached maximum jobs to check (" # Nat.toText(MAX_JOBS_TO_CHECK) # "), stopping job search");
-        break assignment_loop;
-      };
-
       // Always process the job to check completion status
       jobs_checked += 1;
 
@@ -2044,116 +2093,112 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   public shared (msg) func icrc127_create_bounty(
     req : ICRC127Service.CreateBountyRequest
   ) : async ICRC127Service.CreateBountyResult {
-    let result = await icrc127().icrc127_create_bounty(msg.caller, req);
+    // Just create the bounty - don't auto-attach to avoid race conditions
+    // Caller should use attach_bounties_to_job() to attach all bounties at once
+    await icrc127().icrc127_create_bounty(msg.caller, req);
+  };
 
-    // Auto-attach bounty to matching verification job (if exists)
-    Debug.print("icrc127_create_bounty called - attempting auto-attach");
-    switch (result) {
-      case (#Ok(bounty_result)) {
-        let bounty_id = bounty_result.bounty_id;
-        Debug.print("Bounty created successfully with ID: " # Nat.toText(bounty_id));
-
-        // Extract wasm_id and audit_type from bounty metadata
-        var wasm_id_opt : ?Text = null;
-        var audit_type_opt : ?Text = null;
-
-        for ((key, value) in req.bounty_metadata.vals()) {
-          if (key == "wasm_id") {
-            switch (value) {
-              case (#Text(t)) { wasm_id_opt := ?t };
-              case (_) {};
-            };
-          };
-          if (key == "audit_type") {
-            switch (value) {
-              case (#Text(t)) { audit_type_opt := ?t };
-              case (_) {};
-            };
-          };
-        };
-
-        // If both wasm_id and audit_type found, try to attach to most recent matching job
-        switch (wasm_id_opt, audit_type_opt) {
-          case (?wasm_id, ?audit_type) {
-            let prefix = wasm_id # "::" # audit_type # "::";
-            var matching_job : ?Types.VerificationJob = null;
-            var matching_key : ?Text = null;
-
-            // Find the most recent job matching this wasm_id and audit_type
-            for ((key, job) in BTree.entries(pending_audits)) {
-              if (Text.size(key) >= Text.size(prefix)) {
-                let chars = Text.toIter(key);
-                var matches = true;
-                label char_check for (c in Text.toIter(prefix)) {
-                  switch (chars.next()) {
-                    case (?key_char) {
-                      if (key_char != c) {
-                        matches := false;
-                        break char_check;
-                      };
-                    };
-                    case (null) {
-                      matches := false;
-                      break char_check;
-                    };
-                  };
-                };
-                if (matches) {
-                  switch (matching_job) {
-                    case (null) {
-                      matching_job := ?job;
-                      matching_key := ?key;
-                    };
-                    case (?existing) {
-                      if (job.created_at > existing.created_at) {
-                        matching_job := ?job;
-                        matching_key := ?key;
-                      };
-                    };
-                  };
-                };
-              };
-            };
-
-            switch (matching_job, matching_key) {
-              case (?existing_job, ?queue_key) {
-                // Append this bounty to the job's bounty_ids
-                let updated_bounty_ids = Buffer.fromArray<Types.BountyId>(existing_job.bounty_ids);
-                updated_bounty_ids.add(bounty_id);
-
-                let updated_job : Types.VerificationJob = {
-                  wasm_id = existing_job.wasm_id;
-                  repo = existing_job.repo;
-                  commit_hash = existing_job.commit_hash;
-                  build_config = existing_job.build_config;
-                  required_verifiers = existing_job.required_verifiers;
-                  bounty_ids = Buffer.toArray(updated_bounty_ids);
-                  audit_type = existing_job.audit_type;
-                  assigned_count = existing_job.assigned_count;
-                  completed_count = existing_job.completed_count;
-                  created_at = existing_job.created_at;
-                  creator = existing_job.creator;
-                };
-
-                ignore BTree.insert(pending_audits, Text.compare, queue_key, updated_job);
-                Debug.print("Auto-attached bounty " # Nat.toText(bounty_id) # " to job " # queue_key);
-              };
-              case (_, _) {
-                Debug.print("No matching job found for bounty " # Nat.toText(bounty_id) # " (wasm_id: " # wasm_id # ", audit_type: " # audit_type # ")");
-              };
-            };
-          };
-          case (_, _) {
-            Debug.print("Bounty " # Nat.toText(bounty_id) # " missing wasm_id or audit_type metadata - cannot auto-attach");
+  /**
+   * Attach multiple bounties to a job in a single atomic operation.
+   * This prevents race conditions when creating multiple bounties concurrently.
+   * Can be called by bounty_sponsor or owner after creating bounties.
+   */
+  public shared (msg) func attach_bounties_to_job(
+    wasm_id : Text,
+    audit_type : Text,
+    bounty_ids : [Nat],
+  ) : async Result.Result<(), Text> {
+    // Check authorization
+    var authorized = false;
+    if (is_owner(msg.caller)) {
+      authorized := true;
+    } else {
+      switch (bounty_sponsor_canister_id) {
+        case (?sponsor_id) {
+          if (Principal.equal(msg.caller, sponsor_id)) {
+            authorized := true;
           };
         };
+        case (null) {};
       };
-      case (#Error(_)) {
-        // Bounty creation failed, nothing to attach
+    };
+    if (not authorized) {
+      return #err("Only owner or bounty_sponsor can attach bounties");
+    };
+
+    // Find the most recent job matching this wasm_id and audit_type
+    let prefix = wasm_id # "::" # audit_type # "::";
+    var matching_job : ?Types.VerificationJob = null;
+    var matching_key : ?Text = null;
+
+    for ((key, job) in BTree.entries(pending_audits)) {
+      if (Text.size(key) >= Text.size(prefix)) {
+        let chars = Text.toIter(key);
+        var matches = true;
+        label char_check for (c in Text.toIter(prefix)) {
+          switch (chars.next()) {
+            case (?key_char) {
+              if (key_char != c) {
+                matches := false;
+                break char_check;
+              };
+            };
+            case (null) {
+              matches := false;
+              break char_check;
+            };
+          };
+        };
+        if (matches) {
+          switch (matching_job) {
+            case (null) {
+              matching_job := ?job;
+              matching_key := ?key;
+            };
+            case (?existing) {
+              if (job.created_at > existing.created_at) {
+                matching_job := ?job;
+                matching_key := ?key;
+              };
+            };
+          };
+        };
       };
     };
 
-    result;
+    let job = switch (matching_job) {
+      case (?j) { j };
+      case (null) {
+        return #err("Job not found for wasm_id: " # wasm_id # ", audit_type: " # audit_type);
+      };
+    };
+
+    let queue_key = switch (matching_key) {
+      case (?k) { k };
+      case (null) {
+        return #err("Job key not found");
+      };
+    };
+
+    // Append all bounties at once
+    let updated_job : Types.VerificationJob = {
+      wasm_id = job.wasm_id;
+      repo = job.repo;
+      commit_hash = job.commit_hash;
+      build_config = job.build_config;
+      required_verifiers = job.required_verifiers;
+      bounty_ids = Array.append(job.bounty_ids, bounty_ids);
+      audit_type = job.audit_type;
+      assigned_count = job.assigned_count;
+      completed_count = job.completed_count;
+      created_at = job.created_at;
+      creator = job.creator;
+    };
+
+    ignore BTree.insert(pending_audits, Text.compare, queue_key, updated_job);
+    Debug.print("Attached " # Nat.toText(bounty_ids.size()) # " bounties to job " # queue_key);
+
+    #ok();
   };
 
   // Submit a bounty claim (called by verifier after completing verification)
