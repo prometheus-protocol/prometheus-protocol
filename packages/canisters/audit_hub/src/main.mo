@@ -1843,8 +1843,79 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   };
 
   /**
+   * Query endpoint to check if verification jobs are available.
+   * This is a FREE query call that verifiers poll frequently.
+   * Returns true if there are jobs with available bounties.
+   * @param api_key - The verifier's API key (validated but no usage recorded on query)
+   */
+  public shared query func has_available_jobs(
+    api_key : Text
+  ) : async Bool {
+    // 1. Validate API key (but don't record usage on query)
+    let verifier = switch (Map.get(api_credentials, Map.thash, api_key)) {
+      case (null) { return false };
+      case (?cred) {
+        if (not cred.is_active) { return false };
+        cred.verifier_principal;
+      };
+    };
+
+    // 2. Check deny list
+    switch (Map.get(verifier_deny_list, phash, verifier)) {
+      case (?true) { return false };
+      case (_) {};
+    };
+
+    // 3. Quickly scan for any job that has available bounties
+    let current_time = Time.now();
+    
+    label job_loop for ((queue_key, job) in BTree.entries(pending_audits)) {
+      // Check if this verifier already participated
+      let already_assigned = switch (Map.get(job_verifier_assignments, thash, queue_key)) {
+        case (?assignments) {
+          switch (Map.get(assignments, phash, verifier)) {
+            case (?true) { true };
+            case (_) { false };
+          };
+        };
+        case (null) { false };
+      };
+
+      if (already_assigned) {
+        continue job_loop;
+      };
+
+      // Check if job has unclaimed bounties
+      var has_available = false;
+      label bounty_check for (bounty_id in job.bounty_ids.vals()) {
+        // Skip if already assigned to someone
+        if (Option.isSome(Map.get(assigned_jobs, Map.nhash, bounty_id))) {
+          continue bounty_check;
+        };
+
+        // Check if bounty exists and is unclaimed
+        switch (icrc127().icrc127_get_bounty(bounty_id)) {
+          case (?bounty) {
+            if (Option.isNull(bounty.claimed)) {
+              has_available := true;
+              break bounty_check;
+            };
+          };
+          case (null) {};
+        };
+      };
+
+      if (has_available) {
+        return true; // Found at least one available job
+      };
+    };
+
+    return false; // No jobs available
+  };
+
+  /**
    * Request a verification job assignment.
-   * Called by verifier bots using their API key.
+   * Called by verifier bots using their API key ONLY after has_available_jobs() returns true.
    * Returns a job assignment with bounty_id, or an error if no jobs available.
    *
    * PERFORMANCE OPTIMIZATION:

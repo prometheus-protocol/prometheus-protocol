@@ -401,6 +401,7 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'has_active_bounty_lock' : IDL.Func([IDL.Principal], [IDL.Bool], ['query']),
+    'has_available_jobs' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'icrc10_supported_standards' : IDL.Func(
         [],
         [IDL.Vec(IDL.Record({ 'url' : IDL.Text, 'name' : IDL.Text }))],

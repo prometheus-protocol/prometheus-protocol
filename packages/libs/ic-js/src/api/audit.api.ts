@@ -1573,6 +1573,19 @@ export interface VerificationJobAssignment {
   expires_at: bigint;
 }
 
+/**
+ * Check if verification jobs are available (FREE query call).
+ * Use this to poll frequently without burning cycles.
+ * Only call requestVerificationJob() when this returns true.
+ *
+ * @param apiKey The verifier's API key
+ * @returns true if jobs are available for this verifier
+ */
+export const hasAvailableJobs = async (apiKey: string): Promise<boolean> => {
+  const auditHubActor = getAuditHubActor();
+  return await auditHubActor.has_available_jobs(apiKey);
+};
+
 export const requestVerificationJob = async (
   apiKey: string,
 ): Promise<VerificationJobAssignment | null> => {

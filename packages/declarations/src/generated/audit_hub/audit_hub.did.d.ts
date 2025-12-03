@@ -91,6 +91,7 @@ export interface AuditHub {
   >,
   'get_verifier_profile' : ActorMethod<[Principal, TokenId], VerifierProfile>,
   'has_active_bounty_lock' : ActorMethod<[Principal], boolean>,
+  'has_available_jobs' : ActorMethod<[string], boolean>,
   'icrc10_supported_standards' : ActorMethod<
     [],
     Array<{ 'url' : string, 'name' : string }>

@@ -123,7 +123,8 @@ console.log('====================================\n');
 
 /**
  * New job-queue-based polling function.
- * Requests work directly from audit hub instead of scanning all pending verifications.
+ * Uses query call to check for jobs first, then claims with update call.
+ * This dramatically reduces cycles consumption.
  */
 async function pollAndVerifyWithJobQueue(): Promise<void> {
   // Set flag to prevent concurrent polling
@@ -140,11 +141,22 @@ async function pollAndVerifyWithJobQueue(): Promise<void> {
           );
         } else {
           console.log(
-            `🔍 [${new Date().toISOString()}] Requesting verification job from audit hub...`,
+            `🔍 [${new Date().toISOString()}] Checking for available jobs (query)...`,
           );
         }
 
-        // Request a job assignment from the audit hub
+        // First, check if jobs are available using FREE query call
+        const { hasAvailableJobs } = await import('@prometheus-protocol/ic-js');
+        const jobsAvailable = await hasAvailableJobs(VERIFIER_API_KEY!);
+
+        if (!jobsAvailable) {
+          console.log(`   ℹ️  No jobs available (query)`); 
+          return;
+        }
+
+        console.log(`   ✅ Jobs available! Claiming job (update)...`);
+
+        // Jobs are available - claim one with update call
         const job = await requestVerificationJob(VERIFIER_API_KEY!);
 
         if (!job) {

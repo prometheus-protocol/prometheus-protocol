@@ -456,6 +456,11 @@ type AuditHub =
    ///    * @param verifier - The principal of the verifier to check
    ///    * @returns true if the verifier has at least one active lock, false otherwise
    has_active_bounty_lock: (verifier: principal) -> (bool) query;
+   /// * Query endpoint to check if verification jobs are available.
+   ///    * This is a FREE query call that verifiers poll frequently.
+   ///    * Returns true if there are jobs with available bounties.
+   ///    * @param api_key - The verifier's API key (validated but no usage recorded on query)
+   has_available_jobs: (api_key: text) -> (bool) query;
    icrc10_supported_standards: () ->
     (vec record {
            name: text;
@@ -502,7 +507,7 @@ type AuditHub =
    release_job_assignment: (bounty_id: BountyId) -> (Result);
    release_stake: (bounty_id: BountyId) -> (Result);
    /// * Request a verification job assignment.
-   ///    * Called by verifier bots using their API key.
+   ///    * Called by verifier bots using their API key ONLY after has_available_jobs() returns true.
    ///    * Returns a job assignment with bounty_id, or an error if no jobs available.
    ///    *
    ///    * PERFORMANCE OPTIMIZATION:
