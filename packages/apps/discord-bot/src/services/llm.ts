@@ -12,6 +12,7 @@ import { ConfigManager } from '../config/index.js';
 import { MCPService } from './mcp/index.js';
 import { openaiLogger, llmLogger } from '../utils/logger.js';
 import { PromptBuilder, buildTimeContext } from '../prompts/prompt-builder.js';
+import { shouldInterrupt } from '../commands/chat/stop.js';
 
 export class OpenAIProvider implements LLMProvider {
   name = 'OpenAI';
@@ -484,6 +485,22 @@ export class LLMService {
     const maxIterations = 100; // Safety break
 
     for (let i = 0; i < maxIterations; i++) {
+      // Check for user interrupt
+      if (
+        userId &&
+        context?.channelId &&
+        shouldInterrupt(userId, context.channelId)
+      ) {
+        llmLogger.info('Tool loop interrupted by user', {
+          userId,
+          iteration: i,
+        });
+        return {
+          response: '🛑 Processing stopped by user request.',
+          messages: messages.slice(turnStartIndex),
+        };
+      }
+
       llmLogger.info(`Tool loop iteration ${i + 1}/${maxIterations}`, {
         userId,
       });
