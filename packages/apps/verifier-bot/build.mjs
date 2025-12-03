@@ -10,8 +10,8 @@ const __dirname = path.dirname(__filename);
 
 // --- 1. Read package.json to get dependencies ---
 const packageJson = JSON.parse(fs.readFileSync('./package.json', 'utf-8'));
-// Mark only @dfinity/pic as external (has dynamic requires that don't work in bundles)
-const externalDependencies = ['@dfinity/pic'];
+// Mark packages with dynamic requires as external (they can't be bundled)
+const externalDependencies = ['@dfinity/pic', 'dotenv'];
 
 // --- 2. Load Production Canister IDs ---
 // This part runs in Node.js AT BUILD TIME.
