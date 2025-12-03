@@ -112,10 +112,13 @@ export const getVerifierLeaderboard = async (): Promise<
     Principal,
     AuditHub.VerifierProfile,
   ][];
-  
+
   // Transform the result into ranked entries
   return result.map(
-    ([principal, profile]: [Principal, AuditHub.VerifierProfile], index: number) => ({
+    (
+      [principal, profile]: [Principal, AuditHub.VerifierProfile],
+      index: number,
+    ) => ({
       rank: index + 1,
       verifier: principal,
       total_verifications: profile.total_verifications,

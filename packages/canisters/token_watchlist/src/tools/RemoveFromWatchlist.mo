@@ -63,20 +63,17 @@ module {
     };
 
     // Extract canister_id from args
-    let canisterIdText = switch (args) {
-      case (#obj(fields)) {
-        switch (Array.find<(Text, McpTypes.JsonValue)>(fields, func(f) { f.0 == "canister_id" })) {
-          case (?(_, #str(id))) { id };
-          case (_) { return _returnError("Missing or invalid canister_id parameter.", cb) };
-        };
+    let canisterIdText = switch (Result.toOption(Json.getAsText(args, "canister_id"))) {
+      case (?id) { id };
+      case (null) {
+        return _returnError("Missing 'canister_id' parameter.", cb);
       };
-      case (_) { return _returnError("Invalid arguments format.", cb) };
     };
 
     let canisterId = try {
-      Principal.fromText(canisterIdText)
+      Principal.fromText(canisterIdText);
     } catch (_) {
-      return _returnError("Invalid canister_id format.", cb)
+      return _returnError("Invalid canister_id format.", cb);
     };
 
     let current_list = switch (Map.get(deps.user_watchlists, Map.phash, caller)) {

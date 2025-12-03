@@ -210,7 +210,9 @@ const INITIAL_VISIBLE_COUNT = 10;
 const LOAD_MORE_INCREMENT = 10;
 
 export default function LeaderboardPage() {
-  const [activeTab, setActiveTab] = useState<'users' | 'servers' | 'verifiers'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'servers' | 'verifiers'>(
+    'users',
+  );
   const [visibleUserCount, setVisibleUserCount] = useState(
     INITIAL_VISIBLE_COUNT,
   );
@@ -293,7 +295,9 @@ export default function LeaderboardPage() {
 
       <Tabs
         value={activeTab}
-        onValueChange={(value) => setActiveTab(value as 'users' | 'servers' | 'verifiers')}
+        onValueChange={(value) =>
+          setActiveTab(value as 'users' | 'servers' | 'verifiers')
+        }
         className="w-full">
         <TabsList className="grid w-full grid-cols-3 md:w-[600px] mb-16 md:mb-8">
           <TabsTrigger value="users">Top Agents</TabsTrigger>
@@ -371,7 +375,9 @@ export default function LeaderboardPage() {
                   <div className="col-span-4 text-right">
                     <div className="flex items-center gap-1.5 text-sm text-muted-foreground font-mono justify-end">
                       <BarChart3 className="h-3 w-3" />
-                      <span>{Number(entry.total_verifications).toLocaleString()}</span>
+                      <span>
+                        {Number(entry.total_verifications).toLocaleString()}
+                      </span>
                     </div>
                   </div>
                 </div>

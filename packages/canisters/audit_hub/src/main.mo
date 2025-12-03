@@ -58,8 +58,8 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   // The duration a lock is valid before it expires (10 mins for automated builds).
   let LOCK_DURATION_NS : Int = 10 * 60 * 1_000_000_000; // 10 minutes in nanoseconds
 
-  // Maximum number of pending jobs to check per verifier request
-  // This prevents excessive inter-canister calls when many jobs are pending
+  // DEPRECATED: No longer used, kept for stable variable compatibility
+  // TODO: Remove in next major migration
   let MAX_JOBS_TO_CHECK : Nat = 20;
 
   // ==================================================================================
@@ -1360,22 +1360,22 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
    */
   public shared query func get_verifier_leaderboard() : async [(Principal, Types.VerifierProfile)] {
     let verifiers = Buffer.Buffer<(Principal, Types.VerifierProfile)>(Map.size(verifier_stats));
-    
+
     // Collect all verifier profiles
     for ((principal, profile) in Map.entries(verifier_stats)) {
       verifiers.add((principal, profile));
     };
-    
+
     // Sort by total_verifications descending
     let sorted = Array.sort<(Principal, Types.VerifierProfile)>(
       Buffer.toArray(verifiers),
       func(a, b) {
-        if (a.1.total_verifications > b.1.total_verifications) { #less }
-        else if (a.1.total_verifications < b.1.total_verifications) { #greater }
-        else { #equal }
-      }
+        if (a.1.total_verifications > b.1.total_verifications) { #less } else if (a.1.total_verifications < b.1.total_verifications) {
+          #greater;
+        } else { #equal };
+      },
     );
-    
+
     return sorted;
   };
 
@@ -1892,11 +1892,6 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     // Each job already prevents duplicate assignments via _bounty_verifier_map check
     var jobs_checked : Nat = 0;
     label assignment_loop for ((queue_key, job) in BTree.entries(pending_audits)) {
-      if (jobs_checked >= MAX_JOBS_TO_CHECK) {
-        Debug.print("Reached maximum jobs to check (" # Nat.toText(MAX_JOBS_TO_CHECK) # "), stopping job search");
-        break assignment_loop;
-      };
-
       // Always process the job to check completion status
       jobs_checked += 1;
 
