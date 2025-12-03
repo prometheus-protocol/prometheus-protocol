@@ -89,15 +89,6 @@ importers:
       '@icp-sdk/core':
         specifier: ^4.0.1
         version: 4.2.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/identity-secp256k1@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/identity@3.4.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/principal@3.4.1)
-      '@prometheus-protocol/declarations':
-        specifier: workspace:*
-        version: link:../../declarations
-      '@prometheus-protocol/ic-js':
-        specifier: workspace:*
-        version: link:../../libs/ic-js
-      '@prometheus-protocol/reproducible-build':
-        specifier: workspace:*
-        version: link:../../libs/reproducible-build
       commander:
         specifier: ^12.1.0
         version: 12.1.0
@@ -111,6 +102,15 @@ importers:
         specifier: ^2.4.2
         version: 2.4.2
     devDependencies:
+      '@prometheus-protocol/declarations':
+        specifier: workspace:*
+        version: link:../../declarations
+      '@prometheus-protocol/ic-js':
+        specifier: workspace:*
+        version: link:../../libs/ic-js
+      '@prometheus-protocol/reproducible-build':
+        specifier: workspace:*
+        version: link:../../libs/reproducible-build
       '@types/js-yaml':
         specifier: ^4.0.9
         version: 4.0.9
@@ -568,15 +568,6 @@ importers:
       '@icp-sdk/core':
         specifier: ^4.0.1
         version: 4.2.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/identity-secp256k1@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/identity@3.4.1(@dfinity/agent@3.4.1(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/hashes@1.8.0))(@dfinity/candid@3.4.1(@dfinity/principal@3.4.1))(@dfinity/principal@3.4.1)(@noble/curves@1.9.7)(@noble/hashes@1.8.0))(@dfinity/principal@3.4.1)
-      '@prometheus-protocol/declarations':
-        specifier: workspace:*
-        version: link:../../declarations
-      '@prometheus-protocol/ic-js':
-        specifier: workspace:*
-        version: link:../../libs/ic-js
-      '@prometheus-protocol/reproducible-build':
-        specifier: workspace:*
-        version: link:../../libs/reproducible-build
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
@@ -587,6 +578,15 @@ importers:
         specifier: ^1.0.1
         version: 1.0.1
     devDependencies:
+      '@prometheus-protocol/declarations':
+        specifier: workspace:*
+        version: link:../../declarations
+      '@prometheus-protocol/ic-js':
+        specifier: workspace:*
+        version: link:../../libs/ic-js
+      '@prometheus-protocol/reproducible-build':
+        specifier: workspace:*
+        version: link:../../libs/reproducible-build
       '@types/node':
         specifier: ^20.10.0
         version: 20.19.24

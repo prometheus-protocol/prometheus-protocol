@@ -2,6 +2,8 @@
 import path from 'path';
 import fs from 'fs';
 
+// Bump
+
 import { configure as configureIcJs } from '@prometheus-protocol/ic-js';
 
 import { Command } from 'commander';
