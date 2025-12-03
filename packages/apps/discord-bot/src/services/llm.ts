@@ -152,7 +152,7 @@ export class AnthropicProvider implements LLMProvider {
         system: systemPrompt,
         messages: messages,
         tools: tools,
-        tool_choice: { type: 'auto', disable_parallel_tool_use: true },
+        tool_choice: { type: 'auto' },
       });
 
       let iterationCount = 0;
@@ -304,7 +304,7 @@ export class AnthropicProvider implements LLMProvider {
         }));
         // Use 'any' to force Claude to use one of the provided tools
         // This prevents Claude from narrating instead of calling tools
-        params.tool_choice = { type: 'any', disable_parallel_tool_use: true };
+        params.tool_choice = { type: 'any' };
       }
 
       const response = await this.client.messages.create(params);
@@ -431,98 +431,6 @@ export class LLMService {
       statusCallback,
       allFunctions,
     );
-  }
-
-  // New method using Anthropic's tool runner
-  private async generateResponseWithToolRunner(
-    prompt: string,
-    context?: ConversationContext,
-    userId?: string,
-    statusCallback?: (status: string) => Promise<void>,
-    allFunctions?: AIFunction[],
-  ): Promise<string> {
-    if (!(this.provider instanceof AnthropicProvider)) {
-      throw new Error('Tool runner only works with Anthropic provider');
-    }
-
-    // Build messages in Anthropic format
-    const anthropicMessages: Anthropic.MessageParam[] = [];
-
-    if (context?.history) {
-      // Convert history to Anthropic format, handling all message types
-      for (const msg of context.history) {
-        if (msg.role === 'user') {
-          anthropicMessages.push({
-            role: 'user',
-            content: msg.content || '',
-          });
-        } else if (msg.role === 'assistant') {
-          anthropicMessages.push({
-            role: 'assistant',
-            content: msg.content || '',
-          });
-        }
-        // Note: Anthropic's tool runner handles tool messages differently
-        // We only include user and assistant messages in the initial history
-      }
-    }
-
-    anthropicMessages.push({
-      role: 'user',
-      content: prompt,
-    });
-
-    const systemPrompt = await this.getSystemPrompt(userId, allFunctions);
-
-    // Create a function executor that routes to the appropriate handler
-    const functionExecutor = async (name: string, args: any) => {
-      return await this.handleFunctionCall(
-        { name, arguments: args, id: 'tool-runner' },
-        userId!,
-        context,
-      );
-    };
-
-    // Optional callback for tool invocations
-    const onToolCall = async (toolName: string) => {
-      if (statusCallback && allFunctions) {
-        // Get display name for the tool
-        const func = allFunctions.find((f) => f.name === toolName);
-        let displayName = toolName;
-
-        if (func?.title) {
-          displayName = func.title;
-        } else if (this.mcpService && userId) {
-          displayName = await this.mcpService.getToolDisplayName(
-            userId,
-            toolName,
-            context?.channelId || 'default',
-          );
-        }
-
-        // Don't show status for respond_to_user
-        if (toolName !== 'respond_to_user') {
-          await statusCallback(`🔧 ${displayName}`);
-        }
-      }
-    };
-
-    try {
-      const response = await this.provider.generateWithToolRunner(
-        anthropicMessages,
-        systemPrompt,
-        allFunctions || [],
-        functionExecutor,
-        onToolCall,
-      );
-
-      return this.truncateResponse(response);
-    } catch (error) {
-      llmLogger.error('Tool runner failed', error as Error, { userId });
-      return this.truncateResponse(
-        'Sorry, I encountered an error while processing your request.',
-      );
-    }
   }
 
   // Existing manual loop method (for OpenAI)
