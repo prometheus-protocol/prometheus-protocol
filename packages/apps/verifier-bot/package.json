@@ -27,14 +27,14 @@
     "@dfinity/candid": "^3.4.1",
     "@dfinity/pic": "^0.16.1",
     "@icp-sdk/core": "^4.0.1",
-    "@prometheus-protocol/declarations": "workspace:*",
-    "@prometheus-protocol/ic-js": "workspace:*",
-    "@prometheus-protocol/reproducible-build": "workspace:*",
     "dotenv": "^17.2.3",
     "js-yaml": "^4.1.0",
     "pem-file": "^1.0.1"
   },
   "devDependencies": {
+    "@prometheus-protocol/declarations": "workspace:*",
+    "@prometheus-protocol/ic-js": "workspace:*",
+    "@prometheus-protocol/reproducible-build": "workspace:*",
     "@types/node": "^20.10.0",
     "esbuild": "^0.25.9",
     "tsx": "^4.10.5",
