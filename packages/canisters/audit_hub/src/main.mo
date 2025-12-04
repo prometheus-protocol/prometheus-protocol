@@ -1119,7 +1119,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
    * Counts how many bounties have claims filed (completed_count) and updates the job.
    */
   public shared (msg) func admin_recalculate_job_counts(
-    queue_key : Text,
+    queue_key : Text
   ) : async Result.Result<Text, Text> {
     if (not is_owner(msg.caller)) {
       return #err("Unauthorized: Only owner can call this method");
@@ -1162,7 +1162,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
           creator = job.creator;
         };
         ignore BTree.insert(pending_audits, Text.compare, queue_key, updated_job);
-        
+
         let msg = "Updated job " # queue_key # ": assigned_count " # Nat.toText(job.assigned_count) # " -> " # Nat.toText(actual_assigned_count) # ", completed_count " # Nat.toText(job.completed_count) # " -> " # Nat.toText(actual_completed_count);
         Debug.print(msg);
         #ok(msg);
@@ -1654,6 +1654,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
         ("repo", #Text(job.repo)),
         ("commit_hash", #Text(job.commit_hash)),
         ("audit_type", #Text(audit_type)),
+        ("queue_key", #Text(queue_key)), // Include queue_key for direct job lookup
       ];
 
       let create_req : ICRC127Service.CreateBountyRequest = {
@@ -1968,7 +1969,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
 
     // 3. Quickly scan for any job that has available bounties
     let current_time = Time.now();
-    
+
     label job_loop for ((queue_key, job) in BTree.entries(pending_audits)) {
       // Check if job is already complete (matches _process_audit_job logic)
       var completed_count : Nat = 0;
@@ -2115,11 +2116,11 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
       job_verifier_assignments,
       bounty_id,
     );
-    
+
     // Clear from bounty-verifier map to allow the bounty to be reassigned
     ignore Map.remove(_bounty_verifier_map, Map.nhash, bounty_id);
     Debug.print("Released job assignment and cleared bounty-verifier mapping for bounty " # Nat.toText(bounty_id));
-    
+
     return #ok(());
   };
 
@@ -2405,7 +2406,64 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
   public shared (msg) func icrc127_submit_bounty(
     req : ICRC127Service.BountySubmissionRequest
   ) : async ICRC127Service.BountySubmissionResult {
-    await icrc127().icrc127_submit_bounty(msg.caller, req);
+    let result = await icrc127().icrc127_submit_bounty(msg.caller, req);
+
+    // On successful claim, decrement assigned_count for the job
+    switch (result) {
+      case (#Ok(_)) {
+        // Get the bounty to find its queue_key
+        switch (icrc127().icrc127_get_bounty(req.bounty_id)) {
+          case (?bounty) {
+            // Extract queue_key from challenge_parameters
+            switch (bounty.challenge_parameters) {
+              case (#Map(params_map)) {
+                let queue_key_opt = _getICRC16TextOptional(params_map, "queue_key");
+
+                switch (queue_key_opt) {
+                  case (?queue_key) {
+                    // Direct lookup using queue_key (O(log n) instead of O(n))
+                    switch (BTree.get(pending_audits, Text.compare, queue_key)) {
+                      case (?job) {
+                        let updated_job : Types.VerificationJob = {
+                          wasm_id = job.wasm_id;
+                          repo = job.repo;
+                          commit_hash = job.commit_hash;
+                          build_config = job.build_config;
+                          created_at = job.created_at;
+                          required_verifiers = job.required_verifiers;
+                          assigned_count = if (job.assigned_count > 0) {
+                            job.assigned_count - 1;
+                          } else { 0 };
+                          completed_count = job.completed_count + 1;
+                          bounty_ids = job.bounty_ids;
+                          audit_type = job.audit_type;
+                          creator = job.creator;
+                        };
+                        ignore BTree.insert(pending_audits, Text.compare, queue_key, updated_job);
+                        Debug.print("Updated job " # queue_key # " after bounty claim: assigned_count " # Nat.toText(job.assigned_count) # " -> " # Nat.toText(updated_job.assigned_count) # ", completed_count " # Nat.toText(job.completed_count) # " -> " # Nat.toText(updated_job.completed_count));
+                      };
+                      case (null) {
+                        Debug.print("Warning: Job not found for queue_key " # queue_key # " when processing bounty claim " # Nat.toText(req.bounty_id));
+                      };
+                    };
+                  };
+                  case (null) {
+                    Debug.print("Warning: No queue_key in challenge_parameters for bounty " # Nat.toText(req.bounty_id));
+                  };
+                };
+              };
+              case (_) {};
+            };
+          };
+          case (null) {};
+        };
+      };
+      case (#Error(_)) {
+        // Claim failed, don't decrement
+      };
+    };
+
+    result;
   };
 
   // Query bounty information

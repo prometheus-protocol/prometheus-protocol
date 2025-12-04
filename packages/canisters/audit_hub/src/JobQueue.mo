@@ -316,44 +316,10 @@ module {
   } {
     let result = Buffer.Buffer<(Text, VerificationJob)>(0);
     for ((key, job) in BTree.entries(pending_audits)) {
-      // Calculate actual assigned count by counting assignments for this wasm_id and audit_type
-      var actual_assigned_count : Nat = 0;
-      for ((bounty_id, assignment) in Map.entries(assigned_jobs)) {
-        if (assignment.wasm_id == job.wasm_id and assignment.audit_type == job.audit_type) {
-          actual_assigned_count += 1;
-        };
-      };
-
-      // Calculate completed count by checking how many bounties have been claimed
-      var actual_completed_count : Nat = 0;
-      for (bounty_id in job.bounty_ids.vals()) {
-        switch (icrc127_get_bounty(bounty_id)) {
-          case (?bounty) {
-            // Check if bounty has been claimed (has claims and they're valid)
-            if (bounty.claims.size() > 0) {
-              actual_completed_count += 1;
-            };
-          };
-          case (null) {};
-        };
-      };
-
-      // Create updated job with accurate counts
-      let updated_job : VerificationJob = {
-        wasm_id = job.wasm_id;
-        repo = job.repo;
-        commit_hash = job.commit_hash;
-        build_config = job.build_config;
-        created_at = job.created_at;
-        required_verifiers = job.required_verifiers;
-        assigned_count = actual_assigned_count;
-        completed_count = actual_completed_count;
-        bounty_ids = job.bounty_ids;
-        audit_type = job.audit_type;
-        creator = job.creator;
-      };
-
-      result.add((key, updated_job));
+      // Use stored assigned_count (updated by icrc127_submit_bounty and admin methods)
+      // Use stored completed_count (updated by admin_recalculate_job_counts if needed)
+      // No need to recalculate on every query
+      result.add((key, job));
     };
 
     // Sort by timestamp descending (newest first)

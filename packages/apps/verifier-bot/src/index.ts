@@ -150,7 +150,7 @@ async function pollAndVerifyWithJobQueue(): Promise<void> {
         const jobsAvailable = await hasAvailableJobs(VERIFIER_API_KEY!);
 
         if (!jobsAvailable) {
-          console.log(`   ℹ️  No jobs available (query)`); 
+          console.log(`   ℹ️  No jobs available (query)`);
           return;
         }
 
