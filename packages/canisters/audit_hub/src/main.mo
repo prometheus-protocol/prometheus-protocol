@@ -971,12 +971,53 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
 
   // Public function anyone can call to clean up an expired lock and slash the stake.
   public shared func cleanup_expired_lock(bounty_id : Types.BountyId) : async Result.Result<(), Text> {
-    BountyLock.cleanup_expired_lock(
+    let result = BountyLock.cleanup_expired_lock(
       bounty_id,
       bounty_locks,
       staked_balances,
       verifier_stats,
     );
+
+    // If lock was successfully cleaned up, also clear assignment tracking
+    switch (result) {
+      case (#ok()) {
+        // Remove from assigned_jobs and decrement job assigned_count
+        switch (Map.remove(assigned_jobs, Map.nhash, bounty_id)) {
+          case (?assignment) {
+            // Find and update the job in pending_audits
+            for ((queue_key, job) in BTree.entries(pending_audits)) {
+              if (job.wasm_id == assignment.wasm_id and job.audit_type == assignment.audit_type) {
+                let updated_job : Types.VerificationJob = {
+                  wasm_id = job.wasm_id;
+                  repo = job.repo;
+                  commit_hash = job.commit_hash;
+                  build_config = job.build_config;
+                  created_at = job.created_at;
+                  required_verifiers = job.required_verifiers;
+                  assigned_count = if (job.assigned_count > 0) {
+                    job.assigned_count - 1;
+                  } else { 0 };
+                  completed_count = job.completed_count;
+                  bounty_ids = job.bounty_ids;
+                  audit_type = job.audit_type;
+                  creator = job.creator;
+                };
+                ignore BTree.insert(pending_audits, Text.compare, queue_key, updated_job);
+                Debug.print("Decremented assigned_count for expired lock on job " # queue_key);
+              };
+            };
+          };
+          case (null) {};
+        };
+
+        // Clear from bounty-verifier map to allow reassignment
+        ignore Map.remove(_bounty_verifier_map, Map.nhash, bounty_id);
+        Debug.print("Cleaned up expired lock for bounty " # Nat.toText(bounty_id) # " - bounty now available for reassignment");
+      };
+      case (#err(e)) { /* Return error below */ };
+    };
+
+    result;
   };
 
   // Admin function to force-release a lock (even if not expired) in case of bugs.
@@ -1066,6 +1107,65 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
         ignore BTree.insert(pending_audits, Text.compare, queue_key, updated_job);
         Debug.print("Updated job " # queue_key # " assigned_count to " # Nat.toText(new_assigned_count));
         #ok();
+      };
+      case (null) {
+        #err("Job not found: " # queue_key);
+      };
+    };
+  };
+
+  /**
+   * Admin method to recalculate and update job counts from actual bounty state.
+   * Counts how many bounties have claims filed (completed_count) and updates the job.
+   */
+  public shared (msg) func admin_recalculate_job_counts(
+    queue_key : Text,
+  ) : async Result.Result<Text, Text> {
+    if (not is_owner(msg.caller)) {
+      return #err("Unauthorized: Only owner can call this method");
+    };
+
+    switch (BTree.get(pending_audits, Text.compare, queue_key)) {
+      case (?job) {
+        // Calculate actual completed count from bounties
+        var actual_completed_count : Nat = 0;
+        for (bounty_id in job.bounty_ids.vals()) {
+          switch (icrc127().icrc127_get_bounty(bounty_id)) {
+            case (?bounty) {
+              if (bounty.claims.size() > 0) {
+                actual_completed_count += 1;
+              };
+            };
+            case (null) {};
+          };
+        };
+
+        // Calculate actual assigned count from assigned_jobs
+        var actual_assigned_count : Nat = 0;
+        for ((_, assignment) in Map.entries(assigned_jobs)) {
+          if (assignment.wasm_id == job.wasm_id and assignment.audit_type == job.audit_type) {
+            actual_assigned_count += 1;
+          };
+        };
+
+        let updated_job : Types.VerificationJob = {
+          wasm_id = job.wasm_id;
+          repo = job.repo;
+          commit_hash = job.commit_hash;
+          build_config = job.build_config;
+          created_at = job.created_at;
+          required_verifiers = job.required_verifiers;
+          assigned_count = actual_assigned_count;
+          completed_count = actual_completed_count;
+          bounty_ids = job.bounty_ids;
+          audit_type = job.audit_type;
+          creator = job.creator;
+        };
+        ignore BTree.insert(pending_audits, Text.compare, queue_key, updated_job);
+        
+        let msg = "Updated job " # queue_key # ": assigned_count " # Nat.toText(job.assigned_count) # " -> " # Nat.toText(actual_assigned_count) # ", completed_count " # Nat.toText(job.completed_count) # " -> " # Nat.toText(actual_completed_count);
+        Debug.print(msg);
+        #ok(msg);
       };
       case (null) {
         #err("Job not found: " # queue_key);
@@ -1870,6 +1970,23 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
     let current_time = Time.now();
     
     label job_loop for ((queue_key, job) in BTree.entries(pending_audits)) {
+      // Check if job is already complete (matches _process_audit_job logic)
+      var completed_count : Nat = 0;
+      for (bounty_id in job.bounty_ids.vals()) {
+        switch (icrc127().icrc127_get_bounty(bounty_id)) {
+          case (?bounty) {
+            if (bounty.claims.size() > 0) {
+              completed_count += 1;
+            };
+          };
+          case (null) {};
+        };
+      };
+
+      if (completed_count >= job.required_verifiers) {
+        continue job_loop; // Job is complete, skip it
+      };
+
       // Check if this verifier already participated
       let already_assigned = switch (Map.get(job_verifier_assignments, thash, queue_key)) {
         case (?assignments) {
@@ -1885,27 +2002,34 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
         continue job_loop;
       };
 
-      // Check if job has unclaimed bounties
-      var has_available = false;
-      label bounty_check for (bounty_id in job.bounty_ids.vals()) {
-        // Skip if already assigned to someone
-        if (Option.isSome(Map.get(assigned_jobs, Map.nhash, bounty_id))) {
-          continue bounty_check;
-        };
-
-        // Check if bounty exists and is unclaimed
-        switch (icrc127().icrc127_get_bounty(bounty_id)) {
-          case (?bounty) {
-            if (Option.isNull(bounty.claimed)) {
-              has_available := true;
-              break bounty_check;
+      // Check if verifier already has a bounty via _bounty_verifier_map
+      var already_participating = false;
+      label participation_check for (bounty_id in job.bounty_ids.vals()) {
+        switch (Map.get(_bounty_verifier_map, Map.nhash, bounty_id)) {
+          case (?assigned_verifier) {
+            if (Principal.equal(assigned_verifier, verifier)) {
+              already_participating := true;
+              break participation_check;
             };
           };
           case (null) {};
         };
       };
 
-      if (has_available) {
+      if (already_participating) {
+        continue job_loop;
+      };
+
+      // Calculate actual assigned count (matches _process_audit_job logic)
+      var actual_assigned_count : Nat = 0;
+      for ((_, assignment) in Map.entries(assigned_jobs)) {
+        if (assignment.wasm_id == job.wasm_id and assignment.audit_type == job.audit_type) {
+          actual_assigned_count += 1;
+        };
+      };
+
+      // If there's still capacity for assignments, this job has availability
+      if (actual_assigned_count < job.required_verifiers) {
         return true; // Found at least one available job
       };
     };
@@ -1991,6 +2115,11 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
       job_verifier_assignments,
       bounty_id,
     );
+    
+    // Clear from bounty-verifier map to allow the bounty to be reassigned
+    ignore Map.remove(_bounty_verifier_map, Map.nhash, bounty_id);
+    Debug.print("Released job assignment and cleared bounty-verifier mapping for bounty " # Nat.toText(bounty_id));
+    
     return #ok(());
   };
 
