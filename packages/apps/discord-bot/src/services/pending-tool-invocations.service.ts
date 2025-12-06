@@ -43,7 +43,7 @@ export class PendingToolInvocationsService {
 
         // Remove from map first, then reject
         this.pendingInvocations.delete(invocationId);
-        
+
         // Reject with timeout error
         try {
           pending.reject(

@@ -102,7 +102,7 @@ module {
       // Allow reassignment if the bounty is in assigned_jobs but has no active lock (abandoned assignment)
       let has_active_lock = Option.isSome(Map.get(bounty_locks, Map.nhash, bounty_id));
       let is_assigned_with_lock = Option.isSome(Map.get(assigned_jobs, Map.nhash, bounty_id)) and has_active_lock;
-      
+
       if (not is_assigned_with_lock) {
         // IMMEDIATELY claim this bounty to prevent race conditions
         let temp_assignment : Types.AssignedJob = {
@@ -197,7 +197,9 @@ module {
       if (Principal.equal(assignment.verifier, verifier) and assignment.expires_at > current_time) {
         // Check if there's an active lock for this bounty
         let has_active_lock = switch (Map.get(bounty_locks, Map.nhash, bounty_id)) {
-          case (?lock) { Principal.equal(lock.claimant, verifier) and lock.expires_at > current_time };
+          case (?lock) {
+            Principal.equal(lock.claimant, verifier) and lock.expires_at > current_time
+          };
           case (null) { false };
         };
 

@@ -21,6 +21,7 @@ export interface CommandResponse {
   files?: any[];
   embeds?: any[];
   components?: any[]; // Support action rows (buttons) for richer UX
+  additionalMessages?: string[]; // For responses that need to be split into multiple messages
 }
 
 export abstract class BaseCommand {

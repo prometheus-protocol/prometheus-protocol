@@ -1814,7 +1814,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
           case (?bounty) { bounty.claims.size() > 0 };
           case (null) { false };
         };
-        
+
         if (has_active_lock or has_claim) {
           actual_assigned_count += 1;
         };
@@ -2039,7 +2039,7 @@ shared ({ caller = deployer }) persistent actor class AuditHub() = this {
             case (?bounty) { bounty.claims.size() > 0 };
             case (null) { false };
           };
-          
+
           if (has_active_lock or has_claim) {
             actual_assigned_count += 1;
           };

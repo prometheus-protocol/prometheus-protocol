@@ -137,7 +137,9 @@ async function main() {
   );
   console.log(chalk.bold.magenta('💰 Bounty Sponsor Balance:'));
   console.log(
-    chalk.magenta(`  ${formatUsdc(bountySponsorBalance)} USDC available for bounties`),
+    chalk.magenta(
+      `  ${formatUsdc(bountySponsorBalance)} USDC available for bounties`,
+    ),
   );
   console.log('');
 

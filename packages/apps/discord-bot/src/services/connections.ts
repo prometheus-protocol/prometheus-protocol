@@ -1560,7 +1560,7 @@ export class ConnectionPoolService {
             );
           } catch (syncError: any) {
             // Check if the error indicates the connection is dead
-            const isConnectionError = 
+            const isConnectionError =
               syncError.message?.includes('terminated') ||
               syncError.message?.includes('disconnected') ||
               syncError.message?.includes('Connection closed') ||
@@ -1572,10 +1572,10 @@ export class ConnectionPoolService {
               logger.warn(
                 `[ConnPool-${poolKey}] Connection is dead during tool resync. Marking as inactive and triggering reconnection instead of refetching tools.`,
               );
-              
+
               // Remove from active connections
               this.activeConnections.delete(poolKey);
-              
+
               // Mark as disconnected in database
               try {
                 await this.databaseService.updateConnectionStatus(

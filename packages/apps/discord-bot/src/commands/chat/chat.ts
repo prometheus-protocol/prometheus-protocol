@@ -178,14 +178,31 @@ export class ChatCommand extends BaseCommand {
               components: response.components || undefined,
             });
 
+            // Send additional messages if the response was split
+            if (
+              response.additionalMessages &&
+              response.additionalMessages.length > 0
+            ) {
+              for (const additionalMessage of response.additionalMessages) {
+                await thread.send({
+                  content: additionalMessage,
+                });
+              }
+            }
+
             // Store the conversation turn in thread history
+            // Store the full response (all parts combined) for context
+            const fullResponse = response.additionalMessages
+              ? [response.content, ...response.additionalMessages].join('\n\n')
+              : response.content || '';
+
             await this.database.updateThreadHistory(thread.id, {
               role: 'user',
               content: prompt,
             });
             await this.database.updateThreadHistory(thread.id, {
               role: 'assistant',
-              content: response.content || '',
+              content: fullResponse,
             });
           }
         } else {
@@ -211,6 +228,18 @@ export class ChatCommand extends BaseCommand {
               files: response.files || undefined,
               components: response.components || undefined,
             });
+
+            // Send additional messages if the response was split
+            if (
+              response.additionalMessages &&
+              response.additionalMessages.length > 0
+            ) {
+              for (const additionalMessage of response.additionalMessages) {
+                await interaction.followUp({
+                  content: additionalMessage,
+                });
+              }
+            }
           }
         }
       } else {
@@ -238,6 +267,18 @@ export class ChatCommand extends BaseCommand {
             files: response.files || undefined,
             components: response.components || undefined,
           });
+
+          // Send additional messages if the response was split
+          if (
+            response.additionalMessages &&
+            response.additionalMessages.length > 0
+          ) {
+            for (const additionalMessage of response.additionalMessages) {
+              await interaction.followUp({
+                content: additionalMessage,
+              });
+            }
+          }
         }
       }
     } catch (error) {
@@ -363,9 +404,8 @@ export class ChatCommand extends BaseCommand {
         preview: finalResponse.substring(0, 100),
       });
 
-      // Safety check: ensure response fits Discord's limits
-      // (The LLM service should already handle this, but this is a backup)
-      const truncatedResponse = this.ensureDiscordLimit(finalResponse);
+      // Split response into multiple messages if needed
+      const messageParts = this.splitIntoMessages(finalResponse);
 
       // Save conversation to database (unless we're in a thread that manages its own history)
       if (!skipConversationSave) {
@@ -381,11 +421,17 @@ export class ChatCommand extends BaseCommand {
           chatLogger.warn(
             'No turn messages provided, falling back to legacy save',
           );
-          await this.saveConversationTurn(context, prompt, truncatedResponse);
+          await this.saveConversationTurn(context, prompt, finalResponse);
         }
       }
 
-      return { content: truncatedResponse };
+      // Return the first part as the primary response
+      // Additional parts will be sent as follow-ups
+      return {
+        content: messageParts[0],
+        additionalMessages:
+          messageParts.length > 1 ? messageParts.slice(1) : undefined,
+      };
     } catch (error) {
       chatLogger.error(
         'Error in chat command',
@@ -786,51 +832,96 @@ export class ChatCommand extends BaseCommand {
     return { content: summaryMessage };
   }
 
+  /**
+   * Split a long response into multiple Discord-compatible messages
+   * Tries to split at natural boundaries (paragraphs, sentences, words)
+   */
+  private splitIntoMessages(
+    response: string,
+    maxLength: number = 1950,
+  ): string[] {
+    if (response.length <= maxLength) {
+      return [response];
+    }
+
+    chatLogger.info(
+      'Response exceeds Discord limit, splitting into multiple messages',
+      {
+        originalLength: response.length,
+        maxLength,
+        estimatedParts: Math.ceil(response.length / maxLength),
+      },
+    );
+
+    const messages: string[] = [];
+    let remaining = response;
+
+    while (remaining.length > 0) {
+      if (remaining.length <= maxLength) {
+        messages.push(remaining);
+        break;
+      }
+
+      // Find a good split point within the max length
+      const chunk = remaining.substring(0, maxLength);
+
+      // Try to find natural break points
+      const lastParagraph = chunk.lastIndexOf('\n\n');
+      const lastNewline = chunk.lastIndexOf('\n');
+      const lastSentence = Math.max(
+        chunk.lastIndexOf('. '),
+        chunk.lastIndexOf('! '),
+        chunk.lastIndexOf('? '),
+      );
+      const lastComma = chunk.lastIndexOf(', ');
+      const lastSpace = chunk.lastIndexOf(' ');
+
+      let splitPoint = maxLength;
+
+      // Prefer paragraph breaks (best for readability)
+      if (lastParagraph > maxLength * 0.5) {
+        splitPoint = lastParagraph + 2; // Include the \n\n
+      }
+      // Then single newlines
+      else if (lastNewline > maxLength * 0.6) {
+        splitPoint = lastNewline + 1;
+      }
+      // Then sentence endings
+      else if (lastSentence > maxLength * 0.6) {
+        splitPoint = lastSentence + 2; // Include the punctuation and space
+      }
+      // Then commas
+      else if (lastComma > maxLength * 0.7) {
+        splitPoint = lastComma + 2;
+      }
+      // Finally, word boundaries
+      else if (lastSpace > maxLength * 0.7) {
+        splitPoint = lastSpace + 1;
+      }
+
+      messages.push(remaining.substring(0, splitPoint).trim());
+      remaining = remaining.substring(splitPoint).trim();
+    }
+
+    chatLogger.info(`Split response into ${messages.length} messages`);
+    return messages;
+  }
+
+  /**
+   * @deprecated Use splitIntoMessages instead
+   * Legacy function kept for backward compatibility
+   */
   private ensureDiscordLimit(
     response: string,
     maxLength: number = 1950,
   ): string {
-    if (response.length <= maxLength) {
-      return response;
+    const messages = this.splitIntoMessages(response, maxLength);
+    if (messages.length > 1) {
+      chatLogger.warn(
+        'ensureDiscordLimit called but response needs multiple messages',
+      );
     }
-
-    chatLogger.warn('Response exceeds Discord limit, truncating', {
-      originalLength: response.length,
-      maxLength,
-    });
-
-    // Try to find a good truncation point
-    const truncated = response.substring(0, maxLength);
-
-    // Look for the last sentence ending
-    const lastSentence = Math.max(
-      truncated.lastIndexOf('.'),
-      truncated.lastIndexOf('!'),
-      truncated.lastIndexOf('?'),
-    );
-
-    // Look for the last paragraph break
-    const lastParagraph = truncated.lastIndexOf('\n\n');
-
-    // Choose the best truncation point
-    let cutPoint = maxLength - 50;
-
-    if (lastParagraph > maxLength * 0.7) {
-      cutPoint = lastParagraph;
-    } else if (lastSentence > maxLength * 0.7) {
-      cutPoint = lastSentence + 1;
-    } else {
-      // Find the last word boundary
-      const lastSpace = truncated.lastIndexOf(' ', maxLength - 50);
-      if (lastSpace > maxLength * 0.7) {
-        cutPoint = lastSpace;
-      }
-    }
-
-    return (
-      response.substring(0, cutPoint).trim() +
-      '... *(response truncated - ask for more details if needed)*'
-    );
+    return messages[0];
   }
 
   private async saveConversationTurn(
