@@ -302,15 +302,18 @@ class DiscordBot {
         return;
       }
 
-      // Security: Only allow the thread owner to use their tools
+      // Allow others to comment in the thread without triggering the AI
+      // Only process messages from the thread owner for AI responses
       if (message.author.id !== chatThread.user_id) {
-        console.log('🔒 User not authorized for thread', {
-          messageUserId: message.author.id,
-          threadUserId: chatThread.user_id,
-        });
-        await message.reply(
-          '🔒 This thread belongs to another user. Please start your own conversation with `/chat`.',
+        console.log(
+          'ℹ️ Message from non-owner in thread, ignoring for AI processing',
+          {
+            messageUserId: message.author.id,
+            threadUserId: chatThread.user_id,
+            threadId,
+          },
         );
+        // Silently ignore - allows others to help, comment, or react without triggering the AI
         return;
       }
 

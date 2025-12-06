@@ -18,6 +18,7 @@ import { LLMService } from '../../services/llm.js';
 import { chatLogger } from '../../utils/logger.js';
 import { ErrorHandler, AuthenticationError } from '../../utils/errors.js';
 import { startSession, endSession } from './stop.js';
+import { getToolChannelId } from '../../utils/channel-helpers.js';
 
 export class ChatCommand extends BaseCommand {
   name = 'chat';
@@ -122,12 +123,12 @@ export class ChatCommand extends BaseCommand {
           });
 
           // Create a context object for processing
-          // Use parent channelId for tool access, but we'll pass thread.id separately for alerts
+          // Use getToolChannelId for tool access (shared 'dm' for all DMs), thread.id for alerts
           const context: CommandContext = {
             interaction,
             args: [],
             userId: interaction.user.id,
-            channelId: interaction.channelId, // Parent channel for MCP tool access
+            channelId: getToolChannelId(interaction), // Shared 'dm' for DMs, actual channel for guilds
             guildId: interaction.guildId || undefined,
             threadId: thread.id, // Store thread ID in context for task creation
           };
@@ -215,7 +216,7 @@ export class ChatCommand extends BaseCommand {
             interaction,
             args: [],
             userId: interaction.user.id,
-            channelId: interaction.channelId,
+            channelId: getToolChannelId(interaction), // Shared 'dm' for DMs, actual channel for guilds
             guildId: interaction.guildId || undefined,
           };
 
@@ -252,7 +253,7 @@ export class ChatCommand extends BaseCommand {
           interaction,
           args: [],
           userId: interaction.user.id,
-          channelId: interaction.channelId,
+          channelId: getToolChannelId(interaction), // Shared 'dm' for all DMs
           guildId: interaction.guildId || undefined,
         };
 

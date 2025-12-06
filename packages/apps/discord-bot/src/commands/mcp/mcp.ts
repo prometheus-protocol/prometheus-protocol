@@ -119,12 +119,18 @@ export class MCPCommand extends BaseCommand {
 
   /**
    * Get the effective channel ID for MCP operations.
+   * For DMs, returns 'dm' so all DM conversations share the same tool context.
    * If the interaction is in a thread, returns the parent channel ID.
    * Otherwise, returns the interaction's channel ID.
    */
   private async getEffectiveChannelId(
     interaction: ChatInputCommandInteraction,
   ): Promise<string> {
+    // DMs share a unified tool context across all DM conversations
+    if (!interaction.inGuild()) {
+      return 'dm';
+    }
+
     // Check if we're in a thread
     if (interaction.channel?.isThread()) {
       // Return the parent channel ID
@@ -834,10 +840,12 @@ export class MCPCommand extends BaseCommand {
         const subcommand = interaction.options.getSubcommand();
         console.log('🔗 SUBCOMMAND FOR FILTERING:', subcommand);
 
-        // Get the correct channel ID (parent channel if in a thread)
-        const channelId = interaction.channel?.isThread()
-          ? interaction.channel.parentId || interaction.channelId
-          : interaction.channelId;
+        // Get the correct channel ID - use 'dm' for DMs so they share tool context
+        const channelId = !interaction.inGuild()
+          ? 'dm'
+          : interaction.channel?.isThread()
+            ? interaction.channel.parentId || interaction.channelId
+            : interaction.channelId;
 
         // Get user's connections for autocomplete
         const connections = await this.mcpService.getUserConnections(

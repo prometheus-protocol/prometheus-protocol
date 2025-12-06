@@ -17,6 +17,7 @@ import {
 import { TaskManagementFunctions } from '../../ai-functions/task-management.js';
 import { ErrorHandler } from '../../utils/errors.js';
 import logger from '../../utils/logger.js';
+import { getToolChannelId } from '../../utils/channel-helpers.js';
 
 export class TasksCommand extends BaseCommand {
   name = 'tasks';
@@ -188,7 +189,7 @@ export class TasksCommand extends BaseCommand {
         interaction,
         args: [], // Not used in slash commands, but required by interface
         userId: interaction.user.id,
-        channelId: interaction.channelId!,
+        channelId: getToolChannelId(interaction),
         guildId: interaction.guildId || undefined, // Handle DMs where guildId is null
       };
 
@@ -645,7 +646,7 @@ export class TasksCommand extends BaseCommand {
           {},
           {
             userId: interaction.user.id,
-            channelId: interaction.channelId || '',
+            channelId: getToolChannelId(interaction),
             guildId: interaction.guildId || '',
             username:
               interaction.user.username ||
