@@ -283,9 +283,9 @@ class DiscordBot {
   }
 
   /**
-   * Split a message into chunks that fit Discord's 4000 character limit
+   * Split a message into chunks that fit Discord's 2000 character limit
    */
-  private splitMessage(text: string, maxLength: number = 3900): string[] {
+  private splitMessage(text: string, maxLength: number = 1950): string[] {
     if (text.length <= maxLength) {
       return [text];
     }
