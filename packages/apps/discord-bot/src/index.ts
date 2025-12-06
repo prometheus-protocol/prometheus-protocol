@@ -282,6 +282,51 @@ class DiscordBot {
     });
   }
 
+  /**
+   * Split a message into chunks that fit Discord's 4000 character limit
+   */
+  private splitMessage(text: string, maxLength: number = 3900): string[] {
+    if (text.length <= maxLength) {
+      return [text];
+    }
+
+    const messages: string[] = [];
+    let remaining = text;
+
+    while (remaining.length > 0) {
+      if (remaining.length <= maxLength) {
+        messages.push(remaining);
+        break;
+      }
+
+      const chunk = remaining.substring(0, maxLength);
+      const lastParagraph = chunk.lastIndexOf('\n\n');
+      const lastNewline = chunk.lastIndexOf('\n');
+      const lastSentence = Math.max(
+        chunk.lastIndexOf('. '),
+        chunk.lastIndexOf('! '),
+        chunk.lastIndexOf('? '),
+      );
+      const lastSpace = chunk.lastIndexOf(' ');
+
+      let splitPoint = maxLength;
+      if (lastParagraph > maxLength * 0.5) {
+        splitPoint = lastParagraph + 2;
+      } else if (lastNewline > maxLength * 0.6) {
+        splitPoint = lastNewline + 1;
+      } else if (lastSentence > maxLength * 0.6) {
+        splitPoint = lastSentence + 2;
+      } else if (lastSpace > maxLength * 0.7) {
+        splitPoint = lastSpace + 1;
+      }
+
+      messages.push(remaining.substring(0, splitPoint).trim());
+      remaining = remaining.substring(splitPoint).trim();
+    }
+
+    return messages;
+  }
+
   private async handleThreadMessage(message: any): Promise<void> {
     console.log('🔵 handleThreadMessage called', {
       threadId: message.channel.id,
@@ -389,10 +434,16 @@ class DiscordBot {
           throw new Error('Unexpected response format from LLM service');
         }
 
-        // Send response
-        await message.reply(textResponse);
+        // Send response (split if needed to avoid 4000 char limit)
+        const messageParts = this.splitMessage(textResponse);
+        await message.reply(messageParts[0]);
 
-        // Update thread history
+        // Send additional parts as follow-ups
+        for (let i = 1; i < messageParts.length; i++) {
+          await message.channel.send(messageParts[i]);
+        }
+
+        // Update thread history with full response
         await this.database.updateThreadHistory(threadId, {
           role: 'user',
           content: message.content,
@@ -497,10 +548,16 @@ class DiscordBot {
           throw new Error('Unexpected response format from LLM service');
         }
 
-        // Send response
-        await message.reply(textResponse);
+        // Send response (split if needed to avoid 4000 char limit)
+        const messageParts = this.splitMessage(textResponse);
+        await message.reply(messageParts[0]);
 
-        // Save conversation turn
+        // Send additional parts as follow-ups
+        for (let i = 1; i < messageParts.length; i++) {
+          await message.channel.send(messageParts[i]);
+        }
+
+        // Save conversation turn with full response
         await this.database.saveConversationTurn(
           message.author.id,
           message.channel.id,

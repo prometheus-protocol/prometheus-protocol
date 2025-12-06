@@ -855,7 +855,7 @@ export class ChatCommand extends BaseCommand {
    */
   private splitIntoMessages(
     response: string,
-    maxLength: number = 1950,
+    maxLength: number = 3900, // Discord allows 4000, use 3900 for safety margin
   ): string[] {
     if (response.length <= maxLength) {
       return [response];
