@@ -52,7 +52,7 @@ export class MCPCommand extends BaseCommand {
       .addSubcommand((subcommand) =>
         subcommand
           .setName('reconnect')
-          .setDescription('Reconnect to a disconnected MCP server')
+          .setDescription('Reconnect to an MCP server (disconnects first if connected)')
           .addStringOption((option) =>
             option
               .setName('server-name')
@@ -447,6 +447,16 @@ export class MCPCommand extends BaseCommand {
       logger.info(
         `Attempting to reconnect to MCP server ${serverName} for user ${userId}`,
       );
+
+      // First, disconnect if the server is currently connected
+      // This allows users to force a fresh reconnection
+      try {
+        await this.mcpService.disconnectFromServer(serverId, userId, channelId);
+        logger.info(`Disconnected ${serverName} before reconnecting`);
+      } catch (disconnectError) {
+        // Ignore disconnect errors - server might already be disconnected
+        logger.debug(`Disconnect before reconnect (expected if already disconnected): ${disconnectError}`);
+      }
 
       const connection = await this.mcpService.autoReconnectAfterOAuth(
         serverId,
@@ -890,10 +900,8 @@ export class MCPCommand extends BaseCommand {
               // Subcommand-specific filters
               switch (subcommand) {
                 case 'reconnect':
-                  // For reconnect, only show disconnected or error servers
-                  return (
-                    conn.status === 'disconnected' || conn.status === 'error'
-                  );
+                  // For reconnect, show all servers (will disconnect first if connected)
+                  return true;
 
                 case 'disconnect':
                   // For disconnect, only show connected servers
