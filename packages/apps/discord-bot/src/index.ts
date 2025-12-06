@@ -435,12 +435,10 @@ class DiscordBot {
         }
 
         // Send response (split if needed to avoid 4000 char limit)
+        // Use channel.send() to ensure messages stay in the thread
         const messageParts = this.splitMessage(textResponse);
-        await message.reply(messageParts[0]);
-
-        // Send additional parts as follow-ups
-        for (let i = 1; i < messageParts.length; i++) {
-          await message.channel.send(messageParts[i]);
+        for (const part of messageParts) {
+          await message.channel.send(part);
         }
 
         // Update thread history with full response
@@ -468,7 +466,8 @@ class DiscordBot {
         messageContent: message.content.substring(0, 100),
       });
       try {
-        await message.reply(
+        // Use message.channel.send to ensure it goes to the thread
+        await message.channel.send(
           'Sorry, I encountered an error processing your message. Please check the logs for details.',
         );
       } catch (replyError) {
