@@ -12,6 +12,7 @@ import { ConfigManager } from './config/index.js';
 import { CommandRegistryImpl } from './commands/registry.js';
 import { ChatCommand } from './commands/chat/chat.js';
 import { ClearChatCommand } from './commands/chat/clear.js';
+import { StopCommand } from './commands/chat/stop.js';
 import { MCPCommand } from './commands/mcp/mcp.js';
 import { TasksCommand } from './commands/tasks/tasks.js';
 import { LLMService } from './services/llm.js';
@@ -539,6 +540,9 @@ class DiscordBot {
 
     // Register clear chat memory command
     this.commandRegistry.register(new ClearChatCommand(this.database));
+
+    // Register stop command to interrupt AI processing
+    this.commandRegistry.register(new StopCommand());
 
     // Register MCP management command (no registry service needed)
     this.commandRegistry.register(new MCPCommand(this.mcpService));

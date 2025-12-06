@@ -122,89 +122,105 @@ export class ChatCommand extends BaseCommand {
             content: `💬 **"${displayPrompt}"**\n\nContinue in <#${thread.id}>`,
           });
 
-          // Create a context object for processing
-          // Use getToolChannelId for tool access (shared 'dm' for all DMs), thread.id for alerts
-          const context: CommandContext = {
-            interaction,
-            args: [],
-            userId: interaction.user.id,
-            channelId: getToolChannelId(interaction), // Shared 'dm' for DMs, actual channel for guilds
-            guildId: interaction.guildId || undefined,
-            threadId: thread.id, // Store thread ID in context for task creation
-          };
+          // Start typing indicator in the thread to show AI is working
+          await thread.sendTyping();
+          const typingInterval = setInterval(() => {
+            thread.sendTyping().catch(() => clearInterval(typingInterval));
+          }, 5000); // Refresh every 5 seconds
 
-          // Generate the AI response with empty history since this is a new thread
-          // Create a status callback that tracks tool invocations
-          let statusMessage: any = null;
-          let toolInvocations: string[] = [];
-          const statusCallback = async (status: string) => {
-            try {
-              // Add new tool invocation to the list
-              toolInvocations.push(status);
+          try {
+            // Create a context object for processing
+            // Use getToolChannelId for tool access (shared 'dm' for all DMs), thread.id for alerts
+            const context: CommandContext = {
+              interaction,
+              args: [],
+              userId: interaction.user.id,
+              channelId: getToolChannelId(interaction), // Shared 'dm' for DMs, actual channel for guilds
+              guildId: interaction.guildId || undefined,
+              threadId: thread.id, // Store thread ID in context for task creation
+            };
 
-              // Build the combined message with all tool invocations
-              const combinedStatus = toolInvocations.join('\n');
+            // Generate the AI response with empty history since this is a new thread
+            // Create a status callback that tracks tool invocations
+            let statusMessage: any = null;
+            let toolInvocations: string[] = [];
+            const statusCallback = async (status: string) => {
+              try {
+                // Add new tool invocation to the list
+                toolInvocations.push(status);
 
-              if (statusMessage) {
-                // Edit existing status message to show all invocations
-                await statusMessage.edit(combinedStatus);
-              } else {
-                // Create first status message
-                statusMessage = await thread.send(combinedStatus);
-              }
-            } catch (error) {
-              chatLogger.warn('Failed to send status update to thread', {
-                error,
-              });
-            }
-          };
+                // Build the combined message with all tool invocations
+                const combinedStatus = toolInvocations.join('\n');
 
-          const response = await this.executeInternal(
-            context,
-            prompt,
-            statusCallback, // Send tool execution updates to thread
-            [], // Empty history - new thread starts fresh
-            true, // Skip conversation save - thread manages its own history
-          );
-
-          // Keep the status message visible for transparency
-          // Don't delete it - users should see what tools were used
-
-          // Send the response to the thread
-          if (response) {
-            await thread.send({
-              content: response.content || undefined,
-              embeds: response.embeds || undefined,
-              files: response.files || undefined,
-              components: response.components || undefined,
-            });
-
-            // Send additional messages if the response was split
-            if (
-              response.additionalMessages &&
-              response.additionalMessages.length > 0
-            ) {
-              for (const additionalMessage of response.additionalMessages) {
-                await thread.send({
-                  content: additionalMessage,
+                if (statusMessage) {
+                  // Edit existing status message to show all invocations
+                  await statusMessage.edit(combinedStatus);
+                } else {
+                  // Create first status message
+                  statusMessage = await thread.send(combinedStatus);
+                }
+              } catch (error) {
+                chatLogger.warn('Failed to send status update to thread', {
+                  error,
                 });
               }
+            };
+
+            const response = await this.executeInternal(
+              context,
+              prompt,
+              statusCallback, // Send tool execution updates to thread
+              [], // Empty history - new thread starts fresh
+              true, // Skip conversation save - thread manages its own history
+            );
+
+            // Clear typing interval
+            clearInterval(typingInterval);
+
+            // Keep the status message visible for transparency
+            // Don't delete it - users should see what tools were used
+
+            // Send the response to the thread
+            if (response) {
+              await thread.send({
+                content: response.content || undefined,
+                embeds: response.embeds || undefined,
+                files: response.files || undefined,
+                components: response.components || undefined,
+              });
+
+              // Send additional messages if the response was split
+              if (
+                response.additionalMessages &&
+                response.additionalMessages.length > 0
+              ) {
+                for (const additionalMessage of response.additionalMessages) {
+                  await thread.send({
+                    content: additionalMessage,
+                  });
+                }
+              }
+
+              // Store the conversation turn in thread history
+              // Store the full response (all parts combined) for context
+              const fullResponse = response.additionalMessages
+                ? [response.content, ...response.additionalMessages].join(
+                    '\n\n',
+                  )
+                : response.content || '';
+
+              await this.database.updateThreadHistory(thread.id, {
+                role: 'user',
+                content: prompt,
+              });
+              await this.database.updateThreadHistory(thread.id, {
+                role: 'assistant',
+                content: fullResponse,
+              });
             }
-
-            // Store the conversation turn in thread history
-            // Store the full response (all parts combined) for context
-            const fullResponse = response.additionalMessages
-              ? [response.content, ...response.additionalMessages].join('\n\n')
-              : response.content || '';
-
-            await this.database.updateThreadHistory(thread.id, {
-              role: 'user',
-              content: prompt,
-            });
-            await this.database.updateThreadHistory(thread.id, {
-              role: 'assistant',
-              content: fullResponse,
-            });
+          } finally {
+            // Ensure typing is cleared even if there's an error
+            clearInterval(typingInterval);
           }
         } else {
           // Channel doesn't support threads, fall back to follow-up

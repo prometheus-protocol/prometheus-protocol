@@ -544,12 +544,10 @@ export class LLMService {
               ? contentValue
               : 'Request completed.';
 
-          // Smart truncation as safety net for Discord's 2000 character limit
-          const truncatedResponse = this.truncateResponse(finalResponse);
-
+          // Return the full response - chat command will handle splitting if needed
           // Return the response along with NEW messages from this turn (excluding history and system)
           return {
-            response: truncatedResponse,
+            response: finalResponse,
             messages: messages.slice(turnStartIndex),
           };
         }
@@ -659,11 +657,9 @@ export class LLMService {
         const endLoopResult = toolResults.find((r: any) => r.__END_LOOP__);
         if (endLoopResult) {
           llmLogger.info('Tool loop ended by respond_to_user call', { userId });
-          const truncatedResponse = this.truncateResponse(
-            (endLoopResult as any).message,
-          );
+          // Return the full response - chat command will handle splitting if needed
           return {
-            response: truncatedResponse,
+            response: (endLoopResult as any).message,
             messages: messages.slice(turnStartIndex),
           };
         }
@@ -681,22 +677,18 @@ export class LLMService {
           error as Error,
           { userId },
         );
-        const errorResponse = this.truncateResponse(
-          'Sorry, I encountered an error while processing your request.',
-        );
         return {
-          response: errorResponse,
+          response:
+            'Sorry, I encountered an error while processing your request.',
           messages: messages.slice(turnStartIndex),
         };
       }
     }
 
     llmLogger.warn('Loop exited due to max iterations.', { userId });
-    const maxIterResponse = this.truncateResponse(
-      'I performed several actions but reached the processing limit. The tasks have been completed.',
-    );
     return {
-      response: maxIterResponse,
+      response:
+        'I performed several actions but reached the processing limit. The tasks have been completed.',
       messages: messages.slice(turnStartIndex),
     };
   }

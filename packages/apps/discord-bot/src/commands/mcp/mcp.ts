@@ -52,7 +52,9 @@ export class MCPCommand extends BaseCommand {
       .addSubcommand((subcommand) =>
         subcommand
           .setName('reconnect')
-          .setDescription('Reconnect to an MCP server (disconnects first if connected)')
+          .setDescription(
+            'Reconnect to an MCP server (disconnects first if connected)',
+          )
           .addStringOption((option) =>
             option
               .setName('server-name')
@@ -455,7 +457,9 @@ export class MCPCommand extends BaseCommand {
         logger.info(`Disconnected ${serverName} before reconnecting`);
       } catch (disconnectError) {
         // Ignore disconnect errors - server might already be disconnected
-        logger.debug(`Disconnect before reconnect (expected if already disconnected): ${disconnectError}`);
+        logger.debug(
+          `Disconnect before reconnect (expected if already disconnected): ${disconnectError instanceof Error ? disconnectError.message : String(disconnectError)}`,
+        );
       }
 
       const connection = await this.mcpService.autoReconnectAfterOAuth(
@@ -857,11 +861,26 @@ export class MCPCommand extends BaseCommand {
             ? interaction.channel.parentId || interaction.channelId
             : interaction.channelId;
 
-        // Get user's connections for autocomplete
-        const connections = await this.mcpService.getUserConnections(
-          interaction.user.id,
+        console.log('🔗 FETCHING CONNECTIONS FOR:', {
+          userId: interaction.user.id,
           channelId,
-        );
+          inGuild: interaction.inGuild(),
+        });
+
+        // Get user's connections for autocomplete
+        let connections;
+        try {
+          connections = await this.mcpService.getUserConnections(
+            interaction.user.id,
+            channelId,
+          );
+        } catch (error) {
+          console.error('🔗 ERROR FETCHING CONNECTIONS:', error);
+          // Return empty on error
+          await interaction.respond([]);
+          return;
+        }
+
         console.log('🔗 USER CONNECTIONS:', {
           connectionCount: connections.length,
           connections: connections.map((c) => ({
