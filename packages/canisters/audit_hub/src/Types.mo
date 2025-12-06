@@ -61,7 +61,8 @@ module {
     build_config : ICRC16Map;
     created_at : Timestamp;
     required_verifiers : Nat;
-    assigned_count : Nat; // How many verifiers currently have active assignments
+    assigned_count : Nat; // How many verifiers have been assigned (permanent record)
+    in_progress_count : Nat; // How many verifiers currently have active locks
     completed_count : Nat; // How many verifiers have completed and submitted attestations
     bounty_ids : [BountyId]; // IDs of auto-attached bounties
     audit_type : Text; // e.g., "build_reproducibility_v1", "tools_v1", etc.

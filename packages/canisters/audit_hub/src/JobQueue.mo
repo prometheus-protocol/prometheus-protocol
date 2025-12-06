@@ -22,6 +22,7 @@ module {
   public type VerificationJob = Types.VerificationJob;
   public type AssignedJob = Types.AssignedJob;
   public type BountyId = Types.BountyId;
+  public type BountyLock = Types.BountyLock;
   public type ICRC16Map = Types.ICRC16Map;
   public type ICRC16 = Types.ICRC16;
   public type VerificationJobAssignment = Types.VerificationJobAssignment;
@@ -92,6 +93,7 @@ module {
       created_at;
       required_verifiers;
       assigned_count = 0;
+      in_progress_count = 0;
       completed_count = 0;
       bounty_ids = []; // Empty array - bounties will attach via auto-attach mechanism
       audit_type;
@@ -240,7 +242,8 @@ module {
               build_config = job.build_config;
               created_at = job.created_at;
               required_verifiers = job.required_verifiers;
-              assigned_count = job.assigned_count + 1;
+              assigned_count = job.assigned_count;
+              in_progress_count = job.in_progress_count;
               completed_count = job.completed_count;
               bounty_ids = job.bounty_ids;
               audit_type = job.audit_type;
@@ -281,14 +284,14 @@ module {
   ) : () {
     switch (Map.get(assigned_jobs, Map.nhash, bounty_id)) {
       case (?assignment) {
-        // Remove from assigned_jobs
-        ignore Map.remove(assigned_jobs, Map.nhash, bounty_id);
+        // DO NOT remove from assigned_jobs - this is a permanent record
+        // assigned_count is derived from this map, so entries must stay forever
 
         // DO NOT remove from job_verifier_assignments - this should be permanent
         // to prevent verifiers from being reassigned to the same job
         // The verifier has already started work on this job and should not get another bounty for it
 
-        Debug.print("Released job assignment for bounty " # Nat.toText(bounty_id));
+        Debug.print("Released lock for bounty " # Nat.toText(bounty_id) # " - assignment remains in permanent record");
       };
       case (null) {
         Debug.print("Warning: No assignment found for bounty " # Nat.toText(bounty_id));
@@ -304,9 +307,19 @@ module {
    * @param offset - Starting index for pagination
    * @param limit - Maximum number of results to return
    */
+  /**
+   * List all pending audit jobs with pagination.
+   * @param pending_audits - The BTree queue for pending audit jobs
+   * @param assigned_jobs - Map of assigned jobs (for calculating assigned_count)
+   * @param bounty_locks - Map of active bounty locks (for calculating in_progress_count)
+   * @param icrc127_get_bounty - Function to get bounty details
+   * @param offset - Starting index for pagination
+   * @param limit - Maximum number of results to return
+   */
   public func list_pending_jobs(
     pending_audits : BTree.BTree<Text, VerificationJob>,
     assigned_jobs : Map.Map<BountyId, AssignedJob>,
+    bounty_locks : Map.Map<BountyId, BountyLock>,
     icrc127_get_bounty : (BountyId) -> ?ICRC127Lib.Bounty,
     offset : ?Nat,
     limit : ?Nat,
@@ -316,10 +329,62 @@ module {
   } {
     let result = Buffer.Buffer<(Text, VerificationJob)>(0);
     for ((key, job) in BTree.entries(pending_audits)) {
-      // Use stored assigned_count (updated by icrc127_submit_bounty and admin methods)
-      // Use stored completed_count (updated by admin_recalculate_job_counts if needed)
-      // No need to recalculate on every query
-      result.add((key, job));
+      // Recalculate assigned_count from assigned_jobs map
+      var actual_assigned_count : Nat = 0;
+      for ((_, assignment) in Map.entries(assigned_jobs)) {
+        if (assignment.wasm_id == job.wasm_id and assignment.audit_type == job.audit_type) {
+          actual_assigned_count += 1;
+        };
+      };
+
+      // Recalculate in_progress_count from bounty locks (excluding claimed bounties)
+      var actual_in_progress_count : Nat = 0;
+      for (bounty_id in job.bounty_ids.vals()) {
+        switch (Map.get(bounty_locks, Map.nhash, bounty_id)) {
+          case (?_lock) {
+            // Check if this bounty has been claimed
+            let is_claimed = switch (icrc127_get_bounty(bounty_id)) {
+              case (?bounty) { bounty.claims.size() > 0 };
+              case (null) { false };
+            };
+            // Only count as in-progress if NOT claimed
+            if (not is_claimed) {
+              actual_in_progress_count += 1;
+            };
+          };
+          case (null) {};
+        };
+      };
+
+      // Recalculate completed_count from bounty claims
+      var actual_completed_count : Nat = 0;
+      for (bounty_id in job.bounty_ids.vals()) {
+        switch (icrc127_get_bounty(bounty_id)) {
+          case (?bounty) {
+            if (bounty.claims.size() > 0) {
+              actual_completed_count += 1;
+            };
+          };
+          case (null) {};
+        };
+      };
+
+      let job_with_updated_counts : VerificationJob = {
+        wasm_id = job.wasm_id;
+        repo = job.repo;
+        commit_hash = job.commit_hash;
+        build_config = job.build_config;
+        created_at = job.created_at;
+        required_verifiers = job.required_verifiers;
+        assigned_count = actual_assigned_count;
+        in_progress_count = actual_in_progress_count;
+        completed_count = actual_completed_count;
+        bounty_ids = job.bounty_ids;
+        audit_type = job.audit_type;
+        creator = job.creator;
+      };
+
+      result.add((key, job_with_updated_counts));
     };
 
     // Sort by timestamp descending (newest first)

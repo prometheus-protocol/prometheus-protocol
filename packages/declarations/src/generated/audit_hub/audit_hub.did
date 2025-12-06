@@ -23,6 +23,7 @@ type VerificationJob =
    completed_count: nat;
    created_at: Timestamp__1;
    creator: principal;
+   in_progress_count: nat;
    repo: text;
    required_verifiers: nat;
    wasm_id: text;
@@ -365,6 +366,9 @@ type AuditHub =
    admin_fix_job_assigned_count: (queue_key: text, new_assigned_count:
     nat) -> (Result);
    admin_force_release_lock: (bounty_id: BountyId) -> (Result);
+   /// * Admin method to recalculate and update job counts from actual bounty state.
+   ///    * Counts how many bounties have claims filed (completed_count) and updates the job.
+   admin_recalculate_job_counts: (queue_key: text) -> (Result_4);
    /// * Remove a verifier from the deny list.
    admin_remove_from_deny_list: (verifier: principal) -> (Result);
    /// * Admin method to remove a verifier from job_verifier_assignments.
@@ -428,6 +432,7 @@ type AuditHub =
    get_owner: () -> (principal) query;
    /// * Get a specific pending job by its queue key.
    ///    * Returns null if the job doesn't exist.
+   ///    * Recalculates assigned_count from assigned_jobs map to ensure accuracy.
    get_pending_job: (queue_key: text) -> (opt VerificationJob) query;
    /// * Get the stake requirement for a specific audit type.
    ///    * Returns (token_id, amount) tuple.
@@ -488,6 +493,7 @@ type AuditHub =
    list_bounties: (req: BountyListingRequest) ->
     (BountyListingResponse) query;
    /// * Get all pending verification jobs with pagination (for debugging/monitoring).
+   ///    * Recalculates assigned_count from assigned_jobs map to ensure accuracy.
    list_pending_jobs: (offset: opt nat, limit: opt nat) ->
     (record {
        jobs: vec record {

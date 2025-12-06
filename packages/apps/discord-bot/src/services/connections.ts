@@ -1537,10 +1537,10 @@ export class ConnectionPoolService {
 
         if (String(error.code) === disabledToolErrorCode) {
           logger.warn(
-            `[ConnPool-${poolKey}] Tool '${payload.toolName}' is disabled or not found (Code: ${error.code}). Attempting to resync the tool list for the client.`,
+            `[ConnPool-${poolKey}] Tool '${payload.toolName}' is disabled or not found (Code: ${error.code}). Checking connection health before resyncing tools.`,
           );
           try {
-            // Re-fetch the list of available tools from the source
+            // First, check if the connection is still alive by attempting to list tools
             const toolsResponse = await connection.client?.listTools();
 
             if (!toolsResponse) {
@@ -1559,10 +1559,51 @@ export class ConnectionPoolService {
               `[ConnPool-${poolKey}] Successfully published updated tool list after disabled tool error.`,
             );
           } catch (syncError: any) {
-            logger.error(
-              `[ConnPool-${poolKey}] Failed to resync tools after a disabled tool invocation error: ${syncError.message}`,
-              syncError,
-            );
+            // Check if the error indicates the connection is dead
+            const isConnectionError = 
+              syncError.message?.includes('terminated') ||
+              syncError.message?.includes('disconnected') ||
+              syncError.message?.includes('Connection closed') ||
+              syncError.message?.includes('ECONNREFUSED') ||
+              syncError.message?.includes('ENOTFOUND') ||
+              syncError.code === 'ECONNRESET';
+
+            if (isConnectionError) {
+              logger.warn(
+                `[ConnPool-${poolKey}] Connection is dead during tool resync. Marking as inactive and triggering reconnection instead of refetching tools.`,
+              );
+              
+              // Remove from active connections
+              this.activeConnections.delete(poolKey);
+              
+              // Mark as disconnected in database
+              try {
+                await this.databaseService.updateConnectionStatus(
+                  payload.userId,
+                  payload.channelId || 'default',
+                  payload.mcpServerConfigId,
+                  connection.mcpServerUrl,
+                  'DISCONNECTED_UNEXPECTEDLY',
+                );
+              } catch (dbError: any) {
+                logger.error(
+                  `[ConnPool-${poolKey}] Failed to update database status during connection cleanup:`,
+                  dbError,
+                );
+              }
+
+              // Don't try to refetch - the connection will be automatically reconnected
+              // when the next request comes in or via the reconnection mechanism
+              logger.info(
+                `[ConnPool-${poolKey}] Connection marked as disconnected. User will need to reconnect manually or via auto-reconnect.`,
+              );
+            } else {
+              // Some other error during tool fetch - log it but don't kill the connection
+              logger.error(
+                `[ConnPool-${poolKey}] Failed to resync tools after a disabled tool invocation error: ${syncError.message}`,
+                syncError,
+              );
+            }
           }
         } else {
           // For other MCP SDK errors, just log a warning as before.

@@ -1638,6 +1638,7 @@ export interface PendingJob {
   auditType: string;
   requiredVerifiers: number;
   assignedCount: number;
+  inProgressCount: number;
   completedCount: number;
   bountyIds: bigint[];
   createdAt: Date;
@@ -1669,6 +1670,7 @@ export const listPendingJobs = async (
     auditType: job.audit_type,
     requiredVerifiers: Number(job.required_verifiers),
     assignedCount: Number(job.assigned_count),
+    inProgressCount: Number(job.in_progress_count),
     completedCount: Number(job.completed_count),
     bountyIds: job.bounty_ids,
     createdAt: nsToDate(job.created_at),
@@ -1703,6 +1705,7 @@ export const getPendingJob = async (
     auditType: job.audit_type,
     requiredVerifiers: Number(job.required_verifiers),
     assignedCount: Number(job.assigned_count),
+    inProgressCount: Number(job.in_progress_count),
     completedCount: Number(job.completed_count),
     bountyIds: job.bounty_ids,
     createdAt: nsToDate(job.created_at),

@@ -357,10 +357,21 @@ export const useListAllVerificationRequests = (
   });
 };
 
-export const useListPendingJobs = (offset?: number, limit?: number) => {
-  return useQuery({
-    queryKey: ['pendingJobs', offset, limit],
-    queryFn: () => listPendingJobs(offset, limit),
+export const useListPendingJobs = (limit: number = 10) => {
+  return useInfiniteQuery({
+    queryKey: ['pendingJobs'],
+    queryFn: ({ pageParam = 0 }) => listPendingJobs(pageParam, limit),
+    getNextPageParam: (lastPage, allPages) => {
+      // Calculate the current offset based on pages fetched
+      const currentOffset = allPages.length * limit;
+      // If we got a full page, there might be more data
+      if (lastPage.jobs.length === limit) {
+        return currentOffset;
+      }
+      // No more pages
+      return undefined;
+    },
+    initialPageParam: 0,
     refetchInterval: 10000, // Auto-refresh every 10 seconds
   });
 };

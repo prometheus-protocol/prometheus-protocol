@@ -31,15 +31,33 @@ export class PendingToolInvocationsService {
 
       // Set up timeout
       const timeout = setTimeout(() => {
+        const pending = this.pendingInvocations.get(invocationId);
+        if (!pending) {
+          // Already cleaned up, nothing to do
+          return;
+        }
+
         logger.warn(
-          `[PendingInvocations] Tool invocation ${invocationId} timed out after ${this.TIMEOUT_MS}ms`,
+          `[PendingInvocations] Tool invocation ${invocationId} timed out after ${this.TIMEOUT_MS}ms (tool: ${pending.toolName}, user: ${pending.userId})`,
         );
-        this.cleanupInvocation(invocationId);
-        reject(
-          new Error(
-            `Tool invocation timed out after ${this.TIMEOUT_MS / 1000} seconds`,
-          ),
-        );
+
+        // Remove from map first, then reject
+        this.pendingInvocations.delete(invocationId);
+        
+        // Reject with timeout error
+        try {
+          pending.reject(
+            new Error(
+              `Tool invocation timed out after ${this.TIMEOUT_MS / 1000} seconds`,
+            ),
+          );
+        } catch (error) {
+          // If rejection fails, log it but don't crash
+          logger.error(
+            `[PendingInvocations] Error rejecting timeout for ${invocationId}:`,
+            error instanceof Error ? error : new Error(String(error)),
+          );
+        }
       }, this.TIMEOUT_MS);
 
       // Store the pending invocation

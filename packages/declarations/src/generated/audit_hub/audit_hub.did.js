@@ -107,6 +107,7 @@ export const idlFactory = ({ IDL }) => {
     'build_config' : ICRC16Map,
     'assigned_count' : IDL.Nat,
     'wasm_id' : IDL.Text,
+    'in_progress_count' : IDL.Nat,
     'required_verifiers' : IDL.Nat,
     'commit_hash' : IDL.Text,
   });
@@ -330,6 +331,7 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'admin_force_release_lock' : IDL.Func([BountyId], [Result], []),
+    'admin_recalculate_job_counts' : IDL.Func([IDL.Text], [Result_4], []),
     'admin_remove_from_deny_list' : IDL.Func([IDL.Principal], [Result], []),
     'admin_remove_verifier_from_job' : IDL.Func(
         [IDL.Text, IDL.Principal],

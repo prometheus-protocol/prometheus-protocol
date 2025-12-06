@@ -736,6 +736,23 @@ class DiscordBot {
 // Handle graceful shutdown
 const bot = new DiscordBot();
 
+// Handle unhandled promise rejections to prevent crashes
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Log the error but don't crash the bot
+  if (reason instanceof Error) {
+    console.error('Error stack:', reason.stack);
+  }
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  console.error('Stack:', error.stack);
+  // For uncaught exceptions, we should probably restart
+  // but log it first
+});
+
 process.on('SIGINT', async () => {
   console.log('Received SIGINT, shutting down gracefully...');
   await bot.stop();
