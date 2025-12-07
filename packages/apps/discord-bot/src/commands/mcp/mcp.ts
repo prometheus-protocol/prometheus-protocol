@@ -278,6 +278,7 @@ export class MCPCommand extends BaseCommand {
         service: 'MCPCommand',
         hasContent: !!response?.content,
         hasEmbeds: !!response?.embeds,
+        hasAdditionalMessages: !!response?.additionalMessages?.length,
         contentPreview: response?.content?.substring(0, 100),
       });
 
@@ -291,6 +292,22 @@ export class MCPCommand extends BaseCommand {
         logger.info(
           `Successfully sent response to Discord for subcommand ${subcommand}`,
         );
+
+        // Send additional messages as follow-ups if they exist
+        if (response.additionalMessages && response.additionalMessages.length > 0) {
+          logger.info(
+            `Sending ${response.additionalMessages.length} additional message(s) for subcommand ${subcommand}`,
+          );
+          for (const additionalMessage of response.additionalMessages) {
+            await interaction.followUp({
+              content: additionalMessage,
+              ephemeral: true, // Keep follow-ups ephemeral to match the main response
+            });
+          }
+          logger.info(
+            `Successfully sent all additional messages for subcommand ${subcommand}`,
+          );
+        }
       } else {
         await interaction.editReply({ content: '✅ Done.' });
         logger.info(
@@ -668,6 +685,44 @@ export class MCPCommand extends BaseCommand {
     }
   }
 
+  /**
+   * Split a message into chunks that fit within Discord's 2000 character limit.
+   * Tries to split on natural boundaries (double newlines) when possible.
+   */
+  private splitMessage(message: string, maxLength: number = 2000): string[] {
+    if (message.length <= maxLength) {
+      return [message];
+    }
+
+    const chunks: string[] = [];
+    let remainingMessage = message;
+
+    while (remainingMessage.length > 0) {
+      if (remainingMessage.length <= maxLength) {
+        chunks.push(remainingMessage);
+        break;
+      }
+
+      // Try to find a good split point (double newline, then single newline, then space)
+      let splitIndex = remainingMessage.lastIndexOf('\n\n', maxLength);
+      if (splitIndex === -1 || splitIndex < maxLength * 0.5) {
+        splitIndex = remainingMessage.lastIndexOf('\n', maxLength);
+      }
+      if (splitIndex === -1 || splitIndex < maxLength * 0.5) {
+        splitIndex = remainingMessage.lastIndexOf(' ', maxLength);
+      }
+      if (splitIndex === -1 || splitIndex < maxLength * 0.5) {
+        // No good split point, just cut at maxLength
+        splitIndex = maxLength;
+      }
+
+      chunks.push(remainingMessage.substring(0, splitIndex).trim());
+      remainingMessage = remainingMessage.substring(splitIndex).trim();
+    }
+
+    return chunks;
+  }
+
   private async handleTools(
     userId: string,
     channelId: string,
@@ -705,7 +760,13 @@ export class MCPCommand extends BaseCommand {
         message += '\n';
       });
 
-      return { content: message };
+      // Split message if it exceeds Discord's character limit
+      const messageParts = this.splitMessage(message);
+      
+      return {
+        content: messageParts[0],
+        additionalMessages: messageParts.slice(1),
+      };
     } catch (error) {
       console.error('MCP tools error:', error);
       return {
