@@ -1,6 +1,7 @@
 import { ConnectionPoolService } from '../connections.js';
 import { SupabaseService } from '../database.js';
 import { MCPEventService } from '../event-emitter.service.js';
+import { obfuscateUrl } from '../../utils/url-obfuscation.js';
 import { MCPCoordinatorService } from '../mcp-coordinator.service.js';
 import { DiscordNotificationService } from '../discord-notification.service.js';
 import { RegistryService, MinimalMCPServer } from '../registry.service.js';
@@ -312,10 +313,10 @@ export class MCPService {
 
         if (existingConnection && existingConnection.server_url) {
           actualServerUrl = existingConnection.server_url;
-          logger.info(`Found saved URL for server: ${actualServerUrl}`, {
+          logger.info(`Found saved URL for server: ${obfuscateUrl(actualServerUrl)}`, {
             service: 'MCPService',
             serverId,
-            serverUrl: actualServerUrl,
+            serverUrl: obfuscateUrl(actualServerUrl),
           });
         } else {
           // If no saved URL and no serverUrl provided, this is an error
@@ -332,7 +333,7 @@ export class MCPService {
           !actualServerUrl.startsWith('https://'))
       ) {
         throw new Error(
-          `Invalid server URL: ${actualServerUrl}. Must be HTTP or HTTPS.`,
+          `Invalid server URL: ${obfuscateUrl(actualServerUrl)}. Must be HTTP or HTTPS.`,
         );
       }
 

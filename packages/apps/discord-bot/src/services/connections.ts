@@ -31,6 +31,7 @@ import { MCPResourceDataFetchedEvent } from '../dtos/mcp.shared.types.dto.js';
 import { pendingRequestManager } from './pending-request-manager.js';
 import { auth } from '../mcp/oauth.js';
 import logger from '../utils/logger.js';
+import { obfuscateUrl } from '../utils/url-obfuscation.js';
 import { NotFoundError } from '../utils/errors.js';
 
 const TIMEOUT_SECONDS = 60_000; // Fixed timeout for elicitation requests
@@ -1166,7 +1167,7 @@ export class ConnectionPoolService {
       payload.mcpServerConfigId,
     );
     logger.info(
-      `[ConnPool-${poolKey}] Received 'TokensObtained' for ${payload.mcpServerUrl}.`,
+      `[ConnPool-${poolKey}] Received 'TokensObtained' for ${obfuscateUrl(payload.mcpServerUrl)}.`,
     );
     const connection = this.activeConnections.get(poolKey);
 
@@ -1660,7 +1661,7 @@ export class ConnectionPoolService {
       payload.mcpServerConfigId,
     );
     logger.info(
-      `[ConnPool-${poolKey}] Disconnect request for ${payload.mcpServerUrl}. ActingUser: ${payload.userId}`,
+      `[ConnPool-${poolKey}] Disconnect request for ${obfuscateUrl(payload.mcpServerUrl)}. ActingUser: ${payload.userId}`,
     );
     const connection = this.activeConnections.get(poolKey);
 
