@@ -9,6 +9,7 @@ import { useTokenRegistry } from '@/hooks/useTokenRegistry';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { WalletTokenCard } from './WalletTokenCard';
 import { AddTokenDialog } from '../token-manager/AddTokenDialog';
+import { AccountIdentifier } from '@icp-sdk/canisters/ledger/icp';
 
 interface WalletTokenListProps {
   showPrincipalId?: boolean;
@@ -102,30 +103,63 @@ export const WalletTokenList: React.FC<WalletTokenListProps> = ({
       </CardHeader>
       <CardContent className="px-0">
         {showPrincipalId && (
-          <div className="mb-4 p-3 border rounded-lg bg-muted/50">
-            <p className="text-sm font-medium mb-1">Your Wallet Principal ID</p>
-            <p className="text-xs text-muted-foreground mb-2">
-              This is your wallet address for receiving tokens
-            </p>
-            <div className="flex items-center gap-2">
-              <code className="text-xs bg-background px-2 py-1 rounded border font-mono break-all">
-                {identity.getPrincipal().toText()}
-              </code>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0"
-                onClick={() => {
-                  navigator.clipboard.writeText(
-                    identity.getPrincipal().toText(),
-                  );
-                  toast.success('Principal ID copied');
-                }}
-                title="Copy Principal ID">
-                <Copy className="h-3 w-3" />
-              </Button>
+          <>
+            <div className="mb-4 p-3 border rounded-lg bg-muted/50">
+              <p className="text-sm font-medium mb-1">
+                Your Wallet Principal ID
+              </p>
+              <p className="text-xs text-muted-foreground mb-2">
+                This is your wallet address for receiving tokens
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="text-xs bg-background px-2 py-1 rounded border font-mono break-all">
+                  {identity.getPrincipal().toText()}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={() => {
+                    navigator.clipboard.writeText(
+                      identity.getPrincipal().toText(),
+                    );
+                    toast.success('Principal ID copied');
+                  }}
+                  title="Copy Principal ID">
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
             </div>
-          </div>
+
+            <div className="mb-4 p-3 border rounded-lg bg-muted/50">
+              <p className="text-sm font-medium mb-1">ICP Wallet Address</p>
+              <p className="text-xs text-muted-foreground mb-2">
+                Use this address for receiving ICP from exchanges
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="text-xs bg-background px-2 py-1 rounded border font-mono break-all">
+                  {AccountIdentifier.fromPrincipal({
+                    principal: identity.getPrincipal(),
+                  }).toHex()}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={() => {
+                    navigator.clipboard.writeText(
+                      AccountIdentifier.fromPrincipal({
+                        principal: identity.getPrincipal(),
+                      }).toHex(),
+                    );
+                    toast.success('ICP Account ID copied');
+                  }}
+                  title="Copy ICP Account ID">
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          </>
         )}
 
         {isLoadingTokens && watchedTokens.length === 0 ? (

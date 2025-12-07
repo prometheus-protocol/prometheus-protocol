@@ -183,8 +183,15 @@ export class MCPCommand extends BaseCommand {
     // Discord requires acknowledgment within 3 seconds
     let deferred = false;
     try {
-      // List command should be ephemeral to keep URLs private
-      const shouldBeEphemeral = subcommand === 'list';
+      // Make connection-related commands ephemeral for privacy
+      const ephemeralCommands = [
+        'list',
+        'tools',
+        'reconnect',
+        'disconnect',
+        'delete',
+      ];
+      const shouldBeEphemeral = ephemeralCommands.includes(subcommand);
       await interaction.deferReply({ ephemeral: shouldBeEphemeral });
       deferred = true;
       console.log('✅ Successfully deferred MCP command');
@@ -267,6 +274,13 @@ export class MCPCommand extends BaseCommand {
       }
 
       // Send the response using editReply since we deferred
+      logger.info(`Sending response to Discord for subcommand ${subcommand}:`, {
+        service: 'MCPCommand',
+        hasContent: !!response?.content,
+        hasEmbeds: !!response?.embeds,
+        contentPreview: response?.content?.substring(0, 100),
+      });
+
       if (response) {
         await interaction.editReply({
           content: response.content || undefined,
@@ -274,15 +288,31 @@ export class MCPCommand extends BaseCommand {
           files: response.files || undefined,
           components: response.components || undefined,
         });
+        logger.info(
+          `Successfully sent response to Discord for subcommand ${subcommand}`,
+        );
       } else {
         await interaction.editReply({ content: '✅ Done.' });
+        logger.info(
+          `Sent default 'Done' response for subcommand ${subcommand}`,
+        );
       }
     } catch (error) {
       console.error(`Error executing /mcp ${subcommand}:`, error);
+      logger.error(
+        `Outer catch block triggered for subcommand ${subcommand}`,
+        error as Error,
+        {
+          service: 'MCPCommand',
+        },
+      );
 
       await interaction.editReply({
         content: '❌ An unexpected error occurred while running this command.',
       });
+      logger.info(
+        `Sent error response to Discord for subcommand ${subcommand}`,
+      );
     }
   }
 
@@ -493,7 +523,11 @@ export class MCPCommand extends BaseCommand {
       // Skip disconnect for error/disconnected states to avoid hanging
       if (currentConnection?.status === 'connected') {
         try {
-          await this.mcpService.disconnectFromServer(serverId, userId, channelId);
+          await this.mcpService.disconnectFromServer(
+            serverId,
+            userId,
+            channelId,
+          );
           logger.info(`Disconnected ${serverName} before reconnecting`);
         } catch (disconnectError) {
           logger.debug(
@@ -511,6 +545,13 @@ export class MCPCommand extends BaseCommand {
         userId,
         channelId,
       );
+
+      logger.info(`Reconnect result for ${serverName}:`, {
+        service: 'MCPCommand',
+        success: connection.success,
+        status: connection.status || 'undefined',
+        message: connection.message || 'no message',
+      });
 
       if (connection.success && connection.status === 'connected') {
         return {
@@ -641,13 +682,6 @@ export class MCPCommand extends BaseCommand {
         };
       }
 
-      const embed = new EmbedBuilder()
-        .setTitle('🛠️ Available MCP Tools')
-        .setDescription(
-          `You have access to ${tools.length} tools from your connected servers.`,
-        )
-        .setColor(0x00ae86);
-
       // Group tools by server
       const toolsByServer = tools.reduce(
         (acc, tool) => {
@@ -660,32 +694,18 @@ export class MCPCommand extends BaseCommand {
         {} as Record<string, typeof tools>,
       );
 
-      Object.entries(toolsByServer).forEach(([serverName, serverTools]) => {
-        const toolList = serverTools
-          .map((tool) => {
-            // Use title if available, otherwise fall back to name
-            const displayName = tool.title || tool.name;
-            // Truncate long descriptions to keep within Discord field limits
-            const shortDescription =
-              tool.description.length > 100
-                ? tool.description.substring(0, 97) + '...'
-                : tool.description;
-            return `• **${displayName}**: ${shortDescription}`;
-          })
-          .join('\n');
+      let message = `🛠️ **Available MCP Tools**\n\nYou have access to **${tools.length} tools** from your connected servers.\n\n`;
 
-        // Discord field value limit is 1024 characters
-        embed.addFields({
-          name: `🔌 ${serverName}`,
-          value:
-            toolList.length > 1024
-              ? toolList.substring(0, 1021) + '...'
-              : toolList,
-          inline: false,
+      Object.entries(toolsByServer).forEach(([serverName, serverTools]) => {
+        message += `🔌 **${serverName}**\n`;
+        serverTools.forEach((tool) => {
+          const displayName = tool.title || tool.name;
+          message += `• **${displayName}**: ${tool.description}\n`;
         });
+        message += '\n';
       });
 
-      return { content: '', embeds: [embed] };
+      return { content: message };
     } catch (error) {
       console.error('MCP tools error:', error);
       return {

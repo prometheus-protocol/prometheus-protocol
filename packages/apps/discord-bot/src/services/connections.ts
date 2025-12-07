@@ -36,6 +36,36 @@ import { NotFoundError } from '../utils/errors.js';
 
 const TIMEOUT_SECONDS = 60_000; // Fixed timeout for elicitation requests
 
+// Check if URL contains embedded credentials (API key in path or query params)
+function hasEmbeddedCredentials(url: string): boolean {
+  try {
+    const urlObj = new URL(url);
+
+    // Check for common API key query parameters
+    const apiKeyParams = ['api_key', 'apikey', 'key', 'token', 'access_token'];
+    for (const param of apiKeyParams) {
+      if (urlObj.searchParams.has(param)) {
+        return true;
+      }
+    }
+
+    // Check for long path segments that look like API keys (e.g., base64 encoded)
+    // Zapier uses URLs like: /api/mcp/s/YmZmYjA5NzctZmFkMi00ZTFkLWJhZTEtNWY2NjBmYWNhNmFjOjM0MDUxZDE5LThkY2QtNDg4OS1iNmU2LWQxNWY1MjcyZWJjZA==
+    const pathSegments = urlObj.pathname.split('/').filter((s) => s.length > 0);
+    for (const segment of pathSegments) {
+      // Look for segments longer than 40 chars that look like base64 encoded keys
+      // Require minimum length to avoid false positives on short alphanumeric paths
+      if (segment.length > 40 && /^[A-Za-z0-9+/]+=*$/.test(segment)) {
+        return true;
+      }
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 // Generate connection pool key using userId (Discord) and mcpServerConfigId
 function generateConnectionPoolKey(
   userId: string,
@@ -46,7 +76,7 @@ function generateConnectionPoolKey(
 
 interface ActiveConnection {
   client: McpClient | null; // Client instance, null if not yet created
-  authProvider: ConnectionManagerOAuthProvider;
+  authProvider?: ConnectionManagerOAuthProvider; // Optional - only used if no embedded credentials
   mcpServerUrl: string;
   userId: string;
   channelId: string;
@@ -340,6 +370,36 @@ export class ConnectionPoolService {
   async handleConnectionRequest(
     payload: ConnectionRequestPayload,
   ): Promise<void> {
+    // Wrap the entire connection process with a timeout
+    const CONNECTION_TIMEOUT = 60000; // 60 seconds
+
+    const timeoutPromise = new Promise<void>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('Connection request timed out after 60 seconds'));
+      }, CONNECTION_TIMEOUT);
+    });
+
+    try {
+      await Promise.race([
+        this._handleConnectionRequestInternal(payload),
+        timeoutPromise,
+      ]);
+    } catch (error: any) {
+      const poolKey = generateConnectionPoolKey(
+        payload.userId,
+        payload.mcpServerConfigId,
+      );
+      logger.error(
+        `[ConnPool-${poolKey}] Connection request failed: ${error.message}`,
+      );
+      // Ensure failure is recorded even if timeout occurs
+      await this._handleConnectionFailure(payload, poolKey, error);
+    }
+  }
+
+  private async _handleConnectionRequestInternal(
+    payload: ConnectionRequestPayload,
+  ): Promise<void> {
     // 1. Initial validation
     if (
       !payload.userId ||
@@ -422,16 +482,76 @@ export class ConnectionPoolService {
       });
 
       const serverUrlObject = new URL(payload.mcpServerUrl);
-      const authProvider = new ConnectionManagerOAuthProvider(
-        payload.mcpServerConfigId,
-        payload.userId,
-        this.databaseService,
-        this.eventService,
-        payload.mcpServerUrl,
-        payload.channelId, // Pass channelId to the provider
+
+      // Check if URL has embedded credentials - if so, skip OAuth
+      const hasCredentials = hasEmbeddedCredentials(payload.mcpServerUrl);
+      logger.info(
+        `[ConnPool-${poolKey}] URL has embedded credentials: ${hasCredentials}`,
       );
 
-      // Store the authProvider in the pool immediately.
+      let authProvider: ConnectionManagerOAuthProvider | undefined;
+      let authStatus: string | undefined;
+
+      if (!hasCredentials) {
+        // Only use OAuth if there are no embedded credentials
+        authProvider = new ConnectionManagerOAuthProvider(
+          payload.mcpServerConfigId,
+          payload.userId,
+          this.databaseService,
+          this.eventService,
+          payload.mcpServerUrl,
+          payload.channelId, // Pass channelId to the provider
+        );
+
+        authStatus = await auth(authProvider, {
+          serverUrl: payload.mcpServerUrl,
+        });
+
+        console.log('authStatus', authStatus);
+
+        // Handle non-error exit conditions from auth flow
+        if (authStatus === 'REDIRECT') {
+          logger.info(
+            `[ConnPool-${poolKey}] AuthProvider initiated OAuth flow. Redirecting user.`,
+          );
+          await this.databaseService.updateConnectionStatus(
+            payload.userId,
+            payload.channelId,
+            payload.mcpServerConfigId,
+            payload.mcpServerUrl,
+            'AUTH_PENDING',
+          );
+          return;
+        }
+
+        if (authStatus === 'PENDING_CLIENT_REGISTRATION') {
+          logger.info(
+            `[ConnPool-${poolKey}] Dynamic client registration failed. Manual action required.`,
+          );
+          await this.eventService.publishConnectionStatusUpdate({
+            generatedAt: new Date().toISOString(),
+            userId: payload.userId,
+            mcpServerConfigId: payload.mcpServerConfigId,
+            mcpServerUrl: payload.mcpServerUrl,
+            status: 'pending_client_registration',
+            lastUpdated: new Date(),
+          });
+          await this.databaseService.updateConnectionStatus(
+            payload.userId,
+            payload.channelId,
+            payload.mcpServerConfigId,
+            payload.mcpServerUrl,
+            'PENDING_CLIENT_REGISTRATION',
+          );
+          return;
+        }
+      } else {
+        logger.info(
+          `[ConnPool-${poolKey}] Skipping OAuth - using embedded credentials from URL`,
+        );
+      }
+
+      // Store the authProvider in the pool immediately (or undefined if using embedded creds).
       const connectionAttempt: ActiveConnection = {
         client: null, // Client not created yet
         authProvider,
@@ -442,49 +562,6 @@ export class ConnectionPoolService {
         isActiveAttempted: false,
       };
       this.activeConnections.set(poolKey, connectionAttempt);
-
-      const authStatus = await auth(authProvider, {
-        serverUrl: payload.mcpServerUrl,
-      });
-
-      console.log('authStatus', authStatus);
-
-      // Handle non-error exit conditions from auth flow
-      if (authStatus === 'REDIRECT') {
-        logger.info(
-          `[ConnPool-${poolKey}] AuthProvider initiated OAuth flow. Redirecting user.`,
-        );
-        await this.databaseService.updateConnectionStatus(
-          payload.userId,
-          payload.channelId,
-          payload.mcpServerConfigId,
-          payload.mcpServerUrl,
-          'AUTH_PENDING',
-        );
-        return;
-      }
-
-      if (authStatus === 'PENDING_CLIENT_REGISTRATION') {
-        logger.info(
-          `[ConnPool-${poolKey}] Dynamic client registration failed. Manual action required.`,
-        );
-        await this.eventService.publishConnectionStatusUpdate({
-          generatedAt: new Date().toISOString(),
-          userId: payload.userId,
-          mcpServerConfigId: payload.mcpServerConfigId,
-          mcpServerUrl: payload.mcpServerUrl,
-          status: 'pending_client_registration',
-          lastUpdated: new Date(),
-        });
-        await this.databaseService.updateConnectionStatus(
-          payload.userId,
-          payload.channelId,
-          payload.mcpServerConfigId,
-          payload.mcpServerUrl,
-          'PENDING_CLIENT_REGISTRATION',
-        );
-        return;
-      }
 
       // --- Client Creation and Connection ---
       const clientConstructorOpts: Implementation = {
@@ -498,7 +575,8 @@ export class ConnectionPoolService {
       const client = new McpClient(clientConstructorOpts, clientOptions);
       connectionAttempt.client = client; // Add client to the connection object
 
-      const commonTransportOptions = { authProvider };
+      // Only include authProvider in transport options if it exists (not using embedded creds)
+      const commonTransportOptions = authProvider ? { authProvider } : {};
       let connectedTransportType: 'streamableHttp' | 'sse' | undefined;
 
       client.onclose = async () => {
@@ -976,7 +1054,9 @@ export class ConnectionPoolService {
       error.response?.status === 401;
 
     const conn = this.activeConnections.get(poolKey);
-    const tokens = await conn?.authProvider.tokens().catch(() => undefined);
+    const tokens = conn?.authProvider
+      ? await conn.authProvider.tokens().catch(() => undefined)
+      : undefined;
 
     // If tokens are missing and it's an auth-related error, it might be a pending user action.
     // In this case, we update the status but keep the authProvider in the pool for the callback.
