@@ -183,7 +183,9 @@ export class MCPCommand extends BaseCommand {
     // Discord requires acknowledgment within 3 seconds
     let deferred = false;
     try {
-      await interaction.deferReply({ ephemeral: false });
+      // List command should be ephemeral to keep URLs private
+      const shouldBeEphemeral = subcommand === 'list';
+      await interaction.deferReply({ ephemeral: shouldBeEphemeral });
       deferred = true;
       console.log('✅ Successfully deferred MCP command');
     } catch (error) {
@@ -478,15 +480,29 @@ export class MCPCommand extends BaseCommand {
         `Attempting to reconnect to MCP server ${serverName} for user ${userId}`,
       );
 
-      // First, disconnect if the server is currently connected
-      // This allows users to force a fresh reconnection
-      try {
-        await this.mcpService.disconnectFromServer(serverId, userId, channelId);
-        logger.info(`Disconnected ${serverName} before reconnecting`);
-      } catch (disconnectError) {
-        // Ignore disconnect errors - server might already be disconnected
-        logger.debug(
-          `Disconnect before reconnect (expected if already disconnected): ${disconnectError instanceof Error ? disconnectError.message : String(disconnectError)}`,
+      // Check current connection status from database
+      const connections = await this.mcpService.getUserConnections(
+        userId,
+        channelId,
+      );
+      const currentConnection = connections.find(
+        (conn: any) => conn.server_id === serverId,
+      );
+
+      // Only disconnect if the server is currently connected
+      // Skip disconnect for error/disconnected states to avoid hanging
+      if (currentConnection?.status === 'connected') {
+        try {
+          await this.mcpService.disconnectFromServer(serverId, userId, channelId);
+          logger.info(`Disconnected ${serverName} before reconnecting`);
+        } catch (disconnectError) {
+          logger.debug(
+            `Disconnect before reconnect failed: ${disconnectError instanceof Error ? disconnectError.message : String(disconnectError)}`,
+          );
+        }
+      } else {
+        logger.info(
+          `Skipping disconnect for ${serverName} - current status: ${currentConnection?.status || 'unknown'}`,
         );
       }
 
