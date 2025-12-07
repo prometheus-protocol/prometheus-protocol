@@ -351,7 +351,7 @@ export class ChatCommand extends BaseCommand {
           : await this.database.getConversationHistory(
               context.userId,
               context.channelId,
-              50, // Keep last 50 messages for context
+              25, // Keep last 25 messages for context (reduces token usage)
             );
       chatLogger.info('Loaded conversation history', {
         userId: context.userId,

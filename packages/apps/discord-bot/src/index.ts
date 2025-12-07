@@ -392,8 +392,10 @@ class DiscordBot {
       }, 5000); // Refresh every 5 seconds
 
       try {
-        // Load conversation history from database
-        const history = chatThread.conversation_history.map((msg: any) => ({
+        // Load conversation history from database (limit to last 25 messages for token efficiency)
+        const fullHistory = chatThread.conversation_history || [];
+        const recentHistory = fullHistory.slice(-25); // Only keep last 25 messages
+        const history = recentHistory.map((msg: any) => ({
           role: msg.role as 'user' | 'assistant' | 'system',
           content: msg.content,
           timestamp: new Date(),
@@ -510,7 +512,7 @@ class DiscordBot {
         const history = await this.database.getConversationHistory(
           message.author.id,
           message.channel.id,
-          50,
+          25, // Keep last 25 messages for context (reduces token usage)
         );
 
         // Generate AI response
