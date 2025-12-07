@@ -142,7 +142,44 @@ export class MCPCommand extends BaseCommand {
   }
 
   async executeSlash(interaction: ChatInputCommandInteraction): Promise<void> {
-    // CRITICAL: Defer FIRST, before ANY other processing
+    const subcommand = interaction.options.getSubcommand();
+
+    // Special case: connect shows a modal, so don't defer
+    if (subcommand === 'connect') {
+      // Get the correct channel ID (parent channel if in a thread)
+      const channelId = await this.getEffectiveChannelId(interaction);
+
+      console.log('🔍 MCP executeSlash (connect):', {
+        interactionId: interaction.id,
+        userId: interaction.user.id,
+        subcommand,
+        channelId,
+        isThread: interaction.channel?.isThread(),
+      });
+
+      // Show modal for URL input (keeps URL private)
+      const modal = new ModalBuilder()
+        .setCustomId(`mcp_connect_${interaction.user.id}`)
+        .setTitle('Connect to MCP Server');
+
+      const urlInput = new TextInputBuilder()
+        .setCustomId('mcp_server_url')
+        .setLabel('MCP Server URL')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('https://your-mcp-server.com')
+        .setRequired(true);
+
+      const actionRow = new ActionRowBuilder<TextInputBuilder>().addComponents(
+        urlInput,
+      );
+
+      modal.addComponents(actionRow);
+
+      await interaction.showModal(modal);
+      return; // Modal submission will be handled separately
+    }
+
+    // CRITICAL: Defer FIRST, before ANY other processing (except connect)
     // Discord requires acknowledgment within 3 seconds
     let deferred = false;
     try {
@@ -154,8 +191,6 @@ export class MCPCommand extends BaseCommand {
       // If we can't defer, we can't respond at all
       return;
     }
-
-    const subcommand = interaction.options.getSubcommand();
 
     // Get the correct channel ID (parent channel if in a thread)
     const channelId = await this.getEffectiveChannelId(interaction);
@@ -177,28 +212,9 @@ export class MCPCommand extends BaseCommand {
         case 'list':
           response = await this.handleList(interaction.user.id, channelId);
           break;
-        case 'connect': {
-          // Show modal for URL input (keeps URL private)
-          const modal = new ModalBuilder()
-            .setCustomId(`mcp_connect_${interaction.user.id}`)
-            .setTitle('Connect to MCP Server');
-
-          const urlInput = new TextInputBuilder()
-            .setCustomId('mcp_server_url')
-            .setLabel('MCP Server URL')
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder('https://your-mcp-server.com')
-            .setRequired(true);
-
-          const actionRow = new ActionRowBuilder<TextInputBuilder>().addComponents(
-            urlInput,
-          );
-
-          modal.addComponents(actionRow);
-
-          await interaction.showModal(modal);
-          return; // Modal submission will be handled separately
-        }
+        case 'connect':
+          // This case is now handled above before deferring
+          return;
         case 'reconnect': {
           const serverName = interaction.options.getString('server-name', true);
           response = await this.handleReconnect(
