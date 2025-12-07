@@ -15,6 +15,9 @@ import {
   ChatInputCommandInteraction,
   AutocompleteInteraction,
   InteractionContextType,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
 } from 'discord.js';
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { logger } from '../../utils/logger.js';
@@ -41,12 +44,8 @@ export class MCPCommand extends BaseCommand {
       .addSubcommand((subcommand) =>
         subcommand
           .setName('connect')
-          .setDescription('Connect to an MCP server via URL')
-          .addStringOption((option) =>
-            option
-              .setName('url')
-              .setDescription('MCP server URL (http:// or https://)')
-              .setRequired(true),
+          .setDescription(
+            'Connect to an MCP server (opens a private form for URL)',
           ),
       )
       .addSubcommand((subcommand) =>
@@ -179,13 +178,26 @@ export class MCPCommand extends BaseCommand {
           response = await this.handleList(interaction.user.id, channelId);
           break;
         case 'connect': {
-          const url = interaction.options.getString('url', true);
-          response = await this.handleConnect(
-            url,
-            interaction.user.id,
-            channelId,
+          // Show modal for URL input (keeps URL private)
+          const modal = new ModalBuilder()
+            .setCustomId(`mcp_connect_${interaction.user.id}`)
+            .setTitle('Connect to MCP Server');
+
+          const urlInput = new TextInputBuilder()
+            .setCustomId('mcp_server_url')
+            .setLabel('MCP Server URL')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('https://your-mcp-server.com')
+            .setRequired(true);
+
+          const actionRow = new ActionRowBuilder<TextInputBuilder>().addComponents(
+            urlInput,
           );
-          break;
+
+          modal.addComponents(actionRow);
+
+          await interaction.showModal(modal);
+          return; // Modal submission will be handled separately
         }
         case 'reconnect': {
           const serverName = interaction.options.getString('server-name', true);

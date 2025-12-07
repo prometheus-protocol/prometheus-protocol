@@ -217,6 +217,56 @@ class DiscordBot {
         return;
       }
 
+      // Handle modal submit interactions
+      if (interaction.isModalSubmit()) {
+        try {
+          // Check if this is an MCP connect modal
+          if (interaction.customId.startsWith('mcp_connect_')) {
+            const url = interaction.fields.getTextInputValue('mcp_server_url');
+            const userId = interaction.user.id;
+            const channelId = !interaction.inGuild()
+              ? 'dm'
+              : interaction.channel?.isThread()
+                ? interaction.channel.parentId || interaction.channelId
+                : interaction.channelId;
+
+            await interaction.deferReply({ ephemeral: true });
+
+            // Get MCP command and call handleConnect
+            const mcpCommand = this.commandRegistry.getCommand('mcp');
+            if (mcpCommand && 'handleConnect' in mcpCommand) {
+              const response = await (mcpCommand as any).handleConnect(
+                url,
+                userId,
+                channelId,
+              );
+              await interaction.editReply({
+                content: response.content || undefined,
+                embeds: response.embeds || undefined,
+                components: response.components || undefined,
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Error handling modal submit:', error);
+          try {
+            if (interaction.deferred) {
+              await interaction.editReply({
+                content: 'Error processing your request.',
+              });
+            } else {
+              await interaction.reply({
+                content: 'Error processing your request.',
+                ephemeral: true,
+              });
+            }
+          } catch (replyError) {
+            console.error('Failed to send error reply:', replyError);
+          }
+        }
+        return;
+      }
+
       if (!isSlash) return;
 
       const command = this.commandRegistry.getCommand(commandName);
