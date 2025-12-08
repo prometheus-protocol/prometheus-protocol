@@ -30,3 +30,30 @@ export function getToolChannelId(
   // Regular guild channels use their own ID
   return interaction.channelId;
 }
+
+/**
+ * Get the channel ID to use for conversation history storage.
+ *
+ * For DMs: Returns the actual DM channel ID so each DM conversation has its own history.
+ * Unlike tool connections, conversation history should be specific to each DM channel.
+ *
+ * For Guild channels: Returns the actual channel ID.
+ *
+ * For Threads: Returns the parent channel ID so threads share their parent's conversation history.
+ */
+export function getConversationChannelId(
+  interaction: ChatInputCommandInteraction | AutocompleteInteraction,
+): string {
+  // In DMs, use the actual channel ID for separate conversation history
+  if (!interaction.inGuild()) {
+    return interaction.channelId;
+  }
+
+  // In threads, use the parent channel's conversation history
+  if (interaction.channel?.isThread()) {
+    return interaction.channel.parentId || interaction.channelId;
+  }
+
+  // Regular guild channels use their own ID
+  return interaction.channelId;
+}

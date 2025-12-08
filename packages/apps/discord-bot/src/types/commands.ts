@@ -10,7 +10,8 @@ export interface CommandContext {
   interaction: ChatInputCommandInteraction;
   args: string[];
   userId: string;
-  channelId: string;
+  channelId: string; // For tool access - 'dm' for all DMs, actual channel for guilds
+  conversationChannelId?: string; // For conversation history - actual DM channel ID, defaults to channelId if not set
   guildId?: string;
   threadId?: string; // Optional: thread ID for posting alerts when in a thread
 }

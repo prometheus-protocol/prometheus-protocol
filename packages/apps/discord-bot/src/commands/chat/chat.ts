@@ -18,7 +18,7 @@ import { LLMService } from '../../services/llm.js';
 import { chatLogger } from '../../utils/logger.js';
 import { ErrorHandler, AuthenticationError } from '../../utils/errors.js';
 import { startSession, endSession } from './stop.js';
-import { getToolChannelId } from '../../utils/channel-helpers.js';
+import { getToolChannelId, getConversationChannelId } from '../../utils/channel-helpers.js';
 
 export class ChatCommand extends BaseCommand {
   name = 'chat';
@@ -136,6 +136,7 @@ export class ChatCommand extends BaseCommand {
               args: [],
               userId: interaction.user.id,
               channelId: getToolChannelId(interaction), // Shared 'dm' for DMs, actual channel for guilds
+              conversationChannelId: getConversationChannelId(interaction), // Actual channel for conversation history
               guildId: interaction.guildId || undefined,
               threadId: thread.id, // Store thread ID in context for task creation
             };
@@ -233,6 +234,7 @@ export class ChatCommand extends BaseCommand {
             args: [],
             userId: interaction.user.id,
             channelId: getToolChannelId(interaction), // Shared 'dm' for DMs, actual channel for guilds
+            conversationChannelId: getConversationChannelId(interaction), // Actual channel for conversation history
             guildId: interaction.guildId || undefined,
           };
 
@@ -269,7 +271,8 @@ export class ChatCommand extends BaseCommand {
           interaction,
           args: [],
           userId: interaction.user.id,
-          channelId: getToolChannelId(interaction), // Shared 'dm' for all DMs
+          channelId: getToolChannelId(interaction), // Shared 'dm' for all DMs (tool access)
+          conversationChannelId: getConversationChannelId(interaction), // Actual DM channel (conversation history)
           guildId: interaction.guildId || undefined,
         };
 
@@ -345,17 +348,20 @@ export class ChatCommand extends BaseCommand {
       );
 
       // Load conversation history from database (or use override for new threads)
+      // Use conversationChannelId if available, otherwise fall back to channelId
+      const conversationChannelId = context.conversationChannelId || context.channelId;
       const history =
         overrideHistory !== undefined
           ? overrideHistory
           : await this.database.getConversationHistory(
               context.userId,
-              context.channelId,
+              conversationChannelId,
               25, // Keep last 25 messages for context (reduces token usage)
             );
       chatLogger.info('Loaded conversation history', {
         userId: context.userId,
         channelId: context.channelId,
+        conversationChannelId,
         historyCount: history.length,
         isOverride: overrideHistory !== undefined,
       });
@@ -949,9 +955,12 @@ export class ChatCommand extends BaseCommand {
     try {
       chatLogger.info('Saving conversation turn to database');
 
+      // Use conversationChannelId if available, otherwise fall back to channelId
+      const conversationChannelId = context.conversationChannelId || context.channelId;
+
       await this.database.saveConversationTurn(
         context.userId,
-        context.channelId,
+        conversationChannelId,
         userMessage,
         aiResponse,
       );
@@ -976,6 +985,9 @@ export class ChatCommand extends BaseCommand {
       chatLogger.info('Saving conversation with full message history', {
         messageCount: messages.length,
       });
+
+      // Use conversationChannelId if available, otherwise fall back to channelId
+      const conversationChannelId = context.conversationChannelId || context.channelId;
 
       // Convert OpenAI message format to our ConversationMessage format
       const now = new Date();
@@ -1013,7 +1025,7 @@ export class ChatCommand extends BaseCommand {
 
       await this.database.saveMessages(
         context.userId,
-        context.channelId,
+        conversationChannelId,
         conversationMessages,
       );
 
