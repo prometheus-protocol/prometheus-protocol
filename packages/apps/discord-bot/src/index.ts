@@ -15,6 +15,7 @@ import { ClearChatCommand } from './commands/chat/clear.js';
 import { StopCommand } from './commands/chat/stop.js';
 import { MCPCommand } from './commands/mcp/mcp.js';
 import { TasksCommand } from './commands/tasks/tasks.js';
+import { PreferencesCommand } from './commands/preferences/preferences.js';
 import { LLMService } from './services/llm.js';
 import { SupabaseService } from './services/database.js';
 import { AlertScheduler } from './services/scheduler.js';
@@ -654,6 +655,9 @@ class DiscordBot {
 
     // Register MCP management command (no registry service needed)
     this.commandRegistry.register(new MCPCommand(this.mcpService));
+
+    // Register timezone command for user timezone preferences
+    this.commandRegistry.register(new PreferencesCommand(this.database));
 
     // DISABLED: Tasks command removed (task scheduling system disabled)
     // Register dedicated tasks management command
