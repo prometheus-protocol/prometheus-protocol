@@ -6,6 +6,7 @@ import { ClearChatCommand } from './commands/chat/clear.js';
 import { StopCommand } from './commands/chat/stop.js';
 import { MCPCommand } from './commands/mcp/mcp.js';
 import { TasksCommand } from './commands/tasks/tasks.js';
+import { PreferencesCommand } from './commands/preferences/preferences.js';
 // You might need to import your services if the command constructors need them
 // For this script, we can often pass 'null' or a mock if the constructor allows it,
 // since we only need the command definition, not its execution logic.
@@ -30,6 +31,7 @@ commandRegistry.register(new ClearChatCommand(null as any));
 commandRegistry.register(new StopCommand());
 commandRegistry.register(new MCPCommand(null as any)); // No longer needs registry service
 commandRegistry.register(new TasksCommand(null as any, null as any));
+commandRegistry.register(new PreferencesCommand(null as any)); // Timezone command
 
 const commands = commandRegistry
   .getAllCommands()
