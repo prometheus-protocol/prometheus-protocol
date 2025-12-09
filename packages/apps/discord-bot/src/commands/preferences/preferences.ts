@@ -2,6 +2,7 @@ import {
   SlashCommandBuilder,
   SlashCommandSubcommandsOnlyBuilder,
   ChatInputCommandInteraction,
+  AutocompleteInteraction,
   InteractionContextType,
   EmbedBuilder,
 } from 'discord.js';
@@ -33,9 +34,9 @@ export class PreferencesCommand extends BaseCommand {
           .addStringOption((option) =>
             option
               .setName('timezone')
-              .setDescription('Your timezone in IANA format (e.g., America/New_York)')
+              .setDescription('Your timezone - start typing to search')
               .setRequired(true)
-              .setAutocomplete(false),
+              .setAutocomplete(true),
           ),
       )
       .addSubcommand((subcommand) =>
@@ -53,6 +54,99 @@ export class PreferencesCommand extends BaseCommand {
         InteractionContextType.Guild,
         InteractionContextType.PrivateChannel,
       ]);
+  }
+
+  async handleAutocomplete(interaction: AutocompleteInteraction): Promise<void> {
+    const focusedOption = interaction.options.getFocused(true);
+
+    if (focusedOption.name === 'timezone') {
+      const query = focusedOption.value.toLowerCase();
+
+      // Popular timezones organized by region
+      const popularTimezones = [
+        // North America
+        'America/New_York',
+        'America/Chicago',
+        'America/Denver',
+        'America/Los_Angeles',
+        'America/Phoenix',
+        'America/Anchorage',
+        'Pacific/Honolulu',
+        'America/Toronto',
+        'America/Vancouver',
+        'America/Mexico_City',
+        
+        // Europe
+        'Europe/London',
+        'Europe/Paris',
+        'Europe/Berlin',
+        'Europe/Rome',
+        'Europe/Madrid',
+        'Europe/Amsterdam',
+        'Europe/Brussels',
+        'Europe/Vienna',
+        'Europe/Stockholm',
+        'Europe/Moscow',
+        'Europe/Istanbul',
+        'Europe/Athens',
+        
+        // Asia
+        'Asia/Tokyo',
+        'Asia/Seoul',
+        'Asia/Shanghai',
+        'Asia/Hong_Kong',
+        'Asia/Singapore',
+        'Asia/Bangkok',
+        'Asia/Dubai',
+        'Asia/Kolkata',
+        'Asia/Jakarta',
+        'Asia/Manila',
+        
+        // Australia & Pacific
+        'Australia/Sydney',
+        'Australia/Melbourne',
+        'Australia/Brisbane',
+        'Australia/Perth',
+        'Pacific/Auckland',
+        'Pacific/Fiji',
+        
+        // South America
+        'America/Sao_Paulo',
+        'America/Buenos_Aires',
+        'America/Santiago',
+        'America/Lima',
+        
+        // Africa
+        'Africa/Cairo',
+        'Africa/Johannesburg',
+        'Africa/Lagos',
+        'Africa/Nairobi',
+      ];
+
+      // Filter timezones based on user input
+      let filtered = popularTimezones;
+      
+      if (query.length > 0) {
+        filtered = popularTimezones.filter((tz) => {
+          const tzLower = tz.toLowerCase();
+          const city = tz.split('/')[1]?.toLowerCase() || '';
+          const continent = tz.split('/')[0]?.toLowerCase() || '';
+          
+          // Match against full timezone, city name, or continent
+          return tzLower.includes(query) || 
+                 city.includes(query) || 
+                 continent.includes(query);
+        });
+      }
+
+      // Limit to 25 choices (Discord's limit)
+      const choices = filtered.slice(0, 25).map((tz) => ({
+        name: tz.replace('_', ' '),
+        value: tz,
+      }));
+
+      await interaction.respond(choices);
+    }
   }
 
   async executeSlash(interaction: ChatInputCommandInteraction): Promise<void> {
