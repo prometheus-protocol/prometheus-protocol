@@ -200,9 +200,9 @@ export class TasksCommand extends BaseCommand {
       );
 
       if (response.embeds) {
-        await interaction.editReply({ embeds: response.embeds, ephemeral: true });
+        await interaction.editReply({ embeds: response.embeds });
       } else {
-        await interaction.editReply({ content: response.content || 'Command completed.', ephemeral: true });
+        await interaction.editReply({ content: response.content || 'Command completed.' });
       }
     } catch (error) {
       logger.error(
@@ -215,7 +215,7 @@ export class TasksCommand extends BaseCommand {
 
       try {
         if (interaction.deferred || interaction.replied) {
-          await interaction.editReply({ content: `❌ Error: ${errorMessage}`, ephemeral: true });
+          await interaction.editReply({ content: `❌ Error: ${errorMessage}` });
         } else {
           await interaction.reply({ content: `❌ Error: ${errorMessage}`, ephemeral: true });
         }
