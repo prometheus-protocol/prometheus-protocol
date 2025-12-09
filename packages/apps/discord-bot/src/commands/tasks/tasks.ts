@@ -179,7 +179,7 @@ export class TasksCommand extends BaseCommand {
     try {
       // Defer the reply since some operations might take time
       if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply();
+        await interaction.deferReply({ ephemeral: true });
         console.log(
           `✅ Successfully deferred reply for interaction: ${interaction.id}`,
         );
@@ -200,9 +200,9 @@ export class TasksCommand extends BaseCommand {
       );
 
       if (response.embeds) {
-        await interaction.editReply({ embeds: response.embeds });
+        await interaction.editReply({ embeds: response.embeds, ephemeral: true });
       } else {
-        await interaction.editReply(response.content || 'Command completed.');
+        await interaction.editReply({ content: response.content || 'Command completed.', ephemeral: true });
       }
     } catch (error) {
       logger.error(
@@ -215,9 +215,9 @@ export class TasksCommand extends BaseCommand {
 
       try {
         if (interaction.deferred || interaction.replied) {
-          await interaction.editReply(`❌ Error: ${errorMessage}`);
+          await interaction.editReply({ content: `❌ Error: ${errorMessage}`, ephemeral: true });
         } else {
-          await interaction.reply(`❌ Error: ${errorMessage}`);
+          await interaction.reply({ content: `❌ Error: ${errorMessage}`, ephemeral: true });
         }
       } catch (replyError) {
         logger.error(
