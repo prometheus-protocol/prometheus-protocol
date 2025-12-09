@@ -37,9 +37,10 @@ const commands = commandRegistry
   .getAllCommands()
   .map((cmd) => {
     if ('getSlashCommand' in cmd && typeof cmd.getSlashCommand === 'function') {
-      // Assuming getSlashCommand returns a SlashCommandBuilder or similar
+      // Get the slash command data - can be SlashCommandBuilder, SlashCommandSubcommandsOnlyBuilder, etc.
       const slashCommandData = cmd.getSlashCommand();
-      if (slashCommandData instanceof SlashCommandBuilder) {
+      // All slash command builders have a toJSON() method
+      if (slashCommandData && typeof slashCommandData.toJSON === 'function') {
         return slashCommandData.toJSON();
       }
     }
