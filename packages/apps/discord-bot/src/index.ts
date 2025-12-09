@@ -35,6 +35,7 @@ class DiscordBot {
   private llmService: LLMService;
   private database: SupabaseService;
   private scheduler: AlertScheduler;
+  private taskFunctions: TaskManagementFunctions;
   private mcpService: MCPService;
   private discordNotification: DiscordNotificationService;
   private mcpEventService: MCPEventService;
@@ -88,26 +89,24 @@ class DiscordBot {
     // Initialize the MCP service after all dependencies are set up
     this.mcpService.initialize();
 
-    // DISABLED: Task scheduling system removed to reduce LLM token costs
-    // This is a free onboarding tool and scheduled tasks were too expensive
     // Create scheduler and task functions first (LLM service needs task functions)
+    // NOTE: Only one-time tasks are allowed (no recurring) to reduce token costs
     this.scheduler = new AlertScheduler(
       this.client,
       this.database,
       this.config,
       null as any, // Will be set after LLM service is created
     );
-    // Commenting out task functions to disable the system
-    // this.taskFunctions = new TaskManagementFunctions(
-    //   this.scheduler,
-    //   this.database,
-    // );
+    this.taskFunctions = new TaskManagementFunctions(
+      this.scheduler,
+      this.database,
+    );
 
-    // Now create LLM service without task functions (disabled)
+    // Create LLM service with task functions enabled
     this.llmService = new LLMService(
       this.config,
       this.mcpService,
-      undefined, // taskFunctions disabled
+      this.taskFunctions,
     );
 
     // Set the LLM service in scheduler now that it's created
@@ -146,19 +145,18 @@ class DiscordBot {
           console.log(`📍 Guild: ${guild.name} (${guild.id})`);
         });
 
-        // DISABLED: Scheduler system removed to reduce LLM token costs
-        // Start scheduler with alert loading
+        // Start scheduler with alert loading (one-time tasks only)
         // Skip loading alerts in development if DISABLE_SCHEDULER is set
-        console.log('⏸️ Task scheduler permanently disabled (removed feature)');
-        // if (process.env.DISABLE_SCHEDULER === 'true') {
-        //   console.log('⏸️ Scheduler disabled via DISABLE_SCHEDULER env var');
-        // } else {
-        //   try {
-        //     await this.scheduler.start();
-        //   } catch (error) {
-        //     console.error('⚠️ Scheduler initialization error:', error);
-        //   }
-        // }
+        if (process.env.DISABLE_SCHEDULER === 'true') {
+          console.log('⏸️ Scheduler disabled via DISABLE_SCHEDULER env var');
+        } else {
+          try {
+            await this.scheduler.start();
+            console.log('✅ Task scheduler started (one-time tasks only)');
+          } catch (error) {
+            console.error('⚠️ Scheduler initialization error:', error);
+          }
+        }
 
         // NOTE: Reestablishing persistent MCP connections on startup is disabled
         // for scalability. With thousands of users, this would create too many
@@ -659,11 +657,10 @@ class DiscordBot {
     // Register timezone command for user timezone preferences
     this.commandRegistry.register(new PreferencesCommand(this.database));
 
-    // DISABLED: Tasks command removed (task scheduling system disabled)
-    // Register dedicated tasks management command
-    // this.commandRegistry.register(
-    //   new TasksCommand(this.taskFunctions, this.database),
-    // );
+    // Register tasks management command (one-time scheduled tasks only)
+    this.commandRegistry.register(
+      new TasksCommand(this.taskFunctions, this.database),
+    );
 
     console.log(
       `📝 Registered ${this.commandRegistry.getAllCommands().length} commands`,

@@ -30,7 +30,9 @@ export class PreferencesCommand extends BaseCommand {
       .addSubcommand((subcommand) =>
         subcommand
           .setName('set')
-          .setDescription('Set your timezone (e.g., America/New_York, Europe/London, Asia/Tokyo)')
+          .setDescription(
+            'Set your timezone (e.g., America/New_York, Europe/London, Asia/Tokyo)',
+          )
           .addStringOption((option) =>
             option
               .setName('timezone')
@@ -56,7 +58,9 @@ export class PreferencesCommand extends BaseCommand {
       ]);
   }
 
-  async handleAutocomplete(interaction: AutocompleteInteraction): Promise<void> {
+  async handleAutocomplete(
+    interaction: AutocompleteInteraction,
+  ): Promise<void> {
     const focusedOption = interaction.options.getFocused(true);
 
     if (focusedOption.name === 'timezone') {
@@ -75,7 +79,7 @@ export class PreferencesCommand extends BaseCommand {
         'America/Toronto',
         'America/Vancouver',
         'America/Mexico_City',
-        
+
         // Europe
         'Europe/London',
         'Europe/Paris',
@@ -89,7 +93,7 @@ export class PreferencesCommand extends BaseCommand {
         'Europe/Moscow',
         'Europe/Istanbul',
         'Europe/Athens',
-        
+
         // Asia
         'Asia/Tokyo',
         'Asia/Seoul',
@@ -101,7 +105,7 @@ export class PreferencesCommand extends BaseCommand {
         'Asia/Kolkata',
         'Asia/Jakarta',
         'Asia/Manila',
-        
+
         // Australia & Pacific
         'Australia/Sydney',
         'Australia/Melbourne',
@@ -109,13 +113,13 @@ export class PreferencesCommand extends BaseCommand {
         'Australia/Perth',
         'Pacific/Auckland',
         'Pacific/Fiji',
-        
+
         // South America
         'America/Sao_Paulo',
         'America/Buenos_Aires',
         'America/Santiago',
         'America/Lima',
-        
+
         // Africa
         'Africa/Cairo',
         'Africa/Johannesburg',
@@ -125,17 +129,19 @@ export class PreferencesCommand extends BaseCommand {
 
       // Filter timezones based on user input
       let filtered = popularTimezones;
-      
+
       if (query.length > 0) {
         filtered = popularTimezones.filter((tz) => {
           const tzLower = tz.toLowerCase();
           const city = tz.split('/')[1]?.toLowerCase() || '';
           const continent = tz.split('/')[0]?.toLowerCase() || '';
-          
+
           // Match against full timezone, city name, or continent
-          return tzLower.includes(query) || 
-                 city.includes(query) || 
-                 continent.includes(query);
+          return (
+            tzLower.includes(query) ||
+            city.includes(query) ||
+            continent.includes(query)
+          );
         });
       }
 
@@ -257,12 +263,13 @@ export class PreferencesCommand extends BaseCommand {
 
       if (!prefs || !prefs.timezone) {
         return {
-          content: '📋 You have no timezone set.\n\nUse `/timezone set <timezone>` to set your timezone.\n\nFind your timezone at: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones',
+          content:
+            '📋 You have no timezone set.\n\nUse `/timezone set <timezone>` to set your timezone.\n\nFind your timezone at: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones',
         };
       }
 
       const currentTime = this.getCurrentTimeInTimezone(prefs.timezone);
-      
+
       const embed = new EmbedBuilder()
         .setTitle('🌍 Your Timezone')
         .setColor(0x5865f2)
@@ -274,9 +281,9 @@ export class PreferencesCommand extends BaseCommand {
         embeds: [embed],
       };
     } catch (error) {
-      logger.error('Error viewing timezone', error as Error, { 
+      logger.error('Error viewing timezone', error as Error, {
         service: 'TimezoneCommand',
-        userId 
+        userId,
       });
       return {
         content: '❌ Failed to retrieve timezone. Please try again later.',
@@ -297,9 +304,9 @@ export class PreferencesCommand extends BaseCommand {
         content: '✅ Timezone preference cleared successfully.',
       };
     } catch (error) {
-      logger.error('Error clearing timezone', error as Error, { 
+      logger.error('Error clearing timezone', error as Error, {
         service: 'TimezoneCommand',
-        userId 
+        userId,
       });
       return {
         content: '❌ Failed to clear timezone. Please try again later.',

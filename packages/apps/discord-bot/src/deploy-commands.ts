@@ -30,7 +30,7 @@ commandRegistry.register(new ChatCommand(null as any, null as any));
 commandRegistry.register(new ClearChatCommand(null as any));
 commandRegistry.register(new StopCommand());
 commandRegistry.register(new MCPCommand(null as any)); // No longer needs registry service
-commandRegistry.register(new TasksCommand(null as any, null as any));
+commandRegistry.register(new TasksCommand(null as any, null as any)); // One-time tasks only
 commandRegistry.register(new PreferencesCommand(null as any)); // Timezone command
 
 const commands = commandRegistry

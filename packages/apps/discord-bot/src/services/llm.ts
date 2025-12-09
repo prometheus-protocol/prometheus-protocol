@@ -227,17 +227,21 @@ export class AnthropicProvider implements LLMProvider {
           continue;
         } else if (m.role === 'user') {
           // Skip empty user messages (e.g., voice messages without transcripts)
-          const contentStr = typeof m.content === 'string' 
-            ? m.content 
-            : JSON.stringify(m.content);
-          
+          const contentStr =
+            typeof m.content === 'string'
+              ? m.content
+              : JSON.stringify(m.content);
+
           if (!contentStr || contentStr.trim() === '' || contentStr === '""') {
-            llmLogger.info('Skipping empty user message in Anthropic conversion', {
-              messageIndex: i,
-            });
+            llmLogger.info(
+              'Skipping empty user message in Anthropic conversion',
+              {
+                messageIndex: i,
+              },
+            );
             continue;
           }
-          
+
           anthropicMessages.push({
             role: 'user',
             content: contentStr,
@@ -476,8 +480,10 @@ export class LLMService {
           });
         } else if (msg.role === 'assistant') {
           // Skip assistant messages that have no content and no tool calls
-          if ((!msg.content || msg.content.trim() === '') && 
-              (!msg.tool_calls || msg.tool_calls.length === 0)) {
+          if (
+            (!msg.content || msg.content.trim() === '') &&
+            (!msg.tool_calls || msg.tool_calls.length === 0)
+          ) {
             llmLogger.info('Skipping empty assistant message from history');
             continue;
           }

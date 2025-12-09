@@ -294,7 +294,10 @@ export class MCPCommand extends BaseCommand {
         );
 
         // Send additional messages as follow-ups if they exist
-        if (response.additionalMessages && response.additionalMessages.length > 0) {
+        if (
+          response.additionalMessages &&
+          response.additionalMessages.length > 0
+        ) {
           logger.info(
             `Sending ${response.additionalMessages.length} additional message(s) for subcommand ${subcommand}`,
           );
@@ -762,7 +765,7 @@ export class MCPCommand extends BaseCommand {
 
       // Split message if it exceeds Discord's character limit
       const messageParts = this.splitMessage(message);
-      
+
       return {
         content: messageParts[0],
         additionalMessages: messageParts.slice(1),

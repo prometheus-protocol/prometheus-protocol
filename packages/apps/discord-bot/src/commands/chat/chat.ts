@@ -18,7 +18,10 @@ import { LLMService } from '../../services/llm.js';
 import { chatLogger } from '../../utils/logger.js';
 import { ErrorHandler, AuthenticationError } from '../../utils/errors.js';
 import { startSession, endSession } from './stop.js';
-import { getToolChannelId, getConversationChannelId } from '../../utils/channel-helpers.js';
+import {
+  getToolChannelId,
+  getConversationChannelId,
+} from '../../utils/channel-helpers.js';
 
 export class ChatCommand extends BaseCommand {
   name = 'chat';
@@ -349,7 +352,8 @@ export class ChatCommand extends BaseCommand {
 
       // Load conversation history from database (or use override for new threads)
       // Use conversationChannelId if available, otherwise fall back to channelId
-      const conversationChannelId = context.conversationChannelId || context.channelId;
+      const conversationChannelId =
+        context.conversationChannelId || context.channelId;
       const history =
         overrideHistory !== undefined
           ? overrideHistory
@@ -956,7 +960,8 @@ export class ChatCommand extends BaseCommand {
       chatLogger.info('Saving conversation turn to database');
 
       // Use conversationChannelId if available, otherwise fall back to channelId
-      const conversationChannelId = context.conversationChannelId || context.channelId;
+      const conversationChannelId =
+        context.conversationChannelId || context.channelId;
 
       await this.database.saveConversationTurn(
         context.userId,
@@ -987,7 +992,8 @@ export class ChatCommand extends BaseCommand {
       });
 
       // Use conversationChannelId if available, otherwise fall back to channelId
-      const conversationChannelId = context.conversationChannelId || context.channelId;
+      const conversationChannelId =
+        context.conversationChannelId || context.channelId;
 
       // Convert OpenAI message format to our ConversationMessage format
       const now = new Date();
