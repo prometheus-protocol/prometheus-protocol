@@ -226,12 +226,21 @@ export class AnthropicProvider implements LLMProvider {
           // System messages handled separately
           continue;
         } else if (m.role === 'user') {
+          // Skip empty user messages (e.g., voice messages without transcripts)
+          const contentStr = typeof m.content === 'string' 
+            ? m.content 
+            : JSON.stringify(m.content);
+          
+          if (!contentStr || contentStr.trim() === '' || contentStr === '""') {
+            llmLogger.info('Skipping empty user message in Anthropic conversion', {
+              messageIndex: i,
+            });
+            continue;
+          }
+          
           anthropicMessages.push({
             role: 'user',
-            content:
-              typeof m.content === 'string'
-                ? m.content
-                : JSON.stringify(m.content),
+            content: contentStr,
           });
         } else if (m.role === 'assistant') {
           // Assistant message, possibly with tool calls
@@ -454,11 +463,24 @@ export class LLMService {
       // Convert history to OpenAI format, handling all message types
       for (const msg of context.history) {
         if (msg.role === 'user' || msg.role === 'system') {
+          // Skip empty messages (e.g., voice messages, attachments without text)
+          if (!msg.content || msg.content.trim() === '') {
+            llmLogger.info('Skipping empty message from history', {
+              role: msg.role,
+            });
+            continue;
+          }
           messages.push({
             role: msg.role,
-            content: msg.content || '',
+            content: msg.content,
           });
         } else if (msg.role === 'assistant') {
+          // Skip assistant messages that have no content and no tool calls
+          if ((!msg.content || msg.content.trim() === '') && 
+              (!msg.tool_calls || msg.tool_calls.length === 0)) {
+            llmLogger.info('Skipping empty assistant message from history');
+            continue;
+          }
           const assistantMsg: OpenAI.Chat.Completions.ChatCompletionAssistantMessageParam =
             {
               role: 'assistant',
