@@ -222,6 +222,15 @@ class CreateTaskHandler implements AIFunctionHandler {
       };
     }
 
+    // ENFORCE: Minimum interval of 1 minute (60 seconds)
+    const MIN_INTERVAL_MS = 60 * 1000; // 1 minute
+    if (intervalMs < MIN_INTERVAL_MS) {
+      return {
+        success: false,
+        message: `Task interval must be at least 1 minute. You specified ${Math.round(intervalMs / 1000)} seconds.`,
+      };
+    }
+
     // Check if task title already exists for this user
     const existingTasks = await this.database.getUserTasks(context.userId);
     const existingTask = existingTasks.find(
