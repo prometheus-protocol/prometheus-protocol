@@ -80,11 +80,15 @@ export class ChatCommand extends BaseCommand {
       prompt: prompt.substring(0, 100),
     });
 
+    console.log('🔄 Starting chat processing for user:', interaction.user.id);
+
     try {
       // Check if this is in a guild channel (not DM)
       if (interaction.inGuild() && interaction.channel) {
+        console.log('📍 Processing in guild channel:', interaction.channelId);
         // Check if channel supports threads
         if ('threads' in interaction.channel) {
+          console.log('🧵 Channel supports threads, creating thread...');
           // Create a thread name from the prompt (max 100 chars for Discord)
           const threadName =
             prompt.length > 100 ? prompt.substring(0, 97) + '...' : prompt;
@@ -305,15 +309,20 @@ export class ChatCommand extends BaseCommand {
         }
       }
     } catch (error) {
+      console.error('❌ Error in chat slash command:', error);
       chatLogger.error(
         'Error in chat slash command',
         error instanceof Error ? error : new Error(String(error)),
       );
 
-      await interaction.followUp({
-        content:
-          'Sorry, I encountered an error while processing your request. Please try again later.',
-      });
+      try {
+        await interaction.followUp({
+          content:
+            'Sorry, I encountered an error while processing your request. Please try again later.',
+        });
+      } catch (followUpError) {
+        console.error('❌ Failed to send error follow-up:', followUpError);
+      }
     }
   }
 
