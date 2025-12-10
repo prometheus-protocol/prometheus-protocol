@@ -57,23 +57,30 @@ const rest = new REST({ version: '10' }).setToken(token);
 (async () => {
   try {
     console.log('Started refreshing application (/) commands.');
+    console.log('Token length:', token?.length, 'chars');
+    console.log('Client ID:', clientId);
+    console.log('Guild ID:', guildId);
 
     // Deploy to guild for instant updates
     console.log('Deploying to guild...');
-    await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
+    const guildResult = await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
       body: commands,
     });
-    console.log('✅ Guild commands deployed');
+    console.log('✅ Guild commands deployed:', guildResult);
 
     // Also deploy globally for better reliability
     console.log('Deploying globally...');
-    await rest.put(Routes.applicationCommands(clientId), {
+    const globalResult = await rest.put(Routes.applicationCommands(clientId), {
       body: commands,
     });
-    console.log('✅ Global commands deployed');
+    console.log('✅ Global commands deployed:', globalResult);
 
     console.log('✅ Successfully reloaded application (/) commands.');
   } catch (error) {
-    console.error(error);
+    console.error('❌ Deploy error:', error);
+    if (error instanceof Error) {
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+    }
   }
 })();
