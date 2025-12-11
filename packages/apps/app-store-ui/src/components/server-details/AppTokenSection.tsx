@@ -53,7 +53,7 @@ export const AppTokenSection: React.FC<AppTokenSectionProps> = ({
           targetPrincipal={targetPrincipal}
           showPrincipalId={isOwnerOrDeveloper}
           principalIdLabel="App Canister Principal ID"
-          principalIdDescription="Approve tokens for the app to use"
+          principalIdDescription="This app's wallet address for receiving tokens"
         />
       </div>
     </Section>
