@@ -7,22 +7,20 @@ export function PokedBotsBanner() {
       {/* Ambient background glow */}
       <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/20 via-orange-500/30 to-red-500/20 blur-3xl" />
 
-      <div className="relative animate-in fade-in slide-in-from-bottom-8 duration-700">
+      <div className="relative animate-in fade-in slide-in-from-bottom-8 duration-700 overflow-hidden" style={{ borderRadius: '54px' }}>
         {/* Main banner container */}
-        <div className="relative bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-3xl overflow-hidden border-2 border-yellow-500/30">
-          {/* Inner container */}
-          <div className="relative bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-3xl overflow-hidden">
-            {/* Grid pattern overlay */}
-            <div
-              className="absolute inset-0 opacity-5"
-              style={{
-                backgroundImage: `
-                  linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
-                  linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)
-                `,
-                backgroundSize: '30px 30px',
-              }}
-            />
+        <div className="relative bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 overflow-hidden border-2 border-yellow-500/30" style={{ borderRadius: '54px' }}>
+          {/* Grid pattern overlay */}
+          <div
+            className="absolute inset-0 opacity-5"
+            style={{
+              backgroundImage: `
+                linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)
+              `,
+              backgroundSize: '30px 30px',
+            }}
+          />
 
             {/* Main content */}
             <div className="relative px-4 sm:px-8 lg:px-12 py-8 sm:py-12 lg:py-16 flex flex-col lg:flex-row items-center justify-between gap-8 lg:gap-12">
@@ -112,7 +110,6 @@ export function PokedBotsBanner() {
             {/* Bottom accent line */}
             <div className="h-1 bg-gradient-to-r from-transparent via-yellow-500 to-transparent" />
           </div>
-        </div>
 
         {/* Corner glow effects */}
         <div className="absolute -bottom-20 right-10 w-96 h-96 bg-orange-500/20 rounded-full blur-3xl pointer-events-none animate-pulse" />

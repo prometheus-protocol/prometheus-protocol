@@ -131,13 +131,13 @@ function HomePage() {
       {(() => {
         const totalSections = categorySections.length;
         const totalBanners = 2; // WinnerBanner and PokedBotsBanner
-        
+
         // Distribute categories evenly: split into 3 groups (before WinnerBanner, between banners, after PokedBotsBanner)
         const sectionsPerGroup = Math.ceil(totalSections / (totalBanners + 1));
-        
+
         let renderedCount = 0;
         const result = [];
-        
+
         // First group of categories
         const firstGroup = categorySections.slice(0, sectionsPerGroup);
         firstGroup.forEach((section) => {
@@ -146,34 +146,37 @@ function HomePage() {
               key={section.title}
               title={section.title}
               servers={section.servers}
-            />
+            />,
           );
         });
         renderedCount += firstGroup.length;
-        
+
         // WinnerBanner after first group
         if (renderedCount < totalSections) {
           result.push(<ValuePropBanner key="value-prop-banner" />);
         }
-        
+
         // Second group of categories
-        const secondGroup = categorySections.slice(sectionsPerGroup, sectionsPerGroup * 2);
+        const secondGroup = categorySections.slice(
+          sectionsPerGroup,
+          sectionsPerGroup * 2,
+        );
         secondGroup.forEach((section) => {
           result.push(
             <ServerGrid
               key={section.title}
               title={section.title}
               servers={section.servers}
-            />
+            />,
           );
         });
         renderedCount += secondGroup.length;
-        
+
         // WinnerBanner after second group
         if (renderedCount < totalSections) {
           result.push(<WinnerBanner key="winner-banner" />);
         }
-        
+
         // Third group of categories (remaining)
         const thirdGroup = categorySections.slice(sectionsPerGroup * 2);
         thirdGroup.forEach((section) => {
@@ -182,16 +185,16 @@ function HomePage() {
               key={section.title}
               title={section.title}
               servers={section.servers}
-            />
+            />,
           );
         });
-        
+
         // If we didn't use all banners (fewer categories than expected), add them at the end
         if (renderedCount >= totalSections) {
           result.push(<ValuePropBanner key="value-prop-banner-fallback" />);
           result.push(<WinnerBanner key="winner-banner-fallback" />);
         }
-        
+
         return result;
       })()}
 
