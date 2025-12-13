@@ -140,6 +140,17 @@ export class ConnectionManagerOAuthProvider implements OAuthClientProvider {
           refresh_token: tokenData.refresh_token || undefined,
           scope: tokenData.scope || undefined,
         };
+
+        logger.info('OAuth token provided for MCP connection:', {
+          service: 'OAuthProvider',
+          serverId: this.dbServerId,
+          tokenType: oauthTokens.token_type,
+          expiresIn: oauthTokens.expires_in,
+          scope: oauthTokens.scope,
+          hasAccessToken: !!oauthTokens.access_token,
+          accessTokenPrefix: oauthTokens.access_token?.substring(0, 10) + '...',
+        });
+
         return OAuthTokensSchema.parseAsync(oauthTokens);
       }
       return undefined;

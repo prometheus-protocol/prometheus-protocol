@@ -50,9 +50,9 @@ export class TaskManagementFunctions {
     return [
       {
         name: 'create_task',
-        title: 'Create Task',
+        title: 'Create One-Time Task',
         description:
-          'Create a new scheduled task for the current user. Use this to set up recurring monitoring or one-time checks using their available tools. IMPORTANT: Tasks execute without conversation history to reduce costs - make prompts self-contained with all necessary context.\n\nTIME & TIMEZONE IMPORTANT:\n- All tasks run on UTC time internally\n- Current UTC time: ' +
+          'Create a new ONE-TIME scheduled task for the current user. This task will run ONCE at the specified time and then automatically stop. Use this for scheduled reminders or checks. IMPORTANT: Tasks execute without conversation history to reduce costs - make prompts self-contained with all necessary context.\n\nRESTRICTIONS:\n- Recurring/repeating tasks are NOT allowed - all tasks are one-time only\n- If user wants a recurring task, explain this limitation\n\nTIME & TIMEZONE IMPORTANT:\n- All tasks run on UTC time internally\n- Current UTC time: ' +
           new Date().toISOString() +
           '\n- If user specifies a specific time (like "6:45pm"), ASK them what timezone they mean\n- Once you learn their timezone, call save_user_timezone to remember it for future use\n- Always confirm the time in BOTH UTC and their local timezone to avoid confusion\n- Example: "I\'ll run this at 6:45 PM your time (which is 1:45 AM UTC tomorrow)"\n- For natural language times, calculate the delay from NOW',
         parameters: {
@@ -61,25 +61,20 @@ export class TaskManagementFunctions {
             title: {
               type: 'string',
               description:
-                'Clear, descriptive title for this task. Examples: "Check my account balance", "Monitor match predictions", "Alert me about market changes"',
+                'Clear, descriptive title for this ONE-TIME task. Examples: "Remind me to check my account", "Check match predictions at 3pm", "Alert me about market status tomorrow"',
             },
             prompt: {
               type: 'string',
               description:
                 "The AI prompt that will be executed when this task runs. IMPORTANT: Tasks don't have access to conversation history, so this prompt must be completely self-contained. Include all necessary context, parameters, and instructions. Use the user's available tools to gather information.",
             },
-            recurring: {
-              type: 'boolean',
-              description:
-                'True = task repeats at the interval indefinitely. False = task runs once then stops automatically.',
-            },
             interval: {
               type: 'string',
               description:
-                'How often to run this task. You MUST handle time parsing and provide one of:\n\n1. Predefined interval: "1 minute", "5 minutes", "15 minutes", "30 minutes", "1 hour", "6 hours", "12 hours", "daily"\n\n2. Milliseconds as string: For natural language times (like "at 6:45pm", "in 2 hours", "tomorrow at noon"), YOU calculate the milliseconds from NOW and pass it as a string number. Example: User says "in 2 hours" -> you pass "7200000" (2 * 60 * 60 * 1000)\n\nFor specific times (like "6:45pm"), first ask user their timezone, then calculate milliseconds until that time.\n\nIMPORTANT: When confirming with user, explain the time in BOTH UTC and their local timezone to avoid confusion.',
+                'When to run this ONE-TIME task. You MUST handle time parsing and provide milliseconds as a string from NOW.\n\nFor natural language times (like "at 6:45pm", "in 2 hours", "tomorrow at noon"), YOU calculate the milliseconds from NOW and pass it as a string number. Example: User says "in 2 hours" -> you pass "7200000" (2 * 60 * 60 * 1000)\n\nFor specific times (like "6:45pm"), first ask user their timezone, then calculate milliseconds until that time.\n\nIMPORTANT: When confirming with user, explain the time in BOTH UTC and their local timezone to avoid confusion.',
             },
           },
-          required: ['title', 'prompt', 'recurring', 'interval'],
+          required: ['title', 'prompt', 'interval'],
         },
       },
       {
@@ -213,7 +208,10 @@ class CreateTaskHandler implements AIFunctionHandler {
     args: Record<string, any>,
     context: AIFunctionContext,
   ): Promise<AIFunctionResult> {
-    const { prompt, interval, title, recurring = true } = args;
+    const { prompt, interval, title } = args;
+
+    // ENFORCE: Only one-time tasks allowed (no recurring)
+    const recurring = false; // Always false - recurring tasks not allowed
 
     // Parse interval to milliseconds
     const intervalMs = this.parseInterval(interval);
@@ -221,6 +219,15 @@ class CreateTaskHandler implements AIFunctionHandler {
       return {
         success: false,
         message: `Invalid interval: ${interval}`,
+      };
+    }
+
+    // ENFORCE: Minimum interval of 1 minute (60 seconds)
+    const MIN_INTERVAL_MS = 60 * 1000; // 1 minute
+    if (intervalMs < MIN_INTERVAL_MS) {
+      return {
+        success: false,
+        message: `Task interval must be at least 1 minute. You specified ${Math.round(intervalMs / 1000)} seconds.`,
       };
     }
 
@@ -244,9 +251,7 @@ class CreateTaskHandler implements AIFunctionHandler {
       const alertConfig = {
         id: taskId,
         name: title,
-        description: recurring
-          ? `Recurring task: ${title}`
-          : `One-shot task: ${title}`,
+        description: `One-time task: ${title}`,
         userId: context.userId, // Include userId for MCP tool access
         channelId: context.channelId, // Parent channel for MCP tool access
         targetChannelId: context.threadId || context.channelId, // Post alerts to thread if available
@@ -254,7 +259,7 @@ class CreateTaskHandler implements AIFunctionHandler {
         interval: intervalMs,
         enabled: true,
         prompt: prompt,
-        recurring: recurring,
+        recurring: false, // Always false - recurring not allowed
       };
 
       // Add to scheduler
@@ -270,19 +275,14 @@ class CreateTaskHandler implements AIFunctionHandler {
         interval: intervalMs,
         description: title,
         enabled: true,
-        recurring: recurring,
+        recurring: false, // Always false - recurring not allowed
         createdAt: new Date(),
       });
 
-      const taskType = recurring ? 'recurring' : 'one-shot';
-      const executionMsg = recurring
-        ? `I'll execute your prompt every ${interval}`
-        : `I'll execute your prompt once in ${interval}`;
-
       return {
         success: true,
-        message: `✅ Created ${taskType} task: "${title}". ${executionMsg} and alert you based on the results.`,
-        data: { taskId, title, interval, prompt, recurring },
+        message: `✅ Created one-time task: "${title}". I'll execute your prompt once in ${interval} and alert you based on the results.`,
+        data: { taskId, title, interval, prompt, recurring: false },
       };
     } catch (error) {
       return {

@@ -226,12 +226,25 @@ export class AnthropicProvider implements LLMProvider {
           // System messages handled separately
           continue;
         } else if (m.role === 'user') {
+          // Skip empty user messages (e.g., voice messages without transcripts)
+          const contentStr =
+            typeof m.content === 'string'
+              ? m.content
+              : JSON.stringify(m.content);
+
+          if (!contentStr || contentStr.trim() === '' || contentStr === '""') {
+            llmLogger.info(
+              'Skipping empty user message in Anthropic conversion',
+              {
+                messageIndex: i,
+              },
+            );
+            continue;
+          }
+
           anthropicMessages.push({
             role: 'user',
-            content:
-              typeof m.content === 'string'
-                ? m.content
-                : JSON.stringify(m.content),
+            content: contentStr,
           });
         } else if (m.role === 'assistant') {
           // Assistant message, possibly with tool calls
@@ -454,11 +467,26 @@ export class LLMService {
       // Convert history to OpenAI format, handling all message types
       for (const msg of context.history) {
         if (msg.role === 'user' || msg.role === 'system') {
+          // Skip empty messages (e.g., voice messages, attachments without text)
+          if (!msg.content || msg.content.trim() === '') {
+            llmLogger.info('Skipping empty message from history', {
+              role: msg.role,
+            });
+            continue;
+          }
           messages.push({
             role: msg.role,
-            content: msg.content || '',
+            content: msg.content,
           });
         } else if (msg.role === 'assistant') {
+          // Skip assistant messages that have no content and no tool calls
+          if (
+            (!msg.content || msg.content.trim() === '') &&
+            (!msg.tool_calls || msg.tool_calls.length === 0)
+          ) {
+            llmLogger.info('Skipping empty assistant message from history');
+            continue;
+          }
           const assistantMsg: OpenAI.Chat.Completions.ChatCompletionAssistantMessageParam =
             {
               role: 'assistant',
@@ -544,12 +572,10 @@ export class LLMService {
               ? contentValue
               : 'Request completed.';
 
-          // Smart truncation as safety net for Discord's 2000 character limit
-          const truncatedResponse = this.truncateResponse(finalResponse);
-
+          // Return the full response - chat command will handle splitting if needed
           // Return the response along with NEW messages from this turn (excluding history and system)
           return {
-            response: truncatedResponse,
+            response: finalResponse,
             messages: messages.slice(turnStartIndex),
           };
         }
@@ -659,11 +685,9 @@ export class LLMService {
         const endLoopResult = toolResults.find((r: any) => r.__END_LOOP__);
         if (endLoopResult) {
           llmLogger.info('Tool loop ended by respond_to_user call', { userId });
-          const truncatedResponse = this.truncateResponse(
-            (endLoopResult as any).message,
-          );
+          // Return the full response - chat command will handle splitting if needed
           return {
-            response: truncatedResponse,
+            response: (endLoopResult as any).message,
             messages: messages.slice(turnStartIndex),
           };
         }
@@ -681,22 +705,18 @@ export class LLMService {
           error as Error,
           { userId },
         );
-        const errorResponse = this.truncateResponse(
-          'Sorry, I encountered an error while processing your request.',
-        );
         return {
-          response: errorResponse,
+          response:
+            'Sorry, I encountered an error while processing your request.',
           messages: messages.slice(turnStartIndex),
         };
       }
     }
 
     llmLogger.warn('Loop exited due to max iterations.', { userId });
-    const maxIterResponse = this.truncateResponse(
-      'I performed several actions but reached the processing limit. The tasks have been completed.',
-    );
     return {
-      response: maxIterResponse,
+      response:
+        'I performed several actions but reached the processing limit. The tasks have been completed.',
       messages: messages.slice(turnStartIndex),
     };
   }

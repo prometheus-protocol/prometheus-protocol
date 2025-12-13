@@ -217,21 +217,13 @@ ${
       return this;
     }
 
-    // Find MCP tool descriptions from available tools
-    const mcpTools = this.context.availableTools.filter((t) =>
-      this.context.mcpToolNames?.includes(t.name),
-    );
+    // Just list tool names - descriptions are already provided by the LLM provider
+    const mcpToolList = this.context.mcpToolNames?.join(', ') || '';
 
-    let mcpContent = `MCP TOOLS:
-You have access to Model Context Protocol (MCP) tools that the user has connected.
+    const mcpContent = `MCP TOOLS:
+You have access to Model Context Protocol (MCP) tools that the user has connected: ${mcpToolList}
 
-Connected MCP Tools:`;
-
-    mcpTools.forEach((tool) => {
-      mcpContent += `\n- ${tool.name}: ${tool.description || 'No description'}`;
-    });
-
-    mcpContent += `\n\nUse these MCP tools naturally when they can help accomplish the user's request. The tools are provided by external servers and give you access to specialized capabilities.`;
+Use these MCP tools naturally when they can help accomplish the user's request. The tools are provided by external servers and give you access to specialized capabilities.`;
 
     this.sections.push({
       name: 'mcp_instructions',

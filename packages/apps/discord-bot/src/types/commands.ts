@@ -10,7 +10,8 @@ export interface CommandContext {
   interaction: ChatInputCommandInteraction;
   args: string[];
   userId: string;
-  channelId: string;
+  channelId: string; // For tool access - 'dm' for all DMs, actual channel for guilds
+  conversationChannelId?: string; // For conversation history - actual DM channel ID, defaults to channelId if not set
   guildId?: string;
   threadId?: string; // Optional: thread ID for posting alerts when in a thread
 }
@@ -21,6 +22,7 @@ export interface CommandResponse {
   files?: any[];
   embeds?: any[];
   components?: any[]; // Support action rows (buttons) for richer UX
+  additionalMessages?: string[]; // For responses that need to be split into multiple messages
 }
 
 export abstract class BaseCommand {

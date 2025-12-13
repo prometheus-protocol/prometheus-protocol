@@ -17,6 +17,7 @@ import {
 import { TaskManagementFunctions } from '../../ai-functions/task-management.js';
 import { ErrorHandler } from '../../utils/errors.js';
 import logger from '../../utils/logger.js';
+import { getToolChannelId } from '../../utils/channel-helpers.js';
 
 export class TasksCommand extends BaseCommand {
   name = 'tasks';
@@ -178,7 +179,7 @@ export class TasksCommand extends BaseCommand {
     try {
       // Defer the reply since some operations might take time
       if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply();
+        await interaction.deferReply({ ephemeral: true });
         console.log(
           `✅ Successfully deferred reply for interaction: ${interaction.id}`,
         );
@@ -188,7 +189,7 @@ export class TasksCommand extends BaseCommand {
         interaction,
         args: [], // Not used in slash commands, but required by interface
         userId: interaction.user.id,
-        channelId: interaction.channelId!,
+        channelId: getToolChannelId(interaction),
         guildId: interaction.guildId || undefined, // Handle DMs where guildId is null
       };
 
@@ -201,7 +202,9 @@ export class TasksCommand extends BaseCommand {
       if (response.embeds) {
         await interaction.editReply({ embeds: response.embeds });
       } else {
-        await interaction.editReply(response.content || 'Command completed.');
+        await interaction.editReply({
+          content: response.content || 'Command completed.',
+        });
       }
     } catch (error) {
       logger.error(
@@ -214,9 +217,12 @@ export class TasksCommand extends BaseCommand {
 
       try {
         if (interaction.deferred || interaction.replied) {
-          await interaction.editReply(`❌ Error: ${errorMessage}`);
+          await interaction.editReply({ content: `❌ Error: ${errorMessage}` });
         } else {
-          await interaction.reply(`❌ Error: ${errorMessage}`);
+          await interaction.reply({
+            content: `❌ Error: ${errorMessage}`,
+            ephemeral: true,
+          });
         }
       } catch (replyError) {
         logger.error(
@@ -645,7 +651,7 @@ export class TasksCommand extends BaseCommand {
           {},
           {
             userId: interaction.user.id,
-            channelId: interaction.channelId || '',
+            channelId: getToolChannelId(interaction),
             guildId: interaction.guildId || '',
             username:
               interaction.user.username ||

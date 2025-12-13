@@ -3,8 +3,10 @@ import { REST, Routes, SlashCommandBuilder } from 'discord.js';
 import { CommandRegistryImpl } from './commands/registry.js';
 import { ChatCommand } from './commands/chat/chat.js';
 import { ClearChatCommand } from './commands/chat/clear.js';
+import { StopCommand } from './commands/chat/stop.js';
 import { MCPCommand } from './commands/mcp/mcp.js';
 import { TasksCommand } from './commands/tasks/tasks.js';
+import { PreferencesCommand } from './commands/preferences/preferences.js';
 // You might need to import your services if the command constructors need them
 // For this script, we can often pass 'null' or a mock if the constructor allows it,
 // since we only need the command definition, not its execution logic.
@@ -26,16 +28,19 @@ if (!token || !clientId || !guildId) {
 const commandRegistry = new CommandRegistryImpl();
 commandRegistry.register(new ChatCommand(null as any, null as any));
 commandRegistry.register(new ClearChatCommand(null as any));
+commandRegistry.register(new StopCommand());
 commandRegistry.register(new MCPCommand(null as any)); // No longer needs registry service
-commandRegistry.register(new TasksCommand(null as any, null as any));
+commandRegistry.register(new TasksCommand(null as any, null as any)); // One-time tasks only
+commandRegistry.register(new PreferencesCommand(null as any)); // Timezone command
 
 const commands = commandRegistry
   .getAllCommands()
   .map((cmd) => {
     if ('getSlashCommand' in cmd && typeof cmd.getSlashCommand === 'function') {
-      // Assuming getSlashCommand returns a SlashCommandBuilder or similar
+      // Get the slash command data - can be SlashCommandBuilder, SlashCommandSubcommandsOnlyBuilder, etc.
       const slashCommandData = cmd.getSlashCommand();
-      if (slashCommandData instanceof SlashCommandBuilder) {
+      // All slash command builders have a toJSON() method
+      if (slashCommandData && typeof slashCommandData.toJSON === 'function') {
         return slashCommandData.toJSON();
       }
     }
@@ -52,23 +57,30 @@ const rest = new REST({ version: '10' }).setToken(token);
 (async () => {
   try {
     console.log('Started refreshing application (/) commands.');
+    console.log('Token length:', token?.length, 'chars');
+    console.log('Client ID:', clientId);
+    console.log('Guild ID:', guildId);
 
     // Deploy to guild for instant updates
     console.log('Deploying to guild...');
-    await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
+    const guildResult = await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
       body: commands,
     });
-    console.log('✅ Guild commands deployed');
+    console.log('✅ Guild commands deployed:', guildResult);
 
     // Also deploy globally for better reliability
     console.log('Deploying globally...');
-    await rest.put(Routes.applicationCommands(clientId), {
+    const globalResult = await rest.put(Routes.applicationCommands(clientId), {
       body: commands,
     });
-    console.log('✅ Global commands deployed');
+    console.log('✅ Global commands deployed:', globalResult);
 
     console.log('✅ Successfully reloaded application (/) commands.');
   } catch (error) {
-    console.error(error);
+    console.error('❌ Deploy error:', error);
+    if (error instanceof Error) {
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+    }
   }
 })();

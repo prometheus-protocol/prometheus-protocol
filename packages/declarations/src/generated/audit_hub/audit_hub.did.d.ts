@@ -48,6 +48,7 @@ export interface AuditHub {
   'admin_clear_bounty_verifier' : ActorMethod<[BountyId], Result>,
   'admin_fix_job_assigned_count' : ActorMethod<[string, bigint], Result>,
   'admin_force_release_lock' : ActorMethod<[BountyId], Result>,
+  'admin_recalculate_job_counts' : ActorMethod<[string], Result_4>,
   'admin_remove_from_deny_list' : ActorMethod<[Principal], Result>,
   'admin_remove_verifier_from_job' : ActorMethod<[string, Principal], Result>,
   'attach_bounties_to_job' : ActorMethod<
@@ -367,6 +368,7 @@ export interface VerificationJob {
   'build_config' : ICRC16Map,
   'assigned_count' : bigint,
   'wasm_id' : string,
+  'in_progress_count' : bigint,
   'required_verifiers' : bigint,
   'commit_hash' : string,
 }

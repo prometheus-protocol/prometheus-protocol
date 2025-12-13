@@ -12,8 +12,10 @@ import { ConfigManager } from './config/index.js';
 import { CommandRegistryImpl } from './commands/registry.js';
 import { ChatCommand } from './commands/chat/chat.js';
 import { ClearChatCommand } from './commands/chat/clear.js';
+import { StopCommand } from './commands/chat/stop.js';
 import { MCPCommand } from './commands/mcp/mcp.js';
 import { TasksCommand } from './commands/tasks/tasks.js';
+import { PreferencesCommand } from './commands/preferences/preferences.js';
 import { LLMService } from './services/llm.js';
 import { SupabaseService } from './services/database.js';
 import { AlertScheduler } from './services/scheduler.js';
@@ -33,6 +35,7 @@ class DiscordBot {
   private llmService: LLMService;
   private database: SupabaseService;
   private scheduler: AlertScheduler;
+  private taskFunctions: TaskManagementFunctions;
   private mcpService: MCPService;
   private discordNotification: DiscordNotificationService;
   private mcpEventService: MCPEventService;
@@ -86,26 +89,24 @@ class DiscordBot {
     // Initialize the MCP service after all dependencies are set up
     this.mcpService.initialize();
 
-    // DISABLED: Task scheduling system removed to reduce LLM token costs
-    // This is a free onboarding tool and scheduled tasks were too expensive
     // Create scheduler and task functions first (LLM service needs task functions)
+    // NOTE: Only one-time tasks are allowed (no recurring) to reduce token costs
     this.scheduler = new AlertScheduler(
       this.client,
       this.database,
       this.config,
       null as any, // Will be set after LLM service is created
     );
-    // Commenting out task functions to disable the system
-    // this.taskFunctions = new TaskManagementFunctions(
-    //   this.scheduler,
-    //   this.database,
-    // );
+    this.taskFunctions = new TaskManagementFunctions(
+      this.scheduler,
+      this.database,
+    );
 
-    // Now create LLM service without task functions (disabled)
+    // Create LLM service with task functions enabled
     this.llmService = new LLMService(
       this.config,
       this.mcpService,
-      undefined, // taskFunctions disabled
+      this.taskFunctions,
     );
 
     // Set the LLM service in scheduler now that it's created
@@ -144,19 +145,18 @@ class DiscordBot {
           console.log(`📍 Guild: ${guild.name} (${guild.id})`);
         });
 
-        // DISABLED: Scheduler system removed to reduce LLM token costs
-        // Start scheduler with alert loading
+        // Start scheduler with alert loading (one-time tasks only)
         // Skip loading alerts in development if DISABLE_SCHEDULER is set
-        console.log('⏸️ Task scheduler permanently disabled (removed feature)');
-        // if (process.env.DISABLE_SCHEDULER === 'true') {
-        //   console.log('⏸️ Scheduler disabled via DISABLE_SCHEDULER env var');
-        // } else {
-        //   try {
-        //     await this.scheduler.start();
-        //   } catch (error) {
-        //     console.error('⚠️ Scheduler initialization error:', error);
-        //   }
-        // }
+        if (process.env.DISABLE_SCHEDULER === 'true') {
+          console.log('⏸️ Scheduler disabled via DISABLE_SCHEDULER env var');
+        } else {
+          try {
+            await this.scheduler.start();
+            console.log('✅ Task scheduler started (one-time tasks only)');
+          } catch (error) {
+            console.error('⚠️ Scheduler initialization error:', error);
+          }
+        }
 
         // NOTE: Reestablishing persistent MCP connections on startup is disabled
         // for scalability. With thousands of users, this would create too many
@@ -212,6 +212,56 @@ class DiscordBot {
         } else {
           // No autocomplete handler found
           await interaction.respond([]);
+        }
+        return;
+      }
+
+      // Handle modal submit interactions
+      if (interaction.isModalSubmit()) {
+        try {
+          // Check if this is an MCP connect modal
+          if (interaction.customId.startsWith('mcp_connect_')) {
+            const url = interaction.fields.getTextInputValue('mcp_server_url');
+            const userId = interaction.user.id;
+            const channelId = !interaction.inGuild()
+              ? 'dm'
+              : interaction.channel?.isThread()
+                ? interaction.channel.parentId || interaction.channelId
+                : interaction.channelId;
+
+            await interaction.deferReply({ ephemeral: true });
+
+            // Get MCP command and call handleConnect
+            const mcpCommand = this.commandRegistry.getCommand('mcp');
+            if (mcpCommand && 'handleConnect' in mcpCommand) {
+              const response = await (mcpCommand as any).handleConnect(
+                url,
+                userId,
+                channelId,
+              );
+              await interaction.editReply({
+                content: response.content || undefined,
+                embeds: response.embeds || undefined,
+                components: response.components || undefined,
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Error handling modal submit:', error);
+          try {
+            if (interaction.deferred) {
+              await interaction.editReply({
+                content: 'Error processing your request.',
+              });
+            } else {
+              await interaction.reply({
+                content: 'Error processing your request.',
+                ephemeral: true,
+              });
+            }
+          } catch (replyError) {
+            console.error('Failed to send error reply:', replyError);
+          }
         }
         return;
       }
@@ -281,6 +331,51 @@ class DiscordBot {
     });
   }
 
+  /**
+   * Split a message into chunks that fit Discord's 2000 character limit
+   */
+  private splitMessage(text: string, maxLength: number = 1950): string[] {
+    if (text.length <= maxLength) {
+      return [text];
+    }
+
+    const messages: string[] = [];
+    let remaining = text;
+
+    while (remaining.length > 0) {
+      if (remaining.length <= maxLength) {
+        messages.push(remaining);
+        break;
+      }
+
+      const chunk = remaining.substring(0, maxLength);
+      const lastParagraph = chunk.lastIndexOf('\n\n');
+      const lastNewline = chunk.lastIndexOf('\n');
+      const lastSentence = Math.max(
+        chunk.lastIndexOf('. '),
+        chunk.lastIndexOf('! '),
+        chunk.lastIndexOf('? '),
+      );
+      const lastSpace = chunk.lastIndexOf(' ');
+
+      let splitPoint = maxLength;
+      if (lastParagraph > maxLength * 0.5) {
+        splitPoint = lastParagraph + 2;
+      } else if (lastNewline > maxLength * 0.6) {
+        splitPoint = lastNewline + 1;
+      } else if (lastSentence > maxLength * 0.6) {
+        splitPoint = lastSentence + 2;
+      } else if (lastSpace > maxLength * 0.7) {
+        splitPoint = lastSpace + 1;
+      }
+
+      messages.push(remaining.substring(0, splitPoint).trim());
+      remaining = remaining.substring(splitPoint).trim();
+    }
+
+    return messages;
+  }
+
   private async handleThreadMessage(message: any): Promise<void> {
     console.log('🔵 handleThreadMessage called', {
       threadId: message.channel.id,
@@ -302,15 +397,18 @@ class DiscordBot {
         return;
       }
 
-      // Security: Only allow the thread owner to use their tools
+      // Allow others to comment in the thread without triggering the AI
+      // Only process messages from the thread owner for AI responses
       if (message.author.id !== chatThread.user_id) {
-        console.log('🔒 User not authorized for thread', {
-          messageUserId: message.author.id,
-          threadUserId: chatThread.user_id,
-        });
-        await message.reply(
-          '🔒 This thread belongs to another user. Please start your own conversation with `/chat`.',
+        console.log(
+          'ℹ️ Message from non-owner in thread, ignoring for AI processing',
+          {
+            messageUserId: message.author.id,
+            threadUserId: chatThread.user_id,
+            threadId,
+          },
         );
+        // Silently ignore - allows others to help, comment, or react without triggering the AI
         return;
       }
 
@@ -343,8 +441,10 @@ class DiscordBot {
       }, 5000); // Refresh every 5 seconds
 
       try {
-        // Load conversation history from database
-        const history = chatThread.conversation_history.map((msg: any) => ({
+        // Load conversation history from database (limit to last 25 messages for token efficiency)
+        const fullHistory = chatThread.conversation_history || [];
+        const recentHistory = fullHistory.slice(-25); // Only keep last 25 messages
+        const history = recentHistory.map((msg: any) => ({
           role: msg.role as 'user' | 'assistant' | 'system',
           content: msg.content,
           timestamp: new Date(),
@@ -385,10 +485,14 @@ class DiscordBot {
           throw new Error('Unexpected response format from LLM service');
         }
 
-        // Send response
-        await message.reply(textResponse);
+        // Send response (split if needed to avoid 4000 char limit)
+        // Use channel.send() to ensure messages stay in the thread
+        const messageParts = this.splitMessage(textResponse);
+        for (const part of messageParts) {
+          await message.channel.send(part);
+        }
 
-        // Update thread history
+        // Update thread history with full response
         await this.database.updateThreadHistory(threadId, {
           role: 'user',
           content: message.content,
@@ -413,7 +517,8 @@ class DiscordBot {
         messageContent: message.content.substring(0, 100),
       });
       try {
-        await message.reply(
+        // Use message.channel.send to ensure it goes to the thread
+        await message.channel.send(
           'Sorry, I encountered an error processing your message. Please check the logs for details.',
         );
       } catch (replyError) {
@@ -456,7 +561,7 @@ class DiscordBot {
         const history = await this.database.getConversationHistory(
           message.author.id,
           message.channel.id,
-          50,
+          25, // Keep last 25 messages for context (reduces token usage)
         );
 
         // Generate AI response
@@ -493,10 +598,16 @@ class DiscordBot {
           throw new Error('Unexpected response format from LLM service');
         }
 
-        // Send response
-        await message.reply(textResponse);
+        // Send response (split if needed to avoid 4000 char limit)
+        const messageParts = this.splitMessage(textResponse);
+        await message.reply(messageParts[0]);
 
-        // Save conversation turn
+        // Send additional parts as follow-ups
+        for (let i = 1; i < messageParts.length; i++) {
+          await message.channel.send(messageParts[i]);
+        }
+
+        // Save conversation turn with full response
         await this.database.saveConversationTurn(
           message.author.id,
           message.channel.id,
@@ -537,14 +648,19 @@ class DiscordBot {
     // Register clear chat memory command
     this.commandRegistry.register(new ClearChatCommand(this.database));
 
+    // Register stop command to interrupt AI processing
+    this.commandRegistry.register(new StopCommand());
+
     // Register MCP management command (no registry service needed)
     this.commandRegistry.register(new MCPCommand(this.mcpService));
 
-    // DISABLED: Tasks command removed (task scheduling system disabled)
-    // Register dedicated tasks management command
-    // this.commandRegistry.register(
-    //   new TasksCommand(this.taskFunctions, this.database),
-    // );
+    // Register timezone command for user timezone preferences
+    this.commandRegistry.register(new PreferencesCommand(this.database));
+
+    // Register tasks management command (one-time scheduled tasks only)
+    this.commandRegistry.register(
+      new TasksCommand(this.taskFunctions, this.database),
+    );
 
     console.log(
       `📝 Registered ${this.commandRegistry.getAllCommands().length} commands`,
@@ -735,6 +851,23 @@ class DiscordBot {
 
 // Handle graceful shutdown
 const bot = new DiscordBot();
+
+// Handle unhandled promise rejections to prevent crashes
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Log the error but don't crash the bot
+  if (reason instanceof Error) {
+    console.error('Error stack:', reason.stack);
+  }
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  console.error('Stack:', error.stack);
+  // For uncaught exceptions, we should probably restart
+  // but log it first
+});
 
 process.on('SIGINT', async () => {
   console.log('Received SIGINT, shutting down gracefully...');

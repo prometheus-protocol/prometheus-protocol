@@ -122,8 +122,25 @@ async function main() {
   const usdc_ledger = (
     await $`dfx canister id usdc_ledger --network ${NETWORK}`
   ).stdout.trim();
+  const bounty_sponsor = (
+    await $`dfx canister id bounty_sponsor --network ${NETWORK}`
+  ).stdout.trim();
   console.log(chalk.green(`✅ audit_hub: ${audit_hub}`));
   console.log(chalk.green(`✅ usdc_ledger: ${usdc_ledger}`));
+  console.log(chalk.green(`✅ bounty_sponsor: ${bounty_sponsor}`));
+  console.log('');
+
+  // Get bounty_sponsor USDC balance
+  const bountySponsorBalance = await getUsdcBalance(
+    usdc_ledger,
+    bounty_sponsor,
+  );
+  console.log(chalk.bold.magenta('💰 Bounty Sponsor Balance:'));
+  console.log(
+    chalk.magenta(
+      `  ${formatUsdc(bountySponsorBalance)} USDC available for bounties`,
+    ),
+  );
   console.log('');
 
   // Table header

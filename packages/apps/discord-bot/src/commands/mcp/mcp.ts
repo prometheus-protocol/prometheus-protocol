@@ -15,6 +15,9 @@ import {
   ChatInputCommandInteraction,
   AutocompleteInteraction,
   InteractionContextType,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
 } from 'discord.js';
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { logger } from '../../utils/logger.js';
@@ -41,18 +44,16 @@ export class MCPCommand extends BaseCommand {
       .addSubcommand((subcommand) =>
         subcommand
           .setName('connect')
-          .setDescription('Connect to an MCP server via URL')
-          .addStringOption((option) =>
-            option
-              .setName('url')
-              .setDescription('MCP server URL (http:// or https://)')
-              .setRequired(true),
+          .setDescription(
+            'Connect to an MCP server (opens a private form for URL)',
           ),
       )
       .addSubcommand((subcommand) =>
         subcommand
           .setName('reconnect')
-          .setDescription('Reconnect to a disconnected MCP server')
+          .setDescription(
+            'Reconnect to an MCP server (disconnects first if connected)',
+          )
           .addStringOption((option) =>
             option
               .setName('server-name')
@@ -119,12 +120,18 @@ export class MCPCommand extends BaseCommand {
 
   /**
    * Get the effective channel ID for MCP operations.
+   * For DMs, returns 'dm' so all DM conversations share the same tool context.
    * If the interaction is in a thread, returns the parent channel ID.
    * Otherwise, returns the interaction's channel ID.
    */
   private async getEffectiveChannelId(
     interaction: ChatInputCommandInteraction,
   ): Promise<string> {
+    // DMs share a unified tool context across all DM conversations
+    if (!interaction.inGuild()) {
+      return 'dm';
+    }
+
     // Check if we're in a thread
     if (interaction.channel?.isThread()) {
       // Return the parent channel ID
@@ -135,11 +142,57 @@ export class MCPCommand extends BaseCommand {
   }
 
   async executeSlash(interaction: ChatInputCommandInteraction): Promise<void> {
-    // CRITICAL: Defer FIRST, before ANY other processing
+    const subcommand = interaction.options.getSubcommand();
+
+    // Special case: connect shows a modal, so don't defer
+    if (subcommand === 'connect') {
+      // Get the correct channel ID (parent channel if in a thread)
+      const channelId = await this.getEffectiveChannelId(interaction);
+
+      console.log('🔍 MCP executeSlash (connect):', {
+        interactionId: interaction.id,
+        userId: interaction.user.id,
+        subcommand,
+        channelId,
+        isThread: interaction.channel?.isThread(),
+      });
+
+      // Show modal for URL input (keeps URL private)
+      const modal = new ModalBuilder()
+        .setCustomId(`mcp_connect_${interaction.user.id}`)
+        .setTitle('Connect to MCP Server');
+
+      const urlInput = new TextInputBuilder()
+        .setCustomId('mcp_server_url')
+        .setLabel('MCP Server URL')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('https://your-mcp-server.com')
+        .setRequired(true);
+
+      const actionRow = new ActionRowBuilder<TextInputBuilder>().addComponents(
+        urlInput,
+      );
+
+      modal.addComponents(actionRow);
+
+      await interaction.showModal(modal);
+      return; // Modal submission will be handled separately
+    }
+
+    // CRITICAL: Defer FIRST, before ANY other processing (except connect)
     // Discord requires acknowledgment within 3 seconds
     let deferred = false;
     try {
-      await interaction.deferReply({ ephemeral: false });
+      // Make connection-related commands ephemeral for privacy
+      const ephemeralCommands = [
+        'list',
+        'tools',
+        'reconnect',
+        'disconnect',
+        'delete',
+      ];
+      const shouldBeEphemeral = ephemeralCommands.includes(subcommand);
+      await interaction.deferReply({ ephemeral: shouldBeEphemeral });
       deferred = true;
       console.log('✅ Successfully deferred MCP command');
     } catch (error) {
@@ -147,8 +200,6 @@ export class MCPCommand extends BaseCommand {
       // If we can't defer, we can't respond at all
       return;
     }
-
-    const subcommand = interaction.options.getSubcommand();
 
     // Get the correct channel ID (parent channel if in a thread)
     const channelId = await this.getEffectiveChannelId(interaction);
@@ -170,15 +221,9 @@ export class MCPCommand extends BaseCommand {
         case 'list':
           response = await this.handleList(interaction.user.id, channelId);
           break;
-        case 'connect': {
-          const url = interaction.options.getString('url', true);
-          response = await this.handleConnect(
-            url,
-            interaction.user.id,
-            channelId,
-          );
-          break;
-        }
+        case 'connect':
+          // This case is now handled above before deferring
+          return;
         case 'reconnect': {
           const serverName = interaction.options.getString('server-name', true);
           response = await this.handleReconnect(
@@ -229,6 +274,14 @@ export class MCPCommand extends BaseCommand {
       }
 
       // Send the response using editReply since we deferred
+      logger.info(`Sending response to Discord for subcommand ${subcommand}:`, {
+        service: 'MCPCommand',
+        hasContent: !!response?.content,
+        hasEmbeds: !!response?.embeds,
+        hasAdditionalMessages: !!response?.additionalMessages?.length,
+        contentPreview: response?.content?.substring(0, 100),
+      });
+
       if (response) {
         await interaction.editReply({
           content: response.content || undefined,
@@ -236,15 +289,50 @@ export class MCPCommand extends BaseCommand {
           files: response.files || undefined,
           components: response.components || undefined,
         });
+        logger.info(
+          `Successfully sent response to Discord for subcommand ${subcommand}`,
+        );
+
+        // Send additional messages as follow-ups if they exist
+        if (
+          response.additionalMessages &&
+          response.additionalMessages.length > 0
+        ) {
+          logger.info(
+            `Sending ${response.additionalMessages.length} additional message(s) for subcommand ${subcommand}`,
+          );
+          for (const additionalMessage of response.additionalMessages) {
+            await interaction.followUp({
+              content: additionalMessage,
+              ephemeral: true, // Keep follow-ups ephemeral to match the main response
+            });
+          }
+          logger.info(
+            `Successfully sent all additional messages for subcommand ${subcommand}`,
+          );
+        }
       } else {
         await interaction.editReply({ content: '✅ Done.' });
+        logger.info(
+          `Sent default 'Done' response for subcommand ${subcommand}`,
+        );
       }
     } catch (error) {
       console.error(`Error executing /mcp ${subcommand}:`, error);
+      logger.error(
+        `Outer catch block triggered for subcommand ${subcommand}`,
+        error as Error,
+        {
+          service: 'MCPCommand',
+        },
+      );
 
       await interaction.editReply({
         content: '❌ An unexpected error occurred while running this command.',
       });
+      logger.info(
+        `Sent error response to Discord for subcommand ${subcommand}`,
+      );
     }
   }
 
@@ -442,11 +530,48 @@ export class MCPCommand extends BaseCommand {
         `Attempting to reconnect to MCP server ${serverName} for user ${userId}`,
       );
 
+      // Check current connection status from database
+      const connections = await this.mcpService.getUserConnections(
+        userId,
+        channelId,
+      );
+      const currentConnection = connections.find(
+        (conn: any) => conn.server_id === serverId,
+      );
+
+      // Only disconnect if the server is currently connected
+      // Skip disconnect for error/disconnected states to avoid hanging
+      if (currentConnection?.status === 'connected') {
+        try {
+          await this.mcpService.disconnectFromServer(
+            serverId,
+            userId,
+            channelId,
+          );
+          logger.info(`Disconnected ${serverName} before reconnecting`);
+        } catch (disconnectError) {
+          logger.debug(
+            `Disconnect before reconnect failed: ${disconnectError instanceof Error ? disconnectError.message : String(disconnectError)}`,
+          );
+        }
+      } else {
+        logger.info(
+          `Skipping disconnect for ${serverName} - current status: ${currentConnection?.status || 'unknown'}`,
+        );
+      }
+
       const connection = await this.mcpService.autoReconnectAfterOAuth(
         serverId,
         userId,
         channelId,
       );
+
+      logger.info(`Reconnect result for ${serverName}:`, {
+        service: 'MCPCommand',
+        success: connection.success,
+        status: connection.status || 'undefined',
+        message: connection.message || 'no message',
+      });
 
       if (connection.success && connection.status === 'connected') {
         return {
@@ -563,6 +688,44 @@ export class MCPCommand extends BaseCommand {
     }
   }
 
+  /**
+   * Split a message into chunks that fit within Discord's 2000 character limit.
+   * Tries to split on natural boundaries (double newlines) when possible.
+   */
+  private splitMessage(message: string, maxLength: number = 2000): string[] {
+    if (message.length <= maxLength) {
+      return [message];
+    }
+
+    const chunks: string[] = [];
+    let remainingMessage = message;
+
+    while (remainingMessage.length > 0) {
+      if (remainingMessage.length <= maxLength) {
+        chunks.push(remainingMessage);
+        break;
+      }
+
+      // Try to find a good split point (double newline, then single newline, then space)
+      let splitIndex = remainingMessage.lastIndexOf('\n\n', maxLength);
+      if (splitIndex === -1 || splitIndex < maxLength * 0.5) {
+        splitIndex = remainingMessage.lastIndexOf('\n', maxLength);
+      }
+      if (splitIndex === -1 || splitIndex < maxLength * 0.5) {
+        splitIndex = remainingMessage.lastIndexOf(' ', maxLength);
+      }
+      if (splitIndex === -1 || splitIndex < maxLength * 0.5) {
+        // No good split point, just cut at maxLength
+        splitIndex = maxLength;
+      }
+
+      chunks.push(remainingMessage.substring(0, splitIndex).trim());
+      remainingMessage = remainingMessage.substring(splitIndex).trim();
+    }
+
+    return chunks;
+  }
+
   private async handleTools(
     userId: string,
     channelId: string,
@@ -577,13 +740,6 @@ export class MCPCommand extends BaseCommand {
         };
       }
 
-      const embed = new EmbedBuilder()
-        .setTitle('🛠️ Available MCP Tools')
-        .setDescription(
-          `You have access to ${tools.length} tools from your connected servers.`,
-        )
-        .setColor(0x00ae86);
-
       // Group tools by server
       const toolsByServer = tools.reduce(
         (acc, tool) => {
@@ -596,32 +752,24 @@ export class MCPCommand extends BaseCommand {
         {} as Record<string, typeof tools>,
       );
 
-      Object.entries(toolsByServer).forEach(([serverName, serverTools]) => {
-        const toolList = serverTools
-          .map((tool) => {
-            // Use title if available, otherwise fall back to name
-            const displayName = tool.title || tool.name;
-            // Truncate long descriptions to keep within Discord field limits
-            const shortDescription =
-              tool.description.length > 100
-                ? tool.description.substring(0, 97) + '...'
-                : tool.description;
-            return `• **${displayName}**: ${shortDescription}`;
-          })
-          .join('\n');
+      let message = `🛠️ **Available MCP Tools**\n\nYou have access to **${tools.length} tools** from your connected servers.\n\n`;
 
-        // Discord field value limit is 1024 characters
-        embed.addFields({
-          name: `🔌 ${serverName}`,
-          value:
-            toolList.length > 1024
-              ? toolList.substring(0, 1021) + '...'
-              : toolList,
-          inline: false,
+      Object.entries(toolsByServer).forEach(([serverName, serverTools]) => {
+        message += `🔌 **${serverName}**\n`;
+        serverTools.forEach((tool) => {
+          const displayName = tool.title || tool.name;
+          message += `• **${displayName}**: ${tool.description}\n`;
         });
+        message += '\n';
       });
 
-      return { content: '', embeds: [embed] };
+      // Split message if it exceeds Discord's character limit
+      const messageParts = this.splitMessage(message);
+
+      return {
+        content: messageParts[0],
+        additionalMessages: messageParts.slice(1),
+      };
     } catch (error) {
       console.error('MCP tools error:', error);
       return {
@@ -834,16 +982,33 @@ export class MCPCommand extends BaseCommand {
         const subcommand = interaction.options.getSubcommand();
         console.log('🔗 SUBCOMMAND FOR FILTERING:', subcommand);
 
-        // Get the correct channel ID (parent channel if in a thread)
-        const channelId = interaction.channel?.isThread()
-          ? interaction.channel.parentId || interaction.channelId
-          : interaction.channelId;
+        // Get the correct channel ID - use 'dm' for DMs so they share tool context
+        const channelId = !interaction.inGuild()
+          ? 'dm'
+          : interaction.channel?.isThread()
+            ? interaction.channel.parentId || interaction.channelId
+            : interaction.channelId;
+
+        console.log('🔗 FETCHING CONNECTIONS FOR:', {
+          userId: interaction.user.id,
+          channelId,
+          inGuild: interaction.inGuild(),
+        });
 
         // Get user's connections for autocomplete
-        const connections = await this.mcpService.getUserConnections(
-          interaction.user.id,
-          channelId,
-        );
+        let connections;
+        try {
+          connections = await this.mcpService.getUserConnections(
+            interaction.user.id,
+            channelId,
+          );
+        } catch (error) {
+          console.error('🔗 ERROR FETCHING CONNECTIONS:', error);
+          // Return empty on error
+          await interaction.respond([]);
+          return;
+        }
+
         console.log('🔗 USER CONNECTIONS:', {
           connectionCount: connections.length,
           connections: connections.map((c) => ({
@@ -882,10 +1047,8 @@ export class MCPCommand extends BaseCommand {
               // Subcommand-specific filters
               switch (subcommand) {
                 case 'reconnect':
-                  // For reconnect, only show disconnected or error servers
-                  return (
-                    conn.status === 'disconnected' || conn.status === 'error'
-                  );
+                  // For reconnect, show all servers (will disconnect first if connected)
+                  return true;
 
                 case 'disconnect':
                   // For disconnect, only show connected servers

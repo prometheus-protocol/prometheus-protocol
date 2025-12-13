@@ -98,9 +98,12 @@ module {
         };
       };
 
-      // Check if already assigned
-      let is_assigned = Option.isSome(Map.get(assigned_jobs, Map.nhash, bounty_id));
-      if (not is_assigned) {
+      // Check if already assigned AND has an active lock
+      // Allow reassignment if the bounty is in assigned_jobs but has no active lock (abandoned assignment)
+      let has_active_lock = Option.isSome(Map.get(bounty_locks, Map.nhash, bounty_id));
+      let is_assigned_with_lock = Option.isSome(Map.get(assigned_jobs, Map.nhash, bounty_id)) and has_active_lock;
+
+      if (not is_assigned_with_lock) {
         // IMMEDIATELY claim this bounty to prevent race conditions
         let temp_assignment : Types.AssignedJob = {
           wasm_id;
@@ -190,8 +193,23 @@ module {
     bounty_locks : Map.Map<Types.BountyId, Types.BountyLock>,
     icrc127 : ICRC127Instance,
   ) : ?Types.VerificationJobAssignment {
-    for ((bounty_id, assignment) in Map.entries(assigned_jobs)) {
+    label assignment_check for ((bounty_id, assignment) in Map.entries(assigned_jobs)) {
       if (Principal.equal(assignment.verifier, verifier) and assignment.expires_at > current_time) {
+        // Check if there's an active lock for this bounty
+        let has_active_lock = switch (Map.get(bounty_locks, Map.nhash, bounty_id)) {
+          case (?lock) {
+            Principal.equal(lock.claimant, verifier) and lock.expires_at > current_time
+          };
+          case (null) { false };
+        };
+
+        if (not has_active_lock) {
+          Debug.print("Verifier has assignment for bounty " # Nat.toText(bounty_id) # " but NO ACTIVE LOCK - skipping, checking next assignment");
+          // DO NOT remove from assigned_jobs - this is a permanent record
+          // Continue checking other assignments
+          continue assignment_check;
+        };
+
         // Check if this bounty is claimed (query local ICRC127)
         let bounty_opt = icrc127().icrc127_get_bounty(bounty_id);
         let is_claimed = switch (bounty_opt) {
@@ -200,47 +218,51 @@ module {
         };
 
         if (is_claimed) {
-          Debug.print("Verifier has assignment for bounty " # Nat.toText(bounty_id) # " but it's CLAIMED - cleaning up");
-          ignore Map.remove(assigned_jobs, Map.nhash, bounty_id);
-        } else {
-          // Return the existing active assignment
-          Debug.print("Verifier already has active assignment for bounty " # Nat.toText(bounty_id));
+          Debug.print("Verifier has assignment for bounty " # Nat.toText(bounty_id) # " but it's CLAIMED - skipping, checking next assignment");
+          // DO NOT remove from assigned_jobs - this is a permanent record
+          // Continue checking other assignments
+          continue assignment_check;
+        };
 
-          // Find the job in pending_audits
-          var found_job : ?Types.VerificationJob = null;
-          for ((queue_key, job) in BTree.entries(pending_audits)) {
-            if (job.wasm_id == assignment.wasm_id) {
-              found_job := ?job;
-            };
+        // Return the existing active assignment
+        Debug.print("Verifier already has active assignment for bounty " # Nat.toText(bounty_id));
+
+        // Find the job in pending_audits
+        var found_job : ?Types.VerificationJob = null;
+        for ((queue_key, job) in BTree.entries(pending_audits)) {
+          if (job.wasm_id == assignment.wasm_id) {
+            found_job := ?job;
           };
+        };
 
-          switch (found_job) {
-            case (?job) {
-              let bounty_build_config = get_local_bounty_build_config(
-                bounty_id,
-                job,
-                icrc127,
-              );
+        switch (found_job) {
+          case (?job) {
+            let bounty_build_config = get_local_bounty_build_config(
+              bounty_id,
+              job,
+              icrc127,
+            );
 
-              return ?create_job_assignment(
-                bounty_id,
-                assignment.wasm_id,
-                job.repo,
-                job.commit_hash,
-                bounty_build_config,
-                assignment.expires_at,
-              );
-            };
-            case (null) {
-              Debug.print("Warning: Assignment found but job not in pending_audits - cleaning up");
-              ignore Map.remove(assigned_jobs, Map.nhash, bounty_id);
-            };
+            return ?create_job_assignment(
+              bounty_id,
+              assignment.wasm_id,
+              job.repo,
+              job.commit_hash,
+              bounty_build_config,
+              assignment.expires_at,
+            );
+          };
+          case (null) {
+            Debug.print("Warning: Assignment found but job not in pending_audits - skipping, checking next assignment");
+            // DO NOT remove from assigned_jobs - this is a permanent record
+            // Continue checking other assignments
+            continue assignment_check;
           };
         };
       } else if (Principal.equal(assignment.verifier, verifier)) {
-        // Assignment expired, clean it up
-        Debug.print("Cleaning up expired assignment for bounty " # Nat.toText(bounty_id));
-        ignore Map.remove(assigned_jobs, Map.nhash, bounty_id);
+        // Assignment expired, clean up lock only
+        Debug.print("Cleaning up expired assignment lock for bounty " # Nat.toText(bounty_id));
+        // DO NOT remove from assigned_jobs - this is a permanent record
         ignore Map.remove(bounty_locks, Map.nhash, bounty_id);
       };
     };

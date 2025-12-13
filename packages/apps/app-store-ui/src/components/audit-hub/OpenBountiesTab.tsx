@@ -7,19 +7,28 @@ import { AuditHubSkeleton } from '@/components/audits/AuditHubSkeleton';
 import { AuditHubError } from '@/components/audits/AuditHubError';
 import { PendingJobListItem } from './PendingJobListItem';
 
-const JOBS_PER_PAGE = 20;
+const JOBS_PER_PAGE = 10;
 
 export function OpenBountiesTab() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [visibleCount, setVisibleCount] = useState(JOBS_PER_PAGE);
 
-  const { data, isLoading, isError, refetch } = useListPendingJobs(
-    0,
-    visibleCount,
-  );
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useListPendingJobs(JOBS_PER_PAGE);
 
-  const jobs = data?.jobs ?? [];
-  const total = data?.total ?? 0;
+  // Flatten all pages into a single jobs array
+  const jobs = useMemo(() => {
+    if (!data?.pages) return [];
+    return data.pages.flatMap((page) => page.jobs);
+  }, [data]);
+
+  const total = data?.pages?.[0]?.total ?? 0;
 
   // Filter jobs based on search query
   const filteredJobs = useMemo(() => {
@@ -38,7 +47,6 @@ export function OpenBountiesTab() {
 
   const hasSearchQuery = searchQuery.trim().length > 0;
   const visibleJobs = hasSearchQuery ? filteredJobs : jobs;
-  const hasMore = hasSearchQuery ? false : visibleCount < total;
 
   // Show skeleton only on true initial load
   if (isLoading && !data) return <AuditHubSkeleton />;
@@ -78,21 +86,28 @@ export function OpenBountiesTab() {
                 </p>
               </div>
             )}
-            {hasMore ? (
+            {!hasSearchQuery && hasNextPage && (
               <div className="text-center py-8">
                 <Button
-                  onClick={() =>
-                    setVisibleCount((prev) => prev + JOBS_PER_PAGE)
-                  }
+                  onClick={() => fetchNextPage()}
+                  disabled={isFetchingNextPage}
                   variant="outline"
                   className="mx-auto">
-                  Load More
+                  {isFetchingNextPage ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    'Load More'
+                  )}
                 </Button>
                 <p className="text-sm text-gray-500 mt-2">
                   Showing {visibleJobs.length} of {total} jobs
                 </p>
               </div>
-            ) : (
+            )}
+            {!hasSearchQuery && !hasNextPage && jobs.length > 0 && (
               <div className="text-center py-8 text-muted-foreground">
                 <p>
                   All jobs loaded ({total} {total === 1 ? 'job' : 'jobs'})

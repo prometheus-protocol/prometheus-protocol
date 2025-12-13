@@ -25,10 +25,10 @@ const formatTimestamp = (date: Date) => {
 // Helper to get status config based on job progress
 const getStatusConfig = (
   completedCount: number,
-  assignedCount: number,
+  inProgressCount: number,
   requiredVerifiers: number,
 ) => {
-  const totalProgress = completedCount + assignedCount;
+  const totalProgress = completedCount + inProgressCount;
   if (completedCount >= requiredVerifiers) {
     return {
       color: 'text-green-400',
@@ -64,7 +64,7 @@ export const PendingJobListItem = ({
   const auditTypeInfo = getAuditTypeInfo(job.auditType);
   const statusConfig = getStatusConfig(
     job.completedCount,
-    job.assignedCount,
+    job.inProgressCount,
     job.requiredVerifiers,
   );
   const wasmDisplay = truncateHash(job.wasmId);
@@ -74,7 +74,8 @@ export const PendingJobListItem = ({
       : 0;
   const progressPercent =
     job.requiredVerifiers > 0
-      ? ((job.completedCount + job.assignedCount) / job.requiredVerifiers) * 100
+      ? ((job.completedCount + job.inProgressCount) / job.requiredVerifiers) *
+        100
       : 0;
   const isComplete = job.completedCount >= job.requiredVerifiers;
 
@@ -125,15 +126,15 @@ export const PendingJobListItem = ({
                     {job.completedCount} claimed
                   </span>
                 )}
-                {job.completedCount > 0 && job.assignedCount > 0 && (
+                {job.completedCount > 0 && job.inProgressCount > 0 && (
                   <span className="text-gray-500"> · </span>
                 )}
-                {job.assignedCount > 0 && (
+                {job.inProgressCount > 0 && (
                   <span className="text-primary font-semibold">
-                    {job.assignedCount} in progress
+                    {job.inProgressCount} in progress
                   </span>
                 )}
-                {job.completedCount === 0 && job.assignedCount === 0 && (
+                {job.completedCount === 0 && job.inProgressCount === 0 && (
                   <span className="text-gray-500">No verifiers yet</span>
                 )}
                 <span className="text-gray-500">
@@ -150,16 +151,19 @@ export const PendingJobListItem = ({
                 <div className="absolute left-0 top-0 h-full bg-green-500 transition-all duration-300 w-full" />
               ) : (
                 <>
+                  {/* Green section for completed */}
                   <div
                     className="absolute left-0 top-0 h-full bg-green-500 transition-all duration-300"
                     style={{
-                      width: `${(job.completedCount / job.requiredVerifiers) * 100}%`,
+                      width: `${completedPercent}%`,
                     }}
                   />
+                  {/* Yellow section for in-progress (starts after completed) */}
                   <div
-                    className="absolute left-0 top-0 h-full bg-primary transition-all duration-300"
+                    className="absolute top-0 h-full bg-primary transition-all duration-300"
                     style={{
-                      width: `${progressPercent}%`,
+                      left: `${completedPercent}%`,
+                      width: `${(job.inProgressCount / job.requiredVerifiers) * 100}%`,
                     }}
                   />
                 </>
@@ -197,11 +201,11 @@ export const PendingJobListItem = ({
                 {job.completedCount > 0 && (
                   <span className="text-green-400">{job.completedCount}✓</span>
                 )}
-                {job.completedCount > 0 && job.assignedCount > 0 && ' · '}
-                {job.assignedCount > 0 && (
-                  <span className="text-primary">{job.assignedCount}⏳</span>
+                {job.completedCount > 0 && job.inProgressCount > 0 && ' · '}
+                {job.inProgressCount > 0 && (
+                  <span className="text-primary">{job.inProgressCount}⏳</span>
                 )}
-                {job.completedCount === 0 && job.assignedCount === 0 && (
+                {job.completedCount === 0 && job.inProgressCount === 0 && (
                   <span className="text-gray-500">0</span>
                 )}
                 <span className="text-gray-500">
@@ -218,16 +222,19 @@ export const PendingJobListItem = ({
                 <div className="absolute left-0 top-0 h-full bg-green-500 transition-all duration-300 w-full" />
               ) : (
                 <>
+                  {/* Green section for completed */}
                   <div
                     className="absolute left-0 top-0 h-full bg-green-500 transition-all duration-300"
                     style={{
-                      width: `${(job.completedCount / job.requiredVerifiers) * 100}%`,
+                      width: `${completedPercent}%`,
                     }}
                   />
+                  {/* Yellow section for in-progress (starts after completed) */}
                   <div
-                    className="absolute left-0 top-0 h-full bg-primary transition-all duration-300"
+                    className="absolute top-0 h-full bg-primary transition-all duration-300"
                     style={{
-                      width: `${progressPercent}%`,
+                      left: `${completedPercent}%`,
+                      width: `${(job.inProgressCount / job.requiredVerifiers) * 100}%`,
                     }}
                   />
                 </>
@@ -247,7 +254,7 @@ export const PendingJobListItem = ({
                 Progress
               </div>
               <div className="text-white">
-                {job.assignedCount}/{job.requiredVerifiers}
+                {job.inProgressCount}/{job.requiredVerifiers}
               </div>
             </div>
           </div>

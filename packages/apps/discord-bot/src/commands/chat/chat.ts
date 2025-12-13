@@ -18,6 +18,10 @@ import { LLMService } from '../../services/llm.js';
 import { chatLogger } from '../../utils/logger.js';
 import { ErrorHandler, AuthenticationError } from '../../utils/errors.js';
 import { startSession, endSession } from './stop.js';
+import {
+  getToolChannelId,
+  getConversationChannelId,
+} from '../../utils/channel-helpers.js';
 
 export class ChatCommand extends BaseCommand {
   name = 'chat';
@@ -76,11 +80,15 @@ export class ChatCommand extends BaseCommand {
       prompt: prompt.substring(0, 100),
     });
 
+    console.log('🔄 Starting chat processing for user:', interaction.user.id);
+
     try {
       // Check if this is in a guild channel (not DM)
       if (interaction.inGuild() && interaction.channel) {
+        console.log('📍 Processing in guild channel:', interaction.channelId);
         // Check if channel supports threads
         if ('threads' in interaction.channel) {
+          console.log('🧵 Channel supports threads, creating thread...');
           // Create a thread name from the prompt (max 100 chars for Discord)
           const threadName =
             prompt.length > 100 ? prompt.substring(0, 97) + '...' : prompt;
@@ -121,72 +129,106 @@ export class ChatCommand extends BaseCommand {
             content: `💬 **"${displayPrompt}"**\n\nContinue in <#${thread.id}>`,
           });
 
-          // Create a context object for processing
-          // Use parent channelId for tool access, but we'll pass thread.id separately for alerts
-          const context: CommandContext = {
-            interaction,
-            args: [],
-            userId: interaction.user.id,
-            channelId: interaction.channelId, // Parent channel for MCP tool access
-            guildId: interaction.guildId || undefined,
-            threadId: thread.id, // Store thread ID in context for task creation
-          };
+          // Start typing indicator in the thread to show AI is working
+          await thread.sendTyping();
+          const typingInterval = setInterval(() => {
+            thread.sendTyping().catch(() => clearInterval(typingInterval));
+          }, 5000); // Refresh every 5 seconds
 
-          // Generate the AI response with empty history since this is a new thread
-          // Create a status callback that tracks tool invocations
-          let statusMessage: any = null;
-          let toolInvocations: string[] = [];
-          const statusCallback = async (status: string) => {
-            try {
-              // Add new tool invocation to the list
-              toolInvocations.push(status);
+          try {
+            // Create a context object for processing
+            // Use getToolChannelId for tool access (shared 'dm' for all DMs), thread.id for alerts
+            const context: CommandContext = {
+              interaction,
+              args: [],
+              userId: interaction.user.id,
+              channelId: getToolChannelId(interaction), // Shared 'dm' for DMs, actual channel for guilds
+              conversationChannelId: getConversationChannelId(interaction), // Actual channel for conversation history
+              guildId: interaction.guildId || undefined,
+              threadId: thread.id, // Store thread ID in context for task creation
+            };
 
-              // Build the combined message with all tool invocations
-              const combinedStatus = toolInvocations.join('\n');
+            // Generate the AI response with empty history since this is a new thread
+            // Create a status callback that tracks tool invocations
+            let statusMessage: any = null;
+            let toolInvocations: string[] = [];
+            const statusCallback = async (status: string) => {
+              try {
+                // Add new tool invocation to the list
+                toolInvocations.push(status);
 
-              if (statusMessage) {
-                // Edit existing status message to show all invocations
-                await statusMessage.edit(combinedStatus);
-              } else {
-                // Create first status message
-                statusMessage = await thread.send(combinedStatus);
+                // Build the combined message with all tool invocations
+                const combinedStatus = toolInvocations.join('\n');
+
+                if (statusMessage) {
+                  // Edit existing status message to show all invocations
+                  await statusMessage.edit(combinedStatus);
+                } else {
+                  // Create first status message
+                  statusMessage = await thread.send(combinedStatus);
+                }
+              } catch (error) {
+                chatLogger.warn('Failed to send status update to thread', {
+                  error,
+                });
               }
-            } catch (error) {
-              chatLogger.warn('Failed to send status update to thread', {
-                error,
+            };
+
+            const response = await this.executeInternal(
+              context,
+              prompt,
+              statusCallback, // Send tool execution updates to thread
+              [], // Empty history - new thread starts fresh
+              true, // Skip conversation save - thread manages its own history
+            );
+
+            // Clear typing interval
+            clearInterval(typingInterval);
+
+            // Keep the status message visible for transparency
+            // Don't delete it - users should see what tools were used
+
+            // Send the response to the thread
+            if (response) {
+              await thread.send({
+                content: response.content || undefined,
+                embeds: response.embeds || undefined,
+                files: response.files || undefined,
+                components: response.components || undefined,
+              });
+
+              // Send additional messages if the response was split
+              if (
+                response.additionalMessages &&
+                response.additionalMessages.length > 0
+              ) {
+                for (const additionalMessage of response.additionalMessages) {
+                  await thread.send({
+                    content: additionalMessage,
+                  });
+                }
+              }
+
+              // Store the conversation turn in thread history
+              // Store the full response (all parts combined) for context
+              const fullResponse = response.additionalMessages
+                ? [response.content, ...response.additionalMessages].join(
+                    '\n\n',
+                  )
+                : response.content || '';
+
+              await this.database.updateThreadHistory(thread.id, {
+                role: 'user',
+                content: prompt,
+              });
+              await this.database.updateThreadHistory(thread.id, {
+                role: 'assistant',
+                content: fullResponse,
               });
             }
-          };
-
-          const response = await this.executeInternal(
-            context,
-            prompt,
-            statusCallback, // Send tool execution updates to thread
-            [], // Empty history - new thread starts fresh
-            true, // Skip conversation save - thread manages its own history
-          );
-
-          // Keep the status message visible for transparency
-          // Don't delete it - users should see what tools were used
-
-          // Send the response to the thread
-          if (response) {
-            await thread.send({
-              content: response.content || undefined,
-              embeds: response.embeds || undefined,
-              files: response.files || undefined,
-              components: response.components || undefined,
-            });
-
-            // Store the conversation turn in thread history
-            await this.database.updateThreadHistory(thread.id, {
-              role: 'user',
-              content: prompt,
-            });
-            await this.database.updateThreadHistory(thread.id, {
-              role: 'assistant',
-              content: response.content || '',
-            });
+          } finally {
+            // Ensure typing is cleared even if there's an error
+            clearInterval(typingInterval);
           }
         } else {
           // Channel doesn't support threads, fall back to follow-up
@@ -198,7 +240,8 @@ export class ChatCommand extends BaseCommand {
             interaction,
             args: [],
             userId: interaction.user.id,
-            channelId: interaction.channelId,
+            channelId: getToolChannelId(interaction), // Shared 'dm' for DMs, actual channel for guilds
+            conversationChannelId: getConversationChannelId(interaction), // Actual channel for conversation history
             guildId: interaction.guildId || undefined,
           };
 
@@ -211,6 +254,18 @@ export class ChatCommand extends BaseCommand {
               files: response.files || undefined,
               components: response.components || undefined,
             });
+
+            // Send additional messages if the response was split
+            if (
+              response.additionalMessages &&
+              response.additionalMessages.length > 0
+            ) {
+              for (const additionalMessage of response.additionalMessages) {
+                await interaction.followUp({
+                  content: additionalMessage,
+                });
+              }
+            }
           }
         }
       } else {
@@ -223,7 +278,8 @@ export class ChatCommand extends BaseCommand {
           interaction,
           args: [],
           userId: interaction.user.id,
-          channelId: interaction.channelId,
+          channelId: getToolChannelId(interaction), // Shared 'dm' for all DMs (tool access)
+          conversationChannelId: getConversationChannelId(interaction), // Actual DM channel (conversation history)
           guildId: interaction.guildId || undefined,
         };
 
@@ -238,18 +294,35 @@ export class ChatCommand extends BaseCommand {
             files: response.files || undefined,
             components: response.components || undefined,
           });
+
+          // Send additional messages if the response was split
+          if (
+            response.additionalMessages &&
+            response.additionalMessages.length > 0
+          ) {
+            for (const additionalMessage of response.additionalMessages) {
+              await interaction.followUp({
+                content: additionalMessage,
+              });
+            }
+          }
         }
       }
     } catch (error) {
+      console.error('❌ Error in chat slash command:', error);
       chatLogger.error(
         'Error in chat slash command',
         error instanceof Error ? error : new Error(String(error)),
       );
 
-      await interaction.followUp({
-        content:
-          'Sorry, I encountered an error while processing your request. Please try again later.',
-      });
+      try {
+        await interaction.followUp({
+          content:
+            'Sorry, I encountered an error while processing your request. Please try again later.',
+        });
+      } catch (followUpError) {
+        console.error('❌ Failed to send error follow-up:', followUpError);
+      }
     }
   }
 
@@ -287,17 +360,21 @@ export class ChatCommand extends BaseCommand {
       );
 
       // Load conversation history from database (or use override for new threads)
+      // Use conversationChannelId if available, otherwise fall back to channelId
+      const conversationChannelId =
+        context.conversationChannelId || context.channelId;
       const history =
         overrideHistory !== undefined
           ? overrideHistory
           : await this.database.getConversationHistory(
               context.userId,
-              context.channelId,
-              50, // Keep last 50 messages for context
+              conversationChannelId,
+              25, // Keep last 25 messages for context (reduces token usage)
             );
       chatLogger.info('Loaded conversation history', {
         userId: context.userId,
         channelId: context.channelId,
+        conversationChannelId,
         historyCount: history.length,
         isOverride: overrideHistory !== undefined,
       });
@@ -363,9 +440,8 @@ export class ChatCommand extends BaseCommand {
         preview: finalResponse.substring(0, 100),
       });
 
-      // Safety check: ensure response fits Discord's limits
-      // (The LLM service should already handle this, but this is a backup)
-      const truncatedResponse = this.ensureDiscordLimit(finalResponse);
+      // Split response into multiple messages if needed
+      const messageParts = this.splitIntoMessages(finalResponse);
 
       // Save conversation to database (unless we're in a thread that manages its own history)
       if (!skipConversationSave) {
@@ -381,11 +457,17 @@ export class ChatCommand extends BaseCommand {
           chatLogger.warn(
             'No turn messages provided, falling back to legacy save',
           );
-          await this.saveConversationTurn(context, prompt, truncatedResponse);
+          await this.saveConversationTurn(context, prompt, finalResponse);
         }
       }
 
-      return { content: truncatedResponse };
+      // Return the first part as the primary response
+      // Additional parts will be sent as follow-ups
+      return {
+        content: messageParts[0],
+        additionalMessages:
+          messageParts.length > 1 ? messageParts.slice(1) : undefined,
+      };
     } catch (error) {
       chatLogger.error(
         'Error in chat command',
@@ -786,51 +868,96 @@ export class ChatCommand extends BaseCommand {
     return { content: summaryMessage };
   }
 
+  /**
+   * Split a long response into multiple Discord-compatible messages
+   * Tries to split at natural boundaries (paragraphs, sentences, words)
+   */
+  private splitIntoMessages(
+    response: string,
+    maxLength: number = 1950, // Discord followUp/reply limit is 2000, use 1950 for safety
+  ): string[] {
+    if (response.length <= maxLength) {
+      return [response];
+    }
+
+    chatLogger.info(
+      'Response exceeds Discord limit, splitting into multiple messages',
+      {
+        originalLength: response.length,
+        maxLength,
+        estimatedParts: Math.ceil(response.length / maxLength),
+      },
+    );
+
+    const messages: string[] = [];
+    let remaining = response;
+
+    while (remaining.length > 0) {
+      if (remaining.length <= maxLength) {
+        messages.push(remaining);
+        break;
+      }
+
+      // Find a good split point within the max length
+      const chunk = remaining.substring(0, maxLength);
+
+      // Try to find natural break points
+      const lastParagraph = chunk.lastIndexOf('\n\n');
+      const lastNewline = chunk.lastIndexOf('\n');
+      const lastSentence = Math.max(
+        chunk.lastIndexOf('. '),
+        chunk.lastIndexOf('! '),
+        chunk.lastIndexOf('? '),
+      );
+      const lastComma = chunk.lastIndexOf(', ');
+      const lastSpace = chunk.lastIndexOf(' ');
+
+      let splitPoint = maxLength;
+
+      // Prefer paragraph breaks (best for readability)
+      if (lastParagraph > maxLength * 0.5) {
+        splitPoint = lastParagraph + 2; // Include the \n\n
+      }
+      // Then single newlines
+      else if (lastNewline > maxLength * 0.6) {
+        splitPoint = lastNewline + 1;
+      }
+      // Then sentence endings
+      else if (lastSentence > maxLength * 0.6) {
+        splitPoint = lastSentence + 2; // Include the punctuation and space
+      }
+      // Then commas
+      else if (lastComma > maxLength * 0.7) {
+        splitPoint = lastComma + 2;
+      }
+      // Finally, word boundaries
+      else if (lastSpace > maxLength * 0.7) {
+        splitPoint = lastSpace + 1;
+      }
+
+      messages.push(remaining.substring(0, splitPoint).trim());
+      remaining = remaining.substring(splitPoint).trim();
+    }
+
+    chatLogger.info(`Split response into ${messages.length} messages`);
+    return messages;
+  }
+
+  /**
+   * @deprecated Use splitIntoMessages instead
+   * Legacy function kept for backward compatibility
+   */
   private ensureDiscordLimit(
     response: string,
     maxLength: number = 1950,
   ): string {
-    if (response.length <= maxLength) {
-      return response;
+    const messages = this.splitIntoMessages(response, maxLength);
+    if (messages.length > 1) {
+      chatLogger.warn(
+        'ensureDiscordLimit called but response needs multiple messages',
+      );
     }
-
-    chatLogger.warn('Response exceeds Discord limit, truncating', {
-      originalLength: response.length,
-      maxLength,
-    });
-
-    // Try to find a good truncation point
-    const truncated = response.substring(0, maxLength);
-
-    // Look for the last sentence ending
-    const lastSentence = Math.max(
-      truncated.lastIndexOf('.'),
-      truncated.lastIndexOf('!'),
-      truncated.lastIndexOf('?'),
-    );
-
-    // Look for the last paragraph break
-    const lastParagraph = truncated.lastIndexOf('\n\n');
-
-    // Choose the best truncation point
-    let cutPoint = maxLength - 50;
-
-    if (lastParagraph > maxLength * 0.7) {
-      cutPoint = lastParagraph;
-    } else if (lastSentence > maxLength * 0.7) {
-      cutPoint = lastSentence + 1;
-    } else {
-      // Find the last word boundary
-      const lastSpace = truncated.lastIndexOf(' ', maxLength - 50);
-      if (lastSpace > maxLength * 0.7) {
-        cutPoint = lastSpace;
-      }
-    }
-
-    return (
-      response.substring(0, cutPoint).trim() +
-      '... *(response truncated - ask for more details if needed)*'
-    );
+    return messages[0];
   }
 
   private async saveConversationTurn(
@@ -841,9 +968,13 @@ export class ChatCommand extends BaseCommand {
     try {
       chatLogger.info('Saving conversation turn to database');
 
+      // Use conversationChannelId if available, otherwise fall back to channelId
+      const conversationChannelId =
+        context.conversationChannelId || context.channelId;
+
       await this.database.saveConversationTurn(
         context.userId,
-        context.channelId,
+        conversationChannelId,
         userMessage,
         aiResponse,
       );
@@ -868,6 +999,10 @@ export class ChatCommand extends BaseCommand {
       chatLogger.info('Saving conversation with full message history', {
         messageCount: messages.length,
       });
+
+      // Use conversationChannelId if available, otherwise fall back to channelId
+      const conversationChannelId =
+        context.conversationChannelId || context.channelId;
 
       // Convert OpenAI message format to our ConversationMessage format
       const now = new Date();
@@ -905,7 +1040,7 @@ export class ChatCommand extends BaseCommand {
 
       await this.database.saveMessages(
         context.userId,
-        context.channelId,
+        conversationChannelId,
         conversationMessages,
       );
 

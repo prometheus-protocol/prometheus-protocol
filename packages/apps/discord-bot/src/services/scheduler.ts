@@ -32,20 +32,27 @@ export class AlertScheduler {
         alertCount: savedAlerts.length,
       });
 
+      // Safety check: limit number of tasks to prevent runaway execution
+      const MAX_TASKS = 1000;
+      if (savedAlerts.length > MAX_TASKS) {
+        schedulerLogger.warn(`Found ${savedAlerts.length} tasks in database, limiting to ${MAX_TASKS} most recent`);
+        savedAlerts.splice(MAX_TASKS); // Keep only first MAX_TASKS
+      }
+
+      let scheduledCount = 0;
       for (const alert of savedAlerts) {
         this.alerts.set(alert.id, alert);
 
         // Schedule enabled alerts
         if (alert.enabled) {
           await this.scheduleAlert(alert);
+          scheduledCount++;
         }
       }
 
       schedulerLogger.info('Alert scheduler started', {
         loadedAlerts: savedAlerts.length,
-        scheduledAlerts: Array.from(this.alerts.values()).filter(
-          (a) => a.enabled,
-        ).length,
+        scheduledAlerts: scheduledCount,
       });
     } catch (error) {
       schedulerLogger.error(
@@ -343,11 +350,34 @@ export class AlertScheduler {
 
     // Schedule the task
     const timeout = setTimeout(async () => {
-      await this.executeAlert(alert);
+      try {
+        // Remove from tasks map immediately to prevent duplicate execution
+        this.tasks.delete(alert.id);
+        
+        await this.executeAlert(alert);
 
-      // If recurring, reschedule
-      if (alert.recurring !== false && alert.enabled) {
-        await this.scheduleAlert(alert);
+        // If recurring, reschedule
+        if (alert.recurring !== false && alert.enabled) {
+          await this.scheduleAlert(alert);
+        } else {
+          // One-time task completed - clean up
+          schedulerLogger.info('One-time task completed, cleaning up', {
+            alertId: alert.id,
+            alertName: alert.name,
+          });
+          await this.removeAlert(alert.id);
+        }
+      } catch (error) {
+        schedulerLogger.error(
+          'Error in scheduled task execution',
+          error instanceof Error ? error : new Error(String(error)),
+          {
+            alertId: alert.id,
+            alertName: alert.name,
+          }
+        );
+        // Clean up task on error
+        this.tasks.delete(alert.id);
       }
     }, delay);
 
