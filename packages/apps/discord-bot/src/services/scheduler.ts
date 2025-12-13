@@ -35,7 +35,9 @@ export class AlertScheduler {
       // Safety check: limit number of tasks to prevent runaway execution
       const MAX_TASKS = 1000;
       if (savedAlerts.length > MAX_TASKS) {
-        schedulerLogger.warn(`Found ${savedAlerts.length} tasks in database, limiting to ${MAX_TASKS} most recent`);
+        schedulerLogger.warn(
+          `Found ${savedAlerts.length} tasks in database, limiting to ${MAX_TASKS} most recent`,
+        );
         savedAlerts.splice(MAX_TASKS); // Keep only first MAX_TASKS
       }
 
@@ -353,7 +355,7 @@ export class AlertScheduler {
       try {
         // Remove from tasks map immediately to prevent duplicate execution
         this.tasks.delete(alert.id);
-        
+
         await this.executeAlert(alert);
 
         // If recurring, reschedule
@@ -374,7 +376,7 @@ export class AlertScheduler {
           {
             alertId: alert.id,
             alertName: alert.name,
-          }
+          },
         );
         // Clean up task on error
         this.tasks.delete(alert.id);

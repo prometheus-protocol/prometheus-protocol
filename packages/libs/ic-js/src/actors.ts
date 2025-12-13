@@ -13,6 +13,7 @@ import {
   UsageTracker,
   TokenWatchlist,
   BountySponsor,
+  Ext,
 } from '@prometheus-protocol/declarations';
 import { getCanisterId, getHost } from './config.js';
 
@@ -181,6 +182,19 @@ export const getBountySponsorActor = (identity?: Identity) => {
   return createActor<BountySponsor._SERVICE>(
     BountySponsor.idlFactory,
     getCanisterId('BOUNTY_SPONSOR'),
+    identity,
+  );
+};
+
+/**
+ * @param canisterId The canister ID of the EXT NFT canister to connect to
+ * @param identity Optional identity to use for the actor
+ * @returns
+ */
+export const getExtActor = (canisterId: Principal, identity?: Identity) => {
+  return createActor<Ext._SERVICE>(
+    Ext.idlFactory,
+    canisterId.toText(),
     identity,
   );
 };

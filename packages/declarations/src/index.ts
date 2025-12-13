@@ -10,6 +10,7 @@ import * as SearchIndex from './generated/search_index/search_index.did.js';
 import * as UsageTracker from './generated/usage_tracker/usage_tracker.did.js';
 import * as TokenWatchlist from './generated/token_watchlist/token_watchlist.did.js';
 import * as BountySponsor from './generated/bounty_sponsor/bounty_sponsor.did.js';
+import * as Ext from './generated/ext/ext.did.js';
 
 export {
   Registry,
@@ -24,4 +25,5 @@ export {
   UsageTracker,
   TokenWatchlist,
   BountySponsor,
+  Ext,
 };

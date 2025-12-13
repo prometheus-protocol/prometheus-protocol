@@ -1,13 +1,16 @@
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Wallet, Info, Send } from 'lucide-react';
+import { ArrowLeft, Wallet, Info, Send, ImageIcon } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { TransferDialog } from '@/components/TransferDialog';
 import { Token, Tokens } from '@prometheus-protocol/ic-js';
 import { useGetTokenBalance } from '@/hooks/usePayment';
 import { useState } from 'react';
 import { WalletTokenList } from '@/components/wallet';
+import { NFTList } from '@/components/wallet/NFTList';
+import { NFTTransferDialog } from '@/components/wallet/NFTTransferDialog';
+import { useGetUserNFTs, NFTMetadata } from '@/hooks/useNFT';
 
 export default function WalletPage() {
   const { identity } = useInternetIdentity();
@@ -15,6 +18,11 @@ export default function WalletPage() {
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
   const [selectedTransferToken, setSelectedTransferToken] =
     useState<Token | null>(null);
+  const [isNFTTransferDialogOpen, setIsNFTTransferDialogOpen] = useState(false);
+  const [selectedNFT, setSelectedNFT] = useState<NFTMetadata | null>(null);
+
+  // Fetch user's NFTs
+  const { data: userNFTs = [], isLoading: nftsLoading } = useGetUserNFTs();
 
   // Get balance for the display token (selected or default to USDC)
   const displayToken = selectedTransferToken || Tokens.USDC;
@@ -32,6 +40,11 @@ export default function WalletPage() {
   const handleTransferToken = (token: Token) => {
     setSelectedTransferToken(token);
     setIsTransferDialogOpen(true);
+  };
+
+  const handleTransferNFT = (nft: NFTMetadata) => {
+    setSelectedNFT(nft);
+    setIsNFTTransferDialogOpen(true);
   };
 
   if (!identity) {
@@ -127,7 +140,27 @@ export default function WalletPage() {
         onTransfer={handleTransferToken}
       />
 
-      {/* Transfer Dialog */}
+      {/* NFT Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ImageIcon className="h-5 w-5" />
+            My PokedBots NFTs
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Your PokedBots NFT collection
+          </p>
+        </CardHeader>
+        <CardContent>
+          <NFTList
+            nfts={userNFTs}
+            isLoading={nftsLoading}
+            onTransfer={handleTransferNFT}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Transfer Dialogs */}
       {selectedTransferToken && (
         <TransferDialog
           token={selectedTransferToken}
@@ -139,6 +172,15 @@ export default function WalletPage() {
           currentBalance={transferTokenBalanceNum}
         />
       )}
+
+      <NFTTransferDialog
+        nft={selectedNFT}
+        isOpen={isNFTTransferDialogOpen}
+        onOpenChange={(open) => {
+          setIsNFTTransferDialogOpen(open);
+          if (!open) setSelectedNFT(null);
+        }}
+      />
     </div>
   );
 }

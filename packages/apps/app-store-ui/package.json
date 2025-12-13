@@ -17,7 +17,7 @@
     "@dfinity/principal": "^3.4.1",
     "@dfinity/utils": "^3.2.0",
     "@hookform/resolvers": "^5.1.1",
-    "@icp-sdk/canisters": "^2.0.1",
+    "@icp-sdk/canisters": "^3.0.0",
     "@icp-sdk/core": "^4.0.1",
     "@prometheus-protocol/declarations": "workspace:*",
     "@prometheus-protocol/ic-js": "workspace:*",

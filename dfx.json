@@ -95,6 +95,20 @@
         "node_compatibility": true
       }
     },
+    "ext": {
+      "candid": "packages/canisters/ext/ext.did",
+      "wasm": "packages/canisters/ext/ext.wasm",
+      "type": "custom",
+      "remote": {
+        "id": {
+          "ic": "bzsui-sqaaa-aaaah-qce2a-cai"
+        }
+      },
+      "declarations": {
+        "output": "packages/declarations/src/generated/ext",
+        "node_compatibility": true
+      }
+    },
     "icrc1_ledger": {
       "type": "custom",
       "candid": "https://github.com/dfinity/ic/releases/download/ledger-suite-icrc-2025-06-19/ledger.did",

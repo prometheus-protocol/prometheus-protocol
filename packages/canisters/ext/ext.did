@@ -1,0 +1,566 @@
+type Vars = 
+ record {
+   ACCOUNT_REGISTRY: principal;
+   CAP_ROUTER: principal;
+   CHANNEL_REGISTRY: principal;
+   COLLECTIBLE_SET_REGISTRY: principal;
+   EXCHANGE_RATE: principal;
+   ICP_LEDGER: principal;
+   NETWORK: text;
+   NFT_COLLECTION_REGISTRY: principal;
+   NODE_NETWORK: principal;
+   OWNER: principal;
+   SUBNET_ANCHOR_REGISTRY: principal;
+   VIDEO_REGISTRY: principal;
+ };
+type User = 
+ variant {
+   address: AccountIdentifier;
+   "principal": principal;
+ };
+type TransferResponse = 
+ variant {
+   err: TransferErr;
+   ok: Balance;
+ };
+type TransferRequest = 
+ record {
+   amount: Balance;
+   from: User;
+   memo: Memo;
+   notify: bool;
+   subaccount: opt SubAccount;
+   to: User;
+   token: TokenIdentifier;
+ };
+type TransferErr = 
+ variant {
+   CannotNotify: AccountIdentifier;
+   InsufficientBalance;
+   InvalidToken: TokenIdentifier;
+   Other: text;
+   Rejected;
+   Unauthorized: AccountIdentifier;
+ };
+type Transaction = 
+ record {
+   buyer: AccountIdentifier__1;
+   price: nat64;
+   seller: AccountIdentifier__1;
+   time: Time;
+   token: TokenIndex;
+ };
+type TokenIndex__1 = nat32;
+type TokenIndex = nat32;
+type TokenIdentifier__2 = text;
+type TokenIdentifier__1 = text;
+type TokenIdentifier = text;
+type Time__1 = int;
+type Time = int;
+type SubAccount__1 = vec nat8;
+type SubAccount = vec nat8;
+type SaleTransaction = 
+ record {
+   buyer: AccountIdentifier__1;
+   price: nat64;
+   seller: principal;
+   time: Time;
+   tokens: vec TokenIndex;
+ };
+type SaleSettings = 
+ record {
+   bulkPricing: vec record {
+                      nat64;
+                      nat64;
+                    };
+   price: nat64;
+   remaining: nat;
+   salePrice: nat64;
+   sold: nat;
+   startTime: Time;
+   totalToSell: nat;
+   whitelist: bool;
+   whitelistTime: Time;
+ };
+type SaleRemaining = 
+ variant {
+   burn;
+   retain;
+   send: AccountIdentifier__1;
+ };
+type SalePricingGroup = 
+ record {
+   end: Time;
+   limit: record {
+            nat64;
+            nat64;
+          };
+   name: text;
+   participants: vec AccountIdentifier__1;
+   pricing: vec record {
+                  nat64;
+                  nat64;
+                };
+   start: Time;
+ };
+type SaleDetails = 
+ record {
+   end: Time;
+   groups: vec SaleDetailGroup;
+   quantity: nat;
+   remaining: nat;
+   start: Time;
+ };
+type SaleDetailGroup = 
+ record {
+   available: bool;
+   end: Time;
+   id: nat;
+   name: text;
+   pricing: vec record {
+                  nat64;
+                  nat64;
+                };
+   start: Time;
+ };
+type Sale = 
+ record {
+   end: Time;
+   groups: vec SalePricingGroup;
+   quantity: nat;
+   remaining: SaleRemaining;
+   start: Time;
+ };
+type Result_9 = 
+ variant {
+   err: CommonError;
+   ok: AccountIdentifier__1;
+ };
+type Result_8 = 
+ variant {
+   err: CommonError;
+   ok: MetadataLegacy;
+ };
+type Result_7 = 
+ variant {
+   err;
+   ok: CollectionDetails;
+ };
+type Result_6 = 
+ variant {
+   err;
+   ok: vec NftDetails;
+ };
+type Result_5 = 
+ variant {
+   err: text;
+   ok: record {
+         AccountIdentifier__1;
+         nat64;
+       };
+ };
+type Result_4 = 
+ variant {
+   err: text;
+   ok;
+ };
+type Result_3 = 
+ variant {
+   err: CommonError;
+   ok;
+ };
+type Result_2 = 
+ variant {
+   err: CommonError;
+   ok: Balance__1;
+ };
+type Result_13 = 
+ variant {
+   err: CommonError;
+   ok: record {
+         AccountIdentifier__1;
+         opt Listing;
+       };
+ };
+type Result_12 = 
+ variant {
+   err: CommonError;
+   ok: record {
+         AccountIdentifier__1;
+         nat64;
+       };
+ };
+type Result_11 = 
+ variant {
+   err: CommonError;
+   ok: Metadata;
+ };
+type Result_10 = 
+ variant {
+   err: CommonError;
+   ok: text;
+ };
+type Result_1 = 
+ variant {
+   err: CommonError;
+   ok: vec TokenIndex;
+ };
+type Result = 
+ variant {
+   err: CommonError;
+   ok: vec record {
+             TokenIndex;
+             opt Listing;
+             opt blob;
+           };
+ };
+type PaymentType = 
+ variant {
+   nft: TokenIndex;
+   nfts: vec TokenIndex;
+   sale: nat64;
+ };
+type Payment = 
+ record {
+   amount: nat64;
+   expires: Time;
+   payer: AccountIdentifier__1;
+   purchase: PaymentType;
+   subaccount: SubAccount__1;
+ };
+type NftDetails = 
+ record {
+   id: TokenIdentifier__2;
+   index: TokenIndex__1;
+   listing: opt Listing__1;
+   metadata: opt MetadataV2;
+   owner: AccountIdentifier__2;
+ };
+type MetadataValue__1 = 
+ record {
+   text;
+   variant {
+     "blob": blob;
+     "nat": nat;
+     "nat8": nat8;
+     "text": text;
+   };
+ };
+type MetadataValue = 
+ record {
+   text;
+   variant {
+     "blob": blob;
+     "nat": nat;
+     "nat8": nat8;
+     "text": text;
+   };
+ };
+type MetadataV2 = 
+ variant {
+   fungible:
+    record {
+      decimals: nat8;
+      metadata: opt MetadataContainer;
+      name: text;
+      symbol: text;
+    };
+   nonfungible:
+    record {
+      asset: text;
+      metadata: opt MetadataContainer;
+      name: text;
+      thumbnail: text;
+    };
+ };
+type MetadataLegacy = 
+ variant {
+   fungible:
+    record {
+      decimals: nat8;
+      metadata: opt blob;
+      name: text;
+      symbol: text;
+    };
+   nonfungible: record {metadata: opt blob;};
+ };
+type MetadataContainer__1 = 
+ variant {
+   "blob": blob;
+   data: vec MetadataValue__1;
+   json: text;
+ };
+type MetadataContainer = 
+ variant {
+   "blob": blob;
+   data: vec MetadataValue;
+   json: text;
+ };
+type Metadata = 
+ variant {
+   fungible:
+    record {
+      decimals: nat8;
+      metadata: opt MetadataContainer__1;
+      name: text;
+      symbol: text;
+    };
+   nonfungible:
+    record {
+      asset: text;
+      metadata: opt MetadataContainer__1;
+      name: text;
+      thumbnail: text;
+    };
+ };
+type Memo = blob;
+type Listing__1 = 
+ record {
+   locked: opt Time__1;
+   price: nat64;
+   seller: principal;
+ };
+type Listing = 
+ record {
+   locked: opt Time;
+   price: nat64;
+   seller: principal;
+ };
+type ListRequest = 
+ record {
+   from_subaccount: opt SubAccount__1;
+   price: opt nat64;
+   token: TokenIdentifier__1;
+ };
+type HttpStreamingStrategy = variant {
+                               Callback:
+                                record {
+                                  callback:
+                                   func (HttpStreamingCallbackToken) ->
+                                    (HttpStreamingCallbackResponse) query;
+                                  token: HttpStreamingCallbackToken;
+                                };};
+type HttpStreamingCallbackToken = 
+ record {
+   content_encoding: text;
+   index: nat;
+   key: text;
+   sha256: opt blob;
+ };
+type HttpStreamingCallbackResponse = 
+ record {
+   body: blob;
+   token: opt HttpStreamingCallbackToken;
+ };
+type HttpResponse = 
+ record {
+   body: blob;
+   headers: vec HeaderField;
+   status_code: nat16;
+   streaming_strategy: opt HttpStreamingStrategy;
+ };
+type HttpRequest = 
+ record {
+   body: blob;
+   headers: vec HeaderField;
+   method: text;
+   url: text;
+ };
+type HeaderField = 
+ record {
+   text;
+   text;
+ };
+type Extension = text;
+type EXTNFT = 
+ service {
+   acceptCycles: () -> ();
+   addAsset: (AssetHandle, nat32, text, text, text) -> ();
+   addThumbnail: (AssetHandle, blob) -> ();
+   adminKillHeartbeat: () -> ();
+   adminStartHeartbeat: () -> ();
+   allSettlements: () ->
+    (vec
+      record {
+        TokenIndex;
+        record {
+          buyer: AccountIdentifier__1;
+          price: nat64;
+          seller: principal;
+          subaccount: SubAccount__1;
+        };
+      }) query;
+   availableCycles: () -> (nat) query;
+   balance: (BalanceRequest) -> (BalanceResponse) query;
+   bearer: (TokenIdentifier__1) -> (Result_9) query;
+   details: (TokenIdentifier__1) -> (Result_13) query;
+   ext_addAssetCanister: () -> ();
+   ext_admin: () -> (principal) query;
+   ext_assetAdd: (AssetHandle, text, text, AssetType, nat) -> ();
+   ext_assetExists: (AssetHandle) -> (bool) query;
+   ext_assetFits: (bool, nat) -> (bool) query;
+   ext_assetStream: (AssetHandle, blob, bool) -> (bool);
+   ext_balance: (BalanceRequest) -> (BalanceResponse) query;
+   ext_bearer: (TokenIdentifier__1) -> (Result_9) query;
+   ext_capInit: () -> ();
+   ext_expired: () ->
+    (vec record {
+           AccountIdentifier__1;
+           SubAccount__1;
+         }) query;
+   ext_extensions: () -> (vec Extension) query;
+   ext_marketplaceList: (ListRequest) -> (Result_3);
+   ext_marketplaceListings: () ->
+    (vec record {
+           TokenIndex;
+           Listing;
+           Metadata;
+         }) query;
+   ext_marketplacePurchase: (TokenIdentifier__1, nat64,
+    AccountIdentifier__1) -> (Result_12);
+   ext_marketplaceSettle: (AccountIdentifier__1) -> (Result_3);
+   ext_marketplaceStats: () -> (nat64, nat64, nat64, nat64, nat, nat,
+    nat) query;
+   ext_marketplaceTransactions: () -> (vec Transaction) query;
+   ext_metadata: (TokenIdentifier__1) -> (Result_11) query;
+   ext_mint: (vec record {
+                    AccountIdentifier__1;
+                    Metadata;
+                  }) -> (vec TokenIndex);
+   ext_payments: () -> (vec record {
+                              AccountIdentifier__1;
+                              Payment;
+                            }) query;
+   ext_removeAdmin: () -> ();
+   ext_saleClose: () -> (bool);
+   ext_saleCurrent: () -> (opt Sale) query;
+   ext_saleOpen: (vec SalePricingGroup, SaleRemaining,
+    vec AccountIdentifier__1) -> (bool);
+   ext_salePurchase: (nat, nat64, nat64, AccountIdentifier__1) -> (Result_5);
+   ext_saleSettings: (AccountIdentifier__1) -> (opt SaleDetails) query;
+   ext_saleSettle: (AccountIdentifier__1) -> (Result_4);
+   ext_saleTransactions: () -> (vec SaleTransaction) query;
+   ext_saleUpdate: (opt vec SalePricingGroup, opt SaleRemaining,
+    opt vec AccountIdentifier__1) -> (bool);
+   ext_setAdmin: (principal) -> ();
+   ext_setCollectionMetadata: (text, text) -> ();
+   ext_setMarketplaceOpen: (Time) -> ();
+   ext_setOwner: (principal) -> ();
+   ext_setRoyalty: (AccountIdentifier__1, nat64) -> ();
+   ext_transfer: (TransferRequest) -> (TransferResponse);
+   extdata_supply: (TokenIdentifier__1) -> (Result_2) query;
+   extensions: () -> (vec Extension) query;
+   failedSales: () ->
+    (vec record {
+           AccountIdentifier__1;
+           SubAccount__1;
+         }) query;
+   getLedger: () -> (Result_10) query;
+   getMetadata: () -> (vec record {
+                             TokenIndex;
+                             MetadataLegacy;
+                           }) query;
+   getMinter: () -> (principal) query;
+   getRegistry: () -> (vec record {
+                             TokenIndex;
+                             AccountIdentifier__1;
+                           }) query;
+   getTokens: () -> (vec record {
+                           TokenIndex;
+                           MetadataLegacy;
+                         }) query;
+   heartbeat_assetCanisters: () -> ();
+   heartbeat_capEvents: () -> ();
+   heartbeat_disbursements: () -> ();
+   heartbeat_external: () -> ();
+   heartbeat_isRunning: () -> (bool) query;
+   heartbeat_paymentSettlements: () -> ();
+   heartbeat_pending: () -> (vec record {
+                                   text;
+                                   nat;
+                                 }) query;
+   heartbeat_start: () -> ();
+   heartbeat_stop: () -> ();
+   http_request: (HttpRequest) -> (HttpResponse) query;
+   http_request_streaming_callback: (HttpStreamingCallbackToken) ->
+    (HttpStreamingCallbackResponse) query;
+   isHeartbeatRunning: () -> (bool) query;
+   list: (ListRequest) -> (Result_3);
+   listings: () -> (vec record {
+                          TokenIndex;
+                          Listing;
+                          MetadataLegacy;
+                        }) query;
+   lock: (TokenIdentifier__1, nat64, AccountIdentifier__1, SubAccount__1) ->
+    (Result_9);
+   metadata: (TokenIdentifier__1) -> (Result_8) query;
+   portal_getCollectionMeta: () -> (Result_7) query;
+   /// Portal specific
+   portal_getTokens: () -> (Result_6) query;
+   portal_setIsSoulbound: (bool) -> ();
+   reserve: (nat64, nat64, AccountIdentifier__1, SubAccount__1) -> (Result_5);
+   retreive: (AccountIdentifier__1) -> (Result_4);
+   saleTransactions: () -> (vec SaleTransaction) query;
+   salesSettings: (AccountIdentifier__1) -> (SaleSettings) query;
+   setLedger: (text) -> (Result_3);
+   setMinter: (principal) -> ();
+   settle: (TokenIdentifier__1) -> (Result_3);
+   settlements: () ->
+    (vec record {
+           TokenIndex;
+           AccountIdentifier__1;
+           nat64;
+         }) query;
+   stats: () -> (nat64, nat64, nat64, nat64, nat, nat, nat) query;
+   supply: (TokenIdentifier__1) -> (Result_2) query;
+   tokens: (AccountIdentifier__1) -> (Result_1) query;
+   tokens_ext: (AccountIdentifier__1) -> (Result) query;
+   transactions: () -> (vec Transaction) query;
+   transfer: (TransferRequest) -> (TransferResponse);
+ };
+type CommonError__1 = 
+ variant {
+   InvalidToken: TokenIdentifier;
+   Other: text;
+ };
+type CommonError = 
+ variant {
+   InvalidToken: TokenIdentifier;
+   Other: text;
+ };
+type CollectionDetails = 
+ record {
+   assets: nat;
+   maxCollectionStorage: nat;
+   mintedNfts: TokenIndex__1;
+   name: text;
+   usedCollectionStorage: nat;
+ };
+type ChunkId = nat32;
+type Balance__1 = nat;
+type BalanceResponse = 
+ variant {
+   err: CommonError__1;
+   ok: Balance;
+ };
+type BalanceRequest = 
+ record {
+   token: TokenIdentifier;
+   user: User;
+ };
+type Balance = nat;
+type AssetType = 
+ variant {
+   canister: record {
+               canister: text;
+               id: AssetId;
+             };
+   direct: vec ChunkId;
+   other: text;
+ };
+type AssetId = nat32;
+type AssetHandle = text;
+type AccountIdentifier__2 = text;
+type AccountIdentifier__1 = text;
+type AccountIdentifier = text;
+service : (Vars) -> EXTNFT

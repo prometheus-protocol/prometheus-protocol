@@ -23,6 +23,7 @@
     "@dfinity/ledger-icp": "^6.1.2",
     "@dfinity/ledger-icrc": "^4.1.2",
     "@dfinity/utils": "^3.2.0",
+    "@icp-sdk/canisters": "^3.0.0",
     "@icp-sdk/core": "^4.0.1",
     "@prometheus-protocol/declarations": "workspace:*",
     "cross-fetch": "^4.1.0",
