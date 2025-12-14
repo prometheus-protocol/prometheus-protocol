@@ -12,6 +12,8 @@ export interface ConnectionRequestPayload extends BasePubSubPayload {
   initialAccessToken?: string;
   initialRefreshToken?: string;
   // userIdWhoInitiatedAuth?: string; // If refresh tokens are user-specific but connection is workspace
+  apiKeyHeader?: string; // Optional custom header name for API key
+  apiKeyValue?: string; // Optional API key value
 }
 
 export interface TokensObtainedPayload extends BasePubSubPayload {

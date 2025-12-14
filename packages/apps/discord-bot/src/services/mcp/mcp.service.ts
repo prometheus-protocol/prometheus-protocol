@@ -289,12 +289,16 @@ export class MCPService {
   /**
    * Connect to an MCP server
    * @param channelId - Discord channel ID for channel-scoped connections
+   * @param apiKeyHeader - Optional custom header name for API key (e.g., 'x-api-key')
+   * @param apiKeyValue - Optional API key value
    */
   async connectToServer(
     serverId: string,
     userId: string,
     serverUrl?: string,
     channelId: string = 'default',
+    apiKeyHeader?: string,
+    apiKeyValue?: string,
   ): Promise<ConnectionResult> {
     try {
       logger.info(`Connecting user ${userId} to server ${serverId}`);
@@ -362,6 +366,8 @@ export class MCPService {
         channelId: channelId,
         mcpServerConfigId: serverId,
         mcpServerUrl: actualServerUrl,
+        apiKeyHeader,
+        apiKeyValue,
       };
 
       // Start the connection process

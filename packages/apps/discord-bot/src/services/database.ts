@@ -1568,6 +1568,14 @@ export class SupabaseService implements DatabaseService {
       // Clear error message on successful connection
       updateData.error_message = null;
     }
+    
+    // Update API key fields if provided in metadata
+    if (metadata?.apiKeyHeader !== undefined) {
+      updateData.api_key_header = metadata.apiKeyHeader;
+    }
+    if (metadata?.apiKeyValue !== undefined) {
+      updateData.api_key_value = metadata.apiKeyValue;
+    }
 
     // First, try to UPDATE the existing record
     const { data: updateResult, error: updateError } = await this.client
@@ -1604,6 +1612,14 @@ export class SupabaseService implements DatabaseService {
 
       if (updateData.error_message) {
         connectionData.error_message = updateData.error_message;
+      }
+      
+      // Add API key fields if present in metadata
+      if (metadata?.apiKeyHeader) {
+        connectionData.api_key_header = metadata.apiKeyHeader;
+      }
+      if (metadata?.apiKeyValue) {
+        connectionData.api_key_value = metadata.apiKeyValue;
       }
 
       const { data, error } = await this.client

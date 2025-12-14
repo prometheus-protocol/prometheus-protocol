@@ -84,6 +84,8 @@ interface ActiveConnection {
   isActiveAttempted: boolean;
   currentTransportType?: 'streamableHttp' | 'sse';
   capabilities?: ServerCapabilities;
+  apiKeyHeader?: string; // Optional custom header name
+  apiKeyValue?: string; // Optional API key value
 }
 
 export class ConnectionPoolService {
@@ -560,6 +562,8 @@ export class ConnectionPoolService {
         channelId: payload.channelId,
         mcpServerConfigId: payload.mcpServerConfigId,
         isActiveAttempted: false,
+        apiKeyHeader: payload.apiKeyHeader,
+        apiKeyValue: payload.apiKeyValue,
       };
       this.activeConnections.set(poolKey, connectionAttempt);
 
@@ -575,8 +579,21 @@ export class ConnectionPoolService {
       const client = new McpClient(clientConstructorOpts, clientOptions);
       connectionAttempt.client = client; // Add client to the connection object
 
-      // Only include authProvider in transport options if it exists (not using embedded creds)
-      const commonTransportOptions = authProvider ? { authProvider } : {};
+      // Build transport options with authProvider (if OAuth) or custom headers (if API key)
+      const commonTransportOptions: any = authProvider ? { authProvider } : {};
+      
+      // Add custom headers if API key is provided
+      // MCP SDK transports accept headers via fetchOptions
+      if (payload.apiKeyHeader && payload.apiKeyValue) {
+        logger.info(
+          `[ConnPool-${poolKey}] Adding custom API key header: ${payload.apiKeyHeader}`,
+        );
+        commonTransportOptions.fetchOptions = {
+          headers: {
+            [payload.apiKeyHeader]: payload.apiKeyValue,
+          },
+        };
+      }
       let connectedTransportType: 'streamableHttp' | 'sse' | undefined;
 
       client.onclose = async () => {
@@ -796,6 +813,9 @@ export class ConnectionPoolService {
           transportType: connectedTransportType,
           // capabilities are now available to be saved
           capabilities: connectionAttempt.capabilities,
+          // Store API key fields if provided
+          apiKeyHeader: payload.apiKeyHeader,
+          apiKeyValue: payload.apiKeyValue,
         },
       );
 
