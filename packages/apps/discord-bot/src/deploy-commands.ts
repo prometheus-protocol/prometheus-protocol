@@ -63,9 +63,12 @@ const rest = new REST({ version: '10' }).setToken(token);
 
     // Deploy to guild for instant updates
     console.log('Deploying to guild...');
-    const guildResult = await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
-      body: commands,
-    });
+    const guildResult = await rest.put(
+      Routes.applicationGuildCommands(clientId, guildId),
+      {
+        body: commands,
+      },
+    );
     console.log('✅ Guild commands deployed:', guildResult);
 
     // Also deploy globally for better reliability

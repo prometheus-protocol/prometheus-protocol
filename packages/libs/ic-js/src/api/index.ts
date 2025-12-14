@@ -11,3 +11,4 @@ export * from './search.api.js';
 export * from './usage-tracker.api.js';
 export * from './mcp-server.api.js';
 export * from './token-watchlist.api.js';
+export * from './nft.api.js';
