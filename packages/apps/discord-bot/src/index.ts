@@ -222,8 +222,12 @@ class DiscordBot {
           // Check if this is an MCP connect modal
           if (interaction.customId.startsWith('mcp_connect_')) {
             const url = interaction.fields.getTextInputValue('mcp_server_url');
-            const apiKeyHeader = interaction.fields.getTextInputValue('mcp_api_key_header') || undefined;
-            const apiKeyValue = interaction.fields.getTextInputValue('mcp_api_key_value') || undefined;
+            const apiKeyHeader =
+              interaction.fields.getTextInputValue('mcp_api_key_header') ||
+              undefined;
+            const apiKeyValue =
+              interaction.fields.getTextInputValue('mcp_api_key_value') ||
+              undefined;
             const userId = interaction.user.id;
             const channelId = !interaction.inGuild()
               ? 'dm'

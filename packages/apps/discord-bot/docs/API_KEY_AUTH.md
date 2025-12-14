@@ -17,6 +17,7 @@ When using the `/mcp connect` command, you'll see a modal with three fields:
 ### Examples
 
 #### Example 1: Using x-api-key header
+
 ```
 MCP Server URL: https://your-mcp-server.com
 API Key Header: x-api-key
@@ -24,6 +25,7 @@ API Key Value: your-secret-key-12345
 ```
 
 #### Example 2: Using Authorization header
+
 ```
 MCP Server URL: https://api.example.com/mcp
 API Key Header: Authorization
@@ -31,6 +33,7 @@ API Key Value: Bearer sk-1234567890abcdef
 ```
 
 #### Example 3: OAuth server (no API key)
+
 ```
 MCP Server URL: https://oauth-server.com/mcp
 API Key Header: (leave empty)
@@ -54,8 +57,9 @@ API Key Value: (leave empty)
 ### Supported Header Names
 
 You can use any header name your server expects. Common examples:
+
 - `x-api-key`
-- `Authorization` 
+- `Authorization`
 - `api-key`
 - `X-API-Key`
 - Any custom header your server uses
@@ -63,12 +67,14 @@ You can use any header name your server expects. Common examples:
 ## Database Schema
 
 The `mcp_connections` table has been extended with:
+
 - `api_key_header` (TEXT, nullable) - Stores the header name
 - `api_key_value` (TEXT, nullable) - Stores the API key value
 
 ## Migration
 
 To apply the database changes, run:
+
 ```sql
 -- See migrations/add_api_key_columns.sql
 ALTER TABLE mcp_connections ADD COLUMN IF NOT EXISTS api_key_header TEXT;
@@ -83,13 +89,16 @@ ALTER TABLE mcp_connections ADD COLUMN IF NOT EXISTS api_key_value TEXT;
 ## Troubleshooting
 
 ### Connection fails with API key
+
 1. Verify your API key is correct
 2. Check that the header name matches what your server expects (case-sensitive!)
 3. Look at the error message in `/mcp list` for details
 
 ### Server expects Authorization but I'm using x-api-key
+
 Simply reconnect with the correct header name. Use `/mcp disconnect` first, then `/mcp connect` with the right header.
 
 ### Need to update API key
+
 1. Use `/mcp disconnect <server-name>` to disconnect
 2. Use `/mcp connect` again with the updated API key

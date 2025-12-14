@@ -485,17 +485,18 @@ export class ConnectionPoolService {
 
       const serverUrlObject = new URL(payload.mcpServerUrl);
 
-      // Check if URL has embedded credentials - if so, skip OAuth
+      // Check if URL has embedded credentials or if API key is provided - if so, skip OAuth
       const hasCredentials = hasEmbeddedCredentials(payload.mcpServerUrl);
+      const hasApiKey = !!(payload.apiKeyHeader && payload.apiKeyValue);
       logger.info(
-        `[ConnPool-${poolKey}] URL has embedded credentials: ${hasCredentials}`,
+        `[ConnPool-${poolKey}] URL has embedded credentials: ${hasCredentials}, API key provided: ${hasApiKey}`,
       );
 
       let authProvider: ConnectionManagerOAuthProvider | undefined;
       let authStatus: string | undefined;
 
-      if (!hasCredentials) {
-        // Only use OAuth if there are no embedded credentials
+      if (!hasCredentials && !hasApiKey) {
+        // Only use OAuth if there are no embedded credentials AND no API key
         authProvider = new ConnectionManagerOAuthProvider(
           payload.mcpServerConfigId,
           payload.userId,
@@ -548,9 +549,15 @@ export class ConnectionPoolService {
           return;
         }
       } else {
-        logger.info(
-          `[ConnPool-${poolKey}] Skipping OAuth - using embedded credentials from URL`,
-        );
+        if (hasApiKey) {
+          logger.info(
+            `[ConnPool-${poolKey}] Skipping OAuth - using API key authentication`,
+          );
+        } else {
+          logger.info(
+            `[ConnPool-${poolKey}] Skipping OAuth - using embedded credentials from URL`,
+          );
+        }
       }
 
       // Store the authProvider in the pool immediately (or undefined if using embedded creds).
@@ -580,19 +587,24 @@ export class ConnectionPoolService {
       connectionAttempt.client = client; // Add client to the connection object
 
       // Build transport options with authProvider (if OAuth) or custom headers (if API key)
-      const commonTransportOptions: any = authProvider ? { authProvider } : {};
-      
+      let commonTransportOptions: any = authProvider ? { authProvider } : {};
+
       // Add custom headers if API key is provided
-      // MCP SDK transports accept headers via fetchOptions
+      // Headers must be in requestInit.headers per MCP SDK transport implementation
       if (payload.apiKeyHeader && payload.apiKeyValue) {
         logger.info(
-          `[ConnPool-${poolKey}] Adding custom API key header: ${payload.apiKeyHeader}`,
+          `[ConnPool-${poolKey}] Adding custom API key header: ${payload.apiKeyHeader} = ${payload.apiKeyValue.substring(0, 10)}...`,
         );
-        commonTransportOptions.fetchOptions = {
+
+        commonTransportOptions.requestInit = {
           headers: {
             [payload.apiKeyHeader]: payload.apiKeyValue,
           },
         };
+
+        logger.info(
+          `[ConnPool-${poolKey}] Transport options configured with API key in requestInit.headers`,
+        );
       }
       let connectedTransportType: 'streamableHttp' | 'sse' | undefined;
 

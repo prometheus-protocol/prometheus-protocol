@@ -1568,7 +1568,7 @@ export class SupabaseService implements DatabaseService {
       // Clear error message on successful connection
       updateData.error_message = null;
     }
-    
+
     // Update API key fields if provided in metadata
     if (metadata?.apiKeyHeader !== undefined) {
       updateData.api_key_header = metadata.apiKeyHeader;
@@ -1613,7 +1613,7 @@ export class SupabaseService implements DatabaseService {
       if (updateData.error_message) {
         connectionData.error_message = updateData.error_message;
       }
-      
+
       // Add API key fields if present in metadata
       if (metadata?.apiKeyHeader) {
         connectionData.api_key_header = metadata.apiKeyHeader;
