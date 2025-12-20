@@ -1013,12 +1013,24 @@ export class MCPService {
         throw new Error('No saved connection found');
       }
 
-      // Attempt to reconnect
+      // Log API key presence for debugging
+      logger.info(
+        `[autoReconnectAfterOAuth] Connection has API key header: ${!!connection.api_key_header}, value: ${!!connection.api_key_value}`,
+      );
+      if (connection.api_key_header) {
+        logger.info(
+          `[autoReconnectAfterOAuth] API key header name: ${connection.api_key_header}`,
+        );
+      }
+
+      // Attempt to reconnect, preserving API key if present
       return await this.connectToServer(
         serverId,
         userId,
         connection.server_url,
         channelId,
+        connection.api_key_header || undefined,
+        connection.api_key_value || undefined,
       );
     } catch (error: any) {
       logger.error(`Error in auto-reconnect after OAuth:`, error);
