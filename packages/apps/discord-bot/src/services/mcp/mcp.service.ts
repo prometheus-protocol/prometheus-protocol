@@ -289,12 +289,16 @@ export class MCPService {
   /**
    * Connect to an MCP server
    * @param channelId - Discord channel ID for channel-scoped connections
+   * @param apiKeyHeader - Optional custom header name for API key (e.g., 'x-api-key')
+   * @param apiKeyValue - Optional API key value
    */
   async connectToServer(
     serverId: string,
     userId: string,
     serverUrl?: string,
     channelId: string = 'default',
+    apiKeyHeader?: string,
+    apiKeyValue?: string,
   ): Promise<ConnectionResult> {
     try {
       logger.info(`Connecting user ${userId} to server ${serverId}`);
@@ -362,6 +366,8 @@ export class MCPService {
         channelId: channelId,
         mcpServerConfigId: serverId,
         mcpServerUrl: actualServerUrl,
+        apiKeyHeader,
+        apiKeyValue,
       };
 
       // Start the connection process
@@ -1007,12 +1013,24 @@ export class MCPService {
         throw new Error('No saved connection found');
       }
 
-      // Attempt to reconnect
+      // Log API key presence for debugging
+      logger.info(
+        `[autoReconnectAfterOAuth] Connection has API key header: ${!!connection.api_key_header}, value: ${!!connection.api_key_value}`,
+      );
+      if (connection.api_key_header) {
+        logger.info(
+          `[autoReconnectAfterOAuth] API key header name: ${connection.api_key_header}`,
+        );
+      }
+
+      // Attempt to reconnect, preserving API key if present
       return await this.connectToServer(
         serverId,
         userId,
         connection.server_url,
         channelId,
+        connection.api_key_header || undefined,
+        connection.api_key_value || undefined,
       );
     } catch (error: any) {
       logger.error(`Error in auto-reconnect after OAuth:`, error);

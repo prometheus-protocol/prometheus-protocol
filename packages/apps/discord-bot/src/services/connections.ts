@@ -84,6 +84,8 @@ interface ActiveConnection {
   isActiveAttempted: boolean;
   currentTransportType?: 'streamableHttp' | 'sse';
   capabilities?: ServerCapabilities;
+  apiKeyHeader?: string; // Optional custom header name
+  apiKeyValue?: string; // Optional API key value
 }
 
 export class ConnectionPoolService {
@@ -483,17 +485,18 @@ export class ConnectionPoolService {
 
       const serverUrlObject = new URL(payload.mcpServerUrl);
 
-      // Check if URL has embedded credentials - if so, skip OAuth
+      // Check if URL has embedded credentials or if API key is provided - if so, skip OAuth
       const hasCredentials = hasEmbeddedCredentials(payload.mcpServerUrl);
+      const hasApiKey = !!(payload.apiKeyHeader && payload.apiKeyValue);
       logger.info(
-        `[ConnPool-${poolKey}] URL has embedded credentials: ${hasCredentials}`,
+        `[ConnPool-${poolKey}] URL has embedded credentials: ${hasCredentials}, API key provided: ${hasApiKey}`,
       );
 
       let authProvider: ConnectionManagerOAuthProvider | undefined;
       let authStatus: string | undefined;
 
-      if (!hasCredentials) {
-        // Only use OAuth if there are no embedded credentials
+      if (!hasCredentials && !hasApiKey) {
+        // Only use OAuth if there are no embedded credentials AND no API key
         authProvider = new ConnectionManagerOAuthProvider(
           payload.mcpServerConfigId,
           payload.userId,
@@ -546,9 +549,15 @@ export class ConnectionPoolService {
           return;
         }
       } else {
-        logger.info(
-          `[ConnPool-${poolKey}] Skipping OAuth - using embedded credentials from URL`,
-        );
+        if (hasApiKey) {
+          logger.info(
+            `[ConnPool-${poolKey}] Skipping OAuth - using API key authentication`,
+          );
+        } else {
+          logger.info(
+            `[ConnPool-${poolKey}] Skipping OAuth - using embedded credentials from URL`,
+          );
+        }
       }
 
       // Store the authProvider in the pool immediately (or undefined if using embedded creds).
@@ -560,6 +569,8 @@ export class ConnectionPoolService {
         channelId: payload.channelId,
         mcpServerConfigId: payload.mcpServerConfigId,
         isActiveAttempted: false,
+        apiKeyHeader: payload.apiKeyHeader,
+        apiKeyValue: payload.apiKeyValue,
       };
       this.activeConnections.set(poolKey, connectionAttempt);
 
@@ -575,8 +586,26 @@ export class ConnectionPoolService {
       const client = new McpClient(clientConstructorOpts, clientOptions);
       connectionAttempt.client = client; // Add client to the connection object
 
-      // Only include authProvider in transport options if it exists (not using embedded creds)
-      const commonTransportOptions = authProvider ? { authProvider } : {};
+      // Build transport options with authProvider (if OAuth) or custom headers (if API key)
+      let commonTransportOptions: any = authProvider ? { authProvider } : {};
+
+      // Add custom headers if API key is provided
+      // Headers must be in requestInit.headers per MCP SDK transport implementation
+      if (payload.apiKeyHeader && payload.apiKeyValue) {
+        logger.info(
+          `[ConnPool-${poolKey}] Adding custom API key header: ${payload.apiKeyHeader} = ${payload.apiKeyValue.substring(0, 10)}...`,
+        );
+
+        commonTransportOptions.requestInit = {
+          headers: {
+            [payload.apiKeyHeader]: payload.apiKeyValue,
+          },
+        };
+
+        logger.info(
+          `[ConnPool-${poolKey}] Transport options configured with API key in requestInit.headers`,
+        );
+      }
       let connectedTransportType: 'streamableHttp' | 'sse' | undefined;
 
       client.onclose = async () => {
@@ -796,6 +825,9 @@ export class ConnectionPoolService {
           transportType: connectedTransportType,
           // capabilities are now available to be saved
           capabilities: connectionAttempt.capabilities,
+          // Store API key fields if provided
+          apiKeyHeader: payload.apiKeyHeader,
+          apiKeyValue: payload.apiKeyValue,
         },
       );
 

@@ -14,6 +14,8 @@ create table if not exists mcp_connections (
   error_message text null,
   connected_at timestamptz null,
   last_used timestamptz null,
+  api_key_header text null,
+  api_key_value text null,
   updated_at timestamptz default now(),
   created_at timestamptz default now(),
   unique(user_id, channel_id, server_id)
@@ -25,6 +27,8 @@ create index if not exists idx_mcp_connections_user_server on mcp_connections(us
 create index if not exists idx_mcp_connections_status on mcp_connections(status);
 
 comment on column mcp_connections.channel_id is 'Discord channel ID - allows users to have different MCP server configurations per channel';
+comment on column mcp_connections.api_key_header is 'Optional custom header name for API key authentication (e.g., x-api-key, Authorization)';
+comment on column mcp_connections.api_key_value is 'Optional API key value for authentication. Used when the server does not support OAuth';
 
 -- Basic RLS (enable and allow service role access)
 alter table mcp_connections enable row level security;

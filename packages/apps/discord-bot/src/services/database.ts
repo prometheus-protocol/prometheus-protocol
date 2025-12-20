@@ -1185,6 +1185,8 @@ export class SupabaseService implements DatabaseService {
       server_name: connection.server_name,
       status: connection.status,
       tools_count: connection.tools ? JSON.parse(connection.tools).length : 0,
+      api_key_header: connection.api_key_header || 'NULL',
+      api_key_value: connection.api_key_value ? '[REDACTED]' : 'NULL',
     });
 
     const { data, error } = await this.client.from('mcp_connections').upsert(
@@ -1200,6 +1202,8 @@ export class SupabaseService implements DatabaseService {
         connected_at: connection.connected_at?.toISOString() || null,
         last_used: connection.last_used?.toISOString() || null,
         updated_at: new Date().toISOString(),
+        api_key_header: connection.api_key_header || null,
+        api_key_value: connection.api_key_value || null,
       },
       {
         onConflict: 'user_id,channel_id,server_id',
@@ -1272,11 +1276,14 @@ export class SupabaseService implements DatabaseService {
       error_message: data.error_message,
       connected_at: data.connected_at ? new Date(data.connected_at) : null,
       last_used: data.last_used ? new Date(data.last_used) : null,
+      api_key_header: data.api_key_header || null,
+      api_key_value: data.api_key_value || null,
     };
 
     dbLogger.info(`🔗 [DB] Found MCP connection:`, {
       server_name: connection.server_name,
       status: connection.status,
+      has_api_key: !!(connection.api_key_header && connection.api_key_value),
     });
 
     return connection;
@@ -1569,6 +1576,13 @@ export class SupabaseService implements DatabaseService {
       updateData.error_message = null;
     }
 
+    // Update API key fields ONLY if explicitly provided in metadata
+    // Don't touch them during disconnect or other status updates
+    if (metadata?.apiKeyHeader !== undefined && metadata?.apiKeyValue !== undefined) {
+      updateData.api_key_header = metadata.apiKeyHeader;
+      updateData.api_key_value = metadata.apiKeyValue;
+    }
+
     // First, try to UPDATE the existing record
     const { data: updateResult, error: updateError } = await this.client
       .from('mcp_connections')
@@ -1604,6 +1618,14 @@ export class SupabaseService implements DatabaseService {
 
       if (updateData.error_message) {
         connectionData.error_message = updateData.error_message;
+      }
+
+      // Add API key fields if present in metadata
+      if (metadata?.apiKeyHeader) {
+        connectionData.api_key_header = metadata.apiKeyHeader;
+      }
+      if (metadata?.apiKeyValue) {
+        connectionData.api_key_value = metadata.apiKeyValue;
       }
 
       const { data, error } = await this.client
