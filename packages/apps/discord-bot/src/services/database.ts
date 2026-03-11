@@ -1578,7 +1578,10 @@ export class SupabaseService implements DatabaseService {
 
     // Update API key fields ONLY if explicitly provided in metadata
     // Don't touch them during disconnect or other status updates
-    if (metadata?.apiKeyHeader !== undefined && metadata?.apiKeyValue !== undefined) {
+    if (
+      metadata?.apiKeyHeader !== undefined &&
+      metadata?.apiKeyValue !== undefined
+    ) {
       updateData.api_key_header = metadata.apiKeyHeader;
       updateData.api_key_value = metadata.apiKeyValue;
     }

@@ -3,7 +3,6 @@ import { ServerGrid } from '@/components/ServerGrid';
 import { ValuePropBanner } from '@/components/ValuePropBanner';
 import { WinnerBanner } from '@/components/WinnerBanner';
 import { FeaturedCarousel } from '@/components/FeaturedCarousel';
-import { OfferBanner } from '@/components/OfferBanner';
 import { PokedBotsBanner } from '@/components/PokedBotsBanner';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import { truncatePrincipal } from '@/lib/utils';
@@ -130,9 +129,9 @@ function HomePage() {
       {/* Calculate how many category sections to show before each banner */}
       {(() => {
         const totalSections = categorySections.length;
-        const totalBanners = 2; // WinnerBanner and PokedBotsBanner
+        const totalBanners = 1; // ValuePropBanner in the middle
 
-        // Distribute categories evenly: split into 3 groups (before WinnerBanner, between banners, after PokedBotsBanner)
+        // Distribute categories: split into 2 groups (before banner, after banner)
         const sectionsPerGroup = Math.ceil(totalSections / (totalBanners + 1));
 
         let renderedCount = 0;
@@ -151,16 +150,13 @@ function HomePage() {
         });
         renderedCount += firstGroup.length;
 
-        // WinnerBanner after first group
+        // ValuePropBanner in the middle
         if (renderedCount < totalSections) {
           result.push(<ValuePropBanner key="value-prop-banner" />);
         }
 
-        // Second group of categories
-        const secondGroup = categorySections.slice(
-          sectionsPerGroup,
-          sectionsPerGroup * 2,
-        );
+        // Second group of categories (remaining)
+        const secondGroup = categorySections.slice(sectionsPerGroup);
         secondGroup.forEach((section) => {
           result.push(
             <ServerGrid
@@ -170,36 +166,21 @@ function HomePage() {
             />,
           );
         });
-        renderedCount += secondGroup.length;
 
-        // WinnerBanner after second group
-        if (renderedCount < totalSections) {
-          result.push(<WinnerBanner key="winner-banner" />);
-        }
-
-        // Third group of categories (remaining)
-        const thirdGroup = categorySections.slice(sectionsPerGroup * 2);
-        thirdGroup.forEach((section) => {
-          result.push(
-            <ServerGrid
-              key={section.title}
-              title={section.title}
-              servers={section.servers}
-            />,
-          );
-        });
-
-        // If we didn't use all banners (fewer categories than expected), add them at the end
+        // If we didn't use the banner (no categories), add it anyway
         if (renderedCount >= totalSections) {
           result.push(<ValuePropBanner key="value-prop-banner-fallback" />);
-          result.push(<WinnerBanner key="winner-banner-fallback" />);
         }
 
         return result;
       })()}
 
-      {/* OfferBanner moved to the bottom */}
-      <OfferBanner />
+      {goldTierApps.length > 0 && (
+        <ServerGrid title="Gold Tier Apps" servers={goldTierApps} />
+      )}
+
+      {/* Discord CTA at the bottom */}
+      <WinnerBanner />
     </div>
   );
 }
