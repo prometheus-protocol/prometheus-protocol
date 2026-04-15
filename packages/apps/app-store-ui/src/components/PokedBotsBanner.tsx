@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 
 export function PokedBotsBanner() {
   return (
-    <div className="relative w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 my-12">
+    <div className="relative w-full mx-auto my-12">
       {/* Ambient background glow */}
       <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/20 via-orange-500/30 to-red-500/20 blur-3xl" />
 

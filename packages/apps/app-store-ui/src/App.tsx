@@ -21,8 +21,6 @@ import { AboutPage } from './pages/AboutPage';
 import { ContactPage } from './pages/ContactPage';
 import { FaqPage } from './pages/FaqPage';
 import { CommunityPage } from './pages/CommunityPage';
-import GoldVerifiedServerPage from './pages/GoldVerifiedServerPage';
-import { GoldVerifiedTermsPage } from './pages/GoldVerifiedTermsPage';
 
 import { configure as configureIcJs } from '@prometheus-protocol/ic-js';
 import AppBountiesPage from './pages/AppBountiesPage';
@@ -129,10 +127,6 @@ function App() {
 
               {/* Static informational pages */}
               <Route path="about" element={<AboutPage />} />
-              <Route
-                path="gold-verified-server"
-                element={<GoldVerifiedServerPage />}
-              />
 
               {/* Resources */}
               <Route path="contact" element={<ContactPage />} />
@@ -142,10 +136,6 @@ function App() {
               {/* Legal pages */}
               <Route path="terms" element={<TermsOfServicePage />} />
               <Route path="privacy" element={<PrivacyPolicyPage />} />
-              <Route
-                path="gold-verified-terms"
-                element={<GoldVerifiedTermsPage />}
-              />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
 

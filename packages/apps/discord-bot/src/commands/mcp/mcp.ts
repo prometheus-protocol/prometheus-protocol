@@ -169,11 +169,31 @@ export class MCPCommand extends BaseCommand {
         .setPlaceholder('https://your-mcp-server.com')
         .setRequired(true);
 
-      const actionRow = new ActionRowBuilder<TextInputBuilder>().addComponents(
+      const apiKeyHeaderInput = new TextInputBuilder()
+        .setCustomId('mcp_api_key_header')
+        .setLabel('API Key Header (optional)')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('e.g., x-api-key, Authorization')
+        .setRequired(false);
+
+      const apiKeyValueInput = new TextInputBuilder()
+        .setCustomId('mcp_api_key_value')
+        .setLabel('API Key Value (optional)')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Your API key')
+        .setRequired(false);
+
+      const urlRow = new ActionRowBuilder<TextInputBuilder>().addComponents(
         urlInput,
       );
+      const headerRow = new ActionRowBuilder<TextInputBuilder>().addComponents(
+        apiKeyHeaderInput,
+      );
+      const valueRow = new ActionRowBuilder<TextInputBuilder>().addComponents(
+        apiKeyValueInput,
+      );
 
-      modal.addComponents(actionRow);
+      modal.addComponents(urlRow, headerRow, valueRow);
 
       await interaction.showModal(modal);
       return; // Modal submission will be handled separately
@@ -423,6 +443,8 @@ export class MCPCommand extends BaseCommand {
     url: string,
     userId: string,
     channelId: string,
+    apiKeyHeader?: string,
+    apiKeyValue?: string,
   ): Promise<CommandResponse> {
     if (!url) {
       return {
@@ -445,6 +467,13 @@ export class MCPCommand extends BaseCommand {
       };
     }
 
+    // Validate API key fields - both must be provided or neither
+    if ((apiKeyHeader && !apiKeyValue) || (!apiKeyHeader && apiKeyValue)) {
+      return {
+        content: '❌ Both API key header and value must be provided together.',
+      };
+    }
+
     try {
       // Generate a simple UUID for this connection
       const serverId = randomUUID();
@@ -458,6 +487,8 @@ export class MCPCommand extends BaseCommand {
         userId,
         url, // Pass the URL directly
         channelId, // Pass the actual channel ID
+        apiKeyHeader,
+        apiKeyValue,
       );
 
       if (connection.status === 'connected') {
