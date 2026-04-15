@@ -79,6 +79,8 @@ export class MCPEventHandlerService {
         error_message: null,
         connected_at: null,
         last_used: null,
+        api_key_header: existingConnection?.api_key_header || null,
+        api_key_value: existingConnection?.api_key_value || null,
       };
 
       await this.databaseService.saveUserMCPConnection(connectionData);
@@ -323,6 +325,8 @@ export class MCPEventHandlerService {
         connected_at: existingConnection?.connected_at || new Date(),
         last_used: new Date(),
         channel_id: channelId, // Use from payload instead of falling back to empty string
+        api_key_header: existingConnection?.api_key_header || null,
+        api_key_value: existingConnection?.api_key_value || null,
       };
 
       await this.databaseService.saveUserMCPConnection(connectionData);
