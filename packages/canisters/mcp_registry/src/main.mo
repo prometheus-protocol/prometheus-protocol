@@ -85,6 +85,31 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   // Key: wasm_id, Value: Set of bounty_ids that reported divergence
   stable var divergence_progress = BTree.init<Text, [Nat]>(null);
 
+  // --- BYOC (Bring Your Own Canister) ---
+  // External canister bindings: namespace -> ExternalBinding
+  type ExternalBinding = {
+    canister_id : Principal;
+    namespace : Text;
+    bound_by : Principal;
+    bound_at : Nat;
+  };
+
+  type RegisterExternalRequest = {
+    namespace : Text;
+    canister_id : Principal;
+  };
+
+  type RegisterExternalError = {
+    #NotController;
+    #NamespaceNotFound;
+    #AlreadyBound;
+    #CanisterAlreadyBound;
+  };
+
+  stable var external_bindings = BTree.init<Text, ExternalBinding>(null);
+  // Reverse index: canister_id (text) -> namespace, for uniqueness enforcement
+  stable var canister_to_namespace = BTree.init<Text, Text>(null);
+
   // Constants for majority consensus
   let REQUIRED_VERIFIERS : Nat = 9; // Total verifiers needed
   let MAJORITY_THRESHOLD : Nat = 5; // Minimum successful verifications (5 of 9)
@@ -1683,6 +1708,104 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
         return #ok(isController);
       };
     };
+  };
+
+  // =====================================================================================
+  // BYOC (Bring Your Own Canister) — External Deployment Registration
+  // =====================================================================================
+
+  /// Register an externally-deployed canister with the registry.
+  /// Caller must be a controller of the namespace.
+  /// Enforces strict 1:1 — one canister per namespace, one namespace per canister.
+  public shared (msg) func register_external_canister(req : RegisterExternalRequest) : async {
+    #ok : ExternalBinding;
+    #err : RegisterExternalError;
+  } {
+    let caller = msg.caller;
+    let state = icrc118wasmregistry().state;
+
+    // 1. Namespace must exist
+    switch (BTree.get(state.canister_types, Text.compare, req.namespace)) {
+      case (null) { return #err(#NamespaceNotFound) };
+      case (?canister_type) {
+        // 2. Caller must be a controller of the namespace
+        let isController = Option.isSome(
+          Array.find(
+            canister_type.controllers,
+            func(c : Principal) : Bool { Principal.equal(c, caller) },
+          )
+        );
+        if (not isController) { return #err(#NotController) };
+      };
+    };
+
+    // 3. Check namespace isn't already bound
+    switch (BTree.get(external_bindings, Text.compare, req.namespace)) {
+      case (?_) { return #err(#AlreadyBound) };
+      case (null) {};
+    };
+
+    // 4. Check canister isn't already bound to another namespace
+    let canisterText = Principal.toText(req.canister_id);
+    switch (BTree.get(canister_to_namespace, Text.compare, canisterText)) {
+      case (?_) { return #err(#CanisterAlreadyBound) };
+      case (null) {};
+    };
+
+    // 5. Create the binding
+    let binding : ExternalBinding = {
+      canister_id = req.canister_id;
+      namespace = req.namespace;
+      bound_by = caller;
+      bound_at = Int.abs(Time.now());
+    };
+
+    ignore BTree.insert(external_bindings, Text.compare, req.namespace, binding);
+    ignore BTree.insert(canister_to_namespace, Text.compare, canisterText, req.namespace);
+
+    return #ok(binding);
+  };
+
+  /// Unregister an external canister binding.
+  /// Caller must be a controller of the namespace.
+  public shared (msg) func unregister_external_canister(namespace : Text, canister_id : Principal) : async {
+    #ok;
+    #err : Text;
+  } {
+    let caller = msg.caller;
+    let state = icrc118wasmregistry().state;
+
+    // 1. Caller must be a controller of the namespace
+    switch (BTree.get(state.canister_types, Text.compare, namespace)) {
+      case (null) { return #err("Namespace not found") };
+      case (?canister_type) {
+        let isController = Option.isSome(
+          Array.find(
+            canister_type.controllers,
+            func(c : Principal) : Bool { Principal.equal(c, caller) },
+          )
+        );
+        if (not isController) { return #err("Not a controller of this namespace") };
+      };
+    };
+
+    // 2. Remove the binding
+    switch (BTree.get(external_bindings, Text.compare, namespace)) {
+      case (null) { return #err("No external binding for this namespace") };
+      case (?binding) {
+        if (not Principal.equal(binding.canister_id, canister_id)) {
+          return #err("Canister ID does not match the binding");
+        };
+        ignore BTree.delete(external_bindings, Text.compare, namespace);
+        ignore BTree.delete(canister_to_namespace, Text.compare, Principal.toText(canister_id));
+        return #ok;
+      };
+    };
+  };
+
+  /// Query the external binding for a namespace, if any.
+  public query func get_external_binding(namespace : Text) : async ?ExternalBinding {
+    BTree.get(external_bindings, Text.compare, namespace);
   };
 
   // The outcome of a DAO-led verification process.

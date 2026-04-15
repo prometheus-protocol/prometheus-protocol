@@ -723,3 +723,86 @@ export const downloadWasmByHash = async (
 
   return completeWasm;
 };
+
+// --- BYOC (Bring Your Own Canister) ---
+
+export interface ExternalBindingInfo {
+  canisterId: string;
+  namespace: string;
+  boundBy: string;
+  boundAt: bigint;
+}
+
+/**
+ * Register an externally-deployed canister with the Prometheus registry.
+ * Caller must be a controller of the namespace.
+ * Enforces strict 1:1 — one canister per namespace, one namespace per canister.
+ */
+export const registerExternalCanister = async (
+  identity: Identity,
+  args: { namespace: string; canisterId: string },
+): Promise<ExternalBindingInfo> => {
+  const registryActor = getRegistryActor(identity);
+
+  const result = await registryActor.register_external_canister({
+    namespace: args.namespace,
+    canister_id: Principal.fromText(args.canisterId),
+  });
+
+  if ('err' in result) {
+    const errKey = Object.keys(result.err)[0];
+    throw new Error(`Failed to register external canister: ${errKey}`);
+  }
+
+  const binding = result.ok;
+  return {
+    canisterId: binding.canister_id.toText(),
+    namespace: binding.namespace,
+    boundBy: binding.bound_by.toText(),
+    boundAt: binding.bound_at,
+  };
+};
+
+/**
+ * Unregister an external canister binding.
+ * Caller must be a controller of the namespace.
+ */
+export const unregisterExternalCanister = async (
+  identity: Identity,
+  args: { namespace: string; canisterId: string },
+): Promise<void> => {
+  const registryActor = getRegistryActor(identity);
+
+  const result = await registryActor.unregister_external_canister(
+    args.namespace,
+    Principal.fromText(args.canisterId),
+  );
+
+  if ('err' in result) {
+    throw new Error(`Failed to unregister external canister: ${result.err}`);
+  }
+};
+
+/**
+ * Query the external binding for a namespace, if any.
+ */
+export const getExternalBinding = async (
+  namespace: string,
+): Promise<ExternalBindingInfo | null> => {
+  const registryActor = getRegistryActor();
+
+  const result = await registryActor.get_external_binding(namespace);
+
+  // Candid optional: [] | [ExternalBinding]
+  if (result.length === 0) {
+    return null;
+  }
+
+  const binding = result[0];
+  return {
+    canisterId: binding.canister_id.toText(),
+    namespace: binding.namespace,
+    boundBy: binding.bound_by.toText(),
+    boundAt: binding.bound_at,
+  };
+};

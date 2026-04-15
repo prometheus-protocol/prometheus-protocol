@@ -27,6 +27,20 @@ export const idlFactory = ({ IDL }) => {
     'lastExecutionTime' : Time,
   });
   const Result_5 = IDL.Variant({ 'ok' : IDL.Text, 'err' : IDL.Text });
+  const ActionFilter = IDL.Variant({
+    'All' : IDL.Null,
+    'ByActionId' : IDL.Nat,
+    'ByType' : IDL.Text,
+    'ByTimeRange' : IDL.Tuple(Time, Time),
+    'ByRetryCount' : IDL.Nat,
+  });
+  const CancellationResult = IDL.Record({
+    'cancelled' : IDL.Vec(ActionId),
+    'errors' : IDL.Vec(IDL.Tuple(IDL.Nat, IDL.Text)),
+    'notFound' : IDL.Vec(IDL.Nat),
+  });
+  const Time__1 = IDL.Int;
+  const ActionDetail = IDL.Tuple(ActionId, Action);
   const AppListingStatus = IDL.Variant({
     'Rejected' : IDL.Record({ 'reason' : IDL.Text }),
     'Verified' : IDL.Null,
@@ -147,7 +161,6 @@ export const idlFactory = ({ IDL }) => {
     'timeout_date' : IDL.Opt(IDL.Nat),
     'payout_fee' : IDL.Nat,
   });
-  const Time__1 = IDL.Int;
   const AttestationRecord = IDL.Record({
     'audit_type' : IDL.Text,
     'metadata' : ICRC16Map,
@@ -308,6 +321,32 @@ export const idlFactory = ({ IDL }) => {
     'setter' : IDL.Text,
     'required' : IDL.Bool,
     'current_value' : IDL.Opt(IDL.Text),
+  });
+  const ExternalBinding = IDL.Record({
+    'bound_at' : IDL.Nat,
+    'bound_by' : IDL.Principal,
+    'canister_id' : IDL.Principal,
+    'namespace' : IDL.Text,
+  });
+  const ReconstitutionTrace = IDL.Record({
+    'errors' : IDL.Vec(IDL.Text),
+    'actionsRestored' : IDL.Nat,
+    'timestamp' : Time,
+    'migratedTo' : IDL.Text,
+    'migratedFrom' : IDL.Text,
+    'timersRestored' : IDL.Nat,
+    'validationPassed' : IDL.Bool,
+  });
+  const TimerId = IDL.Nat;
+  const TimerDiagnostics = IDL.Record({
+    'pendingActions' : IDL.Nat,
+    'totalActions' : IDL.Nat,
+    'overdueActions' : IDL.Nat,
+    'lockStatus' : IDL.Opt(Time),
+    'currentTime' : Time,
+    'lastExecutionDelta' : IDL.Int,
+    'nextExecutionDelta' : IDL.Opt(IDL.Int),
+    'systemTimerStatus' : IDL.Opt(TimerId),
   });
   const Tip = IDL.Record({
     'last_block_index' : IDL.Vec(IDL.Nat8),
@@ -558,6 +597,16 @@ export const idlFactory = ({ IDL }) => {
     'commit_hash' : IDL.Vec(IDL.Nat8),
     'wasm_hash' : IDL.Vec(IDL.Nat8),
   });
+  const RegisterExternalRequest = IDL.Record({
+    'canister_id' : IDL.Principal,
+    'namespace' : IDL.Text,
+  });
+  const RegisterExternalError = IDL.Variant({
+    'NotController' : IDL.Null,
+    'AlreadyBound' : IDL.Null,
+    'NamespaceNotFound' : IDL.Null,
+    'CanisterAlreadyBound' : IDL.Null,
+  });
   const Result_1 = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   const Subaccount = IDL.Vec(IDL.Nat8);
   const Account = IDL.Record({
@@ -594,6 +643,25 @@ export const idlFactory = ({ IDL }) => {
     'can_install_wasm' : IDL.Func(
         [IDL.Principal, IDL.Text],
         [IDL.Bool],
+        ['query'],
+      ),
+    'cancel_actions_by_filter' : IDL.Func(
+        [ActionFilter],
+        [CancellationResult],
+        [],
+      ),
+    'cancel_actions_by_ids' : IDL.Func(
+        [IDL.Vec(IDL.Nat)],
+        [CancellationResult],
+        [],
+      ),
+    'clear_reconstitution_traces' : IDL.Func([], [], []),
+    'emergency_clear_all_timers' : IDL.Func([], [IDL.Nat], []),
+    'force_release_lock' : IDL.Func([], [IDL.Opt(Time__1)], []),
+    'force_system_timer_cancel' : IDL.Func([], [IDL.Bool], []),
+    'get_actions_by_filter' : IDL.Func(
+        [ActionFilter],
+        [IDL.Vec(ActionDetail)],
         ['query'],
       ),
     'get_app_details_by_namespace' : IDL.Func(
@@ -633,6 +701,22 @@ export const idlFactory = ({ IDL }) => {
         ],
         ['query'],
       ),
+    'get_external_binding' : IDL.Func(
+        [IDL.Text],
+        [IDL.Opt(ExternalBinding)],
+        ['query'],
+      ),
+    'get_latest_reconstitution_trace' : IDL.Func(
+        [],
+        [IDL.Opt(ReconstitutionTrace)],
+        ['query'],
+      ),
+    'get_reconstitution_traces' : IDL.Func(
+        [],
+        [IDL.Vec(ReconstitutionTrace)],
+        ['query'],
+      ),
+    'get_timer_diagnostics' : IDL.Func([], [TimerDiagnostics], ['query']),
     'get_tip' : IDL.Func([], [Tip], ['query']),
     'get_verification_progress' : IDL.Func(
         [IDL.Text, IDL.Text],
@@ -768,6 +852,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(VerificationRecord)],
         ['query'],
       ),
+    'register_external_canister' : IDL.Func(
+        [RegisterExternalRequest],
+        [
+          IDL.Variant({
+            'ok' : ExternalBinding,
+            'err' : RegisterExternalError,
+          }),
+        ],
+        [],
+      ),
     'retrigger_deployment' : IDL.Func([IDL.Text], [Result_1], []),
     'set_auditor_credentials_canister_id' : IDL.Func(
         [IDL.Principal],
@@ -789,6 +883,12 @@ export const idlFactory = ({ IDL }) => {
     'set_search_index_canister_id' : IDL.Func([IDL.Principal], [Result_1], []),
     'set_usage_tracker_canister_id' : IDL.Func([IDL.Principal], [Result_1], []),
     'test_only_notify_indexer' : IDL.Func([IDL.Text, IDL.Text], [], []),
+    'unregister_external_canister' : IDL.Func(
+        [IDL.Text, IDL.Principal],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'validate_timer_state' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
     'withdraw' : IDL.Func([IDL.Principal, IDL.Nat, Account], [Result], []),
   });
   return ICRC118WasmRegistryCanister;
