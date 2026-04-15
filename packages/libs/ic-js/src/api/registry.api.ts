@@ -735,18 +735,34 @@ export interface ExternalBindingInfo {
 
 /**
  * Register an externally-deployed canister with the Prometheus registry.
- * Caller must be a controller of the namespace.
- * Enforces strict 1:1 — one canister per namespace, one namespace per canister.
+ * Caller must be a controller of the namespace. Idempotent upsert:
+ *   - Same namespace + same canister_id -> updates metadata/wasm_hash
+ *   - Same namespace + different canister_id -> AlreadyBound
+ *   - Different namespace + same canister_id -> CanisterAlreadyBound
+ *
+ * wasmHash: live module_hash captured at registration time (via readState).
+ *           The frontend uses this to show whether the canister's current
+ *           module still matches what was registered.
+ * metadata: ICRC-16 map, same shape as verification_request.metadata
+ *           (name, description, visuals, tags, category, publisher,
+ *            deployment_type, key_features, why_this_app, mcp_path, ...)
  */
 export const registerExternalCanister = async (
   identity: Identity,
-  args: { namespace: string; canisterId: string },
+  args: {
+    namespace: string;
+    canisterId: string;
+    wasmHash: Uint8Array;
+    metadata: ICRC16Map;
+  },
 ): Promise<ExternalBindingInfo> => {
   const registryActor = getRegistryActor(identity);
 
   const result = await registryActor.register_external_canister({
     namespace: args.namespace,
     canister_id: Principal.fromText(args.canisterId),
+    wasm_hash: args.wasmHash,
+    metadata: args.metadata,
   });
 
   if ('err' in result) {

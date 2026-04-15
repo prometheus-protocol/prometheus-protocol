@@ -1,8 +1,8 @@
 export const idlFactory = ({ IDL }) => {
   const ArchivedTransactionResponse = IDL.Rec();
   const ICRC16 = IDL.Rec();
-  const ICRC16Map__1 = IDL.Rec();
   const ICRC16Map__2 = IDL.Rec();
+  const ICRC16Map__3 = IDL.Rec();
   const ICRC16__1 = IDL.Rec();
   const ICRC16__2 = IDL.Rec();
   const ICRC16__3 = IDL.Rec();
@@ -43,6 +43,7 @@ export const idlFactory = ({ IDL }) => {
   const ActionDetail = IDL.Tuple(ActionId, Action);
   const AppListingStatus = IDL.Variant({
     'Rejected' : IDL.Record({ 'reason' : IDL.Text }),
+    'External' : IDL.Null,
     'Verified' : IDL.Null,
     'Pending' : IDL.Null,
   });
@@ -135,14 +136,14 @@ export const idlFactory = ({ IDL }) => {
     'owner' : IDL.Principal,
     'subaccount' : IDL.Opt(IDL.Vec(IDL.Nat8)),
   });
-  const ICRC16Map__3 = IDL.Vec(IDL.Tuple(IDL.Text, ICRC16__3));
+  const ICRC16Map__4 = IDL.Vec(IDL.Tuple(IDL.Text, ICRC16__3));
   const ClaimRecord = IDL.Record({
     'result' : IDL.Opt(RunBountyResult),
     'claim_account' : IDL.Opt(Account__1),
     'time_submitted' : IDL.Nat,
     'claim_id' : IDL.Nat,
     'caller' : IDL.Principal,
-    'claim_metadata' : ICRC16Map__3,
+    'claim_metadata' : ICRC16Map__4,
     'submission' : ICRC16__3,
   });
   const Bounty = IDL.Record({
@@ -150,7 +151,7 @@ export const idlFactory = ({ IDL }) => {
     'created' : IDL.Nat,
     'creator' : IDL.Principal,
     'token_amount' : IDL.Nat,
-    'bounty_metadata' : ICRC16Map__3,
+    'bounty_metadata' : ICRC16Map__4,
     'claimed' : IDL.Opt(IDL.Nat),
     'token_canister_id' : IDL.Principal,
     'challenge_parameters' : ICRC16__3,
@@ -267,7 +268,7 @@ export const idlFactory = ({ IDL }) => {
   ICRC16__2.fill(
     IDL.Variant({
       'Int' : IDL.Int,
-      'Map' : ICRC16Map__2,
+      'Map' : ICRC16Map__3,
       'Nat' : IDL.Nat,
       'Set' : IDL.Vec(ICRC16__2),
       'Nat16' : IDL.Nat16,
@@ -292,12 +293,12 @@ export const idlFactory = ({ IDL }) => {
       'Class' : IDL.Vec(ICRC16Property__2),
     })
   );
-  ICRC16Map__2.fill(IDL.Vec(IDL.Tuple(IDL.Text, ICRC16__2)));
+  ICRC16Map__3.fill(IDL.Vec(IDL.Tuple(IDL.Text, ICRC16__2)));
   const Wasm = IDL.Record({
     'created' : IDL.Nat,
     'canister_type_namespace' : IDL.Text,
     'previous' : IDL.Opt(CanisterVersion),
-    'metadata' : ICRC16Map__2,
+    'metadata' : ICRC16Map__3,
     'hash' : IDL.Vec(IDL.Nat8),
     'repo' : IDL.Text,
     'description' : IDL.Text,
@@ -361,7 +362,7 @@ export const idlFactory = ({ IDL }) => {
   ICRC16__1.fill(
     IDL.Variant({
       'Int' : IDL.Int,
-      'Map' : ICRC16Map__1,
+      'Map' : ICRC16Map__2,
       'Nat' : IDL.Nat,
       'Set' : IDL.Vec(ICRC16__1),
       'Nat16' : IDL.Nat16,
@@ -386,9 +387,9 @@ export const idlFactory = ({ IDL }) => {
       'Class' : IDL.Vec(ICRC16Property__1),
     })
   );
-  ICRC16Map__1.fill(IDL.Vec(IDL.Tuple(IDL.Text, ICRC16__1)));
+  ICRC16Map__2.fill(IDL.Vec(IDL.Tuple(IDL.Text, ICRC16__1)));
   const VerificationRequest = IDL.Record({
-    'metadata' : ICRC16Map__1,
+    'metadata' : ICRC16Map__2,
     'repo' : IDL.Text,
     'commit_hash' : IDL.Vec(IDL.Nat8),
     'wasm_hash' : IDL.Vec(IDL.Nat8),
@@ -397,7 +398,7 @@ export const idlFactory = ({ IDL }) => {
   const CreateCanisterType = IDL.Record({
     'canister_type_namespace' : IDL.Text,
     'controllers' : IDL.Opt(IDL.Vec(IDL.Principal)),
-    'metadata' : ICRC16Map__2,
+    'metadata' : ICRC16Map__3,
     'repo' : IDL.Text,
     'canister_type_name' : IDL.Text,
     'description' : IDL.Text,
@@ -434,7 +435,7 @@ export const idlFactory = ({ IDL }) => {
   const CanisterType = IDL.Record({
     'canister_type_namespace' : IDL.Text,
     'controllers' : IDL.Vec(IDL.Principal),
-    'metadata' : ICRC16Map__2,
+    'metadata' : ICRC16Map__3,
     'repo' : IDL.Text,
     'canister_type_name' : IDL.Text,
     'description' : IDL.Text,
@@ -494,7 +495,7 @@ export const idlFactory = ({ IDL }) => {
     'canister_type_namespace' : IDL.Text,
     'previous' : IDL.Opt(CanisterVersion),
     'expected_chunks' : IDL.Vec(IDL.Vec(IDL.Nat8)),
-    'metadata' : ICRC16Map__2,
+    'metadata' : ICRC16Map__3,
     'repo' : IDL.Text,
     'description' : IDL.Text,
     'version_number' : IDL.Tuple(IDL.Nat, IDL.Nat, IDL.Nat),
@@ -520,7 +521,7 @@ export const idlFactory = ({ IDL }) => {
     'chunk_id' : IDL.Nat,
   });
   const AttestationRequest = IDL.Record({
-    'metadata' : ICRC16Map__1,
+    'metadata' : ICRC16Map__2,
     'wasm_id' : IDL.Text,
   });
   const AttestationResult = IDL.Variant({
@@ -532,7 +533,7 @@ export const idlFactory = ({ IDL }) => {
     }),
   });
   const DivergenceReportRequest = IDL.Record({
-    'metadata' : IDL.Opt(ICRC16Map__1),
+    'metadata' : IDL.Opt(ICRC16Map__2),
     'wasm_id' : IDL.Text,
     'divergence_report' : IDL.Text,
   });
@@ -598,8 +599,10 @@ export const idlFactory = ({ IDL }) => {
     'wasm_hash' : IDL.Vec(IDL.Nat8),
   });
   const RegisterExternalRequest = IDL.Record({
+    'metadata' : ICRC16Map,
     'canister_id' : IDL.Principal,
     'namespace' : IDL.Text,
+    'wasm_hash' : IDL.Vec(IDL.Nat8),
   });
   const RegisterExternalError = IDL.Variant({
     'NotController' : IDL.Null,

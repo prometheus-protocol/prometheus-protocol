@@ -18,6 +18,12 @@ app-store-cli byoc register <canister-id> <namespace>
 
 Uses your current dfx identity. You must be a controller of the namespace.
 
+If the namespace doesn't exist on-chain yet (common for BYOC users who skip
+`publish`), `byoc register` will auto-create it from your `prometheus.yml`
+(requires `namespace`, `submission.name`, `submission.description`, and
+`submission.repo_url`). The caller becomes the controller. This step is
+idempotent.
+
 ## Check status
 
 ```bash
@@ -68,7 +74,7 @@ await unregisterExternalCanister(identity, {
 | Error | Meaning |
 |-------|---------|
 | `NotController` | Caller is not a controller of the namespace |
-| `NamespaceNotFound` | Namespace doesn't exist in the registry |
+| `NamespaceNotFound` | Namespace doesn't exist in the registry (run `byoc register` from a directory with a complete prometheus.yml to auto-create it) |
 | `AlreadyBound` | Namespace already has an external canister |
 | `CanisterAlreadyBound` | Canister is already bound to another namespace |
 

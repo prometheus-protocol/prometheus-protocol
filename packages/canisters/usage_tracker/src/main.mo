@@ -360,10 +360,6 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
       case (?hash) { hash };
     };
     let wasm_id = Base16.encode(wasm_hash);
-    if (Option.isNull(Map.get(approved_wasm_hashes, Map.thash, wasm_id))) {
-      Debug.print("Rejected log from unapproved Wasm hash: " # wasm_id # " for canister: " # Principal.toText(caller));
-      return #err("Wasm hash not approved. The canister is not authorized to submit logs.");
-    };
 
     Debug.print("Logging usage from canister: " # Principal.toText(caller) # " with Wasm ID: " # wasm_id);
 
