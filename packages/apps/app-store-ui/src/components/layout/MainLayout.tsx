@@ -4,7 +4,7 @@ import { AppBar } from './AppBar';
 
 export function MainLayout() {
   return (
-    <div className="bg-background text-foreground min-h-screen flex flex-col">
+    <div className="bg-background text-foreground min-h-screen flex flex-col overflow-x-hidden">
       {/* --- Header --- */}
       <AppBar />
 

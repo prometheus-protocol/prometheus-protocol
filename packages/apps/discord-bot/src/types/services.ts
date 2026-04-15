@@ -286,4 +286,6 @@ export interface SavedMCPConnection {
   error_message?: string | null;
   connected_at?: Date | null;
   last_used?: Date | null;
+  api_key_header?: string | null; // Optional custom header name (e.g., 'x-api-key', 'Authorization')
+  api_key_value?: string | null; // Optional API key value
 }
