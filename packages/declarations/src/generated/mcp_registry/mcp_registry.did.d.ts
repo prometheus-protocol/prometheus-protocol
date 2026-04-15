@@ -1,6 +1,6 @@
-import type { Principal } from '@dfinity/principal';
-import type { ActorMethod } from '@dfinity/agent';
-import type { IDL } from '@dfinity/candid';
+import type { Principal } from '@icp-sdk/core/principal';
+import type { ActorMethod } from '@icp-sdk/core/agent';
+import type { IDL } from '@icp-sdk/core/candid';
 
 export interface Account {
   'owner' : Principal,
@@ -16,6 +16,12 @@ export interface Action {
   'params' : Uint8Array | number[],
   'retries' : bigint,
 }
+export type ActionDetail = [ActionId, Action];
+export type ActionFilter = { 'All' : null } |
+  { 'ByActionId' : bigint } |
+  { 'ByType' : string } |
+  { 'ByTimeRange' : [Time, Time] } |
+  { 'ByRetryCount' : bigint };
 export interface ActionId { 'id' : bigint, 'time' : Time }
 export interface AppDetailsResponse {
   'gallery_images' : Array<string>,
@@ -82,7 +88,7 @@ export interface AppVersionSummary {
 }
 export interface ArchivedTransactionResponse {
   'args' : Array<TransactionRange>,
-  'callback' : GetTransactionsFn,
+  'callback' : [Principal, string],
 }
 export interface AttestationRecord {
   'audit_type' : string,
@@ -124,6 +130,11 @@ export interface BuildInfo {
   'status' : string,
   'failure_reason' : [] | [string],
   'repo_url' : [] | [string],
+}
+export interface CancellationResult {
+  'cancelled' : Array<ActionId>,
+  'errors' : Array<[bigint, string]>,
+  'notFound' : Array<bigint>,
 }
 export interface CanisterType {
   'canister_type_namespace' : string,
@@ -208,6 +219,12 @@ export interface EnvDependency {
   'canister_name' : string,
   'current_value' : [] | [Principal],
 }
+export interface ExternalBinding {
+  'bound_at' : bigint,
+  'bound_by' : Principal,
+  'canister_id' : Principal,
+  'namespace' : string,
+}
 export interface GetArchivesArgs { 'from' : [] | [Principal] }
 export type GetArchivesResult = Array<GetArchivesResultItem>;
 export interface GetArchivesResultItem {
@@ -272,9 +289,34 @@ export type GetWasmsFilter = { 'canister_type_namespace' : string } |
   { 'version_max' : [bigint, [] | [bigint], [] | [bigint]] } |
   { 'version_min' : [bigint, [] | [bigint], [] | [bigint]] };
 export interface ICRC118WasmRegistryCanister {
+  /**
+   * / * Admin method to manually trigger consensus handling for stuck bounties.
+   * /    * Use this when consensus was reached but payouts didn't happen due to bugs.
+   */
   'admin_retrigger_consensus' : ActorMethod<[string, string], Result_5>,
+  /**
+   * / * [OWNER-ONLY] Iterates through all published apps and pushes their data
+   * /    * to the search indexer to bootstrap or rebuild the index.
+   * /    *
+   * /    * NOTE: This function is designed for a small number of apps. If the registry
+   * /    * grows to hundreds or thousands of apps, this single call may exceed the
+   * /    * instruction limit and trap.
+   * /    *
+   * /    * @returns A status message indicating how many apps were successfully indexed.
+   */
   'bootstrap_search_index' : ActorMethod<[], Result_5>,
   'can_install_wasm' : ActorMethod<[Principal, string], boolean>,
+  'cancel_actions_by_filter' : ActorMethod<[ActionFilter], CancellationResult>,
+  'cancel_actions_by_ids' : ActorMethod<[Array<bigint>], CancellationResult>,
+  'clear_reconstitution_traces' : ActorMethod<[], undefined>,
+  'emergency_clear_all_timers' : ActorMethod<[], bigint>,
+  'force_release_lock' : ActorMethod<[], [] | [Time__1]>,
+  'force_system_timer_cancel' : ActorMethod<[], boolean>,
+  'get_actions_by_filter' : ActorMethod<[ActionFilter], Array<ActionDetail>>,
+  /**
+   * / * Fetches and assembles all data for an app's detail page using its stable namespace.
+   * /    * This is the single, powerful query the frontend needs.
+   */
   'get_app_details_by_namespace' : ActorMethod<
     [string, [] | [string]],
     Result_4
@@ -295,12 +337,38 @@ export interface ICRC118WasmRegistryCanister {
         }
       }
   >,
+  /**
+   * / Query the external binding for a namespace, if any.
+   */
+  'get_external_binding' : ActorMethod<[string], [] | [ExternalBinding]>,
+  'get_latest_reconstitution_trace' : ActorMethod<
+    [],
+    [] | [ReconstitutionTrace]
+  >,
+  'get_reconstitution_traces' : ActorMethod<[], Array<ReconstitutionTrace>>,
+  'get_timer_diagnostics' : ActorMethod<[], TimerDiagnostics>,
   'get_tip' : ActorMethod<[], Tip>,
   'get_verification_progress' : ActorMethod<[string, string], Array<bigint>>,
+  /**
+   * / * @notice Fetches the original verification request metadata for a given WASM ID.
+   * /    * @param wasm_id The hex-encoded SHA-256 hash of the WASM.
+   * /    * @return The optional `VerificationRequest` record, which contains the repo URL and commit hash.
+   * /    *         Returns `null` if no request is found for the given ID.
+   */
   'get_verification_request' : ActorMethod<
     [string],
     [] | [VerificationRequest]
   >,
+  /**
+   * / * Check if a verifier has already participated in the verification of a specific WASM.
+   * /    * This prevents a verifier from being assigned to multiple bounties for the same WASM.
+   * /    * Used by audit_hub during bounty reservation to enforce mutual exclusion.
+   * /    *
+   * /    * @param verifier - The principal of the verifier to check
+   * /    * @param wasm_id - The WASM hash to check participation for
+   * /    * @param audit_type - The audit type (e.g., "tools_v1", "build_reproducibility_v1")
+   * /    * @returns true if verifier has filed any audit (attestation or divergence) for this WASM+audit_type
+   */
   'has_verifier_participated_in_wasm' : ActorMethod<
     [Principal, string, string],
     boolean
@@ -344,6 +412,10 @@ export interface ICRC118WasmRegistryCanister {
     [AttestationRequest],
     AttestationResult
   >,
+  /**
+   * / * File an attestation using an API key instead of caller identity.
+   * /    * This allows verifier bots to authenticate without managing identities.
+   */
   'icrc126_file_attestation_with_api_key' : ActorMethod<
     [string, AttestationRequest],
     AttestationResult
@@ -352,6 +424,10 @@ export interface ICRC118WasmRegistryCanister {
     [DivergenceReportRequest],
     DivergenceResult
   >,
+  /**
+   * / * File a divergence report using an API key instead of caller identity.
+   * /  * This allows verifier bots to authenticate without managing identities.
+   */
   'icrc126_file_divergence_with_api_key' : ActorMethod<
     [string, DivergenceReportRequest],
     DivergenceResult
@@ -368,6 +444,24 @@ export interface ICRC118WasmRegistryCanister {
     { 'total' : bigint, 'requests' : Array<VerificationRecord> }
   >,
   'list_pending_verifications' : ActorMethod<[], Array<VerificationRecord>>,
+  /**
+   * / Register an externally-deployed canister with the registry.
+   * / Caller must be a controller of the namespace.
+   * / Enforces strict 1:1 — one canister per namespace, one namespace per canister.
+   */
+  'register_external_canister' : ActorMethod<
+    [RegisterExternalRequest],
+    { 'ok' : ExternalBinding } |
+      { 'err' : RegisterExternalError }
+  >,
+  /**
+   * / * [OWNER-ONLY] Manually re-triggers the deployment process for a given WASM.
+   * /    * This is a utility function for debugging failed automated deployments without
+   * /    * needing to re-run the entire verification and attestation lifecycle.
+   * /    *
+   * /    * @param wasm_id The hex-encoded SHA256 hash of the WASM to deploy.
+   * /    * @returns An empty Ok(()) on success, or a Text error on failure.
+   */
   'retrigger_deployment' : ActorMethod<[string], Result_1>,
   'set_auditor_credentials_canister_id' : ActorMethod<[Principal], Result_1>,
   'set_bounty_reward_amount' : ActorMethod<[bigint], Result_1>,
@@ -377,6 +471,20 @@ export interface ICRC118WasmRegistryCanister {
   'set_search_index_canister_id' : ActorMethod<[Principal], Result_1>,
   'set_usage_tracker_canister_id' : ActorMethod<[Principal], Result_1>,
   'test_only_notify_indexer' : ActorMethod<[string, string], undefined>,
+  /**
+   * / Unregister an external canister binding.
+   * / Caller must be a controller of the namespace.
+   */
+  'unregister_external_canister' : ActorMethod<
+    [string, Principal],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'validate_timer_state' : ActorMethod<[], Array<string>>,
+  /**
+   * / Withdraw USDC or other ICRC-2 tokens from the registry treasury
+   * / Only the owner can call this function
+   */
   'withdraw' : ActorMethod<[Principal, bigint, Account], Result>,
 }
 export type ICRC16 = { 'Int' : bigint } |
@@ -522,6 +630,23 @@ export type ManageControllerResult = { 'Ok' : bigint } |
       { 'Generic' : string } |
       { 'Unauthorized' : null }
   };
+export interface ReconstitutionTrace {
+  'errors' : Array<string>,
+  'actionsRestored' : bigint,
+  'timestamp' : Time,
+  'migratedTo' : string,
+  'migratedFrom' : string,
+  'timersRestored' : bigint,
+  'validationPassed' : boolean,
+}
+export type RegisterExternalError = { 'NotController' : null } |
+  { 'AlreadyBound' : null } |
+  { 'NamespaceNotFound' : null } |
+  { 'CanisterAlreadyBound' : null };
+export interface RegisterExternalRequest {
+  'canister_id' : Principal,
+  'namespace' : string,
+}
 export type Result = { 'ok' : bigint } |
   { 'err' : TreasuryError };
 export type Result_1 = { 'ok' : null } |
@@ -548,6 +673,17 @@ export type Subaccount = Uint8Array | number[];
 export interface SupportedStandard { 'url' : string, 'name' : string }
 export type Time = bigint;
 export type Time__1 = bigint;
+export interface TimerDiagnostics {
+  'pendingActions' : bigint,
+  'totalActions' : bigint,
+  'overdueActions' : bigint,
+  'lockStatus' : [] | [Time],
+  'currentTime' : Time,
+  'lastExecutionDelta' : bigint,
+  'nextExecutionDelta' : [] | [bigint],
+  'systemTimerStatus' : [] | [TimerId],
+}
+export type TimerId = bigint;
 export type Timestamp = bigint;
 export interface Tip {
   'last_block_index' : Uint8Array | number[],

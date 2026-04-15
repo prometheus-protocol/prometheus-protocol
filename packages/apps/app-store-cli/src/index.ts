@@ -26,6 +26,7 @@ import { registerCanisterCommands } from './commands/canister/canister.commands.
 import { registerControllerCommands } from './commands/controller/controller.commands.js';
 import { registerVersionCommands } from './commands/version/version.commands.js';
 import { registerAppBountiesCommand } from './commands/app-bounties/app-bounties.commands.js';
+import { registerByocCommands } from './commands/byoc/byoc.commands.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -142,7 +143,10 @@ registerCanisterCommands(program); // Assuming you create a parent for register,
 registerControllerCommands(program); // Assuming you create a parent for add, remove, list
 registerVersionCommands(program); // Assuming you create a parent for list, deprecate
 
-// 5. App Bounties Commands (Related to application-specific bounties)
+// 5. BYOC (Bring Your Own Canister) Commands
+registerByocCommands(program);
+
+// 6. App Bounties Commands (Related to application-specific bounties)
 registerAppBountiesCommand(program);
 
 // 6. Leaderboard Commands (Related to leaderboards)

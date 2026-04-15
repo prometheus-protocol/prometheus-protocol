@@ -1193,8 +1193,6 @@ export const fileAttestationWithApiKey = async (
       `Failed to file attestation: ${JSON.stringify(result.Error)}`,
     );
   }
-
-  return result.Ok;
 };
 
 export interface ClaimBountyWithApiKeyArgs {

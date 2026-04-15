@@ -127,6 +127,18 @@ type Tip =
    last_block_index: blob;
  };
 type Timestamp = nat64;
+type TimerId = nat;
+type TimerDiagnostics = 
+ record {
+   currentTime: Time;
+   lastExecutionDelta: int;
+   lockStatus: opt Time;
+   nextExecutionDelta: opt int;
+   overdueActions: nat;
+   pendingActions: nat;
+   systemTimerStatus: opt TimerId;
+   totalActions: nat;
+ };
 type Time__1 = int;
 type Time = nat;
 type SupportedStandard = 
@@ -180,6 +192,28 @@ type Result =
  variant {
    err: TreasuryError;
    ok: nat;
+ };
+type RegisterExternalRequest = 
+ record {
+   canister_id: principal;
+   namespace: text;
+ };
+type RegisterExternalError = 
+ variant {
+   AlreadyBound;
+   CanisterAlreadyBound;
+   NamespaceNotFound;
+   NotController;
+ };
+type ReconstitutionTrace = 
+ record {
+   actionsRestored: nat;
+   errors: vec text;
+   migratedFrom: text;
+   migratedTo: text;
+   timersRestored: nat;
+   timestamp: Time;
+   validationPassed: bool;
  };
 type ManageControllerResult = 
  variant {
@@ -399,6 +433,13 @@ type ICRC118WasmRegistryCanister =
    ///    * @returns A status message indicating how many apps were successfully indexed.
    bootstrap_search_index: () -> (Result_5);
    can_install_wasm: (caller: principal, wasm_id: text) -> (bool) query;
+   cancel_actions_by_filter: (filter: ActionFilter) -> (CancellationResult);
+   cancel_actions_by_ids: (ids: vec nat) -> (CancellationResult);
+   clear_reconstitution_traces: () -> ();
+   emergency_clear_all_timers: () -> (nat);
+   force_release_lock: () -> (opt Time__1);
+   force_system_timer_cancel: () -> (bool);
+   get_actions_by_filter: (filter: ActionFilter) -> (vec ActionDetail) query;
    /// * Fetches and assembles all data for an app's detail page using its stable namespace.
    ///    * This is the single, powerful query the frontend needs.
    get_app_details_by_namespace: (namespace: text, opt_wasm_id: opt text) ->
@@ -416,6 +457,11 @@ type ICRC118WasmRegistryCanister =
           configuration: vec EnvConfig;
           dependencies: vec EnvDependency;
         };}) query;
+   /// Query the external binding for a namespace, if any.
+   get_external_binding: (namespace: text) -> (opt ExternalBinding) query;
+   get_latest_reconstitution_trace: () -> (opt ReconstitutionTrace) query;
+   get_reconstitution_traces: () -> (vec ReconstitutionTrace) query;
+   get_timer_diagnostics: () -> (TimerDiagnostics) query;
    get_tip: () -> (Tip) query;
    get_verification_progress: (wasm_id: text, audit_type: text) ->
     (vec nat) query;
@@ -480,6 +526,14 @@ type ICRC118WasmRegistryCanister =
        total: nat;
      }) query;
    list_pending_verifications: () -> (vec VerificationRecord) query;
+   /// Register an externally-deployed canister with the registry.
+   /// Caller must be a controller of the namespace.
+   /// Enforces strict 1:1 — one canister per namespace, one namespace per canister.
+   register_external_canister: (req: RegisterExternalRequest) ->
+    (variant {
+       err: RegisterExternalError;
+       ok: ExternalBinding;
+     });
    /// * [OWNER-ONLY] Manually re-triggers the deployment process for a given WASM.
    ///    * This is a utility function for debugging failed automated deployments without
    ///    * needing to re-run the entire verification and attestation lifecycle.
@@ -497,6 +551,14 @@ type ICRC118WasmRegistryCanister =
    set_search_index_canister_id: (canister_id: principal) -> (Result_1);
    set_usage_tracker_canister_id: (canister_id: principal) -> (Result_1);
    test_only_notify_indexer: (namespace: text, content: text) -> ();
+   /// Unregister an external canister binding.
+   /// Caller must be a controller of the namespace.
+   unregister_external_canister: (namespace: text, canister_id: principal) ->
+    (variant {
+       err: text;
+       ok;
+     });
+   validate_timer_state: () -> (vec text) query;
    /// Withdraw USDC or other ICRC-2 tokens from the registry treasury
    /// Only the owner can call this function
    withdraw: (ledger_id: principal, amount: nat, destination: Account) ->
@@ -608,6 +670,13 @@ type GetArchivesResultItem =
  };
 type GetArchivesResult = vec GetArchivesResultItem;
 type GetArchivesArgs = record {from: opt principal;};
+type ExternalBinding = 
+ record {
+   bound_at: nat;
+   bound_by: principal;
+   canister_id: principal;
+   namespace: text;
+ };
 type EnvDependency = 
  record {
    canister_name: text;
@@ -724,6 +793,15 @@ type CanisterType =
    metadata: ICRC16Map__2;
    repo: text;
    versions: vec CanisterVersion;
+ };
+type CancellationResult = 
+ record {
+   cancelled: vec ActionId;
+   errors: vec record {
+                 nat;
+                 text;
+               };
+   notFound: vec nat;
  };
 type BuildInfo = 
  record {
@@ -869,6 +947,22 @@ type ActionId =
  record {
    id: nat;
    time: Time;
+ };
+type ActionFilter = 
+ variant {
+   All;
+   ByActionId: nat;
+   ByRetryCount: nat;
+   ByTimeRange: record {
+                  Time;
+                  Time;
+                };
+   ByType: text;
+ };
+type ActionDetail = 
+ record {
+   ActionId;
+   Action;
  };
 type Action = 
  record {
