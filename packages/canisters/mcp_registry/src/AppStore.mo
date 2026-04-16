@@ -21,6 +21,7 @@ module {
   public type AppListingStatus = {
     #Pending;
     #Verified;
+    #External; // Self-attested BYOC: owner-registered external canister, not audited
     #Rejected : { reason : Text };
   };
 

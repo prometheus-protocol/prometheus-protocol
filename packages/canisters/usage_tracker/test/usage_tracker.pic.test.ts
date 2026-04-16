@@ -29,7 +29,7 @@ const MCP_SERVER_DUMMY_WASM_PATH = path.resolve(
   '.dfx/local/canisters/mcp_server/mcp_server.wasm',
 );
 
-describe('Usage Tracker Canister (Wasm Hash Allowlist)', () => {
+describe('Usage Tracker Canister (Open Log Ingestion)', () => {
   let pic: PocketIc;
   let trackerActor: Actor<UsageTrackerService>;
   let trackerCanisterId: Principal;
@@ -80,23 +80,36 @@ describe('Usage Tracker Canister (Wasm Hash Allowlist)', () => {
       );
     });
 
-    it('should REJECT a log from a canister whose Wasm hash is not on the allowlist', async () => {
-      // The serverActor will call the trackerActor
-      // We need a method on the dummy server like `call_tracker(trackerId, stats)`
+    it('should ACCEPT a log from any canister regardless of the allowlist (open ingestion for BYOC)', async () => {
+      // Allowlist gating was removed so BYOC canisters can submit metrics
+      // without being pre-approved. Any canister may now call log_call.
       const res = await serverActor.call_tracker(trackerCanisterId, {
         start_timestamp_ns: 0n,
         end_timestamp_ns: 1_000_000n,
-        activity: [],
+        activity: [
+          {
+            caller: Principal.fromText('aaaaa-aa'),
+            tool_id: 'example_tool',
+            call_count: 1n,
+          },
+        ],
       });
 
-      expect(res).toHaveProperty('err');
-      expect(res.err).toMatch(
-        /Wasm hash not approved. The canister is not authorized to submit logs./,
-      );
+      expect(res).toHaveProperty('ok');
+
+      // Verify the log was actually recorded
+      trackerActor.setIdentity(PAYOUT_CANISTER_IDENTITY);
+      const logs = await trackerActor.get_and_clear_logs();
+      expect(logs).toHaveProperty('ok');
+      // @ts-ignore
+      expect(logs.ok).toHaveLength(1);
+      // @ts-ignore
+      expect(logs.ok[0].canister_id.toText()).toBe(serverPrincipal.toText());
     });
 
     it("should ACCEPT a log after the canister's Wasm hash is added to the allowlist", async () => {
-      // Step 1: Admin adds the server's Wasm hash to the allowlist
+      // Allowlist is now advisory (not enforced), but adding a hash must not
+      // break ingestion. This test documents that path still works.
       trackerActor.setIdentity(ADMIN_IDENTITY);
       const serverHashId = Buffer.from(serverWasmHash).toString('hex');
       await trackerActor.add_approved_wasm_hash(serverHashId);
@@ -126,8 +139,10 @@ describe('Usage Tracker Canister (Wasm Hash Allowlist)', () => {
       expect(logs.ok[0].canister_id.toText()).toBe(serverPrincipal.toText());
     });
 
-    it('should REJECT a log from a canister after its Wasm hash is removed', async () => {
-      // Add and then remove the hash
+    it('should still ACCEPT a log after the canister\'s Wasm hash is removed from the allowlist', async () => {
+      // Allowlist removal is a no-op for log_call gating — logs continue
+      // to be accepted. Verifies that remove_approved_wasm_hash doesn't
+      // regress into rejecting ingestion.
       trackerActor.setIdentity(ADMIN_IDENTITY);
       const serverHashId = Buffer.from(serverWasmHash).toString('hex');
       await trackerActor.add_approved_wasm_hash(serverHashId);
@@ -136,13 +151,23 @@ describe('Usage Tracker Canister (Wasm Hash Allowlist)', () => {
       const res = await serverActor.call_tracker(trackerCanisterId, {
         start_timestamp_ns: 0n,
         end_timestamp_ns: 1_000_000n,
-        activity: [],
+        activity: [
+          {
+            caller: Principal.fromText('aaaaa-aa'),
+            tool_id: 'example_tool',
+            call_count: 1n,
+          },
+        ],
       });
 
-      expect(res).toHaveProperty('err');
-      expect(res.err).toMatch(
-        /Wasm hash not approved. The canister is not authorized to submit logs./,
-      );
+      expect(res).toHaveProperty('ok');
+
+      // Verify the log landed
+      trackerActor.setIdentity(PAYOUT_CANISTER_IDENTITY);
+      const logs = await trackerActor.get_and_clear_logs();
+      expect(logs).toHaveProperty('ok');
+      // @ts-ignore
+      expect(logs.ok).toHaveLength(1);
     });
   });
 

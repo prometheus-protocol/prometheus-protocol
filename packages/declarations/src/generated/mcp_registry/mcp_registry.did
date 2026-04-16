@@ -17,7 +17,7 @@ type Wasm =
    deprecated: bool;
    description: text;
    hash: blob;
-   metadata: ICRC16Map__2;
+   metadata: ICRC16Map__3;
    previous: opt CanisterVersion;
    repo: text;
    version_number: record {
@@ -29,7 +29,7 @@ type Wasm =
 type VerificationRequest = 
  record {
    commit_hash: blob;
-   metadata: ICRC16Map__1;
+   metadata: ICRC16Map__2;
    repo: text;
    wasm_hash: blob;
  };
@@ -86,7 +86,7 @@ type UpdateWasmRequest =
    description: text;
    expected_chunks: vec blob;
    expected_hash: blob;
-   metadata: ICRC16Map__2;
+   metadata: ICRC16Map__3;
    previous: opt CanisterVersion;
    repo: text;
    version_number: record {
@@ -196,7 +196,9 @@ type Result =
 type RegisterExternalRequest = 
  record {
    canister_id: principal;
+   metadata: ICRC16Map;
    namespace: text;
+   wasm_hash: blob;
  };
 type RegisterExternalError = 
  variant {
@@ -295,7 +297,7 @@ type ICRC16__2 =
    Int32: int32;
    Int64: int64;
    Int8: int8;
-   Map: ICRC16Map__2;
+   Map: ICRC16Map__3;
    Nat: nat;
    Nat16: nat16;
    Nat32: nat32;
@@ -325,7 +327,7 @@ type ICRC16__1 =
    Int32: int32;
    Int64: int64;
    Int8: int8;
-   Map: ICRC16Map__1;
+   Map: ICRC16Map__2;
    Nat: nat;
    Nat16: nat16;
    Nat32: nat32;
@@ -365,17 +367,17 @@ type ICRC16Property =
    name: text;
    value: ICRC16;
  };
-type ICRC16Map__3 = 
+type ICRC16Map__4 = 
  vec record {
        text;
        ICRC16__3;
      };
-type ICRC16Map__2 = 
+type ICRC16Map__3 = 
  vec record {
        text;
        ICRC16__2;
      };
-type ICRC16Map__1 = 
+type ICRC16Map__2 = 
  vec record {
        text;
        ICRC16__1;
@@ -528,7 +530,12 @@ type ICRC118WasmRegistryCanister =
    list_pending_verifications: () -> (vec VerificationRecord) query;
    /// Register an externally-deployed canister with the registry.
    /// Caller must be a controller of the namespace.
-   /// Enforces strict 1:1 — one canister per namespace, one namespace per canister.
+   /// Idempotent upsert:
+   ///   - Same namespace + same canister_id -> update wasm_hash + metadata,
+   ///     refresh bound_at, return #ok (re-register / metadata refresh).
+   ///   - Same namespace + different canister_id -> #AlreadyBound
+   ///     (swap requires explicit unregister first).
+   ///   - Different namespace + same canister_id -> #CanisterAlreadyBound.
    register_external_canister: (req: RegisterExternalRequest) ->
     (variant {
        err: RegisterExternalError;
@@ -704,7 +711,7 @@ type DivergenceResult =
 type DivergenceReportRequest = 
  record {
    divergence_report: text;
-   metadata: opt ICRC16Map__1;
+   metadata: opt ICRC16Map__2;
    wasm_id: text;
  };
 type DivergenceRecord = 
@@ -760,7 +767,7 @@ type CreateCanisterType =
    controllers: opt vec principal;
    description: text;
    forked_from: opt CanisterVersion;
-   metadata: ICRC16Map__2;
+   metadata: ICRC16Map__3;
    repo: text;
  };
 type ClaimRecord = 
@@ -768,7 +775,7 @@ type ClaimRecord =
    caller: principal;
    claim_account: opt Account__1;
    claim_id: nat;
-   claim_metadata: ICRC16Map__3;
+   claim_metadata: ICRC16Map__4;
    result: opt RunBountyResult;
    submission: ICRC16__3;
    time_submitted: nat;
@@ -790,7 +797,7 @@ type CanisterType =
    controllers: vec principal;
    description: text;
    forked_from: opt CanisterVersion;
-   metadata: ICRC16Map__2;
+   metadata: ICRC16Map__3;
    repo: text;
    versions: vec CanisterVersion;
  };
@@ -813,7 +820,7 @@ type BuildInfo =
 type Bounty = 
  record {
    bounty_id: nat;
-   bounty_metadata: ICRC16Map__3;
+   bounty_metadata: ICRC16Map__4;
    challenge_parameters: ICRC16__3;
    claimed: opt nat;
    claimed_date: opt nat;
@@ -848,7 +855,7 @@ type AttestationResult =
  };
 type AttestationRequest = 
  record {
-   metadata: ICRC16Map__1;
+   metadata: ICRC16Map__2;
    wasm_id: text;
  };
 type AttestationRecord = 
@@ -891,6 +898,7 @@ type AppStoreError =
  };
 type AppListingStatus = 
  variant {
+   External;
    Pending;
    Rejected: record {reason: text;};
    Verified;

@@ -63,6 +63,7 @@ export interface AppListingRequest {
 export type AppListingResponse = { 'ok' : Array<AppListing> } |
   { 'err' : string };
 export type AppListingStatus = { 'Rejected' : { 'reason' : string } } |
+  { 'External' : null } |
   { 'Verified' : null } |
   { 'Pending' : null };
 export type AppStoreError = { 'NotFound' : string } |
@@ -97,7 +98,7 @@ export interface AttestationRecord {
   'timestamp' : Time__1,
 }
 export interface AttestationRequest {
-  'metadata' : ICRC16Map__1,
+  'metadata' : ICRC16Map__2,
   'wasm_id' : string,
 }
 export type AttestationResult = { 'Ok' : bigint } |
@@ -114,7 +115,7 @@ export interface Bounty {
   'created' : bigint,
   'creator' : Principal,
   'token_amount' : bigint,
-  'bounty_metadata' : ICRC16Map__3,
+  'bounty_metadata' : ICRC16Map__4,
   'claimed' : [] | [bigint],
   'token_canister_id' : Principal,
   'challenge_parameters' : ICRC16__3,
@@ -139,7 +140,7 @@ export interface CancellationResult {
 export interface CanisterType {
   'canister_type_namespace' : string,
   'controllers' : Array<Principal>,
-  'metadata' : ICRC16Map__2,
+  'metadata' : ICRC16Map__3,
   'repo' : string,
   'canister_type_name' : string,
   'description' : string,
@@ -157,13 +158,13 @@ export interface ClaimRecord {
   'time_submitted' : bigint,
   'claim_id' : bigint,
   'caller' : Principal,
-  'claim_metadata' : ICRC16Map__3,
+  'claim_metadata' : ICRC16Map__4,
   'submission' : ICRC16__3,
 }
 export interface CreateCanisterType {
   'canister_type_namespace' : string,
   'controllers' : [] | [Array<Principal>],
-  'metadata' : ICRC16Map__2,
+  'metadata' : ICRC16Map__3,
   'repo' : string,
   'canister_type_name' : string,
   'description' : string,
@@ -199,7 +200,7 @@ export interface DivergenceRecord {
   'reporter' : Principal,
 }
 export interface DivergenceReportRequest {
-  'metadata' : [] | [ICRC16Map__1],
+  'metadata' : [] | [ICRC16Map__2],
   'wasm_id' : string,
   'divergence_report' : string,
 }
@@ -447,7 +448,12 @@ export interface ICRC118WasmRegistryCanister {
   /**
    * / Register an externally-deployed canister with the registry.
    * / Caller must be a controller of the namespace.
-   * / Enforces strict 1:1 — one canister per namespace, one namespace per canister.
+   * / Idempotent upsert:
+   * /   - Same namespace + same canister_id -> update wasm_hash + metadata,
+   * /     refresh bound_at, return #ok (re-register / metadata refresh).
+   * /   - Same namespace + different canister_id -> #AlreadyBound
+   * /     (swap requires explicit unregister first).
+   * /   - Different namespace + same canister_id -> #CanisterAlreadyBound.
    */
   'register_external_canister' : ActorMethod<
     [RegisterExternalRequest],
@@ -512,9 +518,9 @@ export type ICRC16 = { 'Int' : bigint } |
   { 'ValueMap' : Array<[ICRC16, ICRC16]> } |
   { 'Class' : Array<ICRC16Property> };
 export type ICRC16Map = Array<[string, ICRC16]>;
-export type ICRC16Map__1 = Array<[string, ICRC16__1]>;
-export type ICRC16Map__2 = Array<[string, ICRC16__2]>;
-export type ICRC16Map__3 = Array<[string, ICRC16__3]>;
+export type ICRC16Map__2 = Array<[string, ICRC16__1]>;
+export type ICRC16Map__3 = Array<[string, ICRC16__2]>;
+export type ICRC16Map__4 = Array<[string, ICRC16__3]>;
 export interface ICRC16Property {
   'value' : ICRC16,
   'name' : string,
@@ -536,7 +542,7 @@ export interface ICRC16Property__3 {
   'immutable' : boolean,
 }
 export type ICRC16__1 = { 'Int' : bigint } |
-  { 'Map' : ICRC16Map__1 } |
+  { 'Map' : ICRC16Map__2 } |
   { 'Nat' : bigint } |
   { 'Set' : Array<ICRC16__1> } |
   { 'Nat16' : number } |
@@ -560,7 +566,7 @@ export type ICRC16__1 = { 'Int' : bigint } |
   { 'ValueMap' : Array<[ICRC16__1, ICRC16__1]> } |
   { 'Class' : Array<ICRC16Property__1> };
 export type ICRC16__2 = { 'Int' : bigint } |
-  { 'Map' : ICRC16Map__2 } |
+  { 'Map' : ICRC16Map__3 } |
   { 'Nat' : bigint } |
   { 'Set' : Array<ICRC16__2> } |
   { 'Nat16' : number } |
@@ -644,8 +650,10 @@ export type RegisterExternalError = { 'NotController' : null } |
   { 'NamespaceNotFound' : null } |
   { 'CanisterAlreadyBound' : null };
 export interface RegisterExternalRequest {
+  'metadata' : ICRC16Map,
   'canister_id' : Principal,
   'namespace' : string,
+  'wasm_hash' : Uint8Array | number[],
 }
 export type Result = { 'ok' : bigint } |
   { 'err' : TreasuryError };
@@ -708,7 +716,7 @@ export interface UpdateWasmRequest {
   'canister_type_namespace' : string,
   'previous' : [] | [CanisterVersion],
   'expected_chunks' : Array<Uint8Array | number[]>,
-  'metadata' : ICRC16Map__2,
+  'metadata' : ICRC16Map__3,
   'repo' : string,
   'description' : string,
   'version_number' : [bigint, bigint, bigint],
@@ -743,7 +751,7 @@ export interface VerificationRecord {
   'wasm_hash' : Uint8Array | number[],
 }
 export interface VerificationRequest {
-  'metadata' : ICRC16Map__1,
+  'metadata' : ICRC16Map__2,
   'repo' : string,
   'commit_hash' : Uint8Array | number[],
   'wasm_hash' : Uint8Array | number[],
@@ -752,7 +760,7 @@ export interface Wasm {
   'created' : bigint,
   'canister_type_namespace' : string,
   'previous' : [] | [CanisterVersion],
-  'metadata' : ICRC16Map__2,
+  'metadata' : ICRC16Map__3,
   'hash' : Uint8Array | number[],
   'repo' : string,
   'description' : string,
