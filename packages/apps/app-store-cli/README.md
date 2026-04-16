@@ -83,6 +83,23 @@ Commands for discovering, auditing, and claiming rewards.
 
 ---
 
+### **🌐 BYOC (Bring Your Own Canister) Commands**
+
+Register externally-deployed canisters so they appear in the Prometheus app store for discovery, without going through the full audit/publish flow. Useful for apps whose source lives outside the reproducible-build pipeline.
+
+Requires a `prometheus.yml` with top-level `namespace` plus `submission.name`, `submission.description`, and `submission.repo_url`.
+
+- `app-store-cli --network ic byoc register <canister-id> [namespace]`
+  - Registers an externally-deployed canister with the registry. Reads the live module hash on-chain, ensures the namespace exists, and uploads the app-store listing metadata from `prometheus.yml`. If `namespace` is omitted, falls back to `namespace` in `prometheus.yml`.
+- `app-store-cli --network ic byoc status [namespace]`
+  - Shows the current external binding for a canister / namespace.
+- `app-store-cli --network ic byoc unregister <canister-id> [namespace]`
+  - Removes an external binding.
+
+The app will appear in the app store with `status=External` once registration succeeds.
+
+---
+
 ## 📖 End-to-End Workflow Example
 
 This example shows the complete journey, using the correct invocation for each role.
