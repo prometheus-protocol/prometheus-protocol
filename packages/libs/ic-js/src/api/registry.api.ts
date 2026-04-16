@@ -5,6 +5,7 @@ import {
   LookupPathStatus,
 } from '@icp-sdk/core/agent';
 import { getRegistryActor } from '../actors.js';
+import { getHost } from '../config.js';
 import { Registry } from '@prometheus-protocol/declarations';
 import { Principal } from '@icp-sdk/core/principal';
 import {
@@ -369,8 +370,14 @@ export const createCanisterType = async (
 export const getCanisterWasmHash = async (
   canisterId: Principal,
 ): Promise<Uint8Array | null> => {
-  const isLocal = process.env.DFX_NETWORK !== 'ic';
-  const host = isLocal ? 'http://127.0.0.1:4943' : 'https://icp-api.io';
+  // Use the host configured via `configure()` in config.ts so this function
+  // honors the CLI's `--network` flag (and any frontend's runtime config)
+  // instead of silently dialing localhost when DFX_NETWORK is unset.
+  const host = getHost();
+  const isLocal =
+    host.includes('localhost') ||
+    host.includes('127.0.0.1') ||
+    host.includes('host.docker.internal');
 
   // In v3, use HttpAgent.createSync with shouldFetchRootKey for local development
   // This will fetch the root key before the first request is made
@@ -413,11 +420,13 @@ export const getCanisterWasmHash = async (
 
     return null;
   } catch (e) {
-    console.log(e);
-    // This can happen for various reasons, e.g., network issues or if the
-    // replica is busy. We treat it as "hash not found".
+    // Surface the underlying cause so callers can diagnose the failure
+    // (wrong host, unreachable replica, canister doesn't exist, etc.) instead
+    // of getting a generic "could not read module_hash" message.
+    const reason = e instanceof Error ? e.message : String(e);
     console.warn(
-      `   ⚠️  Warning: Could not read state for canister ${canisterId.toText()}. It may not exist or the network may be busy.`,
+      `   ⚠️  Warning: Could not read state for canister ${canisterId.toText()} ` +
+        `via ${host}.\n      Reason: ${reason}`,
     );
     return null;
   }
