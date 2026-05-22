@@ -13,12 +13,12 @@ import { HomePageError } from '@/components/HomePageError';
 
 // Hardcoded featured servers to always show at the front of the carousel
 const FEATURED_NAMESPACES = [
+  'io.github.jneums.app-store-scout',
   'io.github.jneums.pokedbots-racing',
   'io.github.jneums.final-score',
-  'io.github.jneums.ext-wallet',
-  'io.github.jneums.cycle-buddy',
-  'org.prometheusprotocol.token-watchlist',
-  'io.github.jneums.sui-wallet',
+  'io.github.jneums.secrets-manager',
+  'io.github.jneums.encrypted-mailbox',
+  'io.github.jneums.faucet-mcp',
 ];
 
 function HomePage() {
@@ -50,10 +50,14 @@ function HomePage() {
         (app) => app.latestVersion.securityTier === 'Gold',
       );
       const pendingApps = allServers.filter(
-        (app) => app.latestVersion.securityTier === 'Unranked',
+        (app) =>
+          app.latestVersion.securityTier === 'Unranked' &&
+          app.latestVersion.status === 'Pending',
       );
       const otherListedApps = allServers.filter(
-        (app) => app.latestVersion.status === 'Verified',
+        (app) =>
+          app.latestVersion.status === 'Verified' ||
+          app.latestVersion.status === 'External',
       );
 
       // 2. Create the list for the main carousel with hybrid approach:
