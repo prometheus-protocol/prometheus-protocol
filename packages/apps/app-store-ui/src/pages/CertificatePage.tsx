@@ -93,7 +93,10 @@ export function CertificatePage() {
   if (!appDetails) return <NotFoundPage />;
 
   const { latestVersion } = appDetails;
-  const tierInfo = getTierInfo(latestVersion.securityTier);
+  const tierInfo = getTierInfo(
+    latestVersion.securityTier,
+    latestVersion.status,
+  );
   const buildInfo = latestVersion.buildInfo;
 
   return (
@@ -123,9 +126,10 @@ export function CertificatePage() {
             <div className="lg:col-span-2">
               <h1 className="text-4xl font-bold tracking-tight flex items-center gap-3 mb-12">
                 {appDetails.name}
-                {latestVersion.securityTier !== 'Unranked' && (
-                  <BadgeCheck className="h-8 w-8 text-primary" />
-                )}
+                {latestVersion.securityTier !== 'Unranked' &&
+                  latestVersion.status !== 'External' && (
+                    <BadgeCheck className="h-8 w-8 text-primary" />
+                  )}
               </h1>
               <CertificateSummaryCard appDetails={appDetails} />
 

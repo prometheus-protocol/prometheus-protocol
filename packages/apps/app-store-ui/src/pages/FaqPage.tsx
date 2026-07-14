@@ -25,16 +25,16 @@ As AI agents become more autonomous, the services they connect to pose a signifi
 
 ## For Users & Agent Builders
 
-### What do the certification tiers (Gold, Silver, Bronze) mean?
-The tiers are not based on a subjective score, but on a series of concrete, verifiable achievements. The foundation of all tiers is a **Verified Build**, which cryptographically proves that the code running on-chain is the exact same as the public source code.
+### What do the trust labels mean?
+Prometheus does not provide a blanket guarantee. Labels describe what has been verified for a specific canister version.
 
--   **Gold:** **Verified Build + Audited App Info + Audited Tools + Audited Data Safety.** This is the highest level of trust, indicating the service has passed rigorous checks on its code, its description, its external integrations, and its data privacy practices.
--   **Silver:** **Verified Build + Audited App Info + Audited Tools.** This tier verifies the code and its external dependencies, making it a strong choice for most use cases.
--   **Bronze:** **Verified Build + Audited App Info.** This is the baseline for trust. It proves the code is authentic and the developer's description of the service is accurate.
--   **Unranked:** This service has been submitted but has **not yet passed the minimum requirements for a Bronze tier** (i.e., a verified build). Use with extreme caution.
+-   **Developer Managed:** BYOC/self-managed canister. The developer controls the canister, code, upgrades, and operations. Prometheus has not verified or audited it.
+-   **Verified Build:** The developer submitted open-source code, and the decentralized verifier network rebuilt it in hermetic Docker environments. The resulting WASM hash matched the on-chain WASM.
+-   **Audited Verified Code:** The verified code has also passed a point-in-time security audit. This is the future highest tier and is not a continuous guarantee.
+-   **Unverified:** No reproducible-build proof or audit is available. Use with caution.
 
-### Is a "Gold Verified" service guaranteed to be 100% safe?
-No. A certificate is a point-in-time analysis of a specific version of the service's code. It represents a high standard of quality and security at the time of the audit, but it is not a continuous guarantee or an endorsement. The world of security is constantly evolving. Always exercise caution and do your own research.
+### Is an "Audited Verified Code" service guaranteed to be 100% safe?
+No. Verification proves source/build correspondence, and an audit is a point-in-time review of a specific version. Neither is a continuous guarantee, insurance policy, or endorsement. Always exercise caution and do your own research.
 
 ### What should I do if I find a security issue in a certified service?
 Please report it to the service's development team immediately. We also ask that you confidentially report the issue to the Prometheus Protocol team at **[security@prometheusprotocol.org](mailto:security@prometheusprotocol.org)** so we can review the service's certification status.
@@ -46,14 +46,14 @@ Please report it to the service's development team immediately. We also ask that
 ### How do I submit my service for certification?
 The process is straightforward. You can find a step-by-step guide on our [Service Developer Docs](https://docs.prometheusprotocol.org/guides/service-devs/overview). You will need a public source code repository (like GitHub) and to follow our preparation guide.
 
-### How much does an audit cost?
-During our initial launch phase, audits are subsidized by the protocol and are free for qualifying open-source projects. In the future, the protocol will establish a sustainable fee structure to fund community auditors.
+### How much does verification or audit cost?
+Build verification is performed by the decentralized verifier network. Security audits of verified code are a separate, higher-assurance step and will have their own process once fully implemented.
 
-### How long does the audit process take?
-The timeline can vary depending on the complexity of your service and the current queue of submissions. We aim for a turnaround time of 1-2 weeks, but this is not guaranteed. The process is tracked transparently.
+### How long does verification take?
+Build verification usually completes once enough verifier nodes independently reproduce the same WASM hash. Future security audits will vary by code complexity and queue size.
 
-### What happens if my service fails the audit?
-Failing an audit is not the end of the road. You will receive a private report detailing the issues found. You can address these issues and resubmit your service for a new audit once you are ready.
+### What happens if my service fails verification or audit?
+If build verification fails, the submitted source and build instructions do not reproduce the deployed WASM hash. Fix the source, build environment, or deployment and resubmit. Future audit failures can be addressed and resubmitted after remediation.
 
 ### My question isn't here. Where can I get help?
 Our community is the best place to ask! Join our **[Discord Server](${DISCORD_LINK})** to connect with the team and other developers.

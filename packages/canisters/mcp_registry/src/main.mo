@@ -498,10 +498,9 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
 
   /**
    * @notice Fetches the single most recent attestation for each audit type for a given WASM.
-   * @dev This function has been refactored to IGNORE the finalization log. In a reputation-
-   *      based system, the stake provided by a trusted auditor is the guarantee of quality,
-   *      making a secondary finalization step unnecessary. This function now returns the
-   *      latest submitted attestation for each type, making the system more responsive.
+   * @dev This function returns the latest submitted attestation for each type.
+   *      Attestations and audits are point-in-time signals only; BYOC entries and
+   *      unaudited verified builds must not be presented as platform guarantees.
    * @param wasm_id The hex string identifier of the WASM.
    * @return An array containing the most recent `AttestationRecord` for each audit type.
    */
@@ -1808,6 +1807,24 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
       { wasm_hash = req.wasm_hash; metadata = req.metadata },
     );
 
+    // Register this BYOC canister with the usage tracker so its log_call
+    // submissions get aggregated into namespace-level metrics (invocations,
+    // tool list, etc.) that power the app store UI. Failures here are
+    // non-fatal — the binding itself is still valid.
+    switch (_usage_tracker_canister_id) {
+      case (null) {
+        Debug.print("Usage tracker registration skipped for BYOC: tracker id not configured");
+      };
+      case (?id) {
+        try {
+          let usage_tracker : UsageTracker.Service = actor (Principal.toText(id));
+          ignore await usage_tracker.register_canister_namespace(req.canister_id, req.namespace);
+        } catch (e) {
+          Debug.print("Failed to register BYOC canister in usage tracker: " # Error.message(e));
+        };
+      };
+    };
+
     return #ok(binding);
   };
 
@@ -1852,6 +1869,119 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   /// Query the external binding for a namespace, if any.
   public query func get_external_binding(namespace : Text) : async ?ExternalBinding {
     BTree.get(external_bindings, Text.compare, namespace);
+  };
+
+  /// List all external (BYOC) bindings. Public query — no sensitive data here,
+  /// same information surfaces in AppListing / AppDetailsResponse.
+  public query func list_external_bindings() : async [ExternalBinding] {
+    BTree.toValueArray(external_bindings);
+  };
+
+  /// Admin-only: forcibly remove an external binding without the namespace-
+  /// controller check. Useful when a namespace's controller list is wrong,
+  /// abandoned, or the binding needs to be cleared for ops reasons.
+  public shared (msg) func admin_unregister_external_canister(namespace : Text) : async {
+    #ok;
+    #err : Text;
+  } {
+    if (not _is_owner(msg.caller)) {
+      return #err("Not the registry owner");
+    };
+
+    switch (BTree.get(external_bindings, Text.compare, namespace)) {
+      case (null) { return #err("No external binding for this namespace") };
+      case (?binding) {
+        ignore BTree.delete(external_bindings, Text.compare, namespace);
+        ignore BTree.delete(canister_to_namespace, Text.compare, Principal.toText(binding.canister_id));
+        ignore BTree.delete(external_metadata, Text.compare, namespace);
+        return #ok;
+      };
+    };
+  };
+
+  /// Admin-only: swap the canister_id and/or wasm_hash a BYOC binding points
+  /// at without re-running the controller check. `new_canister_id` and
+  /// `new_wasm_hash` are optional — pass `null` to keep the current value.
+  /// Also re-registers the (possibly new) canister with the usage tracker so
+  /// metrics continue to aggregate under the same namespace.
+  public shared (msg) func admin_update_external_binding(
+    namespace : Text,
+    new_canister_id : ?Principal,
+    new_wasm_hash : ?Blob,
+  ) : async {
+    #ok : ExternalBinding;
+    #err : Text;
+  } {
+    if (not _is_owner(msg.caller)) {
+      return #err("Not the registry owner");
+    };
+
+    switch (BTree.get(external_bindings, Text.compare, namespace)) {
+      case (null) { return #err("No external binding for this namespace") };
+      case (?binding) {
+        let target_canister_id = Option.get(new_canister_id, binding.canister_id);
+        let target_canister_text = Principal.toText(target_canister_id);
+
+        // If swapping canister_id, make sure the new one isn't bound elsewhere.
+        if (not Principal.equal(target_canister_id, binding.canister_id)) {
+          switch (BTree.get(canister_to_namespace, Text.compare, target_canister_text)) {
+            case (?bound_ns) {
+              if (bound_ns != namespace) {
+                return #err("Target canister is already bound to another namespace: " # bound_ns);
+              };
+            };
+            case (null) {};
+          };
+
+          // Drop the old canister_id -> namespace mapping.
+          ignore BTree.delete(canister_to_namespace, Text.compare, Principal.toText(binding.canister_id));
+          ignore BTree.insert(canister_to_namespace, Text.compare, target_canister_text, namespace);
+        };
+
+        let updated_binding : ExternalBinding = {
+          canister_id = target_canister_id;
+          namespace = binding.namespace;
+          bound_by = binding.bound_by;
+          bound_at = binding.bound_at;
+        };
+        ignore BTree.insert(external_bindings, Text.compare, namespace, updated_binding);
+
+        // Update wasm_hash in metadata if provided. Preserves existing ICRC-16
+        // metadata map — only the hash is swapped.
+        switch (new_wasm_hash) {
+          case (?h) {
+            switch (BTree.get(external_metadata, Text.compare, namespace)) {
+              case (?em) {
+                ignore BTree.insert(
+                  external_metadata,
+                  Text.compare,
+                  namespace,
+                  { wasm_hash = h; metadata = em.metadata },
+                );
+              };
+              case (null) {};
+            };
+          };
+          case (null) {};
+        };
+
+        // Re-register with the usage tracker so invocation metrics follow the
+        // (possibly new) canister. Non-fatal if the tracker is down.
+        switch (_usage_tracker_canister_id) {
+          case (null) {};
+          case (?id) {
+            try {
+              let usage_tracker : UsageTracker.Service = actor (Principal.toText(id));
+              ignore await usage_tracker.register_canister_namespace(target_canister_id, namespace);
+            } catch (e) {
+              Debug.print("admin_update_external_binding: tracker re-register failed: " # Error.message(e));
+            };
+          };
+        };
+
+        return #ok(updated_binding);
+      };
+    };
   };
 
   // The outcome of a DAO-led verification process.
@@ -2050,47 +2180,46 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
                   let deployment_type = Option.get(AppStore.getICRC16TextOptional(request_record.metadata, "deployment_type"), "global");
                   if (deployment_type != "global") {
                     Debug.print("Auto-deployment skipped: deployment_type is '" # deployment_type # "', not 'global'.");
-                    return trx_id;
-                  };
+                  } else {
+                    // --- c. Decode wasm_id and construct the request ---
+                    let wasm_hash : Blob = switch (Base16.decode(wasm_id)) {
+                      case (?b) { b };
+                      case (null) { return trx_id; /* Should not happen */ };
+                    };
 
-                  // --- c. Decode wasm_id and construct the request ---
-                  let wasm_hash : Blob = switch (Base16.decode(wasm_id)) {
-                    case (?b) { b };
-                    case (null) { return trx_id; /* Should not happen */ };
-                  };
-
-                  let state = icrc118wasmregistry().state;
-                  // Find the canister type by its namespace using the library's internal map.
-                  let owner = switch (BTree.get(state.canister_types, Text.compare, namespace)) {
-                    case (null) {
-                      Debug.print("Internal error: Canister type not found for namespace " # namespace);
-                      return trx_id;
-                    }; // Should not happen if the namespace is valid.
-                    case (?canister_type) {
-                      if (canister_type.controllers.size() == 0) {
-                        // This should never happen
-                        Debug.print("Cannot determine owner: No controllers defined for canister type " # namespace);
+                    let state = icrc118wasmregistry().state;
+                    // Find the canister type by its namespace using the library's internal map.
+                    let owner = switch (BTree.get(state.canister_types, Text.compare, namespace)) {
+                      case (null) {
+                        Debug.print("Internal error: Canister type not found for namespace " # namespace);
                         return trx_id;
-                      } else {
-                        // For simplicity, we take the first controller as the owner.
-                        // In a real-world scenario, this logic might be more complex.
-                        canister_type.controllers[0];
+                      }; // Should not happen if the namespace is valid.
+                      case (?canister_type) {
+                        if (canister_type.controllers.size() == 0) {
+                          // This should never happen
+                          Debug.print("Cannot determine owner: No controllers defined for canister type " # namespace);
+                          return trx_id;
+                        } else {
+                          // For simplicity, we take the first controller as the owner.
+                          // In a real-world scenario, this logic might be more complex.
+                          canister_type.controllers[0];
+                        };
                       };
                     };
-                  };
 
-                  let deploy_request : Orchestrator.InternalDeployRequest = {
-                    namespace = namespace;
-                    hash = wasm_hash;
-                    owner = owner;
-                  };
+                    let deploy_request : Orchestrator.InternalDeployRequest = {
+                      namespace = namespace;
+                      hash = wasm_hash;
+                      owner = owner;
+                    };
 
-                  // --- d. Make the "fire-and-forget" call ---
-                  try {
-                    let orchestrator : Orchestrator.Service = actor (Principal.toText(orc_id));
-                    ignore orchestrator.internal_deploy_or_upgrade(deploy_request);
-                  } catch (e) {
-                    Debug.print("Error calling orchestrator: " # Error.message(e));
+                    // --- d. Make the "fire-and-forget" call ---
+                    try {
+                      let orchestrator : Orchestrator.Service = actor (Principal.toText(orc_id));
+                      ignore orchestrator.internal_deploy_or_upgrade(deploy_request);
+                    } catch (e) {
+                      Debug.print("Error calling orchestrator: " # Error.message(e));
+                    };
                   };
                 };
                 case (null) {
@@ -2296,8 +2425,40 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
     return null;
   };
 
+  private func _get_published_version_for_hash(
+    namespace : Text,
+    wasm_hash : Blob,
+  ) : ?ICRC118WasmRegistry.CanisterVersion {
+    switch (BTree.get(icrc118wasmregistry().state.canister_types, Text.compare, namespace)) {
+      case (null) { null };
+      case (?canister_type) {
+        Array.find<ICRC118WasmRegistry.CanisterVersion>(
+          canister_type.versions,
+          func(v) { v.calculated_hash == wasm_hash },
+        );
+      };
+    };
+  };
+
+  private func _created_for_hash_or_binding_time(wasm_hash : Blob, binding : ExternalBinding) : Nat {
+    switch (_get_wasm_by_hash(wasm_hash)) {
+      case (?wasm_record) { wasm_record.created };
+      case (null) { binding.bound_at };
+    };
+  };
+
+  private func _external_version_string(namespace : Text, wasm_hash : Blob) : Text {
+    switch (_get_published_version_for_hash(namespace, wasm_hash)) {
+      case (?version_record) { _format_version_number(version_record.version_number) };
+      case (null) { "external" };
+    };
+  };
+
   // --- PRIVATE HELPER: Build a listing directly from a BYOC (external) binding ---
   // Returns null if there's no binding or no metadata for the namespace.
+  // A BYOC app remains self-managed, but if the registered live WASM hash has
+  // passed reproducible-build verification, the listing should surface that
+  // assurance instead of permanently staying #External/#Unranked.
   private func _build_listing_for_external_binding(
     canister_type_namespace : Text
   ) : ?AppStore.AppListing {
@@ -2308,6 +2469,9 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
         let meta = em.metadata;
         let visuals_map = AppStore.getICRC16MapOptional(meta, "visuals");
         let wasm_id = Base16.encode(em.wasm_hash);
+        let is_verified = _is_wasm_verified(wasm_id);
+        let audit_records = _get_audit_records_for_wasm(wasm_id);
+        let completed_audits = AppStore.get_completed_audit_types(audit_records);
 
         return ?{
           namespace = binding.namespace;
@@ -2328,10 +2492,10 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
 
           latest_version = {
             wasm_id = wasm_id;
-            version_string = "external";
-            security_tier = #Unranked;
-            status = #External;
-            created = binding.bound_at;
+            version_string = _external_version_string(binding.namespace, em.wasm_hash);
+            security_tier = AppStore.calculate_security_tier(is_verified, completed_audits);
+            status = if (is_verified) #Verified else #External;
+            created = _created_for_hash_or_binding_time(em.wasm_hash, binding);
           };
         };
       };
@@ -2354,30 +2518,46 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
         let visuals_map = AppStore.getICRC16MapOptional(meta, "visuals");
         let wasm_id = Base16.encode(em.wasm_hash);
 
+        let version_string = _external_version_string(binding.namespace, em.wasm_hash);
+        let created = _created_for_hash_or_binding_time(em.wasm_hash, binding);
+        let is_verified = _is_wasm_verified(wasm_id);
+        let audit_records = _get_audit_records_for_wasm(wasm_id);
+        let completed_audits = AppStore.get_completed_audit_types(audit_records);
+        let security_tier = AppStore.calculate_security_tier(is_verified, completed_audits);
+        let status = if (is_verified) #Verified else #External;
+
         let version_summary : AppStore.AppVersionSummary = {
           wasm_id = wasm_id;
-          version_string = "external";
-          security_tier = #Unranked;
-          status = #External;
-          created = binding.bound_at;
+          version_string = version_string;
+          security_tier = security_tier;
+          status = status;
+          created = created;
         };
 
         let version_details : AppStore.AppVersionDetails = {
           wasm_id = wasm_id;
-          version_string = "external";
-          status = #External;
-          security_tier = #Unranked;
-          build_info = {
-            status = "unknown";
-            git_commit = null;
-            repo_url = AppStore.getICRC16TextOptional(meta, "repo_url");
-            failure_reason = null;
+          version_string = version_string;
+          status = status;
+          security_tier = security_tier;
+          build_info = if (is_verified) {
+            _build_build_info(audit_records);
+          } else {
+            {
+              status = "unknown";
+              git_commit = null;
+              repo_url = AppStore.getICRC16TextOptional(meta, "repo_url");
+              failure_reason = null;
+            };
           };
-          tools = [];
-          data_safety = { overall_description = ""; data_points = [] };
+          tools = if (is_verified) { _get_tools_from_records(audit_records) } else { [] };
+          data_safety = if (is_verified) {
+            _get_data_safety_from_records(audit_records);
+          } else {
+            { overall_description = ""; data_points = [] };
+          };
           bounties = [];
-          audit_records = [];
-          created = binding.bound_at;
+          audit_records = if (is_verified) { audit_records } else { [] };
+          created = created;
         };
 
         return ?{
@@ -2415,8 +2595,9 @@ shared (deployer) actor class ICRC118WasmRegistryCanister<system>(
   // This takes a CanisterType and returns a fully formed AppListing, or null if it shouldn't be listed.
   private func _build_listing_for_canister_type(canister_type : ICRC118WasmRegistry.CanisterType) : ?AppStore.AppListing {
     // 0. BYOC short-circuit: if this namespace has an external binding,
-    //    surface it as a self-attested listing (status = #External, tier = #Unranked)
-    //    and skip the audit/verification path — BYOC apps don't publish WASMs.
+    //    surface it from the live external canister. A reproducibly verified
+    //    registered hash is shown as #Verified, while an unverified BYOC hash
+    //    remains #External/#Unranked.
     switch (_build_listing_for_external_binding(canister_type.canister_type_namespace)) {
       case (?listing) { return ?listing };
       case (null) {};

@@ -461,7 +461,7 @@ export interface AppVersionSummary {
   wasmId: string; // The WASM Hash of this version
   versionString: string; // e.g., "1.2.0"
   securityTier: SecurityTier;
-  status: 'Rejected' | 'Verified' | 'Pending';
+  status: 'Rejected' | 'Verified' | 'Pending' | 'External';
   created: bigint; // Timestamp in nanoseconds since epoch
 }
 
@@ -580,9 +580,10 @@ function mapCanisterVersionToTS(
 // --- 2. CREATE A DEDICATED HELPER FOR MAPPING THE VERSION SUMMARY ---
 function unwrapVersionStatus(
   statusVariant: Registry.AppListingStatus,
-): 'Rejected' | 'Verified' | 'Pending' {
+): 'Rejected' | 'Verified' | 'Pending' | 'External' {
   if ('Rejected' in statusVariant) return 'Rejected';
   if ('Verified' in statusVariant) return 'Verified';
+  if ('External' in statusVariant) return 'External';
   return 'Pending';
 }
 

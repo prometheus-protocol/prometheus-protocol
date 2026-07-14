@@ -1,4 +1,4 @@
-import { Users, TerminalSquare, BarChart3, Globe } from 'lucide-react';
+import { Rocket, TerminalSquare, BarChart3 } from 'lucide-react';
 
 // A helper to format large numbers (including BigInts) into compact strings like "1.5K", "10M"
 const formatNumber = (num: number | bigint): string => {
@@ -12,20 +12,43 @@ const formatNumber = (num: number | bigint): string => {
   }
 };
 
-// --- 1. MODIFIED: The StatItem component is now more flexible. ---
-// The `value` prop is optional to handle cases like "Public Access" which don't have a number.
+// Format a timestamp in nanoseconds (bigint) as a short relative "launched" label.
+// Examples: "Today", "3d ago", "5w ago", "8mo ago", "2y ago".
+const formatLaunched = (launchedNs: bigint): string => {
+  const nowMs = Date.now();
+  // Convert ns -> ms safely (bigint math, then to Number for the diff).
+  const launchedMs = Number(launchedNs / 1_000_000n);
+  const diffMs = Math.max(0, nowMs - launchedMs);
+
+  const day = 1000 * 60 * 60 * 24;
+  const days = Math.floor(diffMs / day);
+
+  if (days <= 0) return 'Today';
+  if (days === 1) return '1d ago';
+  if (days < 7) return `${days}d ago`;
+
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return weeks === 1 ? '1w ago' : `${weeks}w ago`;
+
+  const months = Math.floor(days / 30);
+  if (months < 12) return months === 1 ? '1mo ago' : `${months}mo ago`;
+
+  const years = Math.floor(days / 365);
+  return years === 1 ? '1y ago' : `${years}y ago`;
+};
+
+// The StatItem component. `value` is optional so callers can show icon+label only.
 const StatItem = ({
   value,
   label,
   Icon,
 }: {
-  value?: string; // Value is now optional
+  value?: string;
   label: string;
   Icon: React.ElementType;
 }) => (
   <div className="flex flex-col items-center text-center px-2">
     <div className="flex items-center gap-2 mb-1 min-h-6">
-      {/* Conditionally render the value only if it exists */}
       {value && <span className="text-md font-semibold">{value}</span>}
       <Icon className="w-4 h-4" />
     </div>
@@ -36,51 +59,32 @@ const StatItem = ({
   </div>
 );
 
-// --- 2. UPDATED: The props now match the new, richer data structure from the canister. ---
 interface StatsStripProps {
-  authenticatedUniqueUsers: bigint;
-  anonymousInvocations: bigint;
+  // Earliest `created` timestamp across all versions, in nanoseconds since epoch.
+  // Used to show "Launched" relative time — replaces the old Users metric which
+  // was noisy and unflattering for newly-listed apps.
+  launchedAtNs?: bigint;
   totalTools: bigint;
   totalInvocations: bigint;
 }
 
 export function StatsStrip({
-  authenticatedUniqueUsers,
-  anonymousInvocations,
+  launchedAtNs,
   totalTools,
   totalInvocations,
 }: StatsStripProps) {
-  // --- 3. NEW: This is the core logic to determine which user metric to display. ---
-  const renderUserStat = () => {
-    // Scenario 1: Public, Auth-Free Server (no authenticated users, but has anonymous activity)
-    if (authenticatedUniqueUsers === 0n && anonymousInvocations > 0n) {
-      return (
-        <StatItem
-          label="Public Access"
-          Icon={Globe}
-          // No `value` is passed, so only the icon and label will render.
-        />
-      );
-    }
-
-    // Scenario 2 & 3: Server has authenticated users OR no users at all.
-    // This gracefully handles both cases by showing the number of authenticated users.
-    // If there are no users of any kind, it will correctly show "0".
-    return (
-      <StatItem
-        value={formatNumber(authenticatedUniqueUsers)}
-        label="Genesis Users"
-        Icon={Users}
-      />
-    );
-  };
-
   return (
     <div className="mt-6 mb-6 flex items-center py-4 md:gap-x-4 gap-x-1 max-w-md">
-      {/* The user stat is now rendered conditionally */}
-      {renderUserStat()}
-
-      <div className="h-10 w-px bg-border" />
+      {launchedAtNs !== undefined && launchedAtNs > 0n && (
+        <>
+          <StatItem
+            value={formatLaunched(launchedAtNs)}
+            label="Launched"
+            Icon={Rocket}
+          />
+          <div className="h-10 w-px bg-border" />
+        </>
+      )}
       <StatItem
         value={formatNumber(totalInvocations)}
         label="Total Invocations"

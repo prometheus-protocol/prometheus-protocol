@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { VitePWA } from 'vite-plugin-pwa';
 import environment from 'vite-plugin-environment';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -67,6 +68,53 @@ export default defineConfig(({ mode }) => {
     publicDir: 'assets',
     plugins: [
       react(),
+      VitePWA({
+        registerType: 'autoUpdate',
+        includeAssets: [
+          'favicon.ico',
+          'icons/pwa-192x192.png',
+          'icons/pwa-512x512.png',
+          'images/prometheus.webp',
+        ],
+        manifest: {
+          name: 'Prometheus Protocol App Store',
+          short_name: 'Prometheus',
+          description:
+            'Discover, verify, and run Internet Computer apps with reproducible builds and MCP-ready tooling.',
+          theme_color: '#1a131a',
+          background_color: '#1a131a',
+          display: 'standalone',
+          start_url: '/',
+          scope: '/',
+          icons: [
+            {
+              src: '/icons/pwa-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+            },
+            {
+              src: '/icons/pwa-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+            },
+            {
+              src: '/icons/pwa-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable',
+            },
+          ],
+          categories: ['developer', 'productivity', 'utilities'],
+        },
+        workbox: {
+          cleanupOutdatedCaches: true,
+          clientsClaim: true,
+          skipWaiting: true,
+          globPatterns: ['**/*.{js,css,html,ico,svg,webp,woff2}'],
+          navigateFallback: '/index.html',
+          navigateFallbackDenylist: [/^\/_/, /^\/api\//],
+        },
+      }),
       environment({
         NODE_ENV: isDevelopment ? 'development' : 'production',
         II_URL: internetIdentityUrl,

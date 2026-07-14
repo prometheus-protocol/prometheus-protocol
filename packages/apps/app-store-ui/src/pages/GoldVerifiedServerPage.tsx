@@ -56,7 +56,7 @@ export default function GoldVerifiedServerPage() {
             {tierInfo.name}
           </Badge>{' '}
           <h1 className="text-4xl font-bold tracking-tight">
-            Gold Verified Server Program
+            Audited Verified Code Program
           </h1>
         </div>
         <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">

@@ -570,6 +570,123 @@ describe('MCP Registry ICRC-126 Integration', () => {
       expect(await registryActor.is_wasm_verified(wasmId)).toBe(true);
     });
 
+    it('should upgrade a BYOC/self-managed app to verified when its registered WASM is reproducibly built', async () => {
+      const namespace = 'self-managed-byoc-app';
+      const externalCanisterId = Principal.fromText(
+        'ryjl3-tyaaa-aaaaa-aaaba-cai',
+      );
+
+      // Step 1: Developer starts in BYOC mode: they own the namespace and bind
+      // their externally-managed canister with the live module hash.
+      registryActor.setIdentity(developerIdentity);
+      const createResult = await registryActor.icrc118_create_canister_type([
+        {
+          canister_type_namespace: namespace,
+          controllers: [[developerIdentity.getPrincipal()]],
+          metadata: [],
+          repo: 'https://github.com/test/repo',
+          canister_type_name: 'Self Managed BYOC App',
+          description: 'A self-managed BYOC app',
+          forked_from: [],
+        },
+      ]);
+      expect(createResult[0]).toHaveProperty('Ok');
+
+      const byocResult = await registryActor.register_external_canister({
+        namespace,
+        canister_id: externalCanisterId,
+        wasm_hash: wasmHash,
+        metadata: [
+          ['name', { Text: 'Self Managed BYOC App' }],
+          ['description', { Text: 'A self-managed BYOC app' }],
+          ['publisher', { Text: 'Test Publisher' }],
+          ['category', { Text: 'Developer Tools' }],
+          ['deployment_type', { Text: 'self_managed' }],
+          ['repo_url', { Text: 'https://github.com/test/repo' }],
+        ],
+      });
+      expect(byocResult).toHaveProperty('ok');
+
+      // Step 2: Later, they submit the same module hash for reproducible-build
+      // verification and publish the hash to the namespace, but deployment stays
+      // self-managed (no orchestrator-created canister required).
+      await registryActor.icrc126_verification_request({
+        wasm_hash: wasmHash,
+        repo: 'https://github.com/test/repo',
+        commit_hash: new Uint8Array([1]),
+        metadata: [
+          ['name', { Text: 'Self Managed BYOC App' }],
+          ['description', { Text: 'A self-managed BYOC app' }],
+          ['publisher', { Text: 'Test Publisher' }],
+          ['category', { Text: 'Developer Tools' }],
+          ['deployment_type', { Text: 'self_managed' }],
+        ],
+      });
+      // No icrc118_update_wasm call here: existing BYOC apps should be able to
+      // gain verified-build assurance for their registered live hash without
+      // converting to an orchestrator-managed release/version.
+
+      bountySponsorActor.setIdentity(daoIdentity);
+      await bountySponsorActor.sponsor_bounties_for_wasm(
+        wasmId,
+        wasmHash,
+        ['build_reproducibility_v1'],
+        'https://github.com/test/repo',
+        '01',
+        [],
+        9,
+      );
+      const bountyIds =
+        await bountySponsorActor.get_sponsored_bounties_for_wasm(wasmId);
+      expect(bountyIds.length).toBe(9);
+
+      const auditors = [
+        auditor1Identity,
+        auditor2Identity,
+        auditor3Identity,
+        auditor4Identity,
+        auditor5Identity,
+      ];
+      for (let i = 0; i < 5; i++) {
+        auditHubActor.setIdentity(auditors[i]);
+        await auditHubActor.reserve_bounty(bountyIds[i], buildReproTokenId);
+
+        registryActor.setIdentity(auditors[i]);
+        await registryActor.icrc126_file_attestation({
+          wasm_id: wasmId,
+          metadata: [
+            ['126:audit_type', { Text: buildReproTokenId }],
+            ['bounty_id', { Nat: bountyIds[i] }],
+          ],
+        });
+      }
+      expect(await registryActor.is_wasm_verified(wasmId)).toBe(true);
+
+      const namespaceFilter = [{ namespace }] as [{ namespace: string }];
+      const listings = await registryActor.get_app_listings({
+        filter: [namespaceFilter],
+        take: [],
+        prev: [],
+      });
+      expect('ok' in listings).toBe(true);
+      if (!('ok' in listings)) throw new Error('Expected listings ok');
+      expect(listings.ok).toHaveLength(1);
+      expect(listings.ok[0].latest_version.status).toHaveProperty('Verified');
+      expect(listings.ok[0].latest_version.security_tier).toHaveProperty(
+        'Silver',
+      );
+
+      const details = await registryActor.get_app_details_by_namespace(
+        namespace,
+        [],
+      );
+      expect(details).toHaveProperty('ok');
+      if (!('ok' in details)) throw new Error('Expected details ok');
+      expect(details.ok.latest_version.status).toHaveProperty('Verified');
+      expect(details.ok.latest_version.security_tier).toHaveProperty('Silver');
+      expect(details.ok.all_versions[0].status).toHaveProperty('Verified');
+    });
+
     it('should finalize as #Rejected after bounties are created and 5 divergence reports are submitted', async () => {
       // Step 1: Developer submits verification request
       registryActor.setIdentity(developerIdentity);

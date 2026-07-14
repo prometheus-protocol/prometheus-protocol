@@ -9,12 +9,16 @@ import Principal "mo:base/Principal";
 
 module {
 
-  // A variant to represent the calculated security tier.
+  // A variant to represent the calculated trust tier.
+  // Current model:
+  // - #Unranked: BYOC/self-managed or not build verified; no platform guarantee.
+  // - #Silver: open source + reproducible build verified by decentralized builders.
+  // - #Gold: verified build plus an audit of the verified code.
+  // - #Bronze: retained for legacy records only; new code should not produce it.
   public type SecurityTier = {
     #Gold;
     #Silver;
     #Bronze;
-    // For apps that are listed but haven't met the Bronze criteria yet.
     #Unranked;
   };
 
@@ -274,47 +278,30 @@ module {
     return Buffer.toArray(completed_types);
   };
 
-  // Helper function to determine the security tier based on a definitive verification status
-  // and a list of completed declarative audits.
+  // Helper function to determine the trust tier based on the current model:
+  // BYOC/self-managed -> no platform guarantee, verified build -> reproducibility proof,
+  // audited verified code -> highest tier once audit attestations are implemented.
   public func calculate_security_tier(
     is_build_verified : Bool,
     completed_declarative_audits : [Text],
   ) : SecurityTier {
-    // Helper to check if a specific declarative audit is present.
     func has_audit(audit_type : Text) : Bool {
       return Option.isSome(Array.find<Text>(completed_declarative_audits, func(a) { a == audit_type }));
     };
 
-    // The core logic now relies on the `is_build_verified` boolean, which is the
-    // unambiguous result of the ICRC-126 verification lifecycle.
+    if (not is_build_verified) {
+      return #Unranked;
+    };
 
-    // Gold: Requires a verified build AND all key declarative audits.
+    // Forward-compatible final tier. `security_audit_v1` is the new canonical
+    // audit type; the old all-specific-audits combination is accepted for legacy data.
     if (
-      is_build_verified and
-      has_audit("app_info_v1") and
-      has_audit("tools_v1") and
-      has_audit("data_safety_v1")
+      has_audit("security_audit_v1") or
+      (has_audit("app_info_v1") and has_audit("tools_v1") and has_audit("data_safety_v1"))
     ) {
       return #Gold;
     };
 
-    // Silver: Verified build, app info, and tools.
-    if (
-      is_build_verified and
-      has_audit("app_info_v1") and
-      has_audit("tools_v1")
-    ) {
-      return #Silver;
-    };
-
-    // Bronze: The foundation of trust - a verified build and basic app info.
-    if (
-      is_build_verified and
-      has_audit("app_info_v1")
-    ) {
-      return #Bronze;
-    };
-
-    return #Unranked;
+    return #Silver;
   };
 };

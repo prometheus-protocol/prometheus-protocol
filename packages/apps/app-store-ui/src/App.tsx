@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
+import { HelmetProvider } from 'react-helmet-async';
 import { Toaster } from '@/components/ui/sonner';
 
 // Layouts
@@ -35,6 +36,7 @@ import ConsentPage from './pages/ConsentPage';
 import ConnectionsPage from './pages/ConnectionsPage';
 import VerifierDashboardPage from './pages/VerifierDashboardPage';
 import { OAuthLayout } from './components/layout/OAuthLayout';
+import { RouteSeo } from './components/Seo';
 
 // --- CONFIGURE THE SHARED PACKAGE ---
 // This object is created at BUILD TIME. Vite replaces each `process.env`
@@ -78,88 +80,97 @@ function App() {
   return (
     // AuthProvider will wrap the entire app to provide auth context
     // This will manage the Internet Identity client and user state.
-    <InternetIdentityProvider
-      loginOptions={{
-        identityProvider: process.env.II_URL,
-        maxTimeToLive: BigInt(7 * 24 * 60 * 60 * 1000 * 1000 * 1000), // 7 days in nanoseconds
-      }}>
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <ScrollToTop />
-          <Routes>
-            {/* OAuth flow routes */}
-            <Route path="/oauth" element={<OAuthLayout />}>
-              <Route path="login" element={<LoginPage />} />
-              <Route path="setup" element={<SetupPage />} />
-              <Route path="consent" element={<ConsentPage />} />
-            </Route>
-            {/* --- Public Routes using the Main Layout --- */}
-            {/* All public-facing pages will share a common layout (e.g., Header, Footer) */}
-            <Route element={<MainLayout />}>
-              {/* The root path is now the main browsing page for the App Store */}
-              <Route path="/" element={<HomePage />} />
+    <HelmetProvider>
+      <InternetIdentityProvider
+        loginOptions={{
+          identityProvider: process.env.II_URL,
+          maxTimeToLive: BigInt(7 * 24 * 60 * 60 * 1000 * 1000 * 1000), // 7 days in nanoseconds
+        }}>
+        <QueryClientProvider client={queryClient}>
+          <BrowserRouter>
+            <RouteSeo />
+            <ScrollToTop />
+            <Routes>
+              {/* OAuth flow routes */}
+              <Route path="/oauth" element={<OAuthLayout />}>
+                <Route path="login" element={<LoginPage />} />
+                <Route path="setup" element={<SetupPage />} />
+                <Route path="consent" element={<ConsentPage />} />
+              </Route>
+              {/* --- Public Routes using the Main Layout --- */}
+              {/* All public-facing pages will share a common layout (e.g., Header, Footer) */}
+              <Route element={<MainLayout />}>
+                {/* The root path is now the main browsing page for the App Store */}
+                <Route path="/" element={<HomePage />} />
 
-              {/* The details page for a specific MCP server, accessible by a slug or ID */}
-              <Route path="/app/:appId" element={<ServerDetailsPage />} />
-              <Route
-                path="/app/:appId/:wasmId"
-                element={<ServerDetailsPage />}
-              />
-              <Route path="/certificate/:appId" element={<CertificatePage />} />
-              <Route
-                path="/certificate/:appId/:wasmId"
-                element={<CertificatePage />}
-              />
-              {/* Audit Hub Routes */}
-              <Route path="audit-hub">
-                <Route index element={<AuditHubPage />} />
-                {/* New: WASM-based verification route */}
-                <Route path=":wasmId" element={<VerificationDetailsPage />} />
-                {/* Legacy: Keep bounty-based route for backward compatibility */}
-                <Route path="bounty/:auditId" element={<AuditDetailsPage />} />
+                {/* The details page for a specific MCP server, accessible by a slug or ID */}
+                <Route path="/app/:appId" element={<ServerDetailsPage />} />
+                <Route
+                  path="/app/:appId/:wasmId"
+                  element={<ServerDetailsPage />}
+                />
+                <Route
+                  path="/certificate/:appId"
+                  element={<CertificatePage />}
+                />
+                <Route
+                  path="/certificate/:appId/:wasmId"
+                  element={<CertificatePage />}
+                />
+                {/* Audit Hub Routes */}
+                <Route path="audit-hub">
+                  <Route index element={<AuditHubPage />} />
+                  {/* New: WASM-based verification route */}
+                  <Route path=":wasmId" element={<VerificationDetailsPage />} />
+                  {/* Legacy: Keep bounty-based route for backward compatibility */}
+                  <Route
+                    path="bounty/:auditId"
+                    element={<AuditDetailsPage />}
+                  />
+                </Route>
+
+                {/* Main pages */}
+                <Route path="bounties" element={<AppBountiesPage />} />
+                <Route path="leaderboard" element={<LeaderboardPage />} />
+                <Route path="wallet" element={<WalletPage />} />
+                <Route path="verifier" element={<VerifierDashboardPage />} />
+
+                {/* Static informational pages */}
+                <Route path="about" element={<AboutPage />} />
+
+                {/* Resources */}
+                <Route path="contact" element={<ContactPage />} />
+                <Route path="faq" element={<FaqPage />} />
+                <Route path="community" element={<CommunityPage />} />
+
+                {/* Legal pages */}
+                <Route path="terms" element={<TermsOfServicePage />} />
+                <Route path="privacy" element={<PrivacyPolicyPage />} />
+                <Route path="*" element={<NotFoundPage />} />
               </Route>
 
-              {/* Main pages */}
-              <Route path="bounties" element={<AppBountiesPage />} />
-              <Route path="leaderboard" element={<LeaderboardPage />} />
-              <Route path="wallet" element={<WalletPage />} />
-              <Route path="verifier" element={<VerifierDashboardPage />} />
+              {/* --- Protected Routes for Logged-in Developers --- */}
+              {/* These routes are for developers managing their submissions. */}
+              {/* They also use the MainLayout for a consistent look and feel. */}
+              <Route
+                element={
+                  <ProtectedRoute>
+                    <MainLayout />
+                  </ProtectedRoute>
+                }>
+                {/* Add more protected routes here, e.g., managing a specific submission */}
+                {/* <Route path="/dashboard/server/:id/manage" element={<ManageSubmissionPage />} /> */}
+                <Route path="connections" element={<ConnectionsPage />} />
+              </Route>
 
-              {/* Static informational pages */}
-              <Route path="about" element={<AboutPage />} />
-
-              {/* Resources */}
-              <Route path="contact" element={<ContactPage />} />
-              <Route path="faq" element={<FaqPage />} />
-              <Route path="community" element={<CommunityPage />} />
-
-              {/* Legal pages */}
-              <Route path="terms" element={<TermsOfServicePage />} />
-              <Route path="privacy" element={<PrivacyPolicyPage />} />
+              {/* A catch-all for any undefined routes */}
               <Route path="*" element={<NotFoundPage />} />
-            </Route>
-
-            {/* --- Protected Routes for Logged-in Developers --- */}
-            {/* These routes are for developers managing their submissions. */}
-            {/* They also use the MainLayout for a consistent look and feel. */}
-            <Route
-              element={
-                <ProtectedRoute>
-                  <MainLayout />
-                </ProtectedRoute>
-              }>
-              {/* Add more protected routes here, e.g., managing a specific submission */}
-              {/* <Route path="/dashboard/server/:id/manage" element={<ManageSubmissionPage />} /> */}
-              <Route path="connections" element={<ConnectionsPage />} />
-            </Route>
-
-            {/* A catch-all for any undefined routes */}
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
-          <Toaster />
-        </BrowserRouter>
-      </QueryClientProvider>
-    </InternetIdentityProvider>
+            </Routes>
+            <Toaster />
+          </BrowserRouter>
+        </QueryClientProvider>
+      </InternetIdentityProvider>
+    </HelmetProvider>
   );
 }
 

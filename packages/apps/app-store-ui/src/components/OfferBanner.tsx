@@ -12,14 +12,14 @@ export function OfferBanner() {
         <BadgeCheck className="w-16 h-16 text-white" />
       </div>
       <h2 className="text-3xl font-bold tracking-tight text-neutral-900">
-        Build a Gold Verified Server and earn $500
+        Build an audited verified-code server and earn $500
       </h2>
       <p className="mt-2 text-xl md:text-2xl tracking-tight text-neutral-800 max-w-2xl mx-auto">
         Join our elite developer program. Create high-quality MCP servers that
         meet our rigorous standards and get rewarded for your excellence.
       </p>
       <Button asChild size="lg" variant="secondary" className="mt-6 font-bold">
-        <Link to="/gold-verified-server">Apply for Gold Verified</Link>
+        <Link to="/gold-verified-server">Apply for Audit</Link>
       </Button>
       <PromoBadge>$500 Reward</PromoBadge>
     </section>

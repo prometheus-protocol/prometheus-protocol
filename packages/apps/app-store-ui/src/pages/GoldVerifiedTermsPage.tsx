@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import { Link } from 'react-router-dom';
 
 const markdownContent = `
-# Gold Verified Server Award Program - Terms and Conditions
+# Audited Verified Code Award Program - Terms and Conditions
 
 **Last Updated:** October 5, 2025
 
@@ -11,7 +11,7 @@ const markdownContent = `
 
 ## 1. Program Overview
 
-The Gold Verified Server Award Program (the "Program") is designed to incentivize and reward developers for creating high-quality, secure, and well-documented MCP (Model Context Protocol) servers ("Servers") on the Internet Computer. The goal is to foster a robust ecosystem of trustworthy applications that can be used by AI agents and other services. A one-time Award of **$500 USD** is offered to each project that successfully meets the certification criteria.
+The Audited Verified Code Award Program (the "Program") is designed to incentivize and reward developers for creating high-quality, secure, and well-documented MCP (Model Context Protocol) servers ("Servers") on the Internet Computer. The goal is to foster a robust ecosystem of trustworthy applications that can be used by AI agents and other services. A one-time Award of **$500 USD** is offered to each project that successfully meets the certification criteria.
 
 ---
 
@@ -29,12 +29,11 @@ To be eligible to participate in the Program and receive an Award, you (and your
 
 ## 3. Certification Requirements
 
-To receive an Award, your submitted Server must achieve **Gold Verified** status, which requires:
+To receive an Award, your submitted Server must achieve **Audited Verified Code** status, which requires:
 
-1.  **Verified Build:** Cryptographic proof that the code running on-chain matches your public source code repository.
-2.  **Audited App Info:** Your Server's metadata (name, description, capabilities) must be accurate and approved by our auditors.
-3.  **Audited Tools:** All external APIs, services, or dependencies used by your Server must be documented and approved.
-4.  **Audited Data Safety:** Your Server must meet our data privacy and security standards, including proper handling of user data and sensitive information.
+1.  **Open Source:** The submitted code must be available in a public source repository.
+2.  **Verified Build:** The repository must reproducibly build to the deployed WASM hash in the decentralized verifier network.
+3.  **Security Audit:** The verified code must pass a point-in-time audit against the current program rubric.
 
 The specific technical requirements for each audit stage are detailed in our [Developer Documentation](https://docs.prometheusprotocol.org).
 
@@ -55,8 +54,8 @@ The specific technical requirements for each audit stage are detailed in our [De
 2.  **Approval:** The Prometheus Protocol team will review your application and provide approval (a "green light") or feedback for revisions.
 3.  **Development:** Build your Server according to our technical specifications and best practices.
 4.  **Submission:** Once complete, submit your Server for certification through the Prometheus Protocol platform.
-5.  **Audit:** Our team of auditors will review your Server against the Gold Verified criteria.
-6.  **Certification:** Upon successful completion of all audit stages, your Server will be awarded the Gold Verified certificate.
+5.  **Audit:** Our team of auditors will review the verified code against the Audited Verified Code criteria.
+6.  **Certification:** Upon successful completion, your Server will be awarded the Audited Verified Code certificate.
 7.  **Award:** You will be invited to complete the Deel onboarding process and receive your Award payment.
 
 ---

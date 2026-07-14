@@ -97,10 +97,14 @@ export const provisionInstance = async (
 };
 
 export const getServerCanisterId = async (
-  identity: Identity,
+  identity: Identity | undefined,
   namespace: string,
   wasmId: string,
 ): Promise<Principal | undefined> => {
+  // This is a public query on the orchestrator; identity is optional.
+  // - #global apps return the shared canister regardless of caller.
+  // - #provisioned apps use the caller to look up the user's instance,
+  //   which returns null for anonymous callers (the correct behavior).
   const orchestratorActor = getOrchestratorActor(identity);
   const res = await orchestratorActor.get_canister_id(namespace, wasmId);
   return fromNullable(res);

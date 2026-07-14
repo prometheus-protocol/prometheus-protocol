@@ -409,9 +409,9 @@ shared ({ caller = deployer }) persistent actor class UsageTracker() {
    * when a new canister is provisioned or when an existing canister is upgraded.
    */
   public shared (msg) func register_canister_namespace(canister_id : Principal, namespace : Text) : async Result.Result<(), Text> {
-    if (not is_owner(msg.caller) and not is_orchestrator_canister(msg.caller)) {
+    if (not is_owner(msg.caller) and not is_orchestrator_canister(msg.caller) and not is_registry_canister(msg.caller)) {
       Debug.print("Unauthorized attempt to register canister namespace by: " # Principal.toText(msg.caller));
-      return #err("Unauthorized: Only the owner or orchestrator can register canister namespaces.");
+      return #err("Unauthorized: Only the owner, orchestrator, or registry can register canister namespaces.");
     };
 
     Map.set(canister_to_namespace, Map.phash, canister_id, namespace);

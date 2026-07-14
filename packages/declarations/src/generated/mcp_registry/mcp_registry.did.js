@@ -27,6 +27,12 @@ export const idlFactory = ({ IDL }) => {
     'lastExecutionTime' : Time,
   });
   const Result_5 = IDL.Variant({ 'ok' : IDL.Text, 'err' : IDL.Text });
+  const ExternalBinding = IDL.Record({
+    'bound_at' : IDL.Nat,
+    'bound_by' : IDL.Principal,
+    'canister_id' : IDL.Principal,
+    'namespace' : IDL.Text,
+  });
   const ActionFilter = IDL.Variant({
     'All' : IDL.Null,
     'ByActionId' : IDL.Nat,
@@ -322,12 +328,6 @@ export const idlFactory = ({ IDL }) => {
     'setter' : IDL.Text,
     'required' : IDL.Bool,
     'current_value' : IDL.Opt(IDL.Text),
-  });
-  const ExternalBinding = IDL.Record({
-    'bound_at' : IDL.Nat,
-    'bound_by' : IDL.Principal,
-    'canister_id' : IDL.Principal,
-    'namespace' : IDL.Text,
   });
   const ReconstitutionTrace = IDL.Record({
     'errors' : IDL.Vec(IDL.Text),
@@ -642,6 +642,16 @@ export const idlFactory = ({ IDL }) => {
         [Result_5],
         [],
       ),
+    'admin_unregister_external_canister' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'admin_update_external_binding' : IDL.Func(
+        [IDL.Text, IDL.Opt(IDL.Principal), IDL.Opt(IDL.Vec(IDL.Nat8))],
+        [IDL.Variant({ 'ok' : ExternalBinding, 'err' : IDL.Text })],
+        [],
+      ),
     'bootstrap_search_index' : IDL.Func([], [Result_5], []),
     'can_install_wasm' : IDL.Func(
         [IDL.Principal, IDL.Text],
@@ -848,6 +858,11 @@ export const idlFactory = ({ IDL }) => {
             'requests' : IDL.Vec(VerificationRecord),
           }),
         ],
+        ['query'],
+      ),
+    'list_external_bindings' : IDL.Func(
+        [],
+        [IDL.Vec(ExternalBinding)],
         ['query'],
       ),
     'list_pending_verifications' : IDL.Func(

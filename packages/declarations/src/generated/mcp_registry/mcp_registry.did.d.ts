@@ -296,6 +296,28 @@ export interface ICRC118WasmRegistryCanister {
    */
   'admin_retrigger_consensus' : ActorMethod<[string, string], Result_5>,
   /**
+   * / Admin-only: forcibly remove an external binding without the namespace-
+   * / controller check. Useful when a namespace's controller list is wrong,
+   * / abandoned, or the binding needs to be cleared for ops reasons.
+   */
+  'admin_unregister_external_canister' : ActorMethod<
+    [string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  /**
+   * / Admin-only: swap the canister_id and/or wasm_hash a BYOC binding points
+   * / at without re-running the controller check. `new_canister_id` and
+   * / `new_wasm_hash` are optional — pass `null` to keep the current value.
+   * / Also re-registers the (possibly new) canister with the usage tracker so
+   * / metrics continue to aggregate under the same namespace.
+   */
+  'admin_update_external_binding' : ActorMethod<
+    [string, [] | [Principal], [] | [Uint8Array | number[]]],
+    { 'ok' : ExternalBinding } |
+      { 'err' : string }
+  >,
+  /**
    * / * [OWNER-ONLY] Iterates through all published apps and pushes their data
    * /    * to the search indexer to bootstrap or rebuild the index.
    * /    *
@@ -444,6 +466,11 @@ export interface ICRC118WasmRegistryCanister {
     [[] | [bigint], [] | [bigint]],
     { 'total' : bigint, 'requests' : Array<VerificationRecord> }
   >,
+  /**
+   * / List all external (BYOC) bindings. Public query — no sensitive data here,
+   * / same information surfaces in AppListing / AppDetailsResponse.
+   */
+  'list_external_bindings' : ActorMethod<[], Array<ExternalBinding>>,
   'list_pending_verifications' : ActorMethod<[], Array<VerificationRecord>>,
   /**
    * / Register an externally-deployed canister with the registry.

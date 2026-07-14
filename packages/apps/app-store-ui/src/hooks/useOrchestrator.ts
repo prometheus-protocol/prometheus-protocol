@@ -1,5 +1,6 @@
 import {
   getServerCanisterId,
+  getExternalBinding,
   provisionInstance,
   type AppVersionSummary,
 } from '@prometheus-protocol/ic-js';
@@ -38,16 +39,27 @@ export const useProvisionInstance = (namespace?: string) => {
 /**
  * React Query hook to fetch the canister ID for a specific MCP server instance.
  * Returns null if the canister ID is not available.
+ *
+ * Identity is optional:
+ *   - For #global apps, `get_canister_id` returns the shared canister regardless
+ *     of caller, so we want this to work for logged-out visitors too.
+ *   - For #provisioned apps, `get_canister_id` keys on the caller, so anonymous
+ *     callers correctly receive null.
  */
 export const useGetCanisterId = (namespace?: string, wasmId?: string) => {
   const { identity } = useInternetIdentity();
 
   return useQuery<Principal | null>({
-    // The query is public, but we include the principal to maintain a consistent
-    // pattern and ensure reactivity if the identity changes.
-    queryKey: ['serverCanisterId', namespace, wasmId],
+    // Identity is included in the key so the cached result refreshes when the
+    // user logs in/out (e.g. provisioned apps become visible after login).
+    queryKey: [
+      'serverCanisterId',
+      namespace,
+      wasmId,
+      identity?.getPrincipal().toText() ?? 'anonymous',
+    ],
     queryFn: async (): Promise<Principal | null> => {
-      if (!namespace || !wasmId || !identity) {
+      if (!namespace || !wasmId) {
         return null;
       }
 
@@ -55,7 +67,7 @@ export const useGetCanisterId = (namespace?: string, wasmId?: string) => {
       // Explicitly convert undefined to null for React Query
       return result ?? null;
     },
-    enabled: !!namespace && !!wasmId && !!identity,
+    enabled: !!namespace && !!wasmId,
     // Provide a placeholder to prevent undefined issues during initialization
     placeholderData: null,
   });
@@ -64,18 +76,25 @@ export const useGetCanisterId = (namespace?: string, wasmId?: string) => {
 /**
  * React Query hook to fetch canister IDs for all versions of an MCP server.
  * Returns an array of Principal IDs for all versions that have been provisioned.
+ * Identity is optional for the same reason as useGetCanisterId above.
  */
 export const useGetAllVersionCanisterIds = (
   namespace?: string,
   allVersions?: AppVersionSummary[],
 ) => {
   const { identity } = useInternetIdentity();
+  const principalText = identity?.getPrincipal().toText() ?? 'anonymous';
 
   const queries = useQueries({
     queries: (allVersions ?? []).map((version) => ({
-      queryKey: ['serverCanisterId', namespace, version.wasmId],
+      queryKey: [
+        'serverCanisterId',
+        namespace,
+        version.wasmId,
+        principalText,
+      ],
       queryFn: async (): Promise<Principal | null> => {
-        if (!namespace || !version.wasmId || !identity) {
+        if (!namespace || !version.wasmId) {
           return null;
         }
         try {
@@ -89,7 +108,7 @@ export const useGetAllVersionCanisterIds = (
           return null;
         }
       },
-      enabled: !!namespace && !!version.wasmId && !!identity,
+      enabled: !!namespace && !!version.wasmId,
     })),
     combine: (results) => {
       return {
@@ -110,4 +129,23 @@ export const useGetAllVersionCanisterIds = (
     canisterIds,
     isPending: queries.pending,
   };
+};
+
+/**
+ * React Query hook to fetch the canister ID for a BYOC (external) app.
+ * Uses the registry's external binding lookup instead of the orchestrator.
+ * Returns a Principal if the binding exists, null otherwise.
+ */
+export const useGetExternalCanisterId = (namespace?: string) => {
+  return useQuery<Principal | null>({
+    queryKey: ['externalCanisterId', namespace],
+    queryFn: async (): Promise<Principal | null> => {
+      if (!namespace) return null;
+      const binding = await getExternalBinding(namespace);
+      if (!binding) return null;
+      return Principal.fromText(binding.canisterId);
+    },
+    enabled: !!namespace,
+    placeholderData: null,
+  });
 };

@@ -5,6 +5,7 @@ import { AlertTriangle, ShieldCheck, Wallet, Wrench, Info } from 'lucide-react';
 import { ImageWithFallback } from '@/components/ui/image-with-fallback';
 import { cn } from '@/lib/utils';
 import { getTierInfo } from '@/lib/get-tier-info';
+import { Seo } from '@/components/Seo';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import { useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -228,7 +229,10 @@ export default function ServerDetailsPage() {
   const { latestVersion, allVersions } = server;
 
   // Get tier info for display
-  const tierInfo = getTierInfo(latestVersion.securityTier);
+  const tierInfo = getTierInfo(
+    latestVersion.securityTier,
+    latestVersion.status,
+  );
 
   // Helper to determine if the app is the 'Provisioned' type
   const isProvisionedApp =
@@ -239,7 +243,10 @@ export default function ServerDetailsPage() {
 
   const handleInstallClick = () => {
     // Logic now correctly checks the nested property.
-    if (latestVersion.securityTier === 'Unranked') {
+    if (
+      latestVersion.status === 'External' ||
+      latestVersion.securityTier === 'Unranked'
+    ) {
       setDialogState('confirm');
     } else {
       setDialogState('install');
@@ -500,9 +507,18 @@ export default function ServerDetailsPage() {
   const runtimeToolsCount = namespaceMetrics?.total_tools ?? 0n;
   const totalToolsCount =
     auditToolsCount > 0n ? auditToolsCount : runtimeToolsCount;
+  const seoDescription =
+    server.description?.trim() ||
+    `${server.name} is an Internet Computer app listed on the Prometheus Protocol App Store with ${tierInfo.name.toLowerCase()} status.`;
 
   return (
     <>
+      <Seo
+        title={server.name}
+        description={seoDescription.slice(0, 160)}
+        canonicalPath={`/app/${server.namespace}`}
+        image={server.bannerUrl || server.iconUrl || '/images/prometheus.webp'}
+      />
       <div className="w-full max-w-6xl mx-auto pt-12 pb-32">
         {/* Breadcrumbs - stays at the top, full width */}
         <nav className="text-sm text-muted-foreground mb-8">
@@ -536,7 +552,7 @@ export default function ServerDetailsPage() {
                       {server.publisher}
                     </span>
                     <p className="text-xs text-muted-foreground italic">
-                      In-app transactions available
+                      App publisher
                     </p>
                   </div>
                 </div>
@@ -583,7 +599,9 @@ export default function ServerDetailsPage() {
                   latestVersion={server.latestVersion}
                   onConnectClick={handleInstallClick}
                   isArchived={isViewingArchivedVersion}
-                  canisterId={isByoc ? undefined : (resolvedCanisterId ?? undefined)}
+                  canisterId={
+                    isByoc ? undefined : (resolvedCanisterId ?? undefined)
+                  }
                   onUpgradeClick={handleUpgradeClick}
                   isUpgrading={provisionMutation.isPending}
                   isPollingForCanister={isPollingForCanister}
@@ -616,10 +634,13 @@ export default function ServerDetailsPage() {
               <div className="flex items-start gap-3 p-4 rounded-lg border border-border bg-muted/30">
                 <Info className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
                 <div className="text-sm text-muted-foreground">
-                  <span className="font-medium text-foreground">Externally managed</span>
+                  <span className="font-medium text-foreground">
+                    Externally managed
+                  </span>
                   {' — '}
-                  This server is deployed and upgraded directly by the developer.
-                  Prometheus Protocol does not control its canister or WASM lifecycle.
+                  This server is deployed and upgraded directly by the
+                  developer. Prometheus Protocol does not control its canister
+                  or WASM lifecycle.
                 </div>
               </div>
             ) : (
@@ -697,11 +718,13 @@ export default function ServerDetailsPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Connect to an Uncertified Server?
+              Connect to an Unverified Server?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This server, <span className="font-bold">{server.name}</span>, has
-              not been audited by Prometheus Protocol. Proceed with caution.
+              This server, <span className="font-bold">{server.name}</span>, is
+              not verified or audited by Prometheus Protocol. If it is BYOC, the
+              developer controls the canister, code, upgrades, and operations.
+              Proceed with caution.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

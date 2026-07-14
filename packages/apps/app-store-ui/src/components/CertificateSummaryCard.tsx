@@ -14,7 +14,10 @@ export function CertificateSummaryCard({
   const { latestVersion } = appDetails;
 
   // --- 2. PULL DATA FROM THE `latestVersion` OBJECT ---
-  const tierInfo = getTierInfo(latestVersion.securityTier);
+  const tierInfo = getTierInfo(
+    latestVersion.securityTier,
+    latestVersion.status,
+  );
 
   const uniqueCompletedAudits = new Set(
     latestVersion.auditRecords
@@ -44,7 +47,7 @@ export function CertificateSummaryCard({
           <p className={cn('text-5xl font-bold', tierInfo.textColorClass)}>
             {uniqueCompletedAudits} / {CORE_AUDIT_TYPES.length}
           </p>
-          <p className="text-xs text-muted-foreground">Successful Audits</p>
+          <p className="text-xs text-muted-foreground">Trust Checks</p>
         </div>
       </div>
     </div>
