@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && tsx scripts/generate-social-previews.ts",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -51,6 +51,7 @@
     "next-themes": "^0.4.6",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-helmet-async": "^3.0.0",
     "react-hook-form": "^7.60.0",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.7.0",
@@ -72,6 +73,7 @@
     "tailwindcss": "^4.1.11",
     "vite": "^5.4.19",
     "vite-plugin-copy": "^0.1.6",
-    "vite-plugin-environment": "^1.1.3"
+    "vite-plugin-environment": "^1.1.3",
+    "vite-plugin-pwa": "^1.3.0"
   }
 }

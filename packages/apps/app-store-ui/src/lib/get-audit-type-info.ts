@@ -40,6 +40,12 @@ const auditTypeMap: Record<string, AuditTypeInfo> = {
       'Assesses how the application collects, uses, and shares user data.',
     Icon: BookLock,
   },
+  security_audit_v1: {
+    title: 'Security Audit',
+    description:
+      'Point-in-time security review of code that has already passed reproducible-build verification.',
+    Icon: Shield,
+  },
 };
 
 // The default info to return if an unknown audit type is provided.

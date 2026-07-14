@@ -425,6 +425,25 @@ type ICRC118WasmRegistryCanister =
    /// * Admin method to manually trigger consensus handling for stuck bounties.
    ///    * Use this when consensus was reached but payouts didn't happen due to bugs.
    admin_retrigger_consensus: (wasm_id: text, audit_type: text) -> (Result_5);
+   /// Admin-only: forcibly remove an external binding without the namespace-
+   /// controller check. Useful when a namespace's controller list is wrong,
+   /// abandoned, or the binding needs to be cleared for ops reasons.
+   admin_unregister_external_canister: (namespace: text) ->
+    (variant {
+       err: text;
+       ok;
+     });
+   /// Admin-only: swap the canister_id and/or wasm_hash a BYOC binding points
+   /// at without re-running the controller check. `new_canister_id` and
+   /// `new_wasm_hash` are optional — pass `null` to keep the current value.
+   /// Also re-registers the (possibly new) canister with the usage tracker so
+   /// metrics continue to aggregate under the same namespace.
+   admin_update_external_binding: (namespace: text, new_canister_id:
+    opt principal, new_wasm_hash: opt blob) ->
+    (variant {
+       err: text;
+       ok: ExternalBinding;
+     });
    /// * [OWNER-ONLY] Iterates through all published apps and pushes their data
    ///    * to the search indexer to bootstrap or rebuild the index.
    ///    *
@@ -527,6 +546,9 @@ type ICRC118WasmRegistryCanister =
        requests: vec VerificationRecord;
        total: nat;
      }) query;
+   /// List all external (BYOC) bindings. Public query — no sensitive data here,
+   /// same information surfaces in AppListing / AppDetailsResponse.
+   list_external_bindings: () -> (vec ExternalBinding) query;
    list_pending_verifications: () -> (vec VerificationRecord) query;
    /// Register an externally-deployed canister with the registry.
    /// Caller must be a controller of the namespace.

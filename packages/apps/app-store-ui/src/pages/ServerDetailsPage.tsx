@@ -1,10 +1,11 @@
 import { useParams, Link } from 'react-router-dom';
 import NotFoundPage from './NotFoundPage';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, ShieldCheck, Wallet, Wrench } from 'lucide-react';
+import { AlertTriangle, ShieldCheck, Wallet, Wrench, Info } from 'lucide-react';
 import { ImageWithFallback } from '@/components/ui/image-with-fallback';
 import { cn } from '@/lib/utils';
 import { getTierInfo } from '@/lib/get-tier-info';
+import { Seo } from '@/components/Seo';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import { useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -42,6 +43,7 @@ import {
   useGetCanisterId,
   useProvisionInstance,
   useGetAllVersionCanisterIds,
+  useGetExternalCanisterId,
 } from '@/hooks/useOrchestrator';
 import { useGetAppMetrics } from '@/hooks/useUsageTracker';
 import { useAggregatedAppMetrics } from '@/hooks/useAggregatedAppMetrics';
@@ -146,6 +148,17 @@ export default function ServerDetailsPage() {
     refetch: refetchCanisterId,
   } = useGetCanisterId(server?.namespace, server?.latestVersion.wasmId);
 
+  // For BYOC (external) apps, the orchestrator won't have a canister ID.
+  // Fall back to the registry's external binding.
+  const isByoc = server?.latestVersion.status === 'External';
+  const { data: externalCanisterId, isLoading: isLoadingExternalCanisterId } =
+    useGetExternalCanisterId(isByoc ? server?.namespace : undefined);
+
+  // Use orchestrator canister ID first, fall back to external binding for BYOC
+  const resolvedCanisterId = canisterId ?? externalCanisterId ?? null;
+  const isLoadingAnyCanisterId =
+    isLoadingCanisterId || (isByoc && isLoadingExternalCanisterId);
+
   // Fetch canister IDs for all WASM versions to aggregate metrics
   const { canisterIds: allCanisterIds } = useGetAllVersionCanisterIds(
     server?.namespace,
@@ -189,17 +202,17 @@ export default function ServerDetailsPage() {
     }
 
     // For provisioned apps: check if user is the owner of this instance
-    if (server.deploymentType === 'provisioned' && canisterId) {
+    if (server.deploymentType === 'provisioned' && resolvedCanisterId) {
       // For provisioned instances, the user who can access it is typically the owner
       // This is a simplified check - in practice you might need to call a canister method
       return true;
     }
 
     return false;
-  }, [identity, server, canisterId]);
+  }, [identity, server, resolvedCanisterId]);
 
   // Combine loading states - show skeleton until all critical data is loaded
-  const isLoadingAnyData = isLoading || (server && isLoadingCanisterId);
+  const isLoadingAnyData = isLoading || (server && isLoadingAnyCanisterId);
 
   if (isLoadingAnyData) {
     return <ServerDetailsSkeleton />;
@@ -216,7 +229,10 @@ export default function ServerDetailsPage() {
   const { latestVersion, allVersions } = server;
 
   // Get tier info for display
-  const tierInfo = getTierInfo(latestVersion.securityTier);
+  const tierInfo = getTierInfo(
+    latestVersion.securityTier,
+    latestVersion.status,
+  );
 
   // Helper to determine if the app is the 'Provisioned' type
   const isProvisionedApp =
@@ -227,7 +243,10 @@ export default function ServerDetailsPage() {
 
   const handleInstallClick = () => {
     // Logic now correctly checks the nested property.
-    if (latestVersion.securityTier === 'Unranked') {
+    if (
+      latestVersion.status === 'External' ||
+      latestVersion.securityTier === 'Unranked'
+    ) {
       setDialogState('confirm');
     } else {
       setDialogState('install');
@@ -352,7 +371,7 @@ export default function ServerDetailsPage() {
   };
 
   const handleUpgradeClick = async () => {
-    if (!server || !canisterId) return;
+    if (!server || !resolvedCanisterId) return;
 
     // Always upgrade to the actual latest version (allVersions[0]), not the viewed version
     const actualLatestVersion = allVersions[0];
@@ -379,13 +398,13 @@ export default function ServerDetailsPage() {
           try {
             // Force refetch of WASM hash query
             await queryClient.invalidateQueries({
-              queryKey: ['canisterWasmHash', canisterId.toText()],
+              queryKey: ['canisterWasmHash', resolvedCanisterId.toText()],
             });
 
             // Check if we have WASM hash data now
             const wasmHashData = queryClient.getQueryData([
               'canisterWasmHash',
-              canisterId.toText(),
+              resolvedCanisterId.toText(),
             ]);
 
             if (wasmHashData !== undefined && wasmHashData !== null) {
@@ -452,10 +471,6 @@ export default function ServerDetailsPage() {
     (record) => 'audit_type' in record && record.audit_type === 'app_info_v1',
   );
 
-  // The presence of tools indicates the 'tools_v1' attestation is complete.
-  const hasToolsInfo = server.latestVersion.auditRecords.some(
-    (record) => 'audit_type' in record && record.audit_type === 'tools_v1',
-  );
   // The presence of dataSafety indicates the 'data_safety_v1' attestation is complete.
   const hasDataSafetyInfo = server.latestVersion.auditRecords.some(
     (record) =>
@@ -473,8 +488,37 @@ export default function ServerDetailsPage() {
     (bounty) => bounty.challengeParameters.audit_type === 'data_safety_v1',
   );
 
+  // "Launched" stat — earliest created timestamp across all versions (ns).
+  // For global/provisioned apps this is the first published WASM version.
+  // For BYOC apps, all_versions contains a single synthetic "external" summary
+  // whose `created` is the initial register_external_canister time.
+  const launchedAtNs = allVersions.reduce<bigint>((min, v) => {
+    if (!v.created) return min;
+    return min === 0n || v.created < min ? v.created : min;
+  }, latestVersion.created ?? 0n);
+
+  // Tool list/count sources:
+  //   - Audit-sourced tools (tools_v1 attestation) give name + description + cost.
+  //   - Usage-tracker tools (namespaceMetrics.total_tools) count tools observed
+  //     at runtime. BYOC canisters have empty audit tools, so we fall back to
+  //     the runtime count. Invocation-level tool names come from useNamespaceTools
+  //     inside ToolsAndResources.
+  const auditToolsCount = BigInt(latestVersion.tools?.length ?? 0);
+  const runtimeToolsCount = namespaceMetrics?.total_tools ?? 0n;
+  const totalToolsCount =
+    auditToolsCount > 0n ? auditToolsCount : runtimeToolsCount;
+  const seoDescription =
+    server.description?.trim() ||
+    `${server.name} is an Internet Computer app listed on the Prometheus Protocol App Store with ${tierInfo.name.toLowerCase()} status.`;
+
   return (
     <>
+      <Seo
+        title={server.name}
+        description={seoDescription.slice(0, 160)}
+        canonicalPath={`/app/${server.namespace}`}
+        image={server.bannerUrl || server.iconUrl || '/images/prometheus.webp'}
+      />
       <div className="w-full max-w-6xl mx-auto pt-12 pb-32">
         {/* Breadcrumbs - stays at the top, full width */}
         <nav className="text-sm text-muted-foreground mb-8">
@@ -508,7 +552,7 @@ export default function ServerDetailsPage() {
                       {server.publisher}
                     </span>
                     <p className="text-xs text-muted-foreground italic">
-                      In-app transactions available
+                      App publisher
                     </p>
                   </div>
                 </div>
@@ -534,19 +578,14 @@ export default function ServerDetailsPage() {
               </div>
 
               {/* Stats Strip */}
-              {displayMetrics && (
-                <StatsStrip
-                  authenticatedUniqueUsers={
-                    displayMetrics.authenticated_unique_users
-                  }
-                  anonymousInvocations={displayMetrics.anonymous_invocations}
-                  totalTools={BigInt(server.latestVersion.tools?.length ?? 0)}
-                  totalInvocations={displayMetrics.total_invocations}
-                />
-              )}
+              <StatsStrip
+                launchedAtNs={launchedAtNs}
+                totalTools={totalToolsCount}
+                totalInvocations={displayMetrics?.total_invocations ?? 0n}
+              />
 
               {/* Connection/Provision Info */}
-              {isProvisionedApp && !canisterId ? (
+              {isProvisionedApp && !resolvedCanisterId ? (
                 <ProvisionInstance
                   namespace={server.namespace}
                   onProvisionClick={handleProvisionClick}
@@ -560,7 +599,9 @@ export default function ServerDetailsPage() {
                   latestVersion={server.latestVersion}
                   onConnectClick={handleInstallClick}
                   isArchived={isViewingArchivedVersion}
-                  canisterId={canisterId ?? undefined}
+                  canisterId={
+                    isByoc ? undefined : (resolvedCanisterId ?? undefined)
+                  }
                   onUpgradeClick={handleUpgradeClick}
                   isUpgrading={provisionMutation.isPending}
                   isPollingForCanister={isPollingForCanister}
@@ -569,24 +610,16 @@ export default function ServerDetailsPage() {
             </div>
             {/* Conditionally render the new container component */}
 
-            {/* Token Allowances Section */}
-            {identity && canisterId && (
-              <AppTokenSection
-                targetPrincipal={canisterId}
-                isOwnerOrDeveloper={isOwnerOrDeveloper}
-                appName={server.name}
-              />
-            )}
-
             <AboutSection server={server} />
 
-            {/* Conditional rendering now correctly checks the nested status. */}
-            {hasToolsInfo && (
-              <ToolsAndResources
-                tools={latestVersion.tools}
-                namespace={server.namespace}
-              />
-            )}
+            {/* Tools and Resources — shown when either audit-sourced tools
+                (tools_v1 attestation) or runtime-tracked tools from the
+                usage tracker exist. BYOC apps have no audit attestation but
+                may have runtime tools observed via log_call. */}
+            <ToolsAndResources
+              tools={latestVersion.tools}
+              namespace={server.namespace}
+            />
 
             {hasDataSafetyInfo && (
               <DataSafetySection safetyInfo={latestVersion.dataSafety!} />
@@ -594,37 +627,54 @@ export default function ServerDetailsPage() {
 
             <AccessAndBilling
               latestVersion={server.latestVersion}
-              canisterId={canisterId ?? undefined}
+              canisterId={resolvedCanisterId ?? undefined}
             />
 
-            <div>
-              <label className="text-sm font-medium text-muted-foreground">
-                Version
-              </label>
-              <div className="mt-2">
-                <VersionSelector
-                  allVersions={allVersions}
-                  currentVersionWasmId={latestVersion.wasmId}
-                  namespace={server.namespace}
-                  canisterId={canisterId ?? undefined}
-                />
-              </div>
-            </div>
-
-            {/* WASM Hash Verification Details (for development/debugging) */}
-            {canisterId && !isPollingForCanister && (
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">
-                  Developer Information
-                </label>
-                <div className="mt-2">
-                  <WasmHashDetails
-                    canisterId={canisterId}
-                    expectedWasmId={latestVersion.wasmId}
-                    namespace={server.namespace}
-                  />
+            {isByoc ? (
+              <div className="flex items-start gap-3 p-4 rounded-lg border border-border bg-muted/30">
+                <Info className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">
+                    Externally managed
+                  </span>
+                  {' — '}
+                  This server is deployed and upgraded directly by the
+                  developer. Prometheus Protocol does not control its canister
+                  or WASM lifecycle.
                 </div>
               </div>
+            ) : (
+              <>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">
+                    Version
+                  </label>
+                  <div className="mt-2">
+                    <VersionSelector
+                      allVersions={allVersions}
+                      currentVersionWasmId={latestVersion.wasmId}
+                      namespace={server.namespace}
+                      canisterId={resolvedCanisterId ?? undefined}
+                    />
+                  </div>
+                </div>
+
+                {/* WASM Hash Verification Details (for development/debugging) */}
+                {resolvedCanisterId && !isPollingForCanister && (
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">
+                      Developer Information
+                    </label>
+                    <div className="mt-2">
+                      <WasmHashDetails
+                        canisterId={resolvedCanisterId}
+                        expectedWasmId={latestVersion.wasmId}
+                        namespace={server.namespace}
+                      />
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </main>
 
@@ -632,6 +682,13 @@ export default function ServerDetailsPage() {
           <aside className="lg:col-span-2 space-y-8">
             <MediaGallery images={server.galleryImages} appName={server.name} />
             <SimilarApps currentServerNamespace={server.namespace} />
+            {identity && resolvedCanisterId && (
+              <AppTokenSection
+                targetPrincipal={resolvedCanisterId}
+                isOwnerOrDeveloper={isOwnerOrDeveloper}
+                appName={server.name}
+              />
+            )}
           </aside>
         </div>
       </div>
@@ -646,10 +703,10 @@ export default function ServerDetailsPage() {
       /> */}
 
       {/* InstallDialog takes the whole object and will need to be updated internally. */}
-      {canisterId && (
+      {resolvedCanisterId && (
         <InstallDialog
           server={server}
-          canisterId={canisterId}
+          canisterId={resolvedCanisterId}
           open={dialogState === 'install'}
           onOpenChange={(open) => !open && setDialogState('closed')}
         />
@@ -661,11 +718,13 @@ export default function ServerDetailsPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Connect to an Uncertified Server?
+              Connect to an Unverified Server?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This server, <span className="font-bold">{server.name}</span>, has
-              not been audited by Prometheus Protocol. Proceed with caution.
+              This server, <span className="font-bold">{server.name}</span>, is
+              not verified or audited by Prometheus Protocol. If it is BYOC, the
+              developer controls the canister, code, upgrades, and operations.
+              Proceed with caution.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

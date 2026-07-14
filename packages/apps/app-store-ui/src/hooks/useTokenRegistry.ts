@@ -3,8 +3,23 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { Principal } from '@icp-sdk/core/principal';
 import { Token, getCanisterId } from '@prometheus-protocol/ic-js';
 
-// KongSwap API base URL
-const KONGSWAP_API_BASE = 'https://api.kongswap.io/api';
+// Official IC dashboard ICRC ledger index API, maintained by DFINITY.
+// Replaces the KongSwap token API, which shut down.
+const ICRC_API_BASE = 'https://icrc-api.internetcomputer.org/api/v1';
+
+// Fetch up to this many ledgers per page. The index currently holds ~60
+// ledgers, so everything arrives in a single page.
+const PAGE_LIMIT = 100;
+
+// The ICP ledger itself is not part of the ICRC ledger index, so we add it
+// as a static entry.
+const ICP_TOKEN: TokenRegistryItem = {
+  canister_id: 'ryjl3-tyaaa-aaaaa-aaaba-cai',
+  symbol: 'ICP',
+  name: 'Internet Computer',
+  decimals: 8,
+  fee: 10000,
+};
 
 // Check if we're on local network
 const isLocalNetwork = () => {
@@ -19,7 +34,7 @@ const isLocalNetwork = () => {
 const createMockTokensResponse = (
   page: number,
   searchTerm?: string,
-): KongSwapTokensResponse => {
+): TokensPageResponse => {
   try {
     const localUsdcId = getCanisterId('USDC_LEDGER');
 
@@ -49,7 +64,7 @@ const createMockTokensResponse = (
       total_pages: 1,
       total_count: filteredTokens.length,
       page: page,
-      limit: 25,
+      limit: PAGE_LIMIT,
     };
   } catch (error) {
     console.warn(
@@ -61,34 +76,57 @@ const createMockTokensResponse = (
       total_pages: 1,
       total_count: 0,
       page: page,
-      limit: 25,
+      limit: PAGE_LIMIT,
     };
   }
 };
 
-// KongSwap API response structure
-interface KongSwapTokensResponse {
-  items: Array<{
-    canister_id: string;
-    symbol: string;
-    name: string;
-    decimals: number;
-    token_id?: string;
-    fee?: number;
-    logo_url?: string;
-  }>;
+interface TokenRegistryItem {
+  canister_id: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  fee?: number;
+  logo_url?: string;
+}
+
+interface TokensPageResponse {
+  items: TokenRegistryItem[];
   total_pages: number;
   total_count: number;
   page: number;
   limit: number;
 }
 
-// Fetch a page of tokens from KongSwap API or return mock data for local dev
+// Raw entry shape from the ICRC ledger index API
+interface IcrcLedgerEntry {
+  ledger_canister_id: string;
+  icrc1_metadata: {
+    icrc1_symbol?: string | null;
+    icrc1_name?: string | null;
+    icrc1_decimals?: string | null;
+    icrc1_fee?: string | null;
+    icrc1_logo?: string | null;
+  } | null;
+}
+
+interface IcrcLedgersResponse {
+  data: IcrcLedgerEntry[];
+  total_ledgers: number;
+}
+
+const matchesSearch = (token: TokenRegistryItem, term: string) =>
+  token.symbol.toLowerCase().includes(term) ||
+  token.name.toLowerCase().includes(term) ||
+  token.canister_id.toLowerCase().includes(term);
+
+// Fetch a page of tokens from the ICRC ledger index or return mock data for
+// local dev
 const fetchTokensPage = async (
   page: number,
   searchTerm?: string,
-  limit: number = 25,
-): Promise<KongSwapTokensResponse> => {
+  limit: number = PAGE_LIMIT,
+): Promise<TokensPageResponse> => {
   // Return mock data for local development
   if (isLocalNetwork()) {
     // Simulate network delay for more realistic development experience
@@ -96,17 +134,9 @@ const fetchTokensPage = async (
     return createMockTokensResponse(page, searchTerm);
   }
 
-  // Production KongSwap API call
-  const url = new URL(`${KONGSWAP_API_BASE}/tokens`);
-
-  // Add pagination parameters
-  url.searchParams.set('page', page.toString());
+  const url = new URL(`${ICRC_API_BASE}/ledgers`);
+  url.searchParams.set('offset', ((page - 1) * limit).toString());
   url.searchParams.set('limit', limit.toString());
-
-  // Add search filter if provided
-  if (searchTerm && searchTerm.trim()) {
-    url.searchParams.set('search', searchTerm.trim());
-  }
 
   const response = await fetch(url.toString());
 
@@ -114,12 +144,48 @@ const fetchTokensPage = async (
     throw new Error(`Failed to fetch tokens: ${response.status}`);
   }
 
-  return response.json();
+  const data: IcrcLedgersResponse = await response.json();
+
+  let items = data.data.flatMap((ledger): TokenRegistryItem[] => {
+    const meta = ledger.icrc1_metadata;
+    // Skip ledgers with incomplete metadata — they can't be displayed or
+    // used for transfers.
+    if (!meta?.icrc1_symbol || !meta.icrc1_name || meta.icrc1_decimals == null)
+      return [];
+    return [
+      {
+        canister_id: ledger.ledger_canister_id,
+        symbol: meta.icrc1_symbol,
+        name: meta.icrc1_name,
+        decimals: Number(meta.icrc1_decimals),
+        fee: meta.icrc1_fee != null ? Number(meta.icrc1_fee) : undefined,
+        logo_url: meta.icrc1_logo ?? undefined,
+      },
+    ];
+  });
+
+  if (page === 1) {
+    items = [ICP_TOKEN, ...items];
+  }
+
+  // The API has no server-side search, so filter the fetched page locally.
+  const term = searchTerm?.trim().toLowerCase();
+  if (term) {
+    items = items.filter((token) => matchesSearch(token, term));
+  }
+
+  return {
+    items,
+    total_pages: Math.max(1, Math.ceil(data.total_ledgers / limit)),
+    total_count: data.total_ledgers,
+    page,
+    limit,
+  };
 };
 
 // Transform API token to our Token type (from ic-js)
 const transformToken = (
-  apiToken: KongSwapTokensResponse['items'][0],
+  apiToken: TokenRegistryItem,
 ): Token & { logo_url?: string } => {
   const tokenInfo = {
     canisterId: Principal.fromText(apiToken.canister_id),
@@ -186,7 +252,7 @@ export const useTokenRegistry = () => {
         serverSearchTerm || undefined,
       );
     },
-    getNextPageParam: (lastPage: KongSwapTokensResponse) => {
+    getNextPageParam: (lastPage: TokensPageResponse) => {
       return lastPage.page < lastPage.total_pages
         ? lastPage.page + 1
         : undefined;
@@ -205,7 +271,7 @@ export const useTokenRegistry = () => {
     if (!infiniteData?.pages) return [];
 
     const allApiTokens = infiniteData.pages.flatMap(
-      (page: KongSwapTokensResponse) => page.items,
+      (page: TokensPageResponse) => page.items,
     );
 
     // Deduplicate by canister_id

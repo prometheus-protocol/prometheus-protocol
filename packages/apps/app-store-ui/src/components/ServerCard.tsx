@@ -11,7 +11,10 @@ interface AppCardProps {
 }
 
 export function ServerCard({ app }: AppCardProps) {
-  const tierInfo = getTierInfo(app.latestVersion.securityTier);
+  const tierInfo = getTierInfo(
+    app.latestVersion.securityTier,
+    app.latestVersion.status,
+  );
 
   return (
     <Link
@@ -31,15 +34,13 @@ export function ServerCard({ app }: AppCardProps) {
         {/* 2. Use a proper, contextual status badge */}
         <div className="mr-1.5">
           {app.latestVersion.status === 'Pending' ? (
-            // --- Badge for PENDING apps ---
             <Badge
               variant="secondary"
               className="text-xs bg-grey-900/50 border-grey-700 text-grey-300">
               <ShieldCheck className="h-3 w-3 mr-1" />
-              Build Verified
+              Verification Pending
             </Badge>
           ) : (
-            // --- Badge for LISTED apps ---
             <Badge
               variant="outline"
               className={cn(

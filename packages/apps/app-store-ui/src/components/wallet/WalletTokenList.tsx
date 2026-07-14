@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { useInternetIdentity } from 'ic-use-internet-identity';
 import { toast } from 'sonner';
 import { Loader2, Wallet, Copy } from 'lucide-react';
@@ -16,68 +16,83 @@ interface WalletTokenListProps {
   onTransfer?: (token: Token) => void;
 }
 
+// Helper function to convert TokenInfo (from watchlist) to Token (with conversion methods)
+const tokenInfoToToken = (
+  tokenInfo: any,
+  logoUrl?: string,
+): Token & { logo_url?: string } => {
+  return {
+    canisterId: tokenInfo.canisterId,
+    symbol: tokenInfo.symbol,
+    name: tokenInfo.name,
+    decimals: tokenInfo.decimals,
+    fee: tokenInfo.fee,
+    logo_url: logoUrl,
+    toAtomic: (amount: string | number): bigint => {
+      const amountStr = String(amount);
+      const [integerPart, fractionalPart = ''] = amountStr.split('.');
+
+      if (fractionalPart.length > tokenInfo.decimals) {
+        throw new Error(
+          `Amount "${amountStr}" has more than ${tokenInfo.decimals} decimal places.`,
+        );
+      }
+      const combined =
+        (integerPart || '0') + fractionalPart.padEnd(tokenInfo.decimals, '0');
+      return BigInt(combined);
+    },
+    fromAtomic: (atomicAmount: bigint): string => {
+      const atomicStr = atomicAmount
+        .toString()
+        .padStart(tokenInfo.decimals + 1, '0');
+      const integerPart = atomicStr.slice(0, -tokenInfo.decimals);
+      const fractionalPart = atomicStr
+        .slice(-tokenInfo.decimals)
+        .replace(/0+$/, '');
+
+      return fractionalPart.length > 0
+        ? `${integerPart}.${fractionalPart}`
+        : integerPart;
+    },
+  };
+};
+
 export const WalletTokenList: React.FC<WalletTokenListProps> = ({
   showPrincipalId = false,
   onTransfer,
 }) => {
   const { identity } = useInternetIdentity();
-  const { watchedTokenIds, addWatchedToken, removeWatchedToken } =
-    useWatchlist();
-
-  const { allTokens, isLoading: isLoadingTokens } = useTokenRegistry();
-  const [missingWatchedTokens, setMissingWatchedTokens] = useState<Token[]>([]);
-
-  // This separate registry instance is specifically for finding watched tokens
-  // that might not be in the main `allTokens` list (e.g., from a different page).
   const {
-    tokens: searchResults,
-    serverSearchTerm: missingTokenSearchTerm,
-    setServerSearchTerm: setMissingTokenSearchTerm,
-  } = useTokenRegistry();
-
-  // Effect to find any watched token IDs that aren't in our main list
-  useEffect(() => {
-    if (isLoadingTokens || watchedTokenIds.length === 0) return;
-
-    const missingIds = watchedTokenIds.filter(
-      (id) => !allTokens.some((token) => token.canisterId.toText() === id),
-    );
-
-    if (missingIds.length > 0 && missingIds[0] !== missingTokenSearchTerm) {
-      setMissingTokenSearchTerm(missingIds[0]);
-    } else if (missingIds.length === 0) {
-      setMissingTokenSearchTerm('');
-    }
-  }, [
     watchedTokenIds,
-    allTokens,
-    isLoadingTokens,
-    missingTokenSearchTerm,
-    setMissingTokenSearchTerm,
-  ]);
+    watchedTokens: watchedTokenInfos,
+    addWatchedToken,
+    removeWatchedToken,
+    isLoading: isLoadingWatchlist,
+  } = useWatchlist();
 
-  // Effect to add found tokens to our local `missingWatchedTokens` state
-  useEffect(() => {
-    if (searchResults.length > 0) {
-      setMissingWatchedTokens((prev) => {
-        const newTokens = searchResults.filter(
-          (newToken) =>
-            !prev.some(
-              (p) => p.canisterId.toText() === newToken.canisterId.toText(),
-            ) && watchedTokenIds.includes(newToken.canisterId.toText()),
-        );
-        return [...prev, ...newTokens];
-      });
-    }
-  }, [searchResults, watchedTokenIds]);
+  // Fetch token registry only to enrich watched tokens with logo URLs
+  const { allTokens: registryTokens } = useTokenRegistry();
 
-  // Combine tokens and deduplicate by canister ID
-  const combinedTokenList = [...allTokens, ...missingWatchedTokens];
-  const uniqueTokenMap = new Map(
-    combinedTokenList.map((token) => [token.canisterId.toText(), token]),
-  );
-  const watchedTokens = Array.from(uniqueTokenMap.values()).filter((token) =>
-    watchedTokenIds.includes(token.canisterId.toText()),
+  // Create a lookup map: canisterId -> logo_url
+  const logoMap = useMemo(() => {
+    const map = new Map<string, string>();
+    registryTokens.forEach((token) => {
+      if (token.logo_url) {
+        map.set(token.canisterId.toText(), token.logo_url);
+      }
+    });
+    return map;
+  }, [registryTokens]);
+
+  // Build the full Token list directly from the watchlist canister response.
+  // This ensures every watched token is displayed regardless of whether it
+  // appears in the token registry (which is mocked / sparse on local).
+  const watchedTokens = useMemo(
+    () =>
+      watchedTokenInfos.map((info) =>
+        tokenInfoToToken(info, logoMap.get(info.canisterId.toText())),
+      ),
+    [watchedTokenInfos, logoMap],
   );
 
   if (!identity) {
@@ -162,7 +177,7 @@ export const WalletTokenList: React.FC<WalletTokenListProps> = ({
           </>
         )}
 
-        {isLoadingTokens && watchedTokens.length === 0 ? (
+        {isLoadingWatchlist && watchedTokens.length === 0 ? (
           <div className="text-center text-muted-foreground py-8">
             <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
             Loading tokens...

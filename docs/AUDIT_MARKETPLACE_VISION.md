@@ -1,5 +1,7 @@
 # Audit Marketplace Vision: Making Prometheus Protocol Universal
 
+> Current product rule: Prometheus uses a three-step trust model. BYOC/self-managed apps are developer-controlled and carry no platform guarantee. The next step is open-source reproducible-build verification by the decentralized verifier network. The final step is a point-in-time audit of that verified code, which is not fully implemented yet. Older Gold/Silver/Bronze examples below are historical design notes, not the current public trust ladder.
+
 ## Executive Summary
 
 This document analyzes the current MCP-specific audit pipeline and proposes a path toward a universal, extensible audit marketplace that can serve any canister project while maintaining backward compatibility with MCP servers.

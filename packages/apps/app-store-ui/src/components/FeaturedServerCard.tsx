@@ -11,12 +11,17 @@ interface FeaturedServerCardProps {
 
 const statusMap: Record<string, string> = {
   Unranked: 'New Release',
-  Gold: 'Recommended',
+  External: 'Developer Managed',
+  Silver: 'Verified Build',
+  Bronze: 'Verified Build',
+  Gold: 'Audited Verified Code',
 };
 
 export function FeaturedServerCard({ server }: FeaturedServerCardProps) {
-  // Unranked tier apps are shown as "New Releases" - they have passed build certification but not yet achieved ranked security tiers.
-  const status = server.latestVersion.securityTier;
+  const status =
+    server.latestVersion.status === 'External'
+      ? 'External'
+      : server.latestVersion.securityTier;
 
   return (
     <Link to={`/app/${server.namespace}`} className="block group">

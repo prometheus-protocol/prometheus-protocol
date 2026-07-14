@@ -13,12 +13,12 @@ import { HomePageError } from '@/components/HomePageError';
 
 // Hardcoded featured servers to always show at the front of the carousel
 const FEATURED_NAMESPACES = [
+  'io.github.jneums.app-store-scout',
   'io.github.jneums.pokedbots-racing',
   'io.github.jneums.final-score',
-  'io.github.jneums.ext-wallet',
-  'io.github.jneums.cycle-buddy',
-  'org.prometheusprotocol.token-watchlist',
-  'io.github.jneums.sui-wallet',
+  'io.github.jneums.secrets-manager',
+  'io.github.jneums.encrypted-mailbox',
+  'io.github.jneums.faucet-mcp',
 ];
 
 function HomePage() {
@@ -34,77 +34,85 @@ function HomePage() {
     : 'Guest';
 
   // --- REFACTORED: Process data into meaningful, data-driven sections ---
-  const { carouselApps, goldTierApps, comingSoonApps, categorySections } =
-    useMemo(() => {
-      if (!allServers || allServers.length === 0) {
-        return {
-          carouselApps: [],
-          goldTierApps: [],
-          comingSoonApps: [],
-          categorySections: [],
-        };
-      }
-
-      // 1. Filter apps into primary groups
-      const goldApps = allServers.filter(
-        (app) => app.latestVersion.securityTier === 'Gold',
-      );
-      const pendingApps = allServers.filter(
-        (app) => app.latestVersion.securityTier === 'Unranked',
-      );
-      const otherListedApps = allServers.filter(
-        (app) => app.latestVersion.status === 'Verified',
-      );
-
-      // 2. Create the list for the main carousel with hybrid approach:
-      //    - Start with hardcoded featured servers (if they exist)
-      //    - Fill remaining slots with gold tier apps and new releases
-      const featuredApps = allServers.filter((app) =>
-        FEATURED_NAMESPACES.includes(app.namespace),
-      );
-
-      // Get the featured servers in the order they're defined in FEATURED_NAMESPACES
-      const orderedFeaturedApps = FEATURED_NAMESPACES.map((namespace) =>
-        featuredApps.find((app) => app.namespace === namespace),
-      ).filter((app): app is AppStoreListing => app !== undefined);
-
-      // Add remaining gold apps and pending apps to fill out the carousel
-      const remainingApps = [
-        ...goldApps.filter(
-          (app) => !FEATURED_NAMESPACES.includes(app.namespace),
-        ),
-        ...pendingApps.filter(
-          (app) => !FEATURED_NAMESPACES.includes(app.namespace),
-        ),
-      ].slice(0, 6 - orderedFeaturedApps.length);
-
-      const carouselApps = [...orderedFeaturedApps, ...remainingApps];
-
-      // 3. Group remaining listed apps by category
-      const categoryMap = new Map<string, AppStoreListing[]>();
-      otherListedApps.forEach((app) => {
-        const category = app.category || 'Uncategorized';
-        if (!categoryMap.has(category)) {
-          categoryMap.set(category, []);
-        }
-        categoryMap.get(category)!.push(app);
-      });
-
-      // Convert map to an array of objects for easier rendering
-      const categorySections = Array.from(categoryMap.entries()).map(
-        ([title, servers]) => ({
-          title,
-          servers,
-        }),
-      );
-
+  const {
+    carouselApps,
+    auditedVerifiedCodeApps,
+    comingSoonApps,
+    categorySections,
+  } = useMemo(() => {
+    if (!allServers || allServers.length === 0) {
       return {
-        carouselApps,
-        goldTierApps: goldApps,
-        comingSoonApps: pendingApps,
-        categorySections,
+        carouselApps: [],
+        auditedVerifiedCodeApps: [],
+        comingSoonApps: [],
+        categorySections: [],
       };
-    }, [allServers]);
+    }
+
+    // 1. Filter apps into primary groups
+    const auditedApps = allServers.filter(
+      (app) => app.latestVersion.securityTier === 'Gold',
+    );
+    const pendingApps = allServers.filter(
+      (app) =>
+        app.latestVersion.securityTier === 'Unranked' &&
+        app.latestVersion.status === 'Pending',
+    );
+    const otherListedApps = allServers.filter(
+      (app) =>
+        app.latestVersion.status === 'Verified' ||
+        app.latestVersion.status === 'External',
+    );
+
+    // 2. Create the list for the main carousel with hybrid approach:
+    //    - Start with hardcoded featured servers (if they exist)
+    //    - Fill remaining slots with audited verified code apps and new releases
+    const featuredApps = allServers.filter((app) =>
+      FEATURED_NAMESPACES.includes(app.namespace),
+    );
+
+    // Get the featured servers in the order they're defined in FEATURED_NAMESPACES
+    const orderedFeaturedApps = FEATURED_NAMESPACES.map((namespace) =>
+      featuredApps.find((app) => app.namespace === namespace),
+    ).filter((app): app is AppStoreListing => app !== undefined);
+
+    // Add remaining audited apps and pending apps to fill out the carousel
+    const remainingApps = [
+      ...auditedApps.filter(
+        (app) => !FEATURED_NAMESPACES.includes(app.namespace),
+      ),
+      ...pendingApps.filter(
+        (app) => !FEATURED_NAMESPACES.includes(app.namespace),
+      ),
+    ].slice(0, 6 - orderedFeaturedApps.length);
+
+    const carouselApps = [...orderedFeaturedApps, ...remainingApps];
+
+    // 3. Group remaining listed apps by category
+    const categoryMap = new Map<string, AppStoreListing[]>();
+    otherListedApps.forEach((app) => {
+      const category = app.category || 'Uncategorized';
+      if (!categoryMap.has(category)) {
+        categoryMap.set(category, []);
+      }
+      categoryMap.get(category)!.push(app);
+    });
+
+    // Convert map to an array of objects for easier rendering
+    const categorySections = Array.from(categoryMap.entries()).map(
+      ([title, servers]) => ({
+        title,
+        servers,
+      }),
+    );
+
+    return {
+      carouselApps,
+      auditedVerifiedCodeApps: auditedApps,
+      comingSoonApps: pendingApps,
+      categorySections,
+    };
+  }, [allServers]);
 
   if (isLoading) return <HomePageSkeleton />;
   if (isError) return <HomePageError onRetry={refetch} />;
@@ -175,8 +183,11 @@ function HomePage() {
         return result;
       })()}
 
-      {goldTierApps.length > 0 && (
-        <ServerGrid title="Gold Tier Apps" servers={goldTierApps} />
+      {auditedVerifiedCodeApps.length > 0 && (
+        <ServerGrid
+          title="Audited Verified Code"
+          servers={auditedVerifiedCodeApps}
+        />
       )}
 
       {/* Discord CTA at the bottom */}

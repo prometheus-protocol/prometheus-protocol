@@ -31,45 +31,37 @@ export function nsToDate(ns: bigint): Date {
 export type SecurityTier = 'Gold' | 'Silver' | 'Bronze' | 'Unranked';
 
 /**
- * Calculates the security tier based on a definitive verification status and a list
- * of completed declarative audits.
+ * Calculates the security tier using the current trust model:
+ * - Unranked: BYOC/self-managed or otherwise not build verified. The platform makes no guarantee.
+ * - Silver: Open source + reproducible build verified by the decentralized verifier network.
+ * - Gold: Verified build plus a completed security audit of that verified code.
  *
- * @param isBuildVerified A boolean indicating if the WASM has passed the ICRC-126 verification lifecycle.
- * @param completedDeclarativeAudits An array of audit type strings (e.g., ['app_info_v1', 'data_safety_v1']).
- * @returns The calculated SecurityTier.
+ * Bronze is retained only as a legacy enum value for already-indexed records.
  */
 export function calculateSecurityTier(
   isBuildVerified: boolean,
   completedDeclarativeAudits: string[],
 ): SecurityTier {
-  // Helper to check if a specific declarative audit is present in the array.
   const hasAudit = (auditType: string): boolean => {
     return completedDeclarativeAudits.includes(auditType);
   };
 
-  // Gold: Requires a verified build AND all key declarative audits.
+  if (!isBuildVerified) {
+    return 'Unranked';
+  }
+
+  // The full security audit is not fully implemented yet, but this is the
+  // forward-compatible terminal tier once audit attestations exist.
   if (
-    isBuildVerified &&
-    hasAudit('app_info_v1') &&
-    hasAudit('tools_v1') &&
-    hasAudit('data_safety_v1')
+    hasAudit('security_audit_v1') ||
+    (hasAudit('app_info_v1') &&
+      hasAudit('tools_v1') &&
+      hasAudit('data_safety_v1'))
   ) {
     return 'Gold';
   }
 
-  // Silver: Verified build, app info, and tools.
-  if (isBuildVerified && hasAudit('app_info_v1') && hasAudit('tools_v1')) {
-    return 'Silver';
-  }
-
-  // Bronze: The foundation of trust - a verified build and basic app info.
-  if (isBuildVerified && hasAudit('app_info_v1')) {
-    return 'Bronze';
-  }
-
-  // If none of the tiered conditions are met (e.g., build is not verified),
-  // the app is considered Unranked. This correctly implements your rule.
-  return 'Unranked';
+  return 'Silver';
 }
 
 export function processBounty(bounty: Bounty): AuditBounty {

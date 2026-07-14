@@ -21,7 +21,7 @@ const tokenInfoToToken = (
     name: tokenInfo.name,
     decimals: tokenInfo.decimals,
     fee: tokenInfo.fee,
-    logo_url: logoUrl, // Use logo URL from KongSwap if available
+    logo_url: logoUrl, // Use logo URL from the token registry if available
     toAtomic: (amount: string | number): bigint => {
       const amountStr = String(amount);
       const [integerPart, fractionalPart = ''] = amountStr.split('.');

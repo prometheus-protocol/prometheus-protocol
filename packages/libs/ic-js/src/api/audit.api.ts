@@ -429,13 +429,14 @@ export type AttestationData =
   | BuildReproducibilityAttestationData
   | Record<string, unknown>; // Fallback for unknown types
 
-// Define the core audits that determine security tiers.
+// Core trust checks shown in the public certificate flow.
+// BYOC/self-managed apps are outside this flow. The next implemented step is
+// reproducible-build verification; a full security audit of verified code will
+// be added as `security_audit_v1` once implemented.
 export const CORE_AUDIT_TYPES = [
   'build_reproducibility_v1',
-  'tools_v1',
-  // Not yet implemented:
-  // 'app_info_v1',
-  // 'data_safety_v1',
+  // Not yet fully implemented:
+  // 'security_audit_v1',
 ];
 
 /**
@@ -859,7 +860,7 @@ export interface AppVersionDetails {
   wasmId: string;
   versionString: string;
   deploymentType?: string;
-  status: 'Rejected' | 'Verified' | 'Pending';
+  status: 'Rejected' | 'Verified' | 'Pending' | 'External';
   securityTier: SecurityTier;
   buildInfo: BuildInfo;
   tools: ServerTool[];
