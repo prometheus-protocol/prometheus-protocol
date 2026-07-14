@@ -1,22 +1,10 @@
+// NOTE: later rules override earlier ones for the same field, so catch-alls
+// must come first and specific overrides last.
 [
   {
-    match: 'index.html',
+    match: '**/*',
     cache: {
-      control: 'no-cache',
-    },
-    ignore: false,
-  },
-  {
-    match: 'assets/*',
-    cache: {
-      control: 'no-cache',
-    },
-    ignore: false,
-  },
-  {
-    match: '.well-known/**/*',
-    cache: {
-      control: 'no-cache',
+      max_age: 86400, // 1 day in seconds
     },
     ignore: false,
   },
@@ -28,9 +16,27 @@
     ignore: false,
   },
   {
-    match: '**/*',
+    // Vite emits content-hashed filenames here, so these are immutable.
+    match: 'assets/**/*',
     cache: {
-      max_age: 86400, // 1 day in seconds
+      max_age: 31536000, // 1 year in seconds
+    },
+    ignore: false,
+  },
+  {
+    // Entry points must always revalidate, otherwise browsers and boundary
+    // nodes keep serving a stale index.html pointing at old bundles for the
+    // full cache TTL after a deploy.
+    match: '{index.html,sw.js,workbox-*.js,manifest.webmanifest}',
+    cache: {
+      max_age: 0,
+    },
+    ignore: false,
+  },
+  {
+    match: '.well-known/**/*',
+    cache: {
+      max_age: 0,
     },
     ignore: false,
   },
